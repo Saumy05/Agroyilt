@@ -1738,39 +1738,122 @@ const addReview = async (req, res) => {
 };
 
 /**
- * Get user ratings and reviews (given by the user)
+ * Get user ratings and reviews (given by the authenticated user)
+ * Production-ready with IDOR protection, overall activity stats, and edge case resilience
  */
 const getUserRatings = async (req, res) => {
   try {
-    const userId = req.user.id;
-    const { page = 1, limit = 10 } = req.query;
+    // Strict IDOR protection: Always derive identity from authenticated session
+    const userId = req.user?._id || req.userId;
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required'
+      });
+    }
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const { page = 1, limit = 20 } = req.query;
+    const pageNum = Math.max(1, parseInt(page));
+    const limitNum = Math.min(50, Math.max(1, parseInt(limit)));
+    const skip = (pageNum - 1) * limitNum;
 
-    // Fetch bookings where rating is not null
-    const bookings = await Booking.find({ userId, rating: { $ne: null } })
-      .populate('vendorId', 'name businessName profilePhoto')
-      .populate('serviceId', 'title iconUrl')
-      .populate('workerId', 'name profilePhoto')
-      .sort({ reviewedAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit));
+    const userObjectId = new mongoose.Types.ObjectId(userId.toString());
+    const filter = {
+      userId: userObjectId,
+      rating: { $gte: 1, $lte: 5 }
+    };
 
-    const total = await Booking.countDocuments({ userId, rating: { $ne: null } });
+    // Parallel fetch: aggregate stats + paginated list
+    const [bookings, statsAggregate] = await Promise.all([
+      Booking.find(filter)
+        .populate('vendorId', 'name businessName profilePhoto phone')
+        .populate('serviceId', 'title iconUrl name')
+        .populate('workerId', 'name profilePhoto phone specializations skills')
+        .populate('equipmentId', 'name model year images registrationNumber')
+        .sort({ reviewedAt: -1, updatedAt: -1, createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      Booking.aggregate([
+        { $match: filter },
+        {
+          $group: {
+            _id: null,
+            avgRating: { $avg: '$rating' },
+            totalReviews: { $sum: 1 }
+          }
+        }
+      ])
+    ]);
 
-    res.status(200).json({
-      success: true,
-      data: bookings,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / parseInt(limit))
+    const totalReviews = statsAggregate.length > 0 ? statsAggregate[0].totalReviews : 0;
+    const averageRating = statsAggregate.length > 0 ? parseFloat(statsAggregate[0].avgRating.toFixed(1)) : 0;
+
+    // Resilient formatting handling missing/deleted target references
+    const formattedRatings = bookings.map(b => {
+      let targetType = 'SERVICE';
+      let targetName = b.serviceName || b.serviceId?.title || 'Agriculture Service';
+      let targetPhoto = b.serviceId?.iconUrl || null;
+      let targetRole = 'Service';
+
+      if (b.workerId) {
+        targetType = 'WORKER';
+        targetName = b.workerId.name || 'Assigned Worker';
+        targetPhoto = b.workerId.profilePhoto || null;
+        targetRole = 'Worker';
+      } else if (b.vendorId) {
+        targetType = 'VENDOR';
+        targetName = b.vendorId.businessName || b.vendorId.name || 'Equipment Owner';
+        targetPhoto = b.vendorId.profilePhoto || null;
+        targetRole = 'Vendor';
+      } else if (b.equipmentId) {
+        targetType = 'EQUIPMENT';
+        targetName = b.equipmentId.name || 'Equipment Rental';
+        targetPhoto = Array.isArray(b.equipmentId.images) ? b.equipmentId.images[0] : null;
+        targetRole = 'Equipment';
       }
+
+      return {
+        _id: b._id,
+        bookingId: b._id,
+        bookingNumber: b.bookingNumber || b._id.toString().slice(-6).toUpperCase(),
+        rating: b.rating || 0,
+        review: b.review || '',
+        reviewImages: Array.isArray(b.reviewImages) ? b.reviewImages : [],
+        reviewedAt: b.reviewedAt || b.updatedAt || b.createdAt,
+        targetType,
+        targetRole,
+        targetName,
+        targetPhoto,
+        workerId: b.workerId,
+        vendorId: b.vendorId,
+        serviceId: b.serviceId,
+        serviceName: b.serviceName || b.serviceId?.title || 'Agriculture Service',
+        scheduledDate: b.scheduledDate,
+        status: b.status
+      };
+    });
+
+    const paginationData = {
+      page: pageNum,
+      limit: limitNum,
+      total: totalReviews,
+      totalPages: Math.ceil(totalReviews / limitNum) || 1
+    };
+
+    return res.status(200).json({
+      success: true,
+      data: formattedRatings,
+      ratings: formattedRatings,
+      stats: {
+        averageRating,
+        totalReviews
+      },
+      pagination: paginationData
     });
   } catch (error) {
     console.error('Get user ratings error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to fetch your ratings'
     });

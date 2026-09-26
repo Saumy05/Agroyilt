@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiUser, FiEdit2, FiMapPin, FiPhone, FiMail, FiBriefcase, FiStar, FiChevronRight, FiTag, FiLogOut, FiGift, FiCreditCard, FiX } from 'react-icons/fi';
+import { FiUser, FiEdit2, FiMapPin, FiPhone, FiMail, FiBriefcase, FiStar, FiChevronRight, FiTag, FiLogOut, FiGift, FiCreditCard, FiX, FiHelpCircle } from 'react-icons/fi';
 import { toastManager } from '../../../../utils/toastManager';
 import { workerTheme as themeColors, vendorTheme } from '../../../../theme';
 import { workerAuthService } from '../../../../services/authService';
@@ -495,6 +495,21 @@ const Profile = () => {
           <div className="flex items-center gap-3">
             <FiEdit2 className="w-5 h-5" style={{ color: themeColors.button }} />
             <span className="font-semibold text-gray-800">Settings</span>
+          </div>
+          <FiChevronRight className="w-5 h-5 text-gray-400" />
+        </button>
+
+        {/* Help & Support Button */}
+        <button
+          onClick={() => navigate('/worker/help-support')}
+          className="w-full bg-white rounded-xl p-4 flex items-center justify-between shadow-md transition-all active:scale-95 mb-4"
+          style={{
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+          }}
+        >
+          <div className="flex items-center gap-3">
+            <FiHelpCircle className="w-5 h-5" style={{ color: themeColors.button }} />
+            <span className="font-semibold text-gray-800">Help & Support</span>
           </div>
           <FiChevronRight className="w-5 h-5 text-gray-400" />
         </button>

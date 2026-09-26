@@ -35,6 +35,8 @@ require('./models/Brand');
 require('./models/Review');
 require('./models/Product');
 require('./models/VendorBill');
+require('./models/SupportTicket');
+require('./models/SupportMessage');
 
 // Initialize Redis (if enabled)
 const { initRedis } = require('./services/redisService');

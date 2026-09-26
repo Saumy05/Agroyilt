@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiUser, FiEdit2, FiMapPin, FiPhone, FiMail, FiBriefcase, FiStar, FiArrowRight, FiSettings, FiChevronRight, FiCreditCard, FiLogOut, FiTrash2, FiClock, FiCheckCircle, FiPackage, FiActivity, FiGift, FiX } from 'react-icons/fi';
+import { FiUser, FiEdit2, FiMapPin, FiPhone, FiMail, FiBriefcase, FiStar, FiArrowRight, FiSettings, FiChevronRight, FiCreditCard, FiLogOut, FiTrash2, FiClock, FiCheckCircle, FiPackage, FiActivity, FiGift, FiX, FiHelpCircle } from 'react-icons/fi';
 import { FaWallet, FaTractor } from 'react-icons/fa';
 import { toastManager } from '../../../../utils/toastManager';
 import { vendorTheme as themeColors } from '../../../../theme';
@@ -42,6 +42,7 @@ const Profile = () => {
     { id: 10, label: 'Maintenance Calendar', icon: FiClock, path: '/vendor/maintenance' },
     { id: 11, label: 'Legal Compliance', icon: FiCheckCircle, path: '/vendor/compliance' },
     { id: 13, label: 'Soil Test Requests', icon: FiActivity, path: '/vendor/soil-tests' },
+    { id: 'help_support', label: 'Help & Support', icon: FiHelpCircle, path: '/vendor/help-support' },
     { id: 9, label: 'About Agroyilt', icon: null, customIcon: 'G', path: '/vendor/about-groo' },
   ], [profile, hasOutOfStockProducts]);
 

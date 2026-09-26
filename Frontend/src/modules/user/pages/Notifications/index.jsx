@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FiBell, FiCheck, FiArrowLeft, FiTrash2, FiX } from 'react-icons/fi';
 import { toastManager } from '../../../../utils/toastManager';
@@ -140,6 +140,7 @@ const Notifications = () => {
   const getNotificationIcon = (originalType) => {
     const type = (originalType || '').toLowerCase();
 
+    if (['support', 'ticket'].some(t => type.includes(t))) return '🎧';
     if (['payment', 'refund', 'wallet'].some(t => type.includes(t))) return '💰';
     if (['booking', 'job', 'work', 'visit', 'journey', 'vendor', 'scrap', 'soil_test'].some(t => type.includes(t))) return '📋';
     if (['alert', 'general'].some(t => type.includes(t))) return '🔔';
@@ -151,6 +152,7 @@ const Notifications = () => {
   const getNotificationColor = (originalType) => {
     const type = (originalType || '').toLowerCase();
 
+    if (['support', 'ticket'].some(t => type.includes(t))) return '#059669'; // Emerald
     if (['payment', 'refund', 'wallet'].some(t => type.includes(t))) return '#10B981'; // Green
     if (['booking', 'job', 'work', 'visit', 'journey', 'vendor', 'scrap', 'soil_test'].some(t => type.includes(t))) return '#3B82F6'; // Blue
     if (['alert', 'general'].some(t => type.includes(t))) return themeColors.button;
@@ -288,7 +290,10 @@ const Notifications = () => {
                     {notif.action && (
                       <button
                         onClick={() => {
-                          if (notif.action === 'view_booking') {
+                          if (notif.type?.toLowerCase().includes('support') || notif.relatedType?.toLowerCase().includes('support')) {
+                            const tId = notif.data?.ticketId || notif.relatedId;
+                            navigate(`/user/help-support${tId ? `?ticketId=${tId}` : ''}`);
+                          } else if (notif.action === 'view_booking') {
                             navigate(`/user/booking/${notif.bookingId}`);
                           } else if (notif.action === 'view_wallet') {
                             navigate('/user/wallet');
@@ -301,6 +306,18 @@ const Notifications = () => {
                         style={{ color: themeColors.button }}
                       >
                         View Details
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                      </button>
+                    )}
+                    {!notif.action && (notif.type?.toLowerCase().includes('support') || notif.relatedType?.toLowerCase().includes('support')) && (
+                      <button
+                        onClick={() => {
+                          const tId = notif.data?.ticketId || notif.relatedId;
+                          navigate(`/user/help-support${tId ? `?ticketId=${tId}` : ''}`);
+                        }}
+                        className="mt-3 text-sm font-bold flex items-center gap-1 text-emerald-700"
+                      >
+                        View Support Ticket
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                       </button>
                     )}

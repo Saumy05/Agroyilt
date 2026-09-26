@@ -48,6 +48,7 @@ const SoilTesting = lazy(() => import('../pages/SoilTesting'));
 const BusinessDetails = lazy(() => import('../pages/BusinessDetails'));
 const EquipmentInventory = lazy(() => import('../pages/Equipment/EquipmentInventory'));
 const AddEquipment = lazy(() => import('../pages/Equipment/AddEquipment'));
+const HelpSupport = lazy(() => import('../../user/pages/HelpSupport'));
 
 // Dashboard skeleton for initial page load instead of a spinner
 const LoadingFallback = () => (
@@ -149,6 +150,7 @@ const VendorRoutes = () => {
                 <Route path="/equipment" element={<ProtectedRoute userType="vendor"><EquipmentInventory /></ProtectedRoute>} />
                 <Route path="/equipment/add" element={<ProtectedRoute userType="vendor"><AddEquipment /></ProtectedRoute>} />
                 <Route path="/equipment/edit/:id" element={<ProtectedRoute userType="vendor"><AddEquipment /></ProtectedRoute>} />
+                <Route path="/help-support" element={<ProtectedRoute userType="vendor"><HelpSupport /></ProtectedRoute>} />
               </Routes>
             </PageTransition>
           </Suspense>

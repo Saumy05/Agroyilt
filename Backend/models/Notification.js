@@ -129,6 +129,11 @@ const notificationSchema = new mongoose.Schema({
       'refund',
       'referral_reward',
       'referral_reversed',
+      'support_ticket_reply',
+      'support_ticket_status',
+      'support_update',
+      'SUPPORT_TICKET_REPLY',
+      'SUPPORT_TICKET_STATUS',
       'general'
     ],
     index: true
