@@ -45,7 +45,6 @@ const AdminSupport = () => {
   // Reply state
   const [replyMessage, setReplyMessage] = useState('');
   const [isInternalNote, setIsInternalNote] = useState(false);
-  const [replyStatus, setReplyStatus] = useState('');
   const [submittingReply, setSubmittingReply] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
 
@@ -102,7 +101,6 @@ const AdminSupport = () => {
       setLoadingConversation(true);
       setReplyMessage('');
       setIsInternalNote(false);
-      setReplyStatus('');
 
       const res = await adminSupportService.getTicketById(ticket._id);
       if (res && res.success && res.data) {
@@ -124,7 +122,8 @@ const AdminSupport = () => {
   }, [conversation, isDetailModalOpen]);
 
   // Admin reply / internal note submit
-  const handleSendAdminReply = async () => {
+  const handleSendAdminReply = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
     if (!replyMessage.trim()) {
       return toastManager.error('Please enter a message');
     }
@@ -133,8 +132,7 @@ const AdminSupport = () => {
       setSubmittingReply(true);
       const payload = {
         message: replyMessage.trim(),
-        isInternalNote,
-        status: replyStatus || undefined
+        isInternalNote
       };
 
       const res = await adminSupportService.replyTicket(selectedTicket._id, payload);
@@ -487,12 +485,12 @@ const AdminSupport = () => {
         )}
       </div>
 
-      {/* TICKET DETAIL & REPLY SLIDE-OVER / MODAL */}
+      {/* TICKET DETAIL & REPLY MODAL */}
       <Modal
         isOpen={isDetailModalOpen}
         onClose={() => setIsDetailModalOpen(false)}
         title={selectedTicket ? `Ticket #${selectedTicket.ticketNumber}` : 'Ticket Details'}
-        maxWidth="max-w-4xl"
+        size="lg"
       >
         {selectedTicket && (
           <div className="space-y-5">
@@ -634,95 +632,68 @@ const AdminSupport = () => {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Admin Reply & Internal Note Form */}
-            <div className="space-y-3 pt-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
+            {/* Admin Reply Form - Clean, Simple & Fast */}
+            <form onSubmit={handleSendAdminReply} className="pt-1">
+              <div className={`rounded-2xl border transition-all overflow-hidden ${
+                isInternalNote
+                  ? 'border-amber-300 bg-amber-50/40 ring-2 ring-amber-100'
+                  : 'border-gray-200 bg-white focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-100'
+              }`}>
+                <textarea
+                  value={replyMessage}
+                  onChange={(e) => setReplyMessage(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      if (replyMessage.trim() && !submittingReply) {
+                        handleSendAdminReply(e);
+                      }
+                    }
+                  }}
+                  rows={2}
+                  placeholder={
+                    isInternalNote
+                      ? "Write an internal note (only visible to admins)... [Press Enter to send]"
+                      : "Type your reply... [Press Enter to send]"
+                  }
+                  className="w-full bg-transparent px-3.5 pt-3 pb-2 text-xs font-medium text-gray-800 outline-none resize-none placeholder:text-gray-400"
+                />
+
+                <div className="flex items-center justify-between px-3 py-2 bg-gray-50/70 border-t border-gray-100">
+                  <label className="flex items-center gap-1.5 cursor-pointer text-gray-500 hover:text-gray-700 select-none">
+                    <input
+                      type="checkbox"
+                      checked={isInternalNote}
+                      onChange={(e) => setIsInternalNote(e.target.checked)}
+                      className="w-3.5 h-3.5 rounded text-amber-600 focus:ring-amber-500 border-gray-300 cursor-pointer"
+                    />
+                    <span className="text-[11px] font-bold flex items-center gap-1">
+                      <FiLock className="w-3 h-3 text-gray-400" />
+                      Internal note only
+                    </span>
+                  </label>
+
                   <button
-                    type="button"
-                    onClick={() => setIsInternalNote(false)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${
-                      !isInternalNote
-                        ? 'bg-primary-600 text-white shadow-sm'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                  >
-                    Reply to Customer
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsInternalNote(true)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all ${
+                    type="submit"
+                    disabled={submittingReply || !replyMessage.trim()}
+                    className={`px-4 py-1.5 rounded-xl text-xs font-bold text-white flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-40 disabled:pointer-events-none shadow-sm ${
                       isInternalNote
-                        ? 'bg-amber-500 text-white shadow-sm'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        ? 'bg-amber-600 hover:bg-amber-700'
+                        : 'bg-primary-600 hover:bg-primary-700'
                     }`}
                   >
-                    <FiLock className="w-3 h-3" />
-                    Internal Note
+                    {submittingReply ? (
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        <span>Send</span>
+                        <FiSend className="w-3 h-3" />
+                      </>
+                    )}
                   </button>
                 </div>
-
-                {!isInternalNote && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-bold text-gray-500">Set status after reply:</span>
-                    <select
-                      value={replyStatus}
-                      onChange={(e) => setReplyStatus(e.target.value)}
-                      className="px-2.5 py-1 rounded-lg bg-gray-50 border border-gray-200 text-xs font-bold text-gray-700 outline-none"
-                    >
-                      <option value="">Keep current / In Progress</option>
-                      <option value="WAITING_FOR_USER">Waiting for User</option>
-                      <option value="RESOLVED">Resolved</option>
-                      <option value="CLOSED">Closed</option>
-                    </select>
-                  </div>
-                )}
               </div>
-
-              <textarea
-                value={replyMessage}
-                onChange={(e) => setReplyMessage(e.target.value)}
-                rows={4}
-                className={`w-full p-3.5 rounded-2xl border text-xs font-medium outline-none resize-none transition-all shadow-sm ${
-                  isInternalNote
-                    ? 'bg-amber-50/50 border-amber-200 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-100'
-                    : 'bg-white border-gray-200 focus:border-primary-500 focus:ring-2 focus:ring-primary-100'
-                }`}
-                placeholder={
-                  isInternalNote
-                    ? 'Write private internal note (visible only to admins)...'
-                    : 'Type official response to customer (user receives in-app & push notification)...'
-                }
-              />
-
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsDetailModalOpen(false)}
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition-all"
-                >
-                  Close
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSendAdminReply}
-                  disabled={submittingReply || !replyMessage.trim()}
-                  className={`px-5 py-2 text-white rounded-xl text-xs font-black shadow-md active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50 ${
-                    isInternalNote ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-200' : 'bg-primary-600 hover:bg-primary-700 shadow-primary-200'
-                  }`}
-                >
-                  {submittingReply ? (
-                    <span>Sending...</span>
-                  ) : (
-                    <>
-                      <FiSend className="w-3.5 h-3.5" />
-                      <span>{isInternalNote ? 'Add Note' : 'Send Reply'}</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
+            </form>
           </div>
         )}
       </Modal>

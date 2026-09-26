@@ -143,15 +143,6 @@ export const PERMISSION_GROUPS = [
     ]
   },
   {
-    group: 'Subscription Plans',
-    icon: '📑',
-    color: 'violet',
-    keys: [
-      { key: 'plans.view', label: 'View Plans' },
-      { key: 'plans.edit', label: 'Manage & Edit Plans' }
-    ]
-  },
-  {
     group: 'Manage Website',
     icon: '🌐',
     color: 'sky',

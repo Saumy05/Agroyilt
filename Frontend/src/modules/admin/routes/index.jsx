@@ -26,8 +26,6 @@ const Payments = lazy(() => import('../pages/Payments'));
 const Reports = lazy(() => import('../pages/Reports'));
 const Notifications = lazy(() => import('../pages/Notifications'));
 
-const Plans = lazy(() => import('../pages/Plans/Plans'));
-
 const Withdrawals = lazy(() => import('../pages/Withdrawals'));
 const Settlements = lazy(() => import('../pages/Settlements'));
 const Reviews = lazy(() => import('../pages/Reviews'));
@@ -89,7 +87,7 @@ const AdminRoutes = () => {
             <Route path="reports/*" element={<Reports />} />
             <Route path="notifications/*" element={<Notifications />} />
 
-            <Route path="plans" element={<Plans />} />
+            <Route path="plans" element={<Navigate to="/admin/dashboard" replace />} />
             <Route path="reviews" element={<Reviews />} />
             <Route path="products" element={<Products />} />
             <Route path="products/orders" element={<EcommerceOrders />} />

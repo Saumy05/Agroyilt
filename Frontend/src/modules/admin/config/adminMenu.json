@@ -144,14 +144,6 @@
     "children": []
   },
   {
-    "title": "Plans",
-    "route": "/admin/plans",
-    "allowedRoles": [
-      "super_admin"
-    ],
-    "children": []
-  },
-  {
     "title": "Agri Marketplace",
     "route": "/admin/marketplace",
     "allowedRoles": [
