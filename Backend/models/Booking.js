@@ -285,6 +285,20 @@ const bookingSchema = new mongoose.Schema({
     lng: { type: Number, default: null }
   },
 
+  // Geographic Scope IDs (for admin district-scoped filtering)
+  districtId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'District',
+    default: null,
+    index: true
+  },
+  subDistrictId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'SubDistrict',
+    default: null,
+    index: true
+  },
+
   // ==========================================
   // 6. SCHEDULING
   // ==========================================
@@ -501,6 +515,8 @@ bookingSchema.index({ vendorId: 1, status: 1, createdAt: -1 });
 bookingSchema.index({ workerId: 1, status: 1, createdAt: -1 });
 bookingSchema.index({ scheduledDate: 1, status: 1 });
 bookingSchema.index({ paymentStatus: 1, status: 1 });
+bookingSchema.index({ districtId: 1, createdAt: -1 });
+bookingSchema.index({ subDistrictId: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Booking', bookingSchema);
 

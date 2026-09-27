@@ -6,7 +6,7 @@ const Booking = require('../../models/Booking');
 const { validationResult } = require('express-validator');
 const { WORKER_STATUS, BOOKING_STATUS, VENDOR_STATUS } = require('../../utils/constants');
 const { createNotification } = require('../notificationControllers/notificationController');
-const { buildAdminScopeFilter, auditAdminAction } = require('../../utils/adminScopeHelper');
+const { buildAdminScopeFilter, auditAdminAction, verifyResourceScope, extractAdminScopeFields } = require('../../utils/adminScopeHelper');
 
 /**
  * Get all workers with filters and pagination
@@ -166,6 +166,14 @@ const getWorkerDetails = async (req, res) => {
       });
     }
 
+    // IDOR protection: verify worker is within admin's geographic scope
+    if (!verifyResourceScope(req.user, worker.toObject ? worker.toObject() : worker, 'worker')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. This worker is outside your assigned geographic scope.'
+      });
+    }
+
     // Get worker booking stats
     const jobStats = await Booking.aggregate([
       {
@@ -238,6 +246,13 @@ const approveWorker = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: 'Worker not found'
+      });
+    }
+
+    if (!verifyResourceScope(req.user, worker.toObject ? worker.toObject() : worker, 'worker')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. This worker is outside your assigned geographic scope.'
       });
     }
 
@@ -314,6 +329,13 @@ const rejectWorker = async (req, res) => {
       });
     }
 
+    if (!verifyResourceScope(req.user, worker.toObject ? worker.toObject() : worker, 'worker')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. This worker is outside your assigned geographic scope.'
+      });
+    }
+
     worker.approvalStatus = 'rejected';
     worker.isActive = false;
     worker.rejectionReason = reason || 'Application does not meet requirements';
@@ -371,6 +393,13 @@ const suspendWorker = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: 'Worker not found'
+      });
+    }
+
+    if (!verifyResourceScope(req.user, worker.toObject ? worker.toObject() : worker, 'worker')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. This worker is outside your assigned geographic scope.'
       });
     }
 
@@ -822,6 +851,13 @@ const toggleWorkerStatus = async (req, res) => {
       });
     }
 
+    if (!verifyResourceScope(req.user, worker.toObject ? worker.toObject() : worker, 'worker')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. This worker is outside your assigned geographic scope.'
+      });
+    }
+
     worker.isActive = isActive;
     await worker.save();
 
@@ -914,6 +950,9 @@ const addWorker = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Worker with this phone already exists' });
     }
 
+    // Auto-assign admin's scope fields (Phase 4: scope enforcement on create)
+    const scopeFields = extractAdminScopeFields(req.user);
+
     const worker = await Worker.create({
       name: name.trim(),
       email: email || null,
@@ -927,6 +966,7 @@ const addWorker = async (req, res) => {
       approvalDate: new Date(),
       isActive: true,
       isPhoneVerified: true,
+      ...scopeFields,
       createdByAdmin: req.user?._id || null,
       createdByType: req.user?.role === 'super_admin' ? 'SUPER_ADMIN' : 'ADMIN',
       creationSource: req.user?.role === 'super_admin' ? 'SUPER_ADMIN_CREATED' : 'ADMIN_CREATED',
@@ -939,8 +979,10 @@ const addWorker = async (req, res) => {
       address: {
         addressLine1: req.body.address || '',
         city: req.body.city || req.user?.cityName || '',
-        district: req.body.district || req.user?.districtName || '',
-        subDistrict: req.body.subDistrict || req.user?.subDistrictName || '',
+        district: scopeFields.districtName || req.body.district || req.user?.districtName || '',
+        subDistrict: scopeFields.subDistrictName || req.body.subDistrict || req.user?.subDistrictName || '',
+        districtId: scopeFields.districtId || null,
+        subDistrictId: scopeFields.subDistrictId || null,
         state: req.body.state || 'Maharashtra',
         pincode: req.body.pincode || ''
       }

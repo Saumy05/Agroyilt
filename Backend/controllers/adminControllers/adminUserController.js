@@ -2,7 +2,7 @@ const User = require('../../models/User');
 const Admin = require('../../models/Admin');
 const Booking = require('../../models/Booking');
 const { validationResult } = require('express-validator');
-const { buildAdminScopeFilter, auditAdminAction } = require('../../utils/adminScopeHelper');
+const { buildAdminScopeFilter, auditAdminAction, verifyResourceScope, extractAdminScopeFields } = require('../../utils/adminScopeHelper');
 
 /**
  * Get all users with filters and pagination
@@ -112,6 +112,14 @@ const getUserDetails = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: 'User not found'
+      });
+    }
+
+    // IDOR protection: verify user is within admin's geographic scope
+    if (!verifyResourceScope(req.user, user.toObject ? user.toObject() : user, 'user')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. This user is outside your assigned geographic scope.'
       });
     }
 
@@ -455,10 +463,13 @@ const addUser = async (req, res) => {
       });
     }
 
-    // Create user with admin traceability
+    // Create user with admin traceability + geographic scope
     const userCity = req.body.city || req.user?.cityName || '';
     const userDistrict = req.body.district || req.user?.districtName || '';
     const userSubDistrict = req.body.subDistrict || req.user?.subDistrictName || '';
+
+    // Auto-assign admin's scope fields (Phase 4: scope enforcement on create)
+    const scopeFields = extractAdminScopeFields(req.user);
 
     const isSuperAdmin = req.user?.role === 'super_admin';
     const userData = {
@@ -469,6 +480,7 @@ const addUser = async (req, res) => {
       isActive: true,
       approvalStatus: 'approved',
       approvalDate: new Date(),
+      ...scopeFields, // auto-assign districtId/subDistrictId from creating admin's scope
       createdByAdmin: req.user?._id || null,
       createdByType: isSuperAdmin ? 'SUPER_ADMIN' : 'ADMIN',
       creationSource: isSuperAdmin ? 'SUPER_ADMIN_CREATED' : 'ADMIN_CREATED',

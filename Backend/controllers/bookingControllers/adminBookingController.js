@@ -1,6 +1,7 @@
 const Booking = require('../../models/Booking');
 const { validationResult } = require('express-validator');
 const { BOOKING_STATUS } = require('../../utils/constants');
+const { buildAdminScopeFilter, verifyResourceScope } = require('../../utils/adminScopeHelper');
 
 /**
  * Get all bookings with filters and search
@@ -47,13 +48,19 @@ const getAllBookings = async (req, res) => {
       ];
     }
 
+    // Apply Geographic Scope Filter for scoped Admins
+    const scopeFilter = buildAdminScopeFilter(req.user, 'booking');
+    const finalQuery = Object.keys(scopeFilter).length > 0
+      ? { $and: [query, scopeFilter] }
+      : query;
+
     // Pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     // Fetch bookings & count concurrently with .lean() and focused projection for maximum speed
     const [bookings, total] = await Promise.all([
-      Booking.find(query)
-        .select('bookingNumber status scheduledDate scheduledTime timeSlot finalAmount agreedRate basePrice minRate maxRate userPayableAmount totalAmount paymentStatus paymentMethod items bookedItems selectedImplements rental_type serviceCategory serviceName address liveLocation estimatedArrivalTime distanceRemaining createdAt userId vendorId workerId serviceId categoryId')
+      Booking.find(finalQuery)
+        .select('bookingNumber status scheduledDate scheduledTime timeSlot finalAmount agreedRate basePrice minRate maxRate userPayableAmount totalAmount paymentStatus paymentMethod items bookedItems selectedImplements rental_type serviceCategory serviceName address liveLocation estimatedArrivalTime distanceRemaining createdAt userId vendorId workerId serviceId categoryId districtId subDistrictId')
         .populate('userId', 'name phone email')
         .populate('vendorId', 'name businessName phone')
         .populate('serviceId', 'title iconUrl')
@@ -63,7 +70,7 @@ const getAllBookings = async (req, res) => {
         .skip(skip)
         .limit(parseInt(limit))
         .lean(),
-      Booking.countDocuments(query)
+      Booking.countDocuments(finalQuery)
     ]);
 
     // Ensure finalAmount, totalAmount, and paymentMethod are always reliably populated
@@ -117,6 +124,14 @@ const getBookingById = async (req, res) => {
       });
     }
 
+    // IDOR protection: verify booking is within admin's geographic scope
+    if (!verifyResourceScope(req.user, booking.toObject ? booking.toObject() : booking, 'booking')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. This booking is outside your assigned geographic scope.'
+      });
+    }
+
     res.status(200).json({
       success: true,
       data: booking
@@ -153,6 +168,14 @@ const cancelBooking = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: 'Booking not found'
+      });
+    }
+
+    // IDOR protection: verify booking is within admin's geographic scope
+    if (!verifyResourceScope(req.user, booking.toObject ? booking.toObject() : booking, 'booking')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. This booking is outside your assigned geographic scope.'
       });
     }
 
@@ -199,7 +222,7 @@ const getBookingAnalytics = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
 
-    // Build date filter
+    // Build date filter + scope filter
     const dateFilter = {};
     if (startDate || endDate) {
       dateFilter.createdAt = {};
@@ -207,12 +230,17 @@ const getBookingAnalytics = async (req, res) => {
       if (endDate) dateFilter.createdAt.$lte = new Date(endDate);
     }
 
+    const scopeFilter = buildAdminScopeFilter(req.user, 'booking');
+    const finalFilter = Object.keys(scopeFilter).length > 0
+      ? { $and: [dateFilter, scopeFilter] }
+      : dateFilter;
+
     // Total bookings
-    const totalBookings = await Booking.countDocuments(dateFilter);
+    const totalBookings = await Booking.countDocuments(finalFilter);
 
     // Bookings by status
     const bookingsByStatus = await Booking.aggregate([
-      { $match: dateFilter },
+      { $match: finalFilter },
       {
         $group: {
           _id: '$status',
@@ -223,7 +251,7 @@ const getBookingAnalytics = async (req, res) => {
 
     // Bookings by payment status
     const bookingsByPaymentStatus = await Booking.aggregate([
-      { $match: dateFilter },
+      { $match: finalFilter },
       {
         $group: {
           _id: '$paymentStatus',
@@ -237,7 +265,7 @@ const getBookingAnalytics = async (req, res) => {
     const revenueStats = await Booking.aggregate([
       {
         $match: {
-          ...dateFilter,
+          ...finalFilter,
           paymentStatus: 'success'
         }
       },
@@ -252,14 +280,17 @@ const getBookingAnalytics = async (req, res) => {
     ]);
 
     // Daily bookings trend (last 30 days)
+    const dailyFilter = {
+      ...finalFilter,
+      createdAt: {
+        ...(finalFilter.createdAt || {}),
+        $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+      }
+    };
+
     const dailyTrend = await Booking.aggregate([
       {
-        $match: {
-          ...dateFilter,
-          createdAt: {
-            $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-          }
-        }
+        $match: dailyFilter
       },
       {
         $group: {

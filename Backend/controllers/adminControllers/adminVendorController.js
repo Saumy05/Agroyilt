@@ -7,7 +7,7 @@ const Product = require('../../models/Product');
 const { validationResult } = require('express-validator');
 const { VENDOR_STATUS, BOOKING_STATUS, PAYMENT_STATUS } = require('../../utils/constants');
 const { createNotification } = require('../notificationControllers/notificationController');
-const { buildAdminScopeFilter, auditAdminAction } = require('../../utils/adminScopeHelper');
+const { buildAdminScopeFilter, auditAdminAction, verifyResourceScope, extractAdminScopeFields } = require('../../utils/adminScopeHelper');
 
 /**
  * Get all vendors with filters and pagination
@@ -109,6 +109,14 @@ const getVendorDetails = async (req, res) => {
       });
     }
 
+    // IDOR protection: verify vendor is within admin's geographic scope
+    if (!verifyResourceScope(req.user, vendor.toObject ? vendor.toObject() : vendor, 'vendor')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. This equipment owner is outside your assigned geographic scope.'
+      });
+    }
+
     // Get vendor stats from VendorBill (single source of truth)
     const totalBookings = await Booking.countDocuments({ vendorId: vendor._id });
     const completedBookings = await Booking.countDocuments({ vendorId: vendor._id, status: BOOKING_STATUS.COMPLETED });
@@ -169,6 +177,13 @@ const approveVendor = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: 'Vendor not found'
+      });
+    }
+
+    if (!verifyResourceScope(req.user, vendor.toObject ? vendor.toObject() : vendor, 'vendor')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. This equipment owner is outside your assigned geographic scope.'
       });
     }
 
@@ -247,6 +262,13 @@ const rejectVendor = async (req, res) => {
       });
     }
 
+    if (!verifyResourceScope(req.user, vendor.toObject ? vendor.toObject() : vendor, 'vendor')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. This equipment owner is outside your assigned geographic scope.'
+      });
+    }
+
     vendor.approvalStatus = VENDOR_STATUS.REJECTED;
     vendor.rejectedReason = reason || 'Registration rejected by admin';
     await vendor.save();
@@ -288,6 +310,13 @@ const suspendVendor = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: 'Vendor not found'
+      });
+    }
+
+    if (!verifyResourceScope(req.user, vendor.toObject ? vendor.toObject() : vendor, 'vendor')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. This equipment owner is outside your assigned geographic scope.'
       });
     }
 
@@ -505,6 +534,13 @@ const toggleVendorStatus = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: 'Vendor not found'
+      });
+    }
+
+    if (!verifyResourceScope(req.user, vendor.toObject ? vendor.toObject() : vendor, 'vendor')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. This equipment owner is outside your assigned geographic scope.'
       });
     }
 
@@ -814,6 +850,9 @@ module.exports = {
         serviceArray.push('soil_testing');
       }
 
+      // Auto-assign admin's scope fields (Phase 4: scope enforcement on create)
+      const scopeFields = extractAdminScopeFields(req.user);
+
       // Create the vendor document.
       // Admin created vendors bypass the review process, so approvalStatus is APPROVED and isActive is true.
       const vendorData = {
@@ -837,6 +876,7 @@ module.exports = {
         approvalDate: new Date(),
         isActive: true,
         isPhoneVerified: true,
+        ...scopeFields,
         createdByAdmin: req.user?._id || null,
         createdByType: req.user?.role === 'super_admin' ? 'SUPER_ADMIN' : 'ADMIN',
         creationSource: req.user?.role === 'super_admin' ? 'SUPER_ADMIN_CREATED' : 'ADMIN_CREATED',
@@ -849,8 +889,10 @@ module.exports = {
         address: {
           fullAddress: req.body.address || req.body.fullAddress || '',
           city: req.body.city || req.user?.cityName || '',
-          district: req.body.district || req.user?.districtName || '',
-          subDistrict: req.body.subDistrict || req.user?.subDistrictName || '',
+          district: scopeFields.districtName || req.body.district || req.user?.districtName || '',
+          subDistrict: scopeFields.subDistrictName || req.body.subDistrict || req.user?.subDistrictName || '',
+          districtId: scopeFields.districtId || null,
+          subDistrictId: scopeFields.subDistrictId || null,
           state: req.body.state || 'Maharashtra',
           pincode: req.body.pincode || '',
           cityId: req.user?.cityId || null

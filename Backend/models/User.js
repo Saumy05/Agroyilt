@@ -240,6 +240,28 @@ const userSchema = new mongoose.Schema({
     updatedAt: { type: Date, default: Date.now }
   }],
 
+  // ── Geographic Scope (for Admin filtering by districtId/subDistrictId) ─────
+  districtId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'District',
+    default: null,
+    index: true
+  },
+  districtName: {
+    type: String,
+    default: null
+  },
+  subDistrictId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'SubDistrict',
+    default: null,
+    index: true
+  },
+  subDistrictName: {
+    type: String,
+    default: null
+  },
+
   // Admin Traceability: which admin created/registered this user (immutable)
   createdByAdmin: {
     type: mongoose.Schema.Types.ObjectId,
@@ -304,6 +326,8 @@ userSchema.index({ creationSource: 1, createdAt: -1 });
 userSchema.index({ createdByType: 1, createdAt: -1 });
 userSchema.index({ 'addresses.city': 1 });
 userSchema.index({ 'addresses.district': 1 });
+userSchema.index({ districtId: 1, createdAt: -1 });
+userSchema.index({ subDistrictId: 1, createdAt: -1 });
 userSchema.index({ 'farms.location': '2dsphere' });
 
 module.exports = mongoose.model('User', userSchema);

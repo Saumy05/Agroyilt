@@ -373,6 +373,28 @@ const vendorSchema = new mongoose.Schema({
     updatedAt: { type: Date, default: Date.now }
   }],
 
+  // ── Geographic Scope (for Admin filtering by districtId/subDistrictId) ─────
+  districtId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'District',
+    default: null,
+    index: true
+  },
+  districtName: {
+    type: String,
+    default: null
+  },
+  subDistrictId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'SubDistrict',
+    default: null,
+    index: true
+  },
+  subDistrictName: {
+    type: String,
+    default: null
+  },
+
   // Admin Traceability: which admin created/registered this vendor (immutable)
   createdByAdmin: {
     type: mongoose.Schema.Types.ObjectId,
@@ -422,6 +444,8 @@ vendorSchema.index({ createdByType: 1, createdAt: -1 });
 vendorSchema.index({ 'wallet.earnings': -1 });
 vendorSchema.index({ geoLocation: '2dsphere' }); // Fast geo queries
 vendorSchema.index({ isOnline: 1, availability: 1, approvalStatus: 1 }); // Compound index for vendor search
+vendorSchema.index({ districtId: 1, createdAt: -1 });
+vendorSchema.index({ subDistrictId: 1, createdAt: -1 });
 
 // Hash password before saving
 vendorSchema.pre('save', async function (next) {

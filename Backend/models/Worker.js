@@ -246,6 +246,28 @@ const workerSchema = new mongoose.Schema({
     updatedAt: { type: Date, default: Date.now }
   }],
 
+  // ── Geographic Scope (for Admin filtering by districtId/subDistrictId) ─────
+  districtId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'District',
+    default: null,
+    index: true
+  },
+  districtName: {
+    type: String,
+    default: null
+  },
+  subDistrictId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'SubDistrict',
+    default: null,
+    index: true
+  },
+  subDistrictName: {
+    type: String,
+    default: null
+  },
+
   // Admin Traceability: which admin created/registered this worker (immutable)
   createdByAdmin: {
     type: mongoose.Schema.Types.ObjectId,
@@ -296,6 +318,8 @@ workerSchema.index({ creationSource: 1, createdAt: -1 });
 workerSchema.index({ createdByType: 1, createdAt: -1 });
 workerSchema.index({ status: 1 });
 workerSchema.index({ isOnline: 1 });
+workerSchema.index({ districtId: 1, createdAt: -1 });
+workerSchema.index({ subDistrictId: 1, createdAt: -1 });
 
 // Hash password before saving
 workerSchema.pre('save', async function (next) {

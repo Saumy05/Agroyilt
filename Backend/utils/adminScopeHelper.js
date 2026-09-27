@@ -1,77 +1,232 @@
 const AdminAuditLog = require('../models/AdminAuditLog');
 
 /**
- * Builds the geographic scope query filter for a given admin and entity type.
- * If admin is super_admin or scopeType === 'GLOBAL', returns {} (unrestricted).
+ * buildAdminScopeFilter
+ * ─────────────────────
+ * Builds a Mongoose query filter that restricts data to the admin's geographic scope.
+ *
+ * Strategy (in priority order):
+ *   1. ObjectId match  — districtId / subDistrictId stored on the entity (most reliable)
+ *   2. String fallback — address.district / districtName regex (for legacy records)
+ *
+ * Supported entityType values:
+ *   'user', 'vendor', 'worker', 'booking', 'general'
+ *
+ * Returns {} for super_admin or GLOBAL scope (unrestricted).
  */
 function buildAdminScopeFilter(admin, entityType = 'general') {
+  // Super Admin and GLOBAL scope → unrestricted
   if (!admin || admin.role === 'super_admin' || admin.scopeType === 'GLOBAL') {
     return {};
   }
 
-  const { scopeType, cityId, cityName, districtId, districtName, subDistrictId, subDistrictName } = admin;
-  const cleanCity = (cityName || '').trim();
-  const cleanDistrict = (districtName || '').trim();
-  const cleanSubDistrict = (subDistrictName || '').trim();
+  const { scopeType, districtId, districtName, subDistrictId, subDistrictName, cityId, cityName } = admin;
 
+  // ── CITY scope ──────────────────────────────────────────────────────────────
   if (scopeType === 'CITY') {
-    const cityConditions = [];
+    const conditions = [];
     if (cityId) {
-      if (entityType === 'vendor') cityConditions.push({ cityId });
-      cityConditions.push({ 'address.cityId': cityId });
+      if (entityType === 'vendor') {
+        conditions.push({ cityId }); // top-level cityId on Vendor
+      }
+      conditions.push({ 'address.cityId': cityId }); // address sub-object
     }
-    if (cleanCity) {
-      const cityRegex = new RegExp(`^${escapeRegex(cleanCity)}$`, 'i');
+    if (cityName && cityName.trim()) {
+      const cityRegex = new RegExp(`^${escapeRegex(cityName.trim())}$`, 'i');
       if (entityType === 'user') {
-        cityConditions.push({ 'addresses.city': cityRegex }, { 'farms.location.city': cityRegex });
+        conditions.push(
+          { 'addresses.city': cityRegex },
+          { 'farms.location.city': cityRegex }
+        );
       } else {
-        cityConditions.push({ 'address.city': cityRegex }, { cityName: cityRegex });
+        conditions.push(
+          { 'address.city': cityRegex },
+          { cityName: cityRegex }
+        );
       }
     }
-    return cityConditions.length > 0 ? { $or: cityConditions } : {};
+    return conditions.length > 0 ? { $or: conditions } : {};
   }
 
+  // ── DISTRICT scope ───────────────────────────────────────────────────────────
   if (scopeType === 'DISTRICT') {
-    const distConditions = [];
+    const conditions = [];
+
+    // Primary: ObjectId match
     if (districtId) {
-      distConditions.push({ districtId }, { 'address.districtId': districtId });
+      conditions.push({ districtId });           // top-level field (User/Vendor/Worker/Booking)
+      conditions.push({ 'address.districtId': districtId }); // inside address sub-object
     }
-    if (cleanDistrict) {
-      const distRegex = new RegExp(`^${escapeRegex(cleanDistrict)}$`, 'i');
+
+    // Secondary: string fallback for legacy records
+    if (districtName && districtName.trim()) {
+      const distRegex = new RegExp(`^${escapeRegex(districtName.trim())}$`, 'i');
       if (entityType === 'user') {
-        distConditions.push({ 'addresses.district': distRegex }, { districtName: distRegex });
+        conditions.push(
+          { 'addresses.district': distRegex },
+          { districtName: distRegex }
+        );
+      } else if (entityType === 'booking') {
+        conditions.push(
+          { 'address.district': distRegex },
+          { districtName: distRegex },
+          { 'address.city': distRegex } // legacy bookings often stored district name in address.city
+        );
       } else {
-        distConditions.push({ 'address.district': distRegex }, { districtName: distRegex });
+        conditions.push(
+          { 'address.district': distRegex },
+          { districtName: distRegex }
+        );
       }
     }
-    if (cleanCity && distConditions.length === 0) {
-      const cityRegex = new RegExp(`^${escapeRegex(cleanCity)}$`, 'i');
-      distConditions.push({ 'address.city': cityRegex });
-    }
-    return distConditions.length > 0 ? { $or: distConditions } : {};
+
+    return conditions.length > 0 ? { $or: conditions } : {};
   }
 
+  // ── SUB_DISTRICT scope ───────────────────────────────────────────────────────
   if (scopeType === 'SUB_DISTRICT') {
-    const subConditions = [];
+    const conditions = [];
+
+    // Primary: ObjectId match
     if (subDistrictId) {
-      subConditions.push({ subDistrictId }, { 'address.subDistrictId': subDistrictId });
+      conditions.push({ subDistrictId });
+      conditions.push({ 'address.subDistrictId': subDistrictId });
     }
-    if (cleanSubDistrict) {
-      const subRegex = new RegExp(`^${escapeRegex(cleanSubDistrict)}$`, 'i');
+
+    // Secondary: string fallback
+    if (subDistrictName && subDistrictName.trim()) {
+      const subRegex = new RegExp(`^${escapeRegex(subDistrictName.trim())}$`, 'i');
       if (entityType === 'user') {
-        subConditions.push({ 'addresses.subDistrict': subRegex }, { subDistrictName: subRegex });
+        conditions.push(
+          { 'addresses.subDistrict': subRegex },
+          { subDistrictName: subRegex }
+        );
       } else {
-        subConditions.push({ 'address.subDistrict': subRegex }, { subDistrictName: subRegex });
+        conditions.push(
+          { 'address.subDistrict': subRegex },
+          { subDistrictName: subRegex }
+        );
       }
     }
-    if (cleanDistrict && subConditions.length === 0) {
-      const distRegex = new RegExp(`^${escapeRegex(cleanDistrict)}$`, 'i');
-      subConditions.push({ 'address.district': distRegex });
+
+    // Tertiary: fall back to district string if sub-district has no matches
+    if (conditions.length === 0 && districtName && districtName.trim()) {
+      const distRegex = new RegExp(`^${escapeRegex(districtName.trim())}$`, 'i');
+      conditions.push({ 'address.district': distRegex });
     }
-    return subConditions.length > 0 ? { $or: subConditions } : {};
+
+    return conditions.length > 0 ? { $or: conditions } : {};
   }
 
   return {};
+}
+
+/**
+ * verifyResourceScope
+ * ───────────────────
+ * Call this in individual resource GET/PUT/DELETE endpoints to prevent IDOR
+ * (Insecure Direct Object Reference) across geographic scopes.
+ *
+ * Returns true if the admin is allowed to access this resource, false otherwise.
+ *
+ * @param {Object} admin       - req.user (the authenticated admin)
+ * @param {Object} resource    - the fetched Mongoose document (lean or Mongoose)
+ * @param {string} entityType  - 'user' | 'vendor' | 'worker' | 'booking'
+ */
+function verifyResourceScope(admin, resource, entityType = 'general') {
+  // Super admins can access everything
+  if (!admin || admin.role === 'super_admin' || admin.scopeType === 'GLOBAL') {
+    return true;
+  }
+
+  const { scopeType } = admin;
+
+  // CITY scope
+  if (scopeType === 'CITY') {
+    // City check: match via cityId or city string
+    if (admin.cityId) {
+      const resourceCityId = resource.cityId || resource.address?.cityId;
+      if (resourceCityId && resourceCityId.toString() === admin.cityId.toString()) return true;
+    }
+    if (admin.cityName) {
+      const adminCity = admin.cityName.trim().toLowerCase();
+      const addresses = resource.addresses || [];
+      for (const a of addresses) {
+        if ((a.city || '').toLowerCase() === adminCity) return true;
+      }
+      const addrCity = (resource.address?.city || resource.cityName || '').toLowerCase();
+      if (addrCity === adminCity) return true;
+    }
+    return false;
+  }
+
+  // DISTRICT scope
+  if (scopeType === 'DISTRICT') {
+    if (admin.districtId) {
+      const resDistrictId = resource.districtId || resource.address?.districtId;
+      if (resDistrictId && resDistrictId.toString() === admin.districtId.toString()) return true;
+    }
+    // Also allow: resource was created by this admin (traceability)
+    if (resource.createdByAdmin && resource.createdByAdmin.toString() === admin._id.toString()) {
+      return true;
+    }
+    // String fallback
+    if (admin.districtName) {
+      const adminDist = admin.districtName.trim().toLowerCase();
+      const resDist = (resource.districtName || resource.address?.district || '').toLowerCase();
+      if (resDist && resDist === adminDist) return true;
+      // also allow address.city for legacy bookings
+      if (entityType === 'booking' && (resource.address?.city || '').toLowerCase() === adminDist) {
+        return true;
+      }
+      // user addresses array
+      for (const a of resource.addresses || []) {
+        if ((a.district || '').toLowerCase() === adminDist) return true;
+      }
+    }
+    return false;
+  }
+
+  // SUB_DISTRICT scope
+  if (scopeType === 'SUB_DISTRICT') {
+    if (admin.subDistrictId) {
+      const resSubId = resource.subDistrictId || resource.address?.subDistrictId;
+      if (resSubId && resSubId.toString() === admin.subDistrictId.toString()) return true;
+    }
+    // Also allow: resource was created by this admin
+    if (resource.createdByAdmin && resource.createdByAdmin.toString() === admin._id.toString()) {
+      return true;
+    }
+    // String fallback
+    if (admin.subDistrictName) {
+      const adminSub = admin.subDistrictName.trim().toLowerCase();
+      const resSub = (resource.subDistrictName || resource.address?.subDistrict || '').toLowerCase();
+      if (resSub && resSub === adminSub) return true;
+      for (const a of resource.addresses || []) {
+        if ((a.subDistrict || '').toLowerCase() === adminSub) return true;
+      }
+    }
+    return false;
+  }
+
+  return true; // unknown scope → allow (fail-open, let role checks handle)
+}
+
+/**
+ * extractAdminScopeFields
+ * ────────────────────────
+ * Returns the scope fields to auto-assign to a newly created user/vendor/worker
+ * based on the creating admin's scope.
+ */
+function extractAdminScopeFields(admin) {
+  if (!admin || admin.role === 'super_admin' || admin.scopeType === 'GLOBAL') return {};
+
+  return {
+    districtId: admin.districtId || null,
+    districtName: admin.districtName || null,
+    subDistrictId: admin.subDistrictId || null,
+    subDistrictName: admin.subDistrictName || null
+  };
 }
 
 function escapeRegex(text) {
@@ -88,9 +243,9 @@ async function auditAdminAction(req, action, module, description, targetId = nul
 
     await AdminAuditLog.log({
       adminId: admin._id || admin.id,
-      adminName: admin.name ,
-      adminEmail: admin.email ,
-      adminRole: admin.role ,
+      adminName: admin.name,
+      adminEmail: admin.email,
+      adminRole: admin.role,
       action,
       module,
       description,
@@ -108,5 +263,7 @@ async function auditAdminAction(req, action, module, description, targetId = nul
 
 module.exports = {
   buildAdminScopeFilter,
+  verifyResourceScope,
+  extractAdminScopeFields,
   auditAdminAction
 };
