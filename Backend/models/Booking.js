@@ -18,14 +18,12 @@ const bookingSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: [true, 'User is required'],
-    index: true
+    required: [true, 'User is required']
   },
   vendorId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Vendor',
-    required: false,
-    index: true
+    required: false
   },
   equipmentId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -36,8 +34,7 @@ const bookingSchema = new mongoose.Schema({
   workerId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Worker',
-    default: null,
-    index: true
+    default: null
   },
   workerRequestId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -510,6 +507,7 @@ bookingSchema.pre('save', async function (next) {
 bookingSchema.index({ createdAt: -1 });
 bookingSchema.index({ status: 1, createdAt: -1 });
 bookingSchema.index({ bookingNumber: 1 });
+bookingSchema.index({ userId: 1, createdAt: -1 });
 bookingSchema.index({ userId: 1, status: 1, createdAt: -1 });
 bookingSchema.index({ vendorId: 1, status: 1, createdAt: -1 });
 bookingSchema.index({ workerId: 1, status: 1, createdAt: -1 });

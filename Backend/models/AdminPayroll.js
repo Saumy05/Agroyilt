@@ -63,6 +63,7 @@ const adminPayrollSchema = new mongoose.Schema({
     farmerIncentiveRate: { type: Number, default: 0 },
     vendorIncentiveRate: { type: Number, default: 0 },
     workerIncentiveRate: { type: Number, default: 0 },
+    minRegistrationsForIncentive: { type: Number, default: 0 },
     effectiveFrom: { type: Date },
     bankDetails: {
       accountNumber: { type: String, default: '' },
@@ -106,6 +107,18 @@ const adminPayrollSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  minRegistrationsThreshold: {
+    type: Number,
+    default: 0
+  },
+  totalRegistrationsCount: {
+    type: Number,
+    default: 0
+  },
+  qualifyingRegistrationsCount: {
+    type: Number,
+    default: 0
+  },
 
   // Authoritative, itemized registration proof
   incentiveItems: [{
@@ -123,6 +136,7 @@ const adminPayrollSchema = new mongoose.Schema({
     rate: { type: Number, required: true },
     quantity: { type: Number, default: 1 },
     amount: { type: Number, required: true },
+    isThresholdLocked: { type: Boolean, default: false },
     registeredAt: { type: Date, default: Date.now }
   }],
 

@@ -54,7 +54,9 @@ const formatDate = (d) => {
 
 const getScopeDisplay = (admin) => {
   if (admin.scopeType === 'GLOBAL' || admin.role === 'super_admin') return 'Global Access';
-  if (admin.scopeType === 'SUB_DISTRICT') return admin.subDistrictName || 'Sub-District';
+  if (admin.scopeType === 'SUB_DISTRICT') {
+    return [admin.districtName, admin.subDistrictName].filter(Boolean).join(' · ') || 'Sub-District';
+  }
   if (admin.scopeType === 'DISTRICT') return admin.districtName || 'District';
   return admin.cityId?.name || admin.cityName || 'City';
 };
@@ -298,6 +300,7 @@ const AdminFormModal = ({ admin, cities, onClose, onSave, defaultTab = 'basic' }
       farmerIncentive: admin?.salary?.farmerIncentive !== undefined && admin?.salary?.farmerIncentive !== 0 ? admin.salary.farmerIncentive : '',
       vendorIncentive: admin?.salary?.vendorIncentive !== undefined && admin?.salary?.vendorIncentive !== 0 ? admin.salary.vendorIncentive : '',
       workerIncentive: admin?.salary?.workerIncentive !== undefined && admin?.salary?.workerIncentive !== 0 ? admin.salary.workerIncentive : '',
+      minRegistrationsForIncentive: admin?.salary?.minRegistrationsForIncentive !== undefined && admin?.salary?.minRegistrationsForIncentive !== 0 ? admin.salary.minRegistrationsForIncentive : '',
       bankDetails: {
         accountNumber: admin?.salary?.bankDetails?.accountNumber || '',
         ifscCode: admin?.salary?.bankDetails?.ifscCode || '',
@@ -465,6 +468,7 @@ const AdminFormModal = ({ admin, cities, onClose, onSave, defaultTab = 'basic' }
           farmerIncentive: form.salary.farmerIncentive === '' ? 0 : Number(form.salary.farmerIncentive),
           vendorIncentive: form.salary.vendorIncentive === '' ? 0 : Number(form.salary.vendorIncentive),
           workerIncentive: form.salary.workerIncentive === '' ? 0 : Number(form.salary.workerIncentive),
+          minRegistrationsForIncentive: form.salary.minRegistrationsForIncentive === '' ? 0 : Number(form.salary.minRegistrationsForIncentive),
           status: form.salary.status || 'ACTIVE',
           effectiveFrom: form.salary.effectiveFrom || null,
           effectiveTo: form.salary.effectiveTo || null,
@@ -732,49 +736,80 @@ const AdminFormModal = ({ admin, cities, onClose, onSave, defaultTab = 'basic' }
 
             {/* Compensation & Salary Tab */}
             {activeTab === 'compensation' && (
-              <div className="space-y-5">
+              <div className="space-y-5 pb-8">
                 {/* Live Accrued Compensation Preview if Admin has registrations */}
-                {admin?.onboardedStats && (
-                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-bold text-blue-900 uppercase tracking-wide">
-                        Accrued Performance Payout
-                      </span>
-                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
-                        {admin.onboardedStats.total} Total Onboarded
-                      </span>
+                {admin?.onboardedStats && (() => {
+                  const totalOnboarded = admin.onboardedStats.total || 0;
+                  const threshold = Number(form.salary.minRegistrationsForIncentive) || 0;
+                  const isThresholdMet = totalOnboarded > threshold;
+                  const qualifyingCount = isThresholdMet ? totalOnboarded - threshold : 0;
+                  const rawPool = (
+                    (admin.onboardedStats.farmers * (Number(form.salary.farmerIncentive) || 0)) +
+                    (admin.onboardedStats.vendors * (Number(form.salary.vendorIncentive) || 0)) +
+                    (admin.onboardedStats.workers * (Number(form.salary.workerIncentive) || 0))
+                  );
+                  const liveEarnedIncentives = isThresholdMet
+                    ? (totalOnboarded > 0 ? Math.round((rawPool * qualifyingCount) / totalOnboarded) : 0)
+                    : 0;
+                  const liveEstimatedTotal = (Number(form.salary.baseSalary) || 0) + liveEarnedIncentives;
+
+                  return (
+                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                        <span className="text-xs font-bold text-blue-900 uppercase tracking-wide">
+                          Accrued Performance Payout
+                        </span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                            {totalOnboarded} Total Onboarded
+                          </span>
+                          {threshold > 0 && (
+                            isThresholdMet ? (
+                              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                🎯 {qualifyingCount} Qualifying (Threshold &gt;{threshold})
+                              </span>
+                            ) : (
+                              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                                🔒 Locked (Req. &gt;{threshold} · {threshold - totalOnboarded} more needed)
+                              </span>
+                            )
+                          )}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center mt-2">
+                        <div className="bg-white/80 p-2 rounded-xl border border-blue-100">
+                          <span className="text-[10px] text-gray-500 font-bold block">Base Salary</span>
+                          <span className="text-sm font-black text-gray-800">₹{(Number(form.salary.baseSalary) || 0).toLocaleString()}</span>
+                        </div>
+                        <div className="bg-white/80 p-2 rounded-xl border border-green-100">
+                          <span className="text-[10px] text-green-700 font-bold block">Farmers ({admin.onboardedStats.farmers})</span>
+                          <span className="text-sm font-black text-green-700">₹{(admin.onboardedStats.farmers * (Number(form.salary.farmerIncentive) || 0)).toLocaleString()}</span>
+                        </div>
+                        <div className="bg-white/80 p-2 rounded-xl border border-amber-100">
+                          <span className="text-[10px] text-amber-700 font-bold block">Vendors ({admin.onboardedStats.vendors})</span>
+                          <span className="text-sm font-black text-amber-700">₹{(admin.onboardedStats.vendors * (Number(form.salary.vendorIncentive) || 0)).toLocaleString()}</span>
+                        </div>
+                        <div className="bg-white/80 p-2 rounded-xl border border-purple-100">
+                          <span className="text-[10px] text-purple-700 font-bold block">Workers ({admin.onboardedStats.workers})</span>
+                          <span className="text-sm font-black text-purple-700">₹{(admin.onboardedStats.workers * (Number(form.salary.workerIncentive) || 0)).toLocaleString()}</span>
+                        </div>
+                      </div>
+                      <div className="mt-3 pt-2 border-t border-blue-200/60 flex items-center justify-between text-xs">
+                        <div>
+                          <span className="text-blue-900 font-medium">Estimated Total Compensation:</span>
+                          {threshold > 0 && !isThresholdMet && (
+                            <span className="text-[11px] text-amber-700 block font-normal">
+                              Incentive boundary ({threshold}) not yet reached. Total equals base salary.
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-base font-black text-blue-900">
+                          ₹{liveEstimatedTotal.toLocaleString()}
+                        </span>
+                      </div>
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center mt-2">
-                      <div className="bg-white/80 p-2 rounded-xl border border-blue-100">
-                        <span className="text-[10px] text-gray-500 font-bold block">Base Salary</span>
-                        <span className="text-sm font-black text-gray-800">₹{(Number(form.salary.baseSalary) || 0).toLocaleString()}</span>
-                      </div>
-                      <div className="bg-white/80 p-2 rounded-xl border border-green-100">
-                        <span className="text-[10px] text-green-700 font-bold block">Farmers ({admin.onboardedStats.farmers})</span>
-                        <span className="text-sm font-black text-green-700">₹{(admin.onboardedStats.farmers * (Number(form.salary.farmerIncentive) || 0)).toLocaleString()}</span>
-                      </div>
-                      <div className="bg-white/80 p-2 rounded-xl border border-amber-100">
-                        <span className="text-[10px] text-amber-700 font-bold block">Vendors ({admin.onboardedStats.vendors})</span>
-                        <span className="text-sm font-black text-amber-700">₹{(admin.onboardedStats.vendors * (Number(form.salary.vendorIncentive) || 0)).toLocaleString()}</span>
-                      </div>
-                      <div className="bg-white/80 p-2 rounded-xl border border-purple-100">
-                        <span className="text-[10px] text-purple-700 font-bold block">Workers ({admin.onboardedStats.workers})</span>
-                        <span className="text-sm font-black text-purple-700">₹{(admin.onboardedStats.workers * (Number(form.salary.workerIncentive) || 0)).toLocaleString()}</span>
-                      </div>
-                    </div>
-                    <div className="mt-3 pt-2 border-t border-blue-200/60 flex items-center justify-between text-xs">
-                      <span className="text-blue-900 font-medium">Estimated Total Compensation:</span>
-                      <span className="text-base font-black text-blue-900">
-                        ₹{(
-                          (Number(form.salary.baseSalary) || 0) +
-                          (admin.onboardedStats.farmers * (Number(form.salary.farmerIncentive) || 0)) +
-                          (admin.onboardedStats.vendors * (Number(form.salary.vendorIncentive) || 0)) +
-                          (admin.onboardedStats.workers * (Number(form.salary.workerIncentive) || 0))
-                        ).toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* Base Salary & Frequency & Status */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -893,6 +928,7 @@ const AdminFormModal = ({ admin, cities, onClose, onSave, defaultTab = 'basic' }
                             </div>
                             <p className="text-gray-500 text-[10px]">
                               Incentives: 👨‍🌾 ₹{hist.farmerIncentive || 0} · 🚜 ₹{hist.vendorIncentive || 0} · 👷 ₹{hist.workerIncentive || 0}
+                              {hist.minRegistrationsForIncentive ? ` · 🎯 Min Req: >${hist.minRegistrationsForIncentive}` : ''}
                             </p>
                             {hist.changeReason && (
                               <p className="text-blue-800 italic text-[10px]">Reason: {hist.changeReason}</p>
@@ -904,9 +940,9 @@ const AdminFormModal = ({ admin, cities, onClose, onSave, defaultTab = 'basic' }
                   </div>
                 )}
 
-                {/* Per-Registration Incentives */}
-                <div>
-                  <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                {/* Per-Registration Incentives & Unlock Threshold */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wide flex items-center gap-1.5">
                     <FiAward className="text-amber-500" /> Onboarding &amp; Registration Incentives
                   </h4>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -964,6 +1000,87 @@ const AdminFormModal = ({ admin, cities, onClose, onSave, defaultTab = 'basic' }
                         placeholder="0"
                       />
                     </div>
+                  </div>
+
+                  {/* Minimum Combined Registration Threshold Card (Per-Admin Configurable) */}
+                  <div className="bg-gradient-to-br from-amber-50/90 via-orange-50/60 to-amber-100/50 border border-amber-300/80 rounded-2xl p-4 mt-3 shadow-xs">
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-base">🎯</span>
+                          <label className="block text-xs font-black text-amber-950 uppercase tracking-wider">
+                            Minimum Combined Registration Threshold
+                          </label>
+                          <span className="text-[10px] font-bold text-amber-800 bg-amber-200/80 px-2 py-0.5 rounded-full border border-amber-300">
+                            Per-Admin Config
+                          </span>
+                        </div>
+                        <p className="text-xs text-amber-900 leading-relaxed mt-1 font-medium">
+                          Combined threshold across <strong>Farmers + Vendors + Workers</strong> for this Admin's assigned District/Sub-District. Incentives are applicable only to registrations beyond this threshold.
+                        </p>
+                        <p className="text-[11px] text-amber-700 mt-1 flex items-center gap-1 font-medium">
+                          <span>ℹ️</span> This threshold belongs <strong>strictly to this Admin ({form.name || 'new administrator'})</strong>. Each admin has their own independent threshold.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex flex-col sm:flex-row sm:items-center gap-3">
+                      <div className="w-full sm:w-64 relative">
+                        <input
+                          type="number"
+                          min="0"
+                          value={form.salary.minRegistrationsForIncentive}
+                          onFocus={(e) => e.target.select()}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setForm(p => ({
+                              ...p,
+                              salary: { ...p.salary, minRegistrationsForIncentive: val === '' ? '' : Math.max(0, parseInt(val, 10) || 0) }
+                            }));
+                          }}
+                          className="w-full px-3.5 py-2.5 bg-white border border-amber-400 rounded-xl text-sm font-black text-amber-950 focus:ring-2 focus:ring-amber-500 outline-none pr-28 shadow-xs"
+                          placeholder="500"
+                        />
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-1 rounded-md border border-amber-200">
+                          Threshold
+                        </span>
+                      </div>
+                      <div className="text-xs text-amber-800">
+                        {Number(form.salary.minRegistrationsForIncentive) === 0 ? (
+                          <span className="font-semibold text-emerald-800 flex items-center gap-1">
+                            <span>⚡</span> Threshold is 0: Incentive applies starting from the 1st valid registration.
+                          </span>
+                        ) : (
+                          <span>
+                            Must complete &gt; <strong>{Number(form.salary.minRegistrationsForIncentive)}</strong> combined registrations to unlock onboarding payout.
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Live Threshold Context if editing an existing admin */}
+                    {admin?.onboardedStats && (() => {
+                      const totalOnboarded = admin.onboardedStats.total || 0;
+                      const thresh = Number(form.salary.minRegistrationsForIncentive) || 0;
+                      const eligible = thresh === 0 ? totalOnboarded : Math.max(0, totalOnboarded - thresh);
+                      const remaining = Math.max(0, thresh - totalOnboarded);
+                      return (
+                        <div className="mt-3 pt-3 border-t border-amber-200/80 flex flex-wrap items-center gap-4 text-xs font-semibold">
+                          <span className="text-amber-950">
+                            Current Combined Registrations: <strong className="text-indigo-900">{totalOnboarded}</strong>
+                          </span>
+                          <span className="text-amber-800">|</span>
+                          <span className="text-amber-950">
+                            Threshold: <strong>{thresh}</strong>
+                          </span>
+                          <span className="text-amber-800">|</span>
+                          <span className={eligible > 0 ? "text-emerald-700 font-bold" : "text-amber-800 font-bold"}>
+                            Eligible Registrations: <strong>{eligible}</strong>
+                            {remaining > 0 && ` (${remaining} remaining to unlock)`}
+                          </span>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -2342,7 +2459,8 @@ const AdminManagement = ({ defaultTab }) => {
                   <th className="px-5 py-3.5 font-semibold">Role</th>
                   <th className="px-5 py-3.5 font-semibold">Geographic Scope</th>
                   <th className="px-5 py-3.5 font-semibold">Permissions</th>
-                  <th className="px-5 py-3.5 font-semibold">People Added</th>
+                  <th className="px-5 py-3.5 font-semibold">Registrations</th>
+                  <th className="px-5 py-3.5 font-semibold">Threshold &amp; Eligibility</th>
                   <th className="px-5 py-3.5 font-semibold">Salary &amp; Incentives</th>
                   <th className="px-5 py-3.5 font-semibold">Created By</th>
                   <th className="px-5 py-3.5 font-semibold">Status</th>
@@ -2425,6 +2543,41 @@ const AdminManagement = ({ defaultTab }) => {
                             <span title="Workers">👷 {admin.onboardedStats?.workers || 0}</span>
                           </div>
                         </div>
+                      </td>
+
+                      {/* Threshold & Eligibility */}
+                      <td className="px-5 py-4">
+                        {admin.role === 'super_admin' ? (
+                          <span className="text-[11px] text-gray-400 italic">Not Applicable</span>
+                        ) : (() => {
+                          const thresh = admin.salary?.minRegistrationsForIncentive !== undefined ? admin.salary.minRegistrationsForIncentive : 0;
+                          const total = admin.onboardedStats?.total || 0;
+                          const eligible = admin.onboardedStats?.qualifyingCount !== undefined
+                            ? admin.onboardedStats.qualifyingCount
+                            : (thresh === 0 ? total : Math.max(0, total - thresh));
+                          const remaining = Math.max(0, thresh - total);
+
+                          return (
+                            <div className="flex flex-col gap-1 items-start">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-50 text-amber-900 border border-amber-200">
+                                🎯 Min: {thresh}
+                              </span>
+                              {eligible > 0 ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                  ✓ {eligible} Eligible
+                                </span>
+                              ) : thresh > 0 ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-600 border border-gray-200" title={`${remaining} more registrations needed to unlock incentive`}>
+                                  🔒 0 Eligible ({remaining} left)
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                  ⚡ All Eligible (0 min)
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
 
                       {/* Salary & Incentives */}

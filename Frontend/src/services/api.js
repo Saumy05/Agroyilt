@@ -86,6 +86,33 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
+    // Check if the request is an authentication/login endpoint
+    const reqUrl = (originalRequest?.url || '').toLowerCase();
+    const isAuthRequest = [
+      '/auth/login',
+      '/auth/login-mpin',
+      '/auth/login-with-mpin',
+      '/auth/verify-login',
+      '/auth/send-otp',
+      '/auth/verify-otp',
+      '/auth/register',
+      '/auth/refresh-token',
+      '/auth/set-mpin',
+      '/auth/reset-mpin',
+      '/auth/forgot-mpin',
+      '/auth/mpin-status',
+      '/app/identify-role'
+    ].some(pattern => reqUrl.includes(pattern));
+
+    // If an auth or login request returned 401 (e.g. wrong credentials/MPIN),
+    // NEVER attempt token refresh or trigger logout/redirect. Let the login form catch block handle it gracefully!
+    if (isAuthRequest) {
+      return Promise.reject(error);
+    }
+
+    const currentPath = typeof window !== 'undefined' ? window.location.pathname.toLowerCase() : '';
+    const isOnLoginPage = currentPath.includes('/login') || currentPath.includes('/app') || currentPath.includes('/signup');
+
     // If error is 401 and we haven't tried to refresh yet
     if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
       const role = getRoleForRequest(originalRequest.url);
@@ -110,9 +137,11 @@ api.interceptors.response.use(
       const refreshToken = authStorage.getRefreshToken(role);
 
       if (!refreshToken) {
-        // No refresh token in tab session, logout this role only
+        // No refresh token in tab session, logout this role only if not already on login/auth page
         isRefreshing = false;
-        handleLogout(role);
+        if (!isOnLoginPage) {
+          handleLogout(role);
+        }
         return Promise.reject(error);
       }
 
@@ -150,7 +179,9 @@ api.interceptors.response.use(
         console.error(`[API] RefreshToken failed for ${role}:`, refreshError);
         processQueue(refreshError, null);
         isRefreshing = false;
-        handleLogout(role);
+        if (!isOnLoginPage) {
+          handleLogout(role);
+        }
         return Promise.reject(refreshError);
       }
     }
@@ -170,6 +201,12 @@ export const handleLogout = (role = null) => {
 
   // Clear this specific role session from the tab
   authStorage.clearAuthSession(targetRole);
+
+  // If already on a login/auth page, DO NOT reload or redirect via window.location.href!
+  const currentPath = typeof window !== 'undefined' ? window.location.pathname.toLowerCase() : '';
+  if (currentPath.includes('/login') || currentPath.includes('/app') || currentPath.includes('/signup')) {
+    return;
+  }
 
   // Navigate to portal login without affecting other tabs
   if (targetRole === 'vendor') {

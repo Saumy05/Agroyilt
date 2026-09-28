@@ -82,6 +82,7 @@ const AdminHeader = ({ onMenuClick }) => {
       { path: '/admin/products/orders', title: 'Global Marketplace Orders', description: 'Monitor all marketplace sales and fulfillment' },
       { path: '/admin/products', title: 'Machinery Management', description: 'Approve and manage heavy equipment, tractors, and machinery' },
       { path: '/admin/soil-tests', title: 'Soil Testing', description: 'Manage and monitor soil testing requests' },
+      { path: '/admin/admin-management', title: 'Admin Management', description: 'Configure admins, track lead attribution & record monthly salary' },
     ];
 
     const match = mappings.find(m => pathname === m.path || pathname.startsWith(m.path + '/'));

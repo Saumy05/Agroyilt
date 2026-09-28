@@ -36,7 +36,15 @@ const createAdminValidation = [
   body('email').isEmail().withMessage('Valid email is required'),
   body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
   body('role').optional().isIn(['super_admin', 'admin']).withMessage('Invalid role'),
-  body('scopeType').optional().isIn(['GLOBAL', 'CITY', 'DISTRICT', 'SUB_DISTRICT']).withMessage('Invalid scope type')
+  body('scopeType').optional().isIn(['GLOBAL', 'CITY', 'DISTRICT', 'SUB_DISTRICT']).withMessage('Invalid scope type'),
+  body('salary.minRegistrationsForIncentive').optional().custom(val => {
+    if (val === '' || val === null || val === undefined) return true;
+    const num = Number(val);
+    if (!Number.isInteger(num) || num < 0) {
+      throw new Error('Minimum combined registration threshold must be a valid non-negative integer');
+    }
+    return true;
+  })
 ];
 
 // All routes require authenticated active admin

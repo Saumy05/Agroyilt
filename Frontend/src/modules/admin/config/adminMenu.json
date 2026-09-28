@@ -238,14 +238,6 @@
     "children": []
   },
   {
-    "title": "Admin Payroll",
-    "route": "/admin/admin-salaries",
-    "allowedRoles": [
-      "super_admin"
-    ],
-    "children": []
-  },
-  {
     "title": "Settings",
     "route": "/admin/settings",
     "allowedRoles": [

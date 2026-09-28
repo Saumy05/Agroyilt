@@ -8,6 +8,7 @@ const Vendor = require('../../models/Vendor');
 const Worker = require('../../models/Worker');
 const { validationResult } = require('express-validator');
 const { PERMISSION_KEYS } = require('../../models/Admin');
+const { calculateAdminCombinedIncentives } = require('../../utils/adminIncentiveHelper');
 
 /**
  * Helper: extract request context for audit logs
@@ -59,54 +60,50 @@ const getAllAdmins = async (req, res) => {
       Admin.countDocuments(query)
     ]);
 
-    // Batch aggregate registration counts for all admins in the current page
-    const adminIds = admins.map(a => a._id);
-
-    const [userCounts, vendorCounts, workerCounts] = await Promise.all([
-      User.aggregate([
-        { $match: { createdByAdmin: { $in: adminIds } } },
-        { $group: { _id: '$createdByAdmin', count: { $sum: 1 } } }
-      ]),
-      Vendor.aggregate([
-        { $match: { createdByAdmin: { $in: adminIds } } },
-        { $group: { _id: '$createdByAdmin', count: { $sum: 1 } } }
-      ]),
-      Worker.aggregate([
-        { $match: { createdByAdmin: { $in: adminIds } } },
-        { $group: { _id: '$createdByAdmin', count: { $sum: 1 } } }
-      ])
-    ]);
-
-    const userCountMap = new Map(userCounts.map(c => [c._id.toString(), c.count]));
-    const vendorCountMap = new Map(vendorCounts.map(c => [c._id.toString(), c.count]));
-    const workerCountMap = new Map(workerCounts.map(c => [c._id.toString(), c.count]));
-
-    const enrichedAdmins = admins.map(admin => {
-      const idStr = admin._id.toString();
-      const farmersAdded = userCountMap.get(idStr) || 0;
-      const vendorsAdded = vendorCountMap.get(idStr) || 0;
-      const workersAdded = workerCountMap.get(idStr) || 0;
-      const totalAdded = farmersAdded + vendorsAdded + workersAdded;
-
-      // Incentive calculations based on admin.salary configuration
-      const farmerIncentive = admin.salary?.farmerIncentive || 0;
-      const vendorIncentive = admin.salary?.vendorIncentive || 0;
-      const workerIncentive = admin.salary?.workerIncentive || 0;
-      const earnedIncentive = (farmersAdded * farmerIncentive) + (vendorsAdded * vendorIncentive) + (workersAdded * workerIncentive);
-      const totalEstimatedComp = (admin.salary?.baseSalary || 0) + earnedIncentive;
-
-      return {
-        ...admin,
-        onboardedStats: {
-          farmers: farmersAdded,
-          vendors: vendorsAdded,
-          workers: workersAdded,
-          total: totalAdded,
-          earnedIncentive,
-          totalEstimatedComp
-        }
-      };
-    });
+    // Calculate authoritative scope-aware registrations and threshold incentive stats for all admins
+    const enrichedAdmins = await Promise.all(admins.map(async (admin) => {
+      try {
+        const calc = await calculateAdminCombinedIncentives(admin, { persist: false });
+        return {
+          ...admin,
+          onboardedStats: {
+            farmers: calc.counts.farmers,
+            vendors: calc.counts.vendors,
+            workers: calc.counts.workers,
+            total: calc.totalCombinedRegistrations,
+            minThreshold: calc.minRegistrationsThreshold,
+            isThresholdMet: calc.isThresholdMet,
+            qualifyingCount: calc.qualifyingRegistrationsCount,
+            registrationsRemainingToUnlock: calc.registrationsRemainingToUnlock,
+            farmerIncentives: calc.incentives.farmerIncentivesEarned,
+            vendorIncentives: calc.incentives.vendorIncentivesEarned,
+            workerIncentives: calc.incentives.workerIncentivesEarned,
+            earnedIncentive: calc.incentives.totalIncentivesEarned,
+            totalEstimatedComp: (admin.salary?.baseSalary || 0) + calc.incentives.totalIncentivesEarned
+          }
+        };
+      } catch (err) {
+        console.error('Error calculating incentives for admin:', admin._id, err);
+        return {
+          ...admin,
+          onboardedStats: {
+            farmers: 0,
+            vendors: 0,
+            workers: 0,
+            total: 0,
+            minThreshold: admin.salary?.minRegistrationsForIncentive || 0,
+            isThresholdMet: false,
+            qualifyingCount: 0,
+            registrationsRemainingToUnlock: 0,
+            farmerIncentives: 0,
+            vendorIncentives: 0,
+            workerIncentives: 0,
+            earnedIncentive: 0,
+            totalEstimatedComp: admin.salary?.baseSalary || 0
+          }
+        };
+      }
+    }));
 
     res.status(200).json({
       success: true,
@@ -164,6 +161,17 @@ const createAdmin = async (req, res) => {
       });
     }
 
+    // Validate Minimum Combined Registration Threshold if provided
+    if (req.body.salary && req.body.salary.minRegistrationsForIncentive !== undefined && req.body.salary.minRegistrationsForIncentive !== '') {
+      const minThresh = Number(req.body.salary.minRegistrationsForIncentive);
+      if (isNaN(minThresh) || minThresh < 0 || !Number.isInteger(minThresh)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Minimum combined registration threshold must be a valid non-negative integer'
+        });
+      }
+    }
+
     // Determine effective scope
     const effectiveScopeType = role === 'super_admin' ? 'GLOBAL' : (scopeType || 'CITY');
 
@@ -190,6 +198,7 @@ const createAdmin = async (req, res) => {
         farmerIncentive: Number(req.body.salary.farmerIncentive) >= 0 ? Number(req.body.salary.farmerIncentive) : 0,
         vendorIncentive: Number(req.body.salary.vendorIncentive) >= 0 ? Number(req.body.salary.vendorIncentive) : 0,
         workerIncentive: Number(req.body.salary.workerIncentive) >= 0 ? Number(req.body.salary.workerIncentive) : 0,
+        minRegistrationsForIncentive: Number(req.body.salary.minRegistrationsForIncentive) >= 0 ? Number(req.body.salary.minRegistrationsForIncentive) : 0,
         bankDetails: req.body.salary.bankDetails || {},
         notes: req.body.salary.notes || ''
       } : undefined
@@ -298,10 +307,20 @@ const updateAdmin = async (req, res) => {
     // Salary & Incentive settings (Super Admin configurable with historical versioning)
     if (req.body.salary && typeof req.body.salary === 'object') {
       const s = req.body.salary;
+      if (s.minRegistrationsForIncentive !== undefined && s.minRegistrationsForIncentive !== '') {
+        const minThresh = Number(s.minRegistrationsForIncentive);
+        if (isNaN(minThresh) || minThresh < 0 || !Number.isInteger(minThresh)) {
+          return res.status(400).json({
+            success: false,
+            message: 'Minimum combined registration threshold must be a valid non-negative integer'
+          });
+        }
+      }
       const newBaseSalary = Number(s.baseSalary) >= 0 ? Number(s.baseSalary) : (admin.salary?.baseSalary || 0);
       const newFarmerIncentive = Number(s.farmerIncentive) >= 0 ? Number(s.farmerIncentive) : (admin.salary?.farmerIncentive || 0);
       const newVendorIncentive = Number(s.vendorIncentive) >= 0 ? Number(s.vendorIncentive) : (admin.salary?.vendorIncentive || 0);
       const newWorkerIncentive = Number(s.workerIncentive) >= 0 ? Number(s.workerIncentive) : (admin.salary?.workerIncentive || 0);
+      const newMinRegistrations = Number(s.minRegistrationsForIncentive) >= 0 ? Number(s.minRegistrationsForIncentive) : (admin.salary?.minRegistrationsForIncentive || 0);
       const newStatus = s.status || admin.salary?.status || 'ACTIVE';
       const newEffectiveFrom = s.effectiveFrom ? new Date(s.effectiveFrom) : (admin.salary?.effectiveFrom || new Date());
 
@@ -312,10 +331,11 @@ const updateAdmin = async (req, res) => {
         oldSalary.farmerIncentive !== newFarmerIncentive ||
         oldSalary.vendorIncentive !== newVendorIncentive ||
         oldSalary.workerIncentive !== newWorkerIncentive ||
+        (oldSalary.minRegistrationsForIncentive || 0) !== newMinRegistrations ||
         oldSalary.status !== newStatus
       );
 
-      if (hasMeaningfulChange && (oldSalary.baseSalary > 0 || oldSalary.farmerIncentive > 0 || oldSalary.vendorIncentive > 0 || oldSalary.workerIncentive > 0)) {
+      if (hasMeaningfulChange && (oldSalary.baseSalary > 0 || oldSalary.farmerIncentive > 0 || oldSalary.vendorIncentive > 0 || oldSalary.workerIncentive > 0 || (oldSalary.minRegistrationsForIncentive || 0) > 0)) {
         if (!admin.salaryHistory) admin.salaryHistory = [];
         admin.salaryHistory.push({
           version: (admin.salaryHistory.length || 0) + 1,
@@ -327,6 +347,7 @@ const updateAdmin = async (req, res) => {
           farmerIncentive: oldSalary.farmerIncentive || 0,
           vendorIncentive: oldSalary.vendorIncentive || 0,
           workerIncentive: oldSalary.workerIncentive || 0,
+          minRegistrationsForIncentive: oldSalary.minRegistrationsForIncentive || 0,
           bankDetails: oldSalary.bankDetails || {},
           notes: oldSalary.notes || '',
           changeReason: s.changeReason || 'Salary configuration updated in Admin Edit',
@@ -344,6 +365,7 @@ const updateAdmin = async (req, res) => {
         farmerIncentive: newFarmerIncentive,
         vendorIncentive: newVendorIncentive,
         workerIncentive: newWorkerIncentive,
+        minRegistrationsForIncentive: newMinRegistrations,
         bankDetails: s.bankDetails || admin.salary?.bankDetails || {},
         notes: s.notes !== undefined ? s.notes : (admin.salary?.notes || '')
       };
@@ -1333,6 +1355,7 @@ const updateAdminSalary = async (req, res) => {
       farmerIncentive,
       vendorIncentive,
       workerIncentive,
+      minRegistrationsForIncentive,
       bankDetails,
       notes,
       status,
@@ -1346,10 +1369,21 @@ const updateAdminSalary = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Admin not found' });
     }
 
+    if (minRegistrationsForIncentive !== undefined && minRegistrationsForIncentive !== '') {
+      const minThresh = Number(minRegistrationsForIncentive);
+      if (isNaN(minThresh) || minThresh < 0 || !Number.isInteger(minThresh)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Minimum combined registration threshold must be a valid non-negative integer'
+        });
+      }
+    }
+
     const newBaseSalary = Number(baseSalary) >= 0 ? Number(baseSalary) : (admin.salary?.baseSalary || 0);
     const newFarmerIncentive = Number(farmerIncentive) >= 0 ? Number(farmerIncentive) : (admin.salary?.farmerIncentive || 0);
     const newVendorIncentive = Number(vendorIncentive) >= 0 ? Number(vendorIncentive) : (admin.salary?.vendorIncentive || 0);
     const newWorkerIncentive = Number(workerIncentive) >= 0 ? Number(workerIncentive) : (admin.salary?.workerIncentive || 0);
+    const newMinRegistrations = Number(minRegistrationsForIncentive) >= 0 ? Number(minRegistrationsForIncentive) : (admin.salary?.minRegistrationsForIncentive || 0);
     const newStatus = status || admin.salary?.status || 'ACTIVE';
     const newEffectiveFrom = effectiveFrom ? new Date(effectiveFrom) : (admin.salary?.effectiveFrom || new Date());
 
@@ -1360,10 +1394,11 @@ const updateAdminSalary = async (req, res) => {
       oldSalary.farmerIncentive !== newFarmerIncentive ||
       oldSalary.vendorIncentive !== newVendorIncentive ||
       oldSalary.workerIncentive !== newWorkerIncentive ||
+      (oldSalary.minRegistrationsForIncentive || 0) !== newMinRegistrations ||
       oldSalary.status !== newStatus
     );
 
-    if (hasMeaningfulChange && (oldSalary.baseSalary > 0 || oldSalary.farmerIncentive > 0 || oldSalary.vendorIncentive > 0 || oldSalary.workerIncentive > 0)) {
+    if (hasMeaningfulChange && (oldSalary.baseSalary > 0 || oldSalary.farmerIncentive > 0 || oldSalary.vendorIncentive > 0 || oldSalary.workerIncentive > 0 || (oldSalary.minRegistrationsForIncentive || 0) > 0)) {
       if (!admin.salaryHistory) admin.salaryHistory = [];
       admin.salaryHistory.push({
         version: (admin.salaryHistory.length || 0) + 1,
@@ -1375,6 +1410,7 @@ const updateAdminSalary = async (req, res) => {
         farmerIncentive: oldSalary.farmerIncentive || 0,
         vendorIncentive: oldSalary.vendorIncentive || 0,
         workerIncentive: oldSalary.workerIncentive || 0,
+        minRegistrationsForIncentive: oldSalary.minRegistrationsForIncentive || 0,
         bankDetails: oldSalary.bankDetails || {},
         notes: oldSalary.notes || '',
         changeReason: changeReason || 'Salary configuration updated by Super Admin',
@@ -1393,6 +1429,7 @@ const updateAdminSalary = async (req, res) => {
       farmerIncentive: newFarmerIncentive,
       vendorIncentive: newVendorIncentive,
       workerIncentive: newWorkerIncentive,
+      minRegistrationsForIncentive: newMinRegistrations,
       bankDetails: bankDetails || admin.salary?.bankDetails || {},
       notes: notes !== undefined ? notes : (admin.salary?.notes || '')
     };

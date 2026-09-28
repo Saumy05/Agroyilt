@@ -174,6 +174,11 @@ const adminSchema = new mongoose.Schema({
       type: Number,
       default: 0
     },
+    minRegistrationsForIncentive: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
     bankDetails: {
       accountNumber: { type: String, default: '' },
       ifscCode: { type: String, default: '' },
@@ -198,6 +203,7 @@ const adminSchema = new mongoose.Schema({
     farmerIncentive: { type: Number, default: 0 },
     vendorIncentive: { type: Number, default: 0 },
     workerIncentive: { type: Number, default: 0 },
+    minRegistrationsForIncentive: { type: Number, default: 0, min: 0 },
     bankDetails: {
       accountNumber: { type: String, default: '' },
       ifscCode: { type: String, default: '' },

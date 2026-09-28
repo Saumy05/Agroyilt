@@ -5,6 +5,7 @@ const Vendor = require('../../models/Vendor');
 const Worker = require('../../models/Worker');
 const AdminAuditLog = require('../../models/AdminAuditLog');
 const { getActorInfo, getAuditContext } = require('../../utils/adminScopeHelper');
+const { calculateAdminCombinedIncentives } = require('../../utils/adminIncentiveHelper');
 
 // ────────────────────────────────────────────────────────────────────────────
 // Helper: Get human-readable territory display
@@ -84,6 +85,7 @@ const generateMonthlyPayroll = async (req, res) => {
       const farmerIncentiveRate = Number(adm.salary?.farmerIncentive) >= 0 ? Number(adm.salary.farmerIncentive) : 0;
       const vendorIncentiveRate = Number(adm.salary?.vendorIncentive) >= 0 ? Number(adm.salary.vendorIncentive) : 0;
       const workerIncentiveRate = Number(adm.salary?.workerIncentive) >= 0 ? Number(adm.salary.workerIncentive) : 0;
+      const minRegistrationsThreshold = Number(adm.salary?.minRegistrationsForIncentive) >= 0 ? Number(adm.salary.minRegistrationsForIncentive) : 0;
 
       const salaryConfigSnapshot = {
         baseSalary,
@@ -91,70 +93,48 @@ const generateMonthlyPayroll = async (req, res) => {
         farmerIncentiveRate,
         vendorIncentiveRate,
         workerIncentiveRate,
+        minRegistrationsForIncentive: minRegistrationsThreshold,
         effectiveFrom: adm.salary?.effectiveFrom || adm.createdAt,
         bankDetails: adm.salary?.bankDetails || {}
       };
 
-      // Authoritative count and itemized list of people registered by this admin in this payroll cycle
-      const [farmers, vendors, workers] = await Promise.all([
-        User.find({
-          createdByAdmin: adm._id,
-          createdAt: { $gte: cycleStartDate, $lte: cycleEndDate }
-        }).select('name phone createdAt').lean(),
+      // Authoritative, scope-aware incentive calculation across combined registrations
+      const calcResult = await calculateAdminCombinedIncentives(adm, {
+        startDate: cycleStartDate,
+        endDate: cycleEndDate,
+        persist: true,
+        payrollMonth
+      });
 
-        Vendor.find({
-          createdByAdmin: adm._id,
-          createdAt: { $gte: cycleStartDate, $lte: cycleEndDate }
-        }).select('name businessName phone createdAt').lean(),
+      const farmerCount = calcResult.counts.farmers;
+      const vendorCount = calcResult.counts.vendors;
+      const workerCount = calcResult.counts.workers;
+      const totalRegistrationsCount = calcResult.totalCombinedRegistrations;
+      const qualifyingRegistrationsCount = calcResult.qualifyingRegistrationsCount;
 
-        Worker.find({
-          createdByAdmin: adm._id,
-          createdAt: { $gte: cycleStartDate, $lte: cycleEndDate }
-        }).select('name phone workerType createdAt').lean()
-      ]);
-
-      const farmerCount = farmers.length;
-      const vendorCount = vendors.length;
-      const workerCount = workers.length;
-
-      const farmerIncentives = farmerCount * farmerIncentiveRate;
-      const vendorIncentives = vendorCount * vendorIncentiveRate;
-      const workerIncentives = workerCount * workerIncentiveRate;
-      const totalIncentives = farmerIncentives + vendorIncentives + workerIncentives;
+      const farmerIncentives = calcResult.incentives.farmerIncentivesEarned;
+      const vendorIncentives = calcResult.incentives.vendorIncentivesEarned;
+      const workerIncentives = calcResult.incentives.workerIncentivesEarned;
+      const totalIncentives = calcResult.incentives.totalIncentivesEarned;
 
       // Itemized incentive items for full traceability & audit
-      const incentiveItems = [
-        ...farmers.map(f => ({
-          sourceType: 'FARMER_REGISTRATION',
-          sourceId: f._id,
-          sourceName: f.name || 'Farmer',
-          sourcePhone: f.phone || '',
-          rate: farmerIncentiveRate,
+      const incentiveItems = calcResult.items
+        .filter(item => item.matchesCycle)
+        .map(item => ({
+          sourceType: item.registeredUserRole === 'FARMER'
+            ? 'FARMER_REGISTRATION'
+            : item.registeredUserRole === 'VENDOR'
+              ? 'VENDOR_REGISTRATION'
+              : 'WORKER_REGISTRATION',
+          sourceId: item.registeredUserId,
+          sourceName: item.registeredUserName,
+          sourcePhone: item.registeredUserPhone,
+          rate: item.rate,
           quantity: 1,
-          amount: farmerIncentiveRate,
-          registeredAt: f.createdAt
-        })),
-        ...vendors.map(v => ({
-          sourceType: 'VENDOR_REGISTRATION',
-          sourceId: v._id,
-          sourceName: v.businessName || v.name || 'Equipment Owner',
-          sourcePhone: v.phone || '',
-          rate: vendorIncentiveRate,
-          quantity: 1,
-          amount: vendorIncentiveRate,
-          registeredAt: v.createdAt
-        })),
-        ...workers.map(w => ({
-          sourceType: 'WORKER_REGISTRATION',
-          sourceId: w._id,
-          sourceName: w.name || 'Worker',
-          sourcePhone: w.phone || '',
-          rate: workerIncentiveRate,
-          quantity: 1,
-          amount: workerIncentiveRate,
-          registeredAt: w.createdAt
-        }))
-      ];
+          amount: item.incentiveAmount,
+          isThresholdLocked: item.isThresholdLocked,
+          registeredAt: item.registeredAt
+        }));
 
       // Keep existing bonuses or deductions if updating a draft/pending record
       const bonus = existing ? (existing.bonus || 0) : 0;
@@ -185,6 +165,9 @@ const generateMonthlyPayroll = async (req, res) => {
         workerCount,
         workerIncentives,
         totalIncentives,
+        minRegistrationsThreshold,
+        totalRegistrationsCount,
+        qualifyingRegistrationsCount,
         incentiveItems,
         bonus,
         deductions,
@@ -786,23 +769,31 @@ const getMyPayrollHistory = async (req, res) => {
 
     const currentRecord = payrolls.find(p => p.payrollMonth === currentPayrollMonth);
 
-    // Current month registration attribution counts
+    // Current month registration attribution counts with per-admin threshold
     const cycleStartDate = new Date(currentYear, currentMonth - 1, 1, 0, 0, 0, 0);
     const cycleEndDate = new Date(currentYear, currentMonth, 0, 23, 59, 59, 999);
 
-    const [currentFarmers, currentVendors, currentWorkers] = await Promise.all([
-      User.countDocuments({ createdByAdmin: adminId, createdAt: { $gte: cycleStartDate, $lte: cycleEndDate } }),
-      Vendor.countDocuments({ createdByAdmin: adminId, createdAt: { $gte: cycleStartDate, $lte: cycleEndDate } }),
-      Worker.countDocuments({ createdByAdmin: adminId, createdAt: { $gte: cycleStartDate, $lte: cycleEndDate } })
-    ]);
+    const adminDoc = await Admin.findById(adminId).lean();
+    const calcResult = await calculateAdminCombinedIncentives(adminDoc, {
+      startDate: cycleStartDate,
+      endDate: cycleEndDate,
+      persist: false
+    });
 
-    const adminDoc = await Admin.findById(adminId).select('salary').lean();
     const baseSalary = adminDoc?.salary?.baseSalary || 0;
     const farmerIncentiveRate = adminDoc?.salary?.farmerIncentive || 0;
     const vendorIncentiveRate = adminDoc?.salary?.vendorIncentive || 0;
     const workerIncentiveRate = adminDoc?.salary?.workerIncentive || 0;
+    const minRegistrationsThreshold = calcResult.minRegistrationsThreshold;
 
-    const liveEarnedIncentives = (currentFarmers * farmerIncentiveRate) + (currentVendors * vendorIncentiveRate) + (currentWorkers * workerIncentiveRate);
+    const currentTotalRegistrations = calcResult.totalCombinedRegistrations;
+    const isThresholdMet = calcResult.isThresholdMet;
+    const qualifyingCount = calcResult.qualifyingRegistrationsCount;
+    const registrationsRemainingToUnlock = calcResult.registrationsRemainingToUnlock;
+    const currentFarmers = calcResult.counts.farmers;
+    const currentVendors = calcResult.counts.vendors;
+    const currentWorkers = calcResult.counts.workers;
+    const liveEarnedIncentives = calcResult.incentives.totalIncentivesEarned;
     const liveEstimatedTotal = baseSalary + liveEarnedIncentives;
 
     res.status(200).json({
@@ -816,6 +807,11 @@ const getMyPayrollHistory = async (req, res) => {
           farmerIncentiveRate,
           vendorIncentiveRate,
           workerIncentiveRate,
+          minRegistrationsThreshold,
+          currentTotalRegistrations,
+          isThresholdMet,
+          qualifyingCount,
+          registrationsRemainingToUnlock,
           currentFarmers,
           currentVendors,
           currentWorkers,
@@ -1014,16 +1010,19 @@ const getAdminSalaryList = async (req, res) => {
       const vendorRate = Number(adm.salary?.vendorIncentive) || 0;
       const workerRate = Number(adm.salary?.workerIncentive) || 0;
 
-      const [farmerCount, vendorCount, workerCount] = await Promise.all([
-        User.countDocuments({ createdByAdmin: adm._id, createdAt: { $gte: cycleStartDate, $lte: cycleEndDate } }),
-        Vendor.countDocuments({ createdByAdmin: adm._id, createdAt: { $gte: cycleStartDate, $lte: cycleEndDate } }),
-        Worker.countDocuments({ createdByAdmin: adm._id, createdAt: { $gte: cycleStartDate, $lte: cycleEndDate } })
-      ]);
+      const calcResult = await calculateAdminCombinedIncentives(adm, {
+        startDate: cycleStartDate,
+        endDate: cycleEndDate,
+        persist: false
+      });
 
-      const farmerIncentives = farmerCount * farmerRate;
-      const vendorIncentives = vendorCount * vendorRate;
-      const workerIncentives = workerCount * workerRate;
-      const totalIncentives = farmerIncentives + vendorIncentives + workerIncentives;
+      const farmerCount = calcResult.counts.farmers;
+      const vendorCount = calcResult.counts.vendors;
+      const workerCount = calcResult.counts.workers;
+      const farmerIncentives = calcResult.incentives.farmerIncentivesEarned;
+      const vendorIncentives = calcResult.incentives.vendorIncentivesEarned;
+      const workerIncentives = calcResult.incentives.workerIncentivesEarned;
+      const totalIncentives = calcResult.incentives.totalIncentivesEarned;
       const liveEstimatedTotal = baseSalary + totalIncentives;
 
       const existingPayroll = payrollMap[String(adm._id)];
@@ -1043,11 +1042,17 @@ const getAdminSalaryList = async (req, res) => {
           farmerIncentiveRate: farmerRate,
           vendorIncentiveRate: vendorRate,
           workerIncentiveRate: workerRate,
+          minRegistrationsForIncentive: calcResult.minRegistrationsThreshold,
           status: adm.salary?.status || 'ACTIVE',
           bankDetails: adm.salary?.bankDetails || {}
         },
         currentMonth: {
           payrollMonth: currentPayrollMonth,
+          minRegistrationsThreshold: calcResult.minRegistrationsThreshold,
+          totalCombinedRegistrations: calcResult.totalCombinedRegistrations,
+          qualifyingRegistrationsCount: calcResult.qualifyingRegistrationsCount,
+          registrationsRemainingToUnlock: calcResult.registrationsRemainingToUnlock,
+          isThresholdMet: calcResult.isThresholdMet,
           farmerCount,
           vendorCount,
           workerCount,

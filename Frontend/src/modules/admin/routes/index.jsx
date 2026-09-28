@@ -104,8 +104,8 @@ const AdminRoutes = () => {
             <Route path="referrals" element={<Referrals />} />
             <Route path="settings/*" element={<Settings />} />
             <Route path="admin-management" element={<AdminManagement />} />
-            <Route path="admin-salaries" element={<AdminManagement defaultTab="payroll" />} />
-            <Route path="admin-payroll" element={<AdminManagement defaultTab="payroll" />} />
+            <Route path="admin-salaries" element={<Navigate to="/admin/admin-management" replace />} />
+            <Route path="admin-payroll" element={<Navigate to="/admin/admin-management" replace />} />
             <Route path="my-salary" element={<MySalary />} />
           </Route>
         </Routes>

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiChevronLeft, FiPhone, FiCheckCircle, FiLock, FiEye, FiEyeOff } from 'react-icons/fi';
+import { FiChevronLeft, FiPhone, FiCheckCircle, FiLock, FiEye, FiEyeOff, FiAlertCircle } from 'react-icons/fi';
 import { toastManager } from '../../../utils/toastManager';
 import { z } from 'zod';
 import api from '../../../services/api';
@@ -25,6 +25,7 @@ const AppLogin = () => {
   const [phone, setPhone] = useState('');
   const [mpin, setMpin] = useState('');
   const [showMpin, setShowMpin] = useState(false);
+  const [formError, setFormError] = useState('');
 
   // Forgot MPIN states
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
@@ -76,17 +77,22 @@ const AppLogin = () => {
   // ─── 1. NORMAL LOGIN FLOW ───────────────────────────────────────────────
   const handleLoginSubmit = async (e) => {
     if (e) e.preventDefault();
+    setFormError('');
     const cleanPhone = phone.replace(/\D/g, '');
 
     const phoneVal = phoneSchema.safeParse({ phone: cleanPhone });
     if (!phoneVal.success) {
-      toastManager.error(phoneVal.error.issues[0].message);
+      const msg = 'Please enter a valid 10-digit mobile number';
+      setFormError(msg);
+      toastManager.error(msg);
       return;
     }
 
     const mpinVal = mpinSchema.safeParse({ mpin });
     if (!mpinVal.success) {
-      toastManager.error(mpinVal.error.issues[0].message);
+      const msg = 'Please enter your 4-digit MPIN';
+      setFormError(msg);
+      toastManager.error(msg);
       return;
     }
 
@@ -98,7 +104,9 @@ const AppLogin = () => {
       const roles = identifyRes.data?.roles || [];
 
       if (roles.length === 0) {
-        toastManager.error("No account found for this number. Please register first.");
+        const notFoundMsg = "No account found with this mobile number. Please check the number or register first.";
+        setFormError(notFoundMsg);
+        toastManager.error(notFoundMsg);
         setIsLoading(false);
         return;
       }
@@ -113,8 +121,23 @@ const AppLogin = () => {
       await executeMpinLogin(cleanPhone, mpin, roleToUse);
     } catch (error) {
       console.error('Login error:', error);
-      toastManager.error(error.response?.data?.message || 'Failed to login. Try again.');
       setIsLoading(false);
+      const status = error.response?.status;
+      const rawMsg = (error.response?.data?.message || '').toLowerCase();
+      let friendlyMsg = 'Unable to sign in. Please verify your mobile number and try again.';
+      if (status === 404 || rawMsg.includes('not found') || rawMsg.includes('exist')) {
+        friendlyMsg = 'No account found with this mobile number. Please register first.';
+      } else if (status === 403 || rawMsg.includes('inactive') || rawMsg.includes('deactivated') || rawMsg.includes('suspended')) {
+        friendlyMsg = 'Your account has been deactivated. Please contact customer support.';
+      } else if (status === 429) {
+        friendlyMsg = 'Too many attempts. Please wait a few moments and try again.';
+      } else if (status >= 500) {
+        friendlyMsg = 'Our server is temporarily busy. Please try again in a few moments.';
+      } else if (!error.response || error.code === 'ERR_NETWORK') {
+        friendlyMsg = 'Unable to connect to the server. Please check your internet connection.';
+      }
+      setFormError(friendlyMsg);
+      toastManager.error(friendlyMsg);
     }
   };
 
@@ -137,49 +160,81 @@ const AppLogin = () => {
         else if (role === 'worker') navigate('/worker', { replace: true });
       }
     } catch (err) {
+      setIsLoading(false);
       const errorData = err.response?.data;
+      const status = err.response?.status;
+      const rawMsg = (errorData?.message || '').toLowerCase();
+
       if (errorData?.code === 'ACCOUNT_PENDING_APPROVAL') {
-        toastManager.info(errorData.message || 'Your account is pending admin approval. You can login once approved.', { duration: 6000 });
-        setIsLoading(false);
+        const msg = 'Your registration is pending admin approval. You will be able to log in once approved.';
+        setFormError(msg);
+        toastManager.info(msg, { duration: 6000 });
         return;
       }
 
       if (errorData?.code === 'ACCOUNT_REJECTED') {
-        toastManager.error(errorData.message || 'Your account application was rejected by admin.', { duration: 6000 });
-        setIsLoading(false);
+        const msg = 'Your registration was not approved. Please contact support for assistance.';
+        setFormError(msg);
+        toastManager.error(msg, { duration: 6000 });
         return;
       }
 
       if (errorData?.code === 'REGISTRATION_FEE_REQUIRED') {
-        toastManager.error(errorData.message);
+        const msg = 'Registration fee payment is required before you can access your account.';
+        setFormError(msg);
+        toastManager.error(msg);
         sessionStorage.setItem('preAuthToken', errorData.preAuthToken);
         sessionStorage.setItem('pendingRole', errorData.role);
         navigate('/app/registration-fee', { replace: true });
         return;
       }
 
-      const errorMsg = errorData?.message || 'Invalid Mobile Number or MPIN.';
-      const isMpinNotSet = errorData?.mpinNotSet;
-
-      if (isMpinNotSet) {
-        toastManager.error('MPIN not set for this account. Redirecting to setup...');
-        // Auto-redirect to forgot MPIN flow
+      if (errorData?.mpinNotSet) {
+        const msg = '4-digit MPIN is not yet set for your account. Redirecting to setup...';
+        setFormError(msg);
+        toastManager.error(msg);
         setStep('forgot_phone');
-      } else {
-        toastManager.error(errorMsg);
+        return;
       }
-      setIsLoading(false);
+
+      // Convert raw or technical errors into user-friendly guidance
+      let friendlyMsg = 'Incorrect 4-digit MPIN. Please try again.';
+
+      if (status === 429 || rawMsg.includes('locked') || rawMsg.includes('too many failed attempts')) {
+        friendlyMsg = 'Too many incorrect attempts. For security reasons, your account is temporarily locked. Please try again later.';
+      } else if (rawMsg.includes('attempts remaining')) {
+        const match = rawMsg.match(/(\d+)\s+attempts?\s+remaining/);
+        if (match && match[1]) {
+          friendlyMsg = `Incorrect 4-digit MPIN. You have ${match[1]} attempt${match[1] === '1' ? '' : 's'} remaining.`;
+        } else {
+          friendlyMsg = 'Incorrect 4-digit MPIN. Please verify and try again.';
+        }
+      } else if (status === 404 || rawMsg.includes('not found') || rawMsg.includes('exist')) {
+        friendlyMsg = 'No account found with this mobile number. Please register first.';
+      } else if (status === 403 || rawMsg.includes('suspended') || rawMsg.includes('inactive') || rawMsg.includes('disabled') || rawMsg.includes('blocked')) {
+        friendlyMsg = 'Your account has been deactivated. Please contact customer support.';
+      } else if (status >= 500) {
+        friendlyMsg = 'Our server is temporarily busy. Please try again in a few moments.';
+      } else if (!err.response || err.code === 'ERR_NETWORK') {
+        friendlyMsg = 'Unable to connect to the server. Please check your internet connection.';
+      }
+
+      setFormError(friendlyMsg);
+      toastManager.error(friendlyMsg);
     }
   };
 
   // ─── 2. FORGOT MPIN FLOW ────────────────────────────────────────────────
   const handleForgotPhoneSubmit = async (e) => {
     e.preventDefault();
+    setFormError('');
     const cleanPhone = phone.replace(/\D/g, '');
 
     const validation = phoneSchema.safeParse({ phone: cleanPhone });
     if (!validation.success) {
-      toastManager.error(validation.error.issues[0].message);
+      const msg = 'Please enter a valid 10-digit mobile number';
+      setFormError(msg);
+      toastManager.error(msg);
       return;
     }
 
@@ -190,7 +245,9 @@ const AppLogin = () => {
       const roles = identifyRes.data?.roles || [];
 
       if (roles.length === 0) {
-        toastManager.error("No account found for this number.");
+        const msg = "No account found with this mobile number. Please register first.";
+        setFormError(msg);
+        toastManager.error(msg);
         setIsLoading(false);
         return;
       }
@@ -198,7 +255,9 @@ const AppLogin = () => {
       const roleToUse = roles[0]; // Uses first role found for OTP sending
       await sendOtpForRole(cleanPhone, roleToUse);
     } catch (error) {
-      toastManager.error(error.response?.data?.message || 'Failed to send OTP.');
+      const msg = 'Unable to send verification OTP. Please check the number and try again.';
+      setFormError(msg);
+      toastManager.error(msg);
       setIsLoading(false);
     }
   };
@@ -218,18 +277,26 @@ const AppLogin = () => {
         setIsLoading(false);
         toastManager.success('OTP sent successfully!');
       } else {
-        throw new Error(response?.message || 'Failed to send OTP');
+        throw new Error('Failed to send OTP');
       }
     } catch (err) {
-      toastManager.error(err.response?.data?.message || 'Failed to send OTP.');
+      const msg = 'Unable to send verification OTP. Please try again in a few moments.';
+      setFormError(msg);
+      toastManager.error(msg);
       setIsLoading(false);
     }
   };
 
   const handleVerifyOtp = async (e) => {
     if (e) e.preventDefault();
+    setFormError('');
     const otpValue = otp.join('');
-    if (otpValue.length !== 6) { toastManager.error('Please enter all 6 digits'); return; }
+    if (otpValue.length !== 6) {
+      const msg = 'Please enter all 6 digits of the verification code';
+      setFormError(msg);
+      toastManager.error(msg);
+      return;
+    }
 
     setIsLoading(true);
     const cleanPhone = phone.replace(/\D/g, '');
@@ -249,20 +316,27 @@ const AppLogin = () => {
         throw new Error('Verification token not received.');
       }
     } catch (err) {
-      toastManager.error(err.response?.data?.message || 'OTP Verification failed.');
+      const msg = 'Invalid or expired verification code. Please check and try again.';
+      setFormError(msg);
+      toastManager.error(msg);
       setIsLoading(false);
     }
   };
 
   const handleSetMpinSubmit = async (e) => {
     e.preventDefault();
+    setFormError('');
     
     if (newMpin.length !== 4) {
-      toastManager.error('MPIN must be exactly 4 digits');
+      const msg = 'MPIN must be exactly 4 digits';
+      setFormError(msg);
+      toastManager.error(msg);
       return;
     }
     if (newMpin !== confirmMpin) {
-      toastManager.error('MPINs do not match');
+      const msg = 'MPINs do not match. Please re-enter.';
+      setFormError(msg);
+      toastManager.error(msg);
       return;
     }
 
@@ -286,10 +360,12 @@ const AppLogin = () => {
         setOtp(['', '', '', '', '', '']);
         setIsLoading(false);
       } else {
-        throw new Error(response?.message || 'Failed to update MPIN');
+        throw new Error('Failed to update MPIN');
       }
     } catch (err) {
-      toastManager.error(err.response?.data?.message || 'Failed to update MPIN.');
+      const msg = 'Failed to update MPIN. Please try again.';
+      setFormError(msg);
+      toastManager.error(msg);
       setIsLoading(false);
     }
   };
@@ -334,6 +410,7 @@ const AppLogin = () => {
   };
 
   const handleBack = () => {
+    setFormError('');
     if (step === 'forgot_phone') setStep('login');
     else if (step === 'forgot_otp') { setStep('forgot_phone'); setOtp(['','','','','','']); }
     else if (step === 'set_mpin') { setStep('forgot_otp'); setNewMpin(''); setConfirmMpin(''); }
@@ -388,6 +465,20 @@ const AppLogin = () => {
 
       {/* Body */}
       <div style={{ flex: 1, padding: '32px 24px 16px' }}>
+
+        {/* User-friendly Error Alert */}
+        {formError && (
+          <div style={{
+            display: 'flex', alignItems: 'flex-start', gap: '10px',
+            padding: '12px 16px', borderRadius: '12px',
+            background: '#FFEBEE', border: '1px solid #FFCDD2',
+            color: '#C62828', fontSize: '0.85rem', fontWeight: 500,
+            marginBottom: '20px', lineHeight: 1.4
+          }}>
+            <FiAlertCircle size={20} style={{ flexShrink: 0, color: '#D32F2F', marginTop: '2px' }} />
+            <span>{formError}</span>
+          </div>
+        )}
 
         {/* --- NORMAL LOGIN FLOW --- */}
         {step === 'login' && (
@@ -446,7 +537,7 @@ const AppLogin = () => {
                   inputMode="numeric"
                   maxLength={10}
                   value={phone}
-                  onChange={e => setPhone(e.target.value.replace(/\D/g, ''))}
+                  onChange={e => { if (formError) setFormError(''); setPhone(e.target.value.replace(/\D/g, '')); }}
                   placeholder="Enter 10-digit number"
                   style={{
                     flex: 1, border: 'none', outline: 'none', background: 'transparent', 
@@ -477,8 +568,8 @@ const AppLogin = () => {
                   inputMode="numeric"
                   maxLength={4}
                   value={mpin}
-                  onChange={e => setMpin(e.target.value.replace(/\D/g, ''))}
-                  placeholder="? ? ? ?"
+                  onChange={e => { if (formError) setFormError(''); setMpin(e.target.value.replace(/\D/g, '')); }}
+                  placeholder="• • • •"
                   style={{
                     flex: 1, border: 'none', outline: 'none', background: 'transparent', 
                     fontSize: '1.2rem', fontWeight: 600, color: '#263238', padding: '14px 0',
@@ -493,7 +584,7 @@ const AppLogin = () => {
               </div>
 
               <div style={{ textAlign: 'right', marginBottom: '32px' }}>
-                <button type="button" onClick={() => { setStep('forgot_phone'); setPhone(''); }} style={{ background: 'none', border: 'none', color: '#2E7D32', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}>
+                <button type="button" onClick={() => { setFormError(''); setStep('forgot_phone'); setPhone(''); }} style={{ background: 'none', border: 'none', color: '#2E7D32', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}>
                   Forgot MPIN?
                 </button>
               </div>
@@ -549,7 +640,7 @@ const AppLogin = () => {
                   inputMode="numeric"
                   maxLength={10}
                   value={phone}
-                  onChange={e => setPhone(e.target.value.replace(/\D/g, ''))}
+                  onChange={e => { if (formError) setFormError(''); setPhone(e.target.value.replace(/\D/g, '')); }}
                   placeholder="Enter 10-digit number"
                   style={{
                     flex: 1, border: 'none', outline: 'none', background: 'transparent',

@@ -291,10 +291,15 @@ export default function MySalaryHistoryModal({ isOpen, onClose }) {
                           {/* Incentive details */}
                           <div className="p-3 bg-white rounded-xl border border-gray-100 flex items-center justify-between text-[11px]">
                             <span className="text-gray-500">Breakdown:</span>
-                            <div className="flex gap-3 text-gray-700 font-medium">
+                            <div className="flex flex-wrap gap-2 text-gray-700 font-medium">
                               <span>👨‍🌾 Farmers: {item.farmerCount || 0} (₹{item.farmerIncentives || 0})</span>
                               <span>🚜 Owners: {item.vendorCount || 0} (₹{item.vendorIncentives || 0})</span>
                               <span>👷 Workers: {item.workerCount || 0} (₹{item.workerIncentives || 0})</span>
+                              {item.minRegistrationsThreshold > 0 && (
+                                <span className="text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 text-[10px]">
+                                  🎯 Boundary: &gt;{item.minRegistrationsThreshold} ({item.qualifyingRegistrationsCount || 0} qualifying)
+                                </span>
+                              )}
                             </div>
                           </div>
 

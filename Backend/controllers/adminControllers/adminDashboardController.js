@@ -11,6 +11,7 @@ const AdminPayroll = require('../../models/AdminPayroll');
 
 const { BOOKING_STATUS, PAYMENT_STATUS, VENDOR_STATUS } = require('../../utils/constants');
 const { buildAdminScopeFilter } = require('../../utils/adminScopeHelper');
+const { calculateAdminCombinedIncentives } = require('../../utils/adminIncentiveHelper');
 
 /**
  * Get overall dashboard stats
@@ -192,15 +193,29 @@ const getDashboardStats = async (req, res) => {
           const cycleStartDate = new Date(currentYear, currentMonth - 1, 1, 0, 0, 0, 0);
           const cycleEndDate = new Date(currentYear, currentMonth, 0, 23, 59, 59, 999);
 
-          // Check current month registrations & official payroll record
-          const [curFarmers, curVendors, curWorkers, payrollRecord] = await Promise.all([
-            User.countDocuments({ createdByAdmin: adminId, createdAt: { $gte: cycleStartDate, $lte: cycleEndDate } }),
-            Vendor.countDocuments({ createdByAdmin: adminId, createdAt: { $gte: cycleStartDate, $lte: cycleEndDate } }),
-            Worker.countDocuments({ createdByAdmin: adminId, createdAt: { $gte: cycleStartDate, $lte: cycleEndDate } }),
+          // Check current month registrations & official payroll record with per-admin threshold
+          const [calc, payrollRecord] = await Promise.all([
+            calculateAdminCombinedIncentives(adminDoc, {
+              startDate: cycleStartDate,
+              endDate: cycleEndDate,
+              persist: false
+            }),
             AdminPayroll.findOne({ adminId, payrollMonth: currentPayrollMonth }).lean()
           ]);
 
-          const curEarnedIncentive = (curFarmers * farmerIncentive) + (curVendors * vendorIncentive) + (curWorkers * workerIncentive);
+          const curFarmers = calc.counts.farmers;
+          const curVendors = calc.counts.vendors;
+          const curWorkers = calc.counts.workers;
+          const currentTotalRegistrations = calc.totalCombinedRegistrations;
+          const minRegistrationsThreshold = calc.minRegistrationsThreshold;
+          const qualifyingRegistrationsCount = calc.qualifyingRegistrationsCount;
+          const registrationsRemainingToUnlock = calc.registrationsRemainingToUnlock;
+          const isThresholdMet = calc.isThresholdMet;
+
+          const farmerIncentives = calc.incentives.farmerIncentivesEarned;
+          const vendorIncentives = calc.incentives.vendorIncentivesEarned;
+          const workerIncentives = calc.incentives.workerIncentivesEarned;
+          const curEarnedIncentive = calc.incentives.totalIncentivesEarned;
           const estimatedCurrentCompensation = baseSalary + curEarnedIncentive;
 
           // Payment Status Extraction
@@ -214,6 +229,14 @@ const getDashboardStats = async (req, res) => {
             farmerIncentive,
             vendorIncentive,
             workerIncentive,
+            minRegistrationsThreshold,
+            currentTotalRegistrations,
+            qualifyingRegistrationsCount,
+            registrationsRemainingToUnlock,
+            isThresholdMet,
+            farmerIncentives,
+            vendorIncentives,
+            workerIncentives,
             payFrequency: adminDoc.salary?.payFrequency || 'monthly',
             salaryStatus: adminDoc.salary?.status || 'ACTIVE',
 
@@ -224,6 +247,7 @@ const getDashboardStats = async (req, res) => {
             curVendors,
             curWorkers,
             earnedIncentive: curEarnedIncentive,
+            curEarnedIncentive,
             estimatedCurrentCompensation,
             totalEstimatedPayout: estimatedCurrentCompensation,
 

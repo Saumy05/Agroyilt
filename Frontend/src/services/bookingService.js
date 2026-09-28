@@ -1,4 +1,5 @@
 import api from './api';
+import { apiCache } from '../utils/apiCache';
 
 /**
  * Booking Service
@@ -9,6 +10,7 @@ export const bookingService = {
   // Create a new booking
   create: async (bookingData) => {
     console.log('[BookingService] Creating booking request');
+    apiCache.invalidatePrefix('/users/bookings');
     const response = await api.post('/users/bookings', bookingData);
     return response.data;
   },
@@ -22,7 +24,17 @@ export const bookingService = {
     if (params.page) queryParams.append('page', params.page);
     if (params.limit) queryParams.append('limit', params.limit);
 
-    const response = await api.get(`/users/bookings${queryParams.toString() ? `?${queryParams.toString()}` : ''}`);
+    const url = `/users/bookings${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+
+    if (!params.skipCache) {
+      const cached = apiCache.get(url);
+      if (cached) return cached;
+    }
+
+    const response = await api.get(url);
+    if (response.data?.success) {
+      apiCache.set(url, response.data, 20); // 20s TTL
+    }
     return response.data;
   },
 
@@ -34,18 +46,21 @@ export const bookingService = {
 
   // Cancel booking
   cancel: async (id, cancellationReason) => {
+    apiCache.invalidatePrefix('/users/bookings');
     const response = await api.post(`/users/bookings/${id}/cancel`, { cancellationReason });
     return response.data;
   },
 
   // Reschedule booking
   reschedule: async (id, rescheduleData) => {
+    apiCache.invalidatePrefix('/users/bookings');
     const response = await api.put(`/users/bookings/${id}/reschedule`, rescheduleData);
     return response.data;
   },
 
   // Add review and rating
   addReview: async (id, reviewData) => {
+    apiCache.invalidatePrefix('/users/bookings');
     const response = await api.post(`/users/bookings/${id}/review`, reviewData);
     return response.data;
   },

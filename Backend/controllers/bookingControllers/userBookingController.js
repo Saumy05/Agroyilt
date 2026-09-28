@@ -10,6 +10,7 @@ const Worker = require('../../models/Worker');
 const Review = require('../../models/Review');
 const Settings = require('../../models/Settings');
 const VendorEquipment = require('../../models/VendorEquipment');
+const WorkerBookingRequest = require('../../models/WorkerBookingRequest');
 const { validationResult } = require('express-validator');
 const { BOOKING_STATUS, PAYMENT_STATUS } = require('../../utils/constants');
 const { createNotification } = require('../notificationControllers/notificationController');
@@ -1029,7 +1030,7 @@ const createBooking = async (req, res) => {
 };
 
 /**
- * Get user bookings with filters
+ * Get user bookings with filters (High-Performance Optimized)
  */
 const getUserBookings = async (req, res) => {
   try {
@@ -1040,12 +1041,10 @@ const getUserBookings = async (req, res) => {
     const query = { userId };
     if (status) {
       if (status.includes(',')) {
-        query.status = { $in: status.split(',') };
+        query.status = { $in: status.split(',').map(s => s.trim()) };
       } else {
         query.status = status;
       }
-    } else {
-      // Default: Fetch all, including SEARCHING. Frontend will filter for active.
     }
     if (startDate || endDate) {
       query.scheduledDate = {};
@@ -1054,49 +1053,72 @@ const getUserBookings = async (req, res) => {
     }
 
     // Pagination
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 10));
+    const skip = (pageNum - 1) * limitNum;
 
-    // Get bookings
-    const bookings = await Booking.find(query)
-      .populate('vendorId', 'name businessName phone profilePhoto')
-      .populate('serviceId', 'title iconUrl')
-      .populate('categoryId', 'title slug requiresDriver')
-      .populate('workerId', 'name phone profilePhoto')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit));
+    // Run query and total count in parallel with lean() and precise lightweight projection
+    const [bookings, total] = await Promise.all([
+      Booking.find(query)
+        .select('_id bookingNumber providerType serviceCategory categoryIcon brandName brandIcon serviceName bookedItems selectedImplements address scheduledDate scheduledTime timeSlot rental_type status paymentStatus paymentMethod finalAmount totalAmount userPayableAmount workerRequestId parentRequestId rating settlementStatus workerPaymentStatus createdAt vendorId workerId serviceId categoryId')
+        .populate('vendorId', 'name businessName phone')
+        .populate('serviceId', 'title iconUrl')
+        .populate('categoryId', 'title slug requiresDriver')
+        .populate('workerId', 'name phone')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      Booking.countDocuments(query)
+    ]);
 
-    // Get total count
-    const total = await Booking.countDocuments(query);
+    // Single batch enrichment for WorkerBookingRequest (only if missing and needed)
+    const missingIds = bookings
+      .filter(b => !b.workerRequestId && (b.providerType === 'WORKER' || (b.bookingNumber && b.bookingNumber.startsWith('WRK-'))))
+      .map(b => b._id);
 
-    // Enrich with parent WorkerBookingRequest ID for independent worker bookings
-    const WorkerBookingRequest = require('../../models/WorkerBookingRequest');
-    const enrichedBookings = await Promise.all(bookings.map(async (b) => {
-      const bObj = b.toObject();
-      if (!bObj.workerRequestId && (bObj.providerType === 'WORKER' || (bObj.bookingNumber && bObj.bookingNumber.startsWith('WRK-')))) {
-        try {
-          const parentReq = await WorkerBookingRequest.findOne({
-            $or: [{ finalBookingIds: b._id }, { finalBookingId: b._id }]
-          }).select('_id');
-          if (parentReq) {
-            bObj.workerRequestId = parentReq._id;
-            bObj.parentRequestId = parentReq._id;
+    const parentMap = new Map();
+    if (missingIds.length > 0) {
+      try {
+        const parentRequests = await WorkerBookingRequest.find({
+          $or: [
+            { finalBookingIds: { $in: missingIds } },
+            { finalBookingId: { $in: missingIds } }
+          ]
+        }).select('_id finalBookingIds finalBookingId').lean();
+
+        for (const reqDoc of parentRequests) {
+          if (reqDoc.finalBookingId) parentMap.set(reqDoc.finalBookingId.toString(), reqDoc._id);
+          if (Array.isArray(reqDoc.finalBookingIds)) {
+            for (const fid of reqDoc.finalBookingIds) {
+              parentMap.set(fid.toString(), reqDoc._id);
+            }
           }
-        } catch (e) {}
+        }
+      } catch (e) {
+        // Silently continue without parent map
+      }
+    }
+
+    const enrichedBookings = bookings.map(b => {
+      const bObj = { ...b };
+      if (!bObj.workerRequestId && parentMap.has(b._id.toString())) {
+        bObj.workerRequestId = parentMap.get(b._id.toString());
+        bObj.parentRequestId = bObj.workerRequestId;
       } else if (bObj.workerRequestId) {
         bObj.parentRequestId = bObj.workerRequestId;
       }
       return bObj;
-    }));
+    });
 
     res.status(200).json({
       success: true,
       data: enrichedBookings,
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page: pageNum,
+        limit: limitNum,
         total,
-        pages: Math.ceil(total / parseInt(limit))
+        pages: Math.ceil(total / limitNum)
       }
     });
   } catch (error) {

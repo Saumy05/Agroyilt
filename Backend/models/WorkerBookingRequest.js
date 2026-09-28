@@ -285,6 +285,8 @@ const workerBookingRequestSchema = new mongoose.Schema({
 
 // ── Indexes ──────────────────────────────────────────────────────────────────
 workerBookingRequestSchema.index({ farmerId: 1, status: 1 });
+workerBookingRequestSchema.index({ finalBookingIds: 1 });
+workerBookingRequestSchema.index({ finalBookingId: 1 });
 workerBookingRequestSchema.index({ workerId: 1, status: 1 });
 workerBookingRequestSchema.index({ 'dispatchedTo.workerId': 1 });
 workerBookingRequestSchema.index({ workerId: 1, scheduledDate: 1, status: 1 });

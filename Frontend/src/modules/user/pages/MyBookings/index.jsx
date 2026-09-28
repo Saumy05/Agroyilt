@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FiArrowLeft, FiClock, FiMapPin, FiCheckCircle, FiXCircle, FiLoader, FiCalendar, FiChevronRight, FiSearch } from 'react-icons/fi';
 import { toastManager } from '../../../../utils/toastManager';
@@ -7,6 +7,7 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import NotificationBell from '../../components/common/NotificationBell';
 import { motion } from 'framer-motion';
 import { bookingService } from '../../../../services/bookingService';
+import { apiCache } from '../../../../utils/apiCache';
 
 const MyBookings = () => {
   const navigate = useNavigate();
@@ -15,43 +16,75 @@ const MyBookings = () => {
   const [filter, setFilter] = useState('all'); // all, confirmed, in-progress, completed, cancelled
   const [searchQuery, setSearchQuery] = useState('');
 
-  useEffect(() => {
-    const loadBookings = async () => {
-      try {
-        setLoading(true);
-        const params = {};
-        if (filter !== 'all') {
-          if (filter === 'in_progress') {
-             // For Machinery/Farm orders, "In Progress" means anything from journey started to operation
-             params.status = 'journey_started,visited,in_progress';
-          } else {
-             params.status = filter;
-          }
-        }
-        const response = await bookingService.getUserBookings(params);
-        if (response.success) {
-          setBookings(response.data || []);
+  const bookingsCacheRef = useRef({});
+  const activeRequestIdRef = useRef(0);
+
+  const loadBookings = useCallback(async (isSilent = false) => {
+    const requestId = ++activeRequestIdRef.current;
+
+    // Fast-path: If cached data exists for this filter, immediately render it (0ms latency!)
+    if (bookingsCacheRef.current[filter]) {
+      setBookings(bookingsCacheRef.current[filter]);
+      if (!isSilent) setLoading(false);
+    } else if (!isSilent) {
+      setLoading(true);
+    }
+
+    try {
+      const params = { limit: 50 };
+      if (isSilent) params.skipCache = true;
+      if (filter !== 'all') {
+        if (filter === 'in_progress') {
+          // For Machinery/Farm orders, "In Progress" means anything from journey started to operation
+          params.status = 'journey_started,visited,in_progress';
         } else {
-          toastManager.error(response.message || 'Failed to load bookings');
-          setBookings([]);
+          params.status = filter;
         }
-      } catch (error) {
+      }
+      const response = await bookingService.getUserBookings(params);
+
+      // Race-condition guard: Discard response if a newer filter was clicked in between
+      if (requestId !== activeRequestIdRef.current) return;
+
+      if (response.success) {
+        const data = response.data || [];
+        bookingsCacheRef.current[filter] = data;
+        setBookings(data);
+      } else {
+        if (!isSilent) toastManager.error(response.message || 'Failed to load bookings');
+      }
+    } catch (error) {
+      if (!isSilent && requestId === activeRequestIdRef.current) {
         toastManager.error('Failed to load bookings. Please try again.');
-        setBookings([]);
-      } finally {
+      }
+    } finally {
+      if (requestId === activeRequestIdRef.current) {
         setLoading(false);
       }
+    }
+  }, [filter]);
+
+  useEffect(() => {
+    loadBookings(false);
+
+    let debounceTimer = null;
+    const handleUpdate = () => {
+      // Invalidate cache and silently refresh in the background without UI flicker
+      apiCache.invalidatePrefix('/users/bookings');
+      delete bookingsCacheRef.current[filter];
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        loadBookings(true);
+      }, 300);
     };
 
-    loadBookings();
-
-    // Listen for real-time updates
-    window.addEventListener('userBookingsUpdated', loadBookings);
+    window.addEventListener('userBookingsUpdated', handleUpdate);
 
     return () => {
-      window.removeEventListener('userBookingsUpdated', loadBookings);
+      clearTimeout(debounceTimer);
+      window.removeEventListener('userBookingsUpdated', handleUpdate);
     };
-  }, [filter]);
+  }, [loadBookings, filter]);
 
   const getStatusIcon = (status) => {
     switch (status) {

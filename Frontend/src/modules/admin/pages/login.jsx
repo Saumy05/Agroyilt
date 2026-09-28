@@ -1,6 +1,6 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { FiMail, FiLock, FiEye, FiEyeOff } from 'react-icons/fi';
+import { FiMail, FiLock, FiEye, FiEyeOff, FiAlertCircle } from 'react-icons/fi';
 import { toastManager } from '../../../utils/toastManager';
 import { themeColors } from '../../../theme';
 import { adminAuthService } from '../../../services/authService';
@@ -15,9 +15,7 @@ const AdminLogin = () => {
   const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState({});
-
-
-
+  const [formError, setFormError] = useState('');
 
   const validateEmail = (email) => {
     if (!email) return "";
@@ -30,6 +28,7 @@ const AdminLogin = () => {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
+    if (formError) setFormError('');
     setFormData(prev => ({
       ...prev,
       [name]: value
@@ -42,9 +41,12 @@ const AdminLogin = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setFormError('');
 
     if (!formData.email || !formData.password) {
-      toastManager.error('Please enter both email and password');
+      const msg = 'Please enter both email and password';
+      setFormError(msg);
+      toastManager.error(msg);
       return;
     }
 
@@ -61,11 +63,37 @@ const AdminLogin = () => {
         navigate('/admin/dashboard');
       } else {
         setIsLoading(false);
-        toastManager.error(response.message || 'Login failed'); // Reading file to debug token key mismatch (error)
+        const msg = 'Invalid email or password. Please verify your credentials and try again.';
+        setFormError(msg);
+        toastManager.error(msg);
       }
     } catch (error) {
       setIsLoading(false);
-      toastManager.error(error.response?.data?.message || 'Login failed. Please check your credentials.');
+      const status = error.response?.status;
+      const rawMsg = (error.response?.data?.message || '').toLowerCase();
+
+      let friendlyMsg = 'Invalid email or password. Please check your credentials and try again.';
+
+      if (status === 400 || status === 401) {
+        if (rawMsg.includes('not found') || rawMsg.includes('exist')) {
+          friendlyMsg = 'No administrator account found with this email.';
+        } else if (rawMsg.includes('inactive') || rawMsg.includes('suspended') || rawMsg.includes('disabled') || rawMsg.includes('blocked')) {
+          friendlyMsg = 'Your administrator account has been deactivated. Please contact the Super Administrator.';
+        } else {
+          friendlyMsg = 'Incorrect email or password. Please check your credentials and try again.';
+        }
+      } else if (status === 403) {
+        friendlyMsg = 'Access denied. You do not have permission to access the admin portal.';
+      } else if (status === 429) {
+        friendlyMsg = 'Too many failed login attempts. Please wait a few moments before trying again.';
+      } else if (status >= 500) {
+        friendlyMsg = 'Our server is temporarily busy. Please try again in a few moments.';
+      } else if (!error.response || error.code === 'ERR_NETWORK') {
+        friendlyMsg = 'Unable to connect to the server. Please check your internet connection.';
+      }
+
+      setFormError(friendlyMsg);
+      toastManager.error(friendlyMsg);
     }
   };
 
@@ -96,9 +124,17 @@ const AdminLogin = () => {
           <h1 className="text-3xl font-bold text-gray-900 text-center mb-2">
             Admin Login
           </h1>
-          <p className="text-gray-600 text-center mb-8">
+          <p className="text-gray-600 text-center mb-6">
             Enter your credentials to access the admin panel
           </p>
+
+          {/* User-friendly Error Alert */}
+          {formError && (
+            <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm flex items-start gap-3 shadow-sm">
+              <FiAlertCircle className="w-5 h-5 flex-shrink-0 text-red-500 mt-0.5" />
+              <span className="font-medium leading-relaxed">{formError}</span>
+            </div>
+          )}
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-6">

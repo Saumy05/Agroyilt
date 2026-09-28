@@ -377,6 +377,67 @@ const AdminDashboard = () => {
                 Incentive Rates: 👨‍🌾 ₹{stats.adminCompensation?.farmerIncentive || currentAdmin.salary?.farmerIncentive || 0} · 🚜 ₹{stats.adminCompensation?.vendorIncentive || currentAdmin.salary?.vendorIncentive || 0} · 👷 ₹{stats.adminCompensation?.workerIncentive || currentAdmin.salary?.workerIncentive || 0}
               </div>
 
+              {/* Threshold & Registration Incentives Breakdown */}
+              <div className="bg-white/10 p-3 rounded-xl backdrop-blur-xs space-y-2 border border-white/10 text-xs">
+                <div className="flex items-center justify-between text-[11px] font-bold text-amber-200">
+                  <span className="flex items-center gap-1">
+                    <span>🎯</span> Minimum Registration Threshold
+                  </span>
+                  <span className="bg-amber-400/20 text-amber-300 px-2 py-0.5 rounded-full border border-amber-400/30 text-[10px]">
+                    Min Req: {stats.adminCompensation?.minRegistrationsThreshold || 0}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-1.5 text-center text-[10px]">
+                  <div className="bg-black/20 p-1.5 rounded-lg">
+                    <span className="text-gray-300 block">Combined Total</span>
+                    <strong className="text-white text-xs">{stats.adminCompensation?.currentTotalRegistrations || (stats.adminCompensation?.curFarmers + stats.adminCompensation?.curVendors + stats.adminCompensation?.curWorkers) || 0}</strong>
+                  </div>
+                  <div className="bg-black/20 p-1.5 rounded-lg">
+                    <span className="text-gray-300 block">Threshold</span>
+                    <strong className="text-amber-300 text-xs">{stats.adminCompensation?.minRegistrationsThreshold || 0}</strong>
+                  </div>
+                  <div className="bg-black/20 p-1.5 rounded-lg">
+                    <span className="text-gray-300 block">Eligible Count</span>
+                    <strong className={(stats.adminCompensation?.qualifyingRegistrationsCount || 0) > 0 ? "text-emerald-300 text-xs" : "text-gray-400 text-xs"}>
+                      {stats.adminCompensation?.qualifyingRegistrationsCount || 0}
+                    </strong>
+                  </div>
+                </div>
+
+                {(stats.adminCompensation?.registrationsRemainingToUnlock || 0) > 0 ? (
+                  <p className="text-[10px] text-amber-300/90 text-center font-medium">
+                    🔒 {stats.adminCompensation.registrationsRemainingToUnlock} more registrations needed to unlock incentives.
+                  </p>
+                ) : (stats.adminCompensation?.qualifyingRegistrationsCount || 0) > 0 ? (
+                  <p className="text-[10px] text-emerald-300 text-center font-medium">
+                    ✓ Threshold reached! {stats.adminCompensation.qualifyingRegistrationsCount} registrations earning incentives.
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-indigo-200/70 text-center">
+                    {(stats.adminCompensation?.minRegistrationsThreshold || 0) === 0
+                      ? '⚡ Zero threshold: All registrations are incentive eligible.'
+                      : 'Accruing registrations toward threshold.'}
+                  </p>
+                )}
+
+                {/* Role-wise earned incentives */}
+                <div className="pt-1.5 border-t border-white/10 grid grid-cols-3 gap-1 text-[10px] text-indigo-100 text-center">
+                  <div>
+                    <span className="text-gray-400 block">👨‍🌾 Farmers</span>
+                    <span className="font-bold text-white">₹{(stats.adminCompensation?.farmerIncentives || 0).toLocaleString()}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 block">🚜 Eq. Owners</span>
+                    <span className="font-bold text-white">₹{(stats.adminCompensation?.vendorIncentives || 0).toLocaleString()}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 block">👷 Workers</span>
+                    <span className="font-bold text-white">₹{(stats.adminCompensation?.workerIncentives || 0).toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+
               {/* Part 2: Official Salary Payment Status (SEPARATED FROM EARNINGS) */}
               <div className="pt-3 border-t border-white/15 space-y-2">
                 <div className="flex items-center justify-between">

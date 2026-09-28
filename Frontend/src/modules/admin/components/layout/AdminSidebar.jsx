@@ -52,7 +52,6 @@ const iconMap = {
   "Machinery Approvals": FiTruck,
   Referrals: FiGift,
   "Admin Management": FiShield,
-  "Admin Payroll": FiDollarSign,
   "My Salary": FiDollarSign,
 };
 
@@ -196,7 +195,6 @@ const AdminSidebar = ({ isOpen, onClose }) => {
     'Manage Website': 'website.view',
     'Referrals': 'referrals.view',
     'Admin Management': null, // strictly super_admin only
-    'Admin Payroll': null, // strictly super_admin only
     'Settings': 'settings.view'
   };
 

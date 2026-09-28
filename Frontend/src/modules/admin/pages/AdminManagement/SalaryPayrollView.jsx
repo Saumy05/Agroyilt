@@ -455,6 +455,20 @@ function AdminProfilePanel({ admin, onClose, onRecordPayment }) {
                 <span>Workers Added ({cm.workerCount || 0})</span>
                 <span className="font-semibold">₹{cm.workerIncentives || 0}</span>
               </div>
+              {cm.minRegistrationsThreshold > 0 && (
+                <div className={`mt-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold flex items-center justify-between ${
+                  cm.isThresholdMet 
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' 
+                    : 'bg-amber-50 text-amber-800 border border-amber-200'
+                }`}>
+                  <span>🎯 Boundary (&gt;{cm.minRegistrationsThreshold}):</span>
+                  <span>
+                    {cm.isThresholdMet 
+                      ? `${cm.qualifyingRegistrationsCount || cm.qualifyingCount || 0} qualifying registrations` 
+                      : `Locked (${cm.registrationsRemainingToUnlock !== undefined ? cm.registrationsRemainingToUnlock : Math.max(0, cm.minRegistrationsThreshold - (cm.currentTotalRegistrations || cm.totalCombinedRegistrations || ((cm.farmerCount || 0) + (cm.vendorCount || 0) + (cm.workerCount || 0))))} more needed)`}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Total Payable banner */}
