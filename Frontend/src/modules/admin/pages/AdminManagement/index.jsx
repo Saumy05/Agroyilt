@@ -14,7 +14,7 @@ import {
   getAttributionSummary, exportAttributionData,
   getDistricts, getSubDistricts
 } from '../../services/adminManagementService';
-import { cityService } from '../../services/cityService';
+import { stateService, districtService, subDistrictService } from '../../services/geoService';
 import {
   PERMISSION_GROUPS,
   getAllPermissionKeys,
@@ -29,17 +29,21 @@ import SalaryPayrollView from './SalaryPayrollView';
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 const SCOPE_LABELS = {
-  GLOBAL: { label: 'Global Access', icon: FiGlobe, color: 'amber' },
-  CITY: { label: 'City Scope', icon: FiMapPin, color: 'teal' },
+  GLOBAL_INDIA: { label: 'Global (India)', icon: FiGlobe, color: 'amber' },
+  GLOBAL: { label: 'Global (India)', icon: FiGlobe, color: 'amber' },
+  STATE: { label: 'State Scope', icon: FiMapPin, color: 'teal' },
   DISTRICT: { label: 'District Scope', icon: FiMapPin, color: 'blue' },
-  SUB_DISTRICT: { label: 'Sub-District Scope', icon: FiMapPin, color: 'purple' }
+  SUB_DISTRICT: { label: 'Sub-District Scope', icon: FiMapPin, color: 'purple' },
+  CITY: { label: 'City Scope (Legacy)', icon: FiMapPin, color: 'gray' }
 };
 
 const SCOPE_COLORS = {
+  GLOBAL_INDIA: 'bg-amber-100 text-amber-800 border-amber-200',
   GLOBAL: 'bg-amber-100 text-amber-800 border-amber-200',
-  CITY: 'bg-teal-100 text-teal-800 border-teal-200',
+  STATE: 'bg-teal-100 text-teal-800 border-teal-200',
   DISTRICT: 'bg-blue-100 text-blue-800 border-blue-200',
-  SUB_DISTRICT: 'bg-purple-100 text-purple-800 border-purple-200'
+  SUB_DISTRICT: 'bg-purple-100 text-purple-800 border-purple-200',
+  CITY: 'bg-gray-100 text-gray-700 border-gray-200'
 };
 
 const ROLE_COLORS = {
@@ -53,12 +57,15 @@ const formatDate = (d) => {
 };
 
 const getScopeDisplay = (admin) => {
-  if (admin.scopeType === 'GLOBAL' || admin.role === 'super_admin') return 'Global Access';
+  if (admin.scopeType === 'GLOBAL' || admin.scopeType === 'GLOBAL_INDIA' || admin.role === 'super_admin') return 'Global Access (India)';
   if (admin.scopeType === 'SUB_DISTRICT') {
-    return [admin.districtName, admin.subDistrictName].filter(Boolean).join(' · ') || 'Sub-District';
+    return [admin.stateName, admin.districtName, admin.subDistrictName].filter(Boolean).join(' · ') || 'Sub-District';
   }
-  if (admin.scopeType === 'DISTRICT') return admin.districtName || 'District';
-  return admin.cityId?.name || admin.cityName || 'City';
+  if (admin.scopeType === 'DISTRICT') {
+    return [admin.stateName, admin.districtName].filter(Boolean).join(' · ') || admin.districtName || 'District';
+  }
+  if (admin.scopeType === 'STATE') return admin.stateName || 'State';
+  return admin.cityName || admin.cityId?.name || 'Assigned Scope';
 };
 
 // ── Sub-Components ─────────────────────────────────────────────────────────
@@ -202,19 +209,26 @@ const AdminAccessSummary = ({ form }) => {
   const totalEnabled = countEnabledPermissions(form.permissions);
   const totalKeys = getAllPermissionKeys().length;
 
-  let territoryLabel = 'All Territories (Global)';
+  let territoryLabel = 'All Territories (GLOBAL INDIA)';
   let scopeBadge = { label: 'GLOBAL', color: 'bg-amber-100 text-amber-800 border-amber-300' };
 
   if (!isSuperAdmin) {
     if (form.scopeType === 'SUB_DISTRICT') {
-      territoryLabel = [form.subDistrictName, form.districtName, form.cityName].filter(Boolean).join(', ') || 'Unassigned Sub-District';
+      territoryLabel = [form.subDistrictName, form.districtName, form.stateName].filter(Boolean).join(', ') || 'Unassigned Sub-District';
       scopeBadge = { label: 'SUB-DISTRICT', color: 'bg-purple-100 text-purple-800 border-purple-300' };
     } else if (form.scopeType === 'DISTRICT') {
-      territoryLabel = [form.districtName, form.cityName].filter(Boolean).join(', ') || 'Unassigned District';
+      territoryLabel = [form.districtName, form.stateName].filter(Boolean).join(', ') || 'Unassigned District';
       scopeBadge = { label: 'DISTRICT', color: 'bg-blue-100 text-blue-800 border-blue-300' };
-    } else {
-      territoryLabel = form.cityName || 'Unassigned City';
-      scopeBadge = { label: 'CITY', color: 'bg-teal-100 text-teal-800 border-teal-300' };
+    } else if (form.scopeType === 'STATE') {
+      territoryLabel = form.stateName || 'Unassigned State';
+      scopeBadge = { label: 'STATE', color: 'bg-teal-100 text-teal-800 border-teal-300' };
+    } else if (form.scopeType === 'GLOBAL_INDIA') {
+      territoryLabel = 'All of India';
+      scopeBadge = { label: 'GLOBAL INDIA', color: 'bg-amber-100 text-amber-800 border-amber-300' };
+    } else if (form.scopeType === 'CITY') {
+      // Legacy backward compat
+      territoryLabel = form.cityName || form.stateName || 'Legacy City Scope';
+      scopeBadge = { label: 'LEGACY-CITY', color: 'bg-gray-100 text-gray-600 border-gray-300' };
     }
   }
 
@@ -275,14 +289,18 @@ const AdminAccessSummary = ({ form }) => {
 
 // ── Admin Form Modal ───────────────────────────────────────────────────────
 
-const AdminFormModal = ({ admin, cities, onClose, onSave, defaultTab = 'basic' }) => {
+const AdminFormModal = ({ admin, states, cities, onClose, onSave, defaultTab = 'basic' }) => {
+  const stateList = states || cities || [];
   const isEdit = !!(admin?.id || admin?._id);
   const [form, setForm] = useState({
     name: admin?.name || '',
     email: admin?.email || '',
     password: '',
     role: admin?.role || 'admin',
-    scopeType: admin?.scopeType || 'CITY',
+    scopeType: admin?.scopeType || 'STATE',
+    stateId: admin?.stateId?._id || admin?.stateId || '',
+    stateName: admin?.stateName || '',
+    // Legacy city fields kept for backward compat
     cityId: admin?.cityId?._id || admin?.cityId || '',
     cityName: admin?.cityName || '',
     districtId: admin?.districtId?._id || admin?.districtId || '',
@@ -325,9 +343,10 @@ const AdminFormModal = ({ admin, cities, onClose, onSave, defaultTab = 'basic' }
   const [isCustomDistrict, setIsCustomDistrict] = useState(false);
   const [isCustomSubDistrict, setIsCustomSubDistrict] = useState(false);
 
-  // Fetch districts when cityId changes
+  // Fetch districts when stateId changes (new scope: STATE → DISTRICT → SUB_DISTRICT)
   useEffect(() => {
-    if (!form.cityId) {
+    const stateIdToUse = form.stateId || form.cityId; // fallback for legacy CITY-scoped admins
+    if (!stateIdToUse) {
       setDistricts([]);
       setSubDistricts([]);
       return;
@@ -336,23 +355,28 @@ const AdminFormModal = ({ admin, cities, onClose, onSave, defaultTab = 'basic' }
     const fetchDistricts = async () => {
       setLoadingDistricts(true);
       try {
-        const res = await getDistricts(form.cityId);
+        // Try new API first, fall back to legacy
+        const res = await districtService.getByState(stateIdToUse);
         if (isMounted) {
-          const list = res?.data || [];
+          const list = res?.districts || [];
           setDistricts(list);
           if (form.districtName && !form.districtId && !list.some(d => (d.name || '').toLowerCase() === form.districtName.toLowerCase())) {
             setIsCustomDistrict(true);
           }
         }
       } catch (err) {
-        console.error('Failed to fetch districts:', err);
+        // Fall back to legacy getDistricts if new API fails
+        try {
+          const res = await getDistricts(stateIdToUse);
+          if (isMounted) setDistricts(res?.data || []);
+        } catch {}
       } finally {
         if (isMounted) setLoadingDistricts(false);
       }
     };
     fetchDistricts();
     return () => { isMounted = false; };
-  }, [form.cityId]);
+  }, [form.stateId, form.cityId]);
 
   // Fetch sub-districts when districtId changes
   useEffect(() => {
@@ -434,16 +458,16 @@ const AdminFormModal = ({ admin, cities, onClose, onSave, defaultTab = 'basic' }
 
     // Auto-set scope based on role
     if (name === 'role' && value === 'super_admin') {
-      setForm(p => ({ ...p, role: value, scopeType: 'GLOBAL' }));
+      setForm(p => ({ ...p, role: value, scopeType: 'GLOBAL_INDIA' }));
     }
 
-    // Auto-fill cityName and reset lower scopes
-    if (name === 'cityId') {
-      const city = cities.find(c => (c._id || c.id) === value);
+    // Auto-fill stateName and reset lower scopes when stateId changes
+    if (name === 'stateId') {
+      const state = stateList.find(s => (s._id || s.id) === value);
       setForm(p => ({
         ...p,
-        cityId: value,
-        cityName: city?.name || '',
+        stateId: value,
+        stateName: state?.name || '',
         districtId: '',
         districtName: '',
         subDistrictId: '',
@@ -615,23 +639,26 @@ const AdminFormModal = ({ admin, cities, onClose, onSave, defaultTab = 'basic' }
                       <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Scope Type</label>
                       <select name="scopeType" value={form.scopeType} onChange={handleChange}
                         className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white">
-                        <option value="CITY">City</option>
+                        <option value="GLOBAL_INDIA">Global India (Entire India)</option>
+                        <option value="STATE">State</option>
                         <option value="DISTRICT">District</option>
                         <option value="SUB_DISTRICT">Sub-District</option>
                       </select>
                     </div>
 
-                    {/* City Selector */}
+                    {/* State Selector (for all non-global scopes) */}
+                    {form.scopeType !== 'GLOBAL_INDIA' && (
                     <div>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Assign City *</label>
-                      <select name="cityId" value={form.cityId} onChange={handleChange}
+                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Assign State *</label>
+                      <select name="stateId" value={form.stateId} onChange={handleChange}
                         className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white">
-                        <option value="">— Select City —</option>
-                        {cities.map(c => (
-                          <option key={c._id || c.id} value={c._id || c.id}>{c.name}</option>
+                        <option value="">— Select State —</option>
+                        {stateList.map(s => (
+                          <option key={s._id || s.id} value={s._id || s.id}>{s.name}</option>
                         ))}
                       </select>
                     </div>
+                    )}
 
                     {/* District (if scope is DISTRICT or SUB_DISTRICT) */}
                     {(form.scopeType === 'DISTRICT' || form.scopeType === 'SUB_DISTRICT') && (
@@ -2194,10 +2221,11 @@ const PeopleAttributionView = ({ onViewAdminPeople }) => {
                             role: admin.role,
                             isActive: admin.isActive,
                             scopeType: admin.scopeType,
-                          cityScope: admin.cityScope,
-                          districtScope: admin.districtScope,
-                          subDistrictScope: admin.subDistrictScope
-                        })}
+                            stateScope: admin.stateName,
+                            cityScope: admin.cityName || admin.cityScope,
+                            districtScope: admin.districtName || admin.districtScope,
+                            subDistrictScope: admin.subDistrictName || admin.subDistrictScope
+                          })}
                         className="inline-flex items-center gap-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition shadow-xs cursor-pointer"
                       >
                         <FiEye className="w-3.5 h-3.5" /> View People
@@ -2219,6 +2247,7 @@ const PeopleAttributionView = ({ onViewAdminPeople }) => {
 
 const AdminManagement = ({ defaultTab }) => {
   const [admins, setAdmins] = useState([]);
+  const [states, setStates] = useState([]);
   const [cities, setCities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -2273,15 +2302,19 @@ const AdminManagement = ({ defaultTab }) => {
     }
   }, [search, filterRole, filterStatus]);
 
-  const fetchCities = useCallback(async () => {
+  const fetchStates = useCallback(async () => {
     try {
-      const res = await cityService.getAll();
-      if (res.success) setCities(res.cities || []);
+      const res = await stateService.getAll();
+      if (res.success) {
+        const list = res.states || [];
+        setStates(list);
+        setCities(list);
+      }
     } catch {}
   }, []);
 
   useEffect(() => { fetchAdmins(); }, [fetchAdmins]);
-  useEffect(() => { fetchCities(); }, [fetchCities]);
+  useEffect(() => { fetchStates(); }, [fetchStates]);
 
   const handleToggleStatus = async (admin) => {
     const action = admin.isActive !== false ? 'block' : 'unblock';
@@ -2706,6 +2739,7 @@ const AdminManagement = ({ defaultTab }) => {
           <AdminFormModal
             key="admin-form"
             admin={editAdmin ? { ...editAdmin, id: editAdmin._id } : null}
+            states={states}
             cities={cities}
             defaultTab={adminModalTab}
             onClose={() => { setShowCreateModal(false); setEditAdmin(null); setAdminModalTab('basic'); }}

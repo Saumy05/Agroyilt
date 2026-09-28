@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     FiPlus,
     FiEdit2,
@@ -18,7 +18,6 @@ import {
 import adminProductService from '../../../../services/adminProductService';
 import adminEquipmentService from '../../../../services/adminEquipmentService';
 import { publicCatalogService, serviceService, homeContentService, categoryService } from '../../../../services/catalogService';
-import { cityService } from '../../services/cityService';
 import { getSettings } from '../../services/settingsService';
 import { toastManager } from '../../../../utils/toastManager';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -61,16 +60,6 @@ const ManageProducts = () => {
         parentSourceId: ""
     });
     const [savingCatalog, setSavingCatalog] = useState(false);
-
-    const [showCityModal, setShowCityModal] = useState(false);
-    const [cityFormData, setCityFormData] = useState({
-        name: "",
-        state: "",
-        country: "India",
-        isActive: true,
-        parentSourceId: ""
-    });
-    const [savingCity, setSavingCity] = useState(false);
 
     const [formData, setFormData] = useState({
         title: '',
@@ -289,17 +278,6 @@ const ManageProducts = () => {
         }
     };
 
-    const openCityModal = (vendorEq) => {
-        setCityFormData({
-            name: vendorEq.requestedCityName || "",
-            state: vendorEq.vendorId?.address?.state || vendorEq.vendorId?.state || "",
-            country: "India",
-            isActive: true,
-            parentSourceId: vendorEq._id
-        });
-        setShowCityModal(true);
-    };
-
     const handleSaveToCatalog = async (e) => {
         e.preventDefault();
         let finalCategoryId = catalogFormData.parentCategory;
@@ -388,28 +366,6 @@ const ManageProducts = () => {
             }
         } finally {
             setSavingCatalog(false);
-        }
-    };
-
-    const handleSaveCity = async (e) => {
-        e.preventDefault();
-        try {
-            setSavingCity(true);
-            const res = await cityService.create(cityFormData);
-            if (res.success) {
-                // Update VendorEquipment to link the new city
-                await adminEquipmentService.update(cityFormData.parentSourceId, {
-                    cityIds: [res.data?._id || res.city?._id],
-                    requestedCityName: null
-                });
-                toastManager.success('City Added Successfully!');
-                setShowCityModal(false);
-                fetchData();
-            }
-        } catch (err) {
-            toastManager.error(err.response?.data?.message || 'Failed to add city');
-        } finally {
-            setSavingCity(false);
         }
     };
 
@@ -685,27 +641,13 @@ const ManageProducts = () => {
                                                         {isVendorEq && p.requestedCategoryName && (
                                                             <button 
                                                                 onClick={() => { 
-                                                                    if (p.requestedCityName) {
-                                                                        toastManager.error("Please process the New City request first before adding to catalog!");
-                                                                        return;
-                                                                    }
                                                                     openCatalogModal(p); 
                                                                     setActiveMenuId(null); 
                                                                 }}
-                                                                className={`w-full text-left px-3.5 py-2 text-xs font-black rounded-xl transition-all flex items-center gap-2 ${p.requestedCityName ? 'text-slate-400 bg-slate-50 cursor-not-allowed opacity-60' : 'text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700'}`}
-                                                                title={p.requestedCityName ? "Please process the New City request first" : ""}
+                                                                className="w-full text-left px-3.5 py-2 text-xs font-black text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 rounded-xl transition-all flex items-center gap-2"
                                                             >
                                                                 <FiPlus className="w-3.5 h-3.5" />
                                                                 Add to Catalog
-                                                            </button>
-                                                        )}
-                                                        {isVendorEq && p.requestedCityName && (
-                                                            <button 
-                                                                onClick={() => { openCityModal(p); setActiveMenuId(null); }}
-                                                                className="w-full text-left px-3.5 py-2 text-xs font-black text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 rounded-xl transition-all flex items-center gap-2"
-                                                            >
-                                                                <FiPlus className="w-3.5 h-3.5" />
-                                                                Add New City
                                                             </button>
                                                         )}
                                                         <button 
@@ -1207,69 +1149,6 @@ const ManageProducts = () => {
                                 </button>
                                 <button type="submit" form="catalogForm" disabled={savingCatalog} className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl text-sm font-black hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 disabled:opacity-50">
                                     {savingCatalog ? 'Saving...' : 'Add to Catalog'}
-                                </button>
-                            </div>
-                        </motion.div>
-                    </div>
-                )}
-
-                {/* Add New City Modal */}
-                {showCityModal && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-                        <motion.div 
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.95 }}
-                            className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col"
-                        >
-                            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">
-                                <div>
-                                    <h3 className="text-xl font-black text-slate-800 tracking-tight">Add New Zone / City</h3>
-                                    <p className="text-sm font-bold text-slate-500 mt-1">Approve requested city to database.</p>
-                                </div>
-                                <button onClick={() => setShowCityModal(false)} className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors">
-                                    <FiX className="w-5 h-5" />
-                                </button>
-                            </div>
-                            
-                            <div className="p-6">
-                                <form id="cityForm" onSubmit={handleSaveCity} className="space-y-4">
-                                    <div className="space-y-2">
-                                        <label className="text-xs font-black text-slate-400 uppercase tracking-wider">City Name</label>
-                                        <input 
-                                            required
-                                            value={cityFormData.name}
-                                            onChange={e => setCityFormData(p => ({ ...p, name: e.target.value }))}
-                                            className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-bold text-slate-800 outline-none focus:border-emerald-500/30 focus:bg-white transition-all"
-                                        />
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <label className="text-xs font-black text-slate-400 uppercase tracking-wider">State</label>
-                                            <input 
-                                                value={cityFormData.state}
-                                                onChange={e => setCityFormData(p => ({ ...p, state: e.target.value }))}
-                                                className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-bold text-slate-800 outline-none"
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <label className="text-xs font-black text-slate-400 uppercase tracking-wider">Country</label>
-                                            <input 
-                                                value={cityFormData.country}
-                                                onChange={e => setCityFormData(p => ({ ...p, country: e.target.value }))}
-                                                className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-bold text-slate-800 outline-none"
-                                            />
-                                        </div>
-                                    </div>
-                                </form>
-                            </div>
-
-                            <div className="p-6 border-t border-slate-100 bg-slate-50 flex gap-3 shrink-0">
-                                <button type="button" onClick={() => setShowCityModal(false)} className="flex-1 py-4 bg-white border-2 border-slate-200 text-slate-600 rounded-2xl text-sm font-black hover:bg-slate-50 transition-colors">
-                                    Cancel
-                                </button>
-                                <button type="submit" form="cityForm" disabled={savingCity} className="flex-1 py-4 bg-emerald-600 text-white rounded-2xl text-sm font-black hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-200 disabled:opacity-50">
-                                    {savingCity ? 'Saving...' : 'Save City'}
                                 </button>
                             </div>
                         </motion.div>

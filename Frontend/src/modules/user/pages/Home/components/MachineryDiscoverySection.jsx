@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   FiTruck, FiArrowRight, FiCheckCircle,
@@ -6,20 +6,16 @@ import {
 } from 'react-icons/fi';
 import { motion } from 'framer-motion';
 import { publicEquipmentService } from '../../../../../services/publicEquipmentService';
-import { useCity } from '../../../../../context/CityContext';
 
 const MachineryDiscoverySection = () => {
   const navigate = useNavigate();
   const [equipment, setEquipment] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { currentCity } = useCity();
 
   useEffect(() => {
     const fetchEquipment = async () => {
       try {
-        const cityId = currentCity?._id || currentCity?.id;
         const res = await publicEquipmentService.getAllEquipment({
-          cityId,
           isFeatured: true
         });
         if (res.success) {
@@ -32,7 +28,7 @@ const MachineryDiscoverySection = () => {
       }
     };
     fetchEquipment();
-  }, [currentCity]);
+  }, []);
 
   if (!loading && equipment.length === 0) return null;
 

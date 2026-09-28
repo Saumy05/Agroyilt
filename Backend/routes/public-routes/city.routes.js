@@ -1,12 +1,18 @@
 const express = require('express');
 const router = express.Router();
-const { getActiveCities } = require('../../controllers/cityController');
 
 /**
  * @route   GET /api/public/cities
- * @desc    Get all active cities for public use
+ * @desc    Deprecated endpoint - Geographic hierarchy migrated to State -> District -> Sub-District
  * @access  Public
  */
-router.get('/', getActiveCities);
+router.get('/', (req, res) => {
+  res.status(200).json({
+    success: true,
+    count: 0,
+    cities: [],
+    message: 'Operational locations have migrated to State -> District -> Sub-District system.'
+  });
+});
 
 module.exports = router;

@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import AppRoutes from './routes';
 import { SocketProvider } from './context/SocketContext';
 import { CartProvider } from './context/CartContext';
-import { CityProvider } from './context/CityContext';
+import { GeoProvider } from './context/GeoContext';
 import { EcommerceCartProvider } from './context/EcommerceCartContext';
 import { BrandProvider } from './context/BrandContext';
 import { initializePushNotifications, setupForegroundNotificationHandler } from './services/pushNotificationService';
@@ -95,7 +95,7 @@ function App() {
     <BrowserRouter>
       <BrandProvider>
         <SocketProvider>
-          <CityProvider>
+          <GeoProvider>
             <CartProvider>
               <EcommerceCartProvider>
                 <div className="App">
@@ -136,7 +136,7 @@ function App() {
                 </div>
               </EcommerceCartProvider>
             </CartProvider>
-          </CityProvider>
+          </GeoProvider>
         </SocketProvider>
       </BrandProvider>
     </BrowserRouter>

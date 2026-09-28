@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiSettings, FiGrid, FiDollarSign, FiSave, FiUser, FiMail, FiTrash2, FiPlus, FiUsers, FiShield, FiFileText, FiMapPin, FiPhone, FiHeadphones, FiMessageCircle, FiEdit, FiLock, FiUnlock, FiX, FiGlobe, FiUpload, FiCamera } from 'react-icons/fi';
+import { useNavigate } from 'react-router-dom';
 import { getSettings, updateSettings, updateAdminProfile, getAdminProfile, getAllAdmins, createAdmin, deleteAdmin, updateAdminDetails, toggleAdminStatus, getRegistrationFees, updateRegistrationFee } from '../../services/settingsService';
-import { cityService } from '../../services/cityService';
-import CityManagement from '../Cities';
 import { toastManager } from '../../../../utils/toastManager';
 import { useBrand } from '../../../../context/BrandContext';
 import api from '../../../../services/api';
 import authStorage from '../../../../utils/authStorage';
 
 const AdminSettings = () => {
+  const navigate = useNavigate();
   const { refreshBrandSettings } = useBrand();
   const [settings, setSettings] = useState({
     // No operator assignment in Agroyilt
@@ -408,23 +408,10 @@ const AdminSettings = () => {
     }
   };
 
-  // Fetch cities for dropdown
-  const loadCities = async () => {
-    try {
-      const res = await cityService.getAll();
-      if (res.success) {
-        setCities(res.cities || []);
-      }
-    } catch (error) {
-      console.error('Error loading cities:', error);
-    }
-  };
-
-  // Load admins and cities ONLY when entering admin view
+  // Load admins ONLY when entering admin view
   useEffect(() => {
     if (isSuperAdmin && activeView === 'admins') {
       if (admins.length === 0) loadAdmins();
-      if (cities.length === 0) loadCities();
     }
   }, [isSuperAdmin, activeView]);
 
@@ -834,21 +821,9 @@ const AdminSettings = () => {
         </div>
       )}
 
-      {/* City Management Card - Super Admin Only */}
-      {isSuperAdmin && (
-        <div onClick={() => setActiveView('cities')}
-          className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer group">
-          <div className="w-12 h-12 bg-teal-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-teal-100 transition-colors">
-            <FiMapPin className="w-6 h-6 text-teal-600" />
-          </div>
-          <h3 className="text-lg font-bold text-gray-800 mb-2">City Management</h3>
-          <p className="text-sm text-gray-500">Manage operational cities and default location</p>
-        </div>
-      )}
-
       {/* Admin Management Card - Super Admin Only */}
       {isSuperAdmin && (
-        <div onClick={() => setActiveView('admins')}
+        <div onClick={() => navigate('/admin/admin-management')}
           className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer group">
           <div className="w-12 h-12 bg-amber-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-amber-100 transition-colors">
             <FiUsers className="w-6 h-6 text-amber-600" />
@@ -1763,14 +1738,6 @@ const AdminSettings = () => {
           )
         }
 
-        {/* City Management View */}
-        {
-          activeView === 'cities' && (
-            <motion.div key="cities" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
-              <CityManagement />
-            </motion.div>
-          )
-        }
 
         {/* Admin Management View - Super Admin Only */}
         {

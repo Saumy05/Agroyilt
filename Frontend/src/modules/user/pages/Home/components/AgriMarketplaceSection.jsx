@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FiShoppingCart, FiArrowRight, FiPlus, FiTag } from 'react-icons/fi';
 import { motion } from 'framer-motion';
@@ -15,11 +15,8 @@ const toAssetUrl = (url) => {
     return `${base}${clean.startsWith('/') ? '' : '/'}${clean}`;
 };
 
-import { useCity } from '../../../../../context/CityContext';
-
 const AgriMarketplaceSection = () => {
     const navigate = useNavigate();
-    const { activeCity } = useCity();
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const { addToCart } = useCart();
@@ -28,9 +25,6 @@ const AgriMarketplaceSection = () => {
         const fetchProducts = async () => {
             try {
                 const params = { isFeatured: true };
-                if (activeCity) {
-                    params.cityId = activeCity._id || activeCity.id;
-                }
                 const res = await productService.getProducts(params);
                 if (res.success) {
                     setProducts(res.data);
@@ -42,7 +36,7 @@ const AgriMarketplaceSection = () => {
             }
         };
         fetchProducts();
-    }, [activeCity]);
+    }, []);
 
     const handleAddToCart = async (product) => {
         try {

@@ -14,26 +14,41 @@ const HomeContent = require('../../models/HomeContent');
  */
 const getPublicCategories = async (req, res) => {
   try {
-    const { cityId, type } = req.query;
+    const { cityId, stateId, districtId, subDistrictId, type } = req.query;
     const mongoose = require('mongoose');
 
     let query = { status: 'active', showOnHome: true };
-    
-    if (cityId) {
-      const mongoose = require('mongoose');
-      let cityObjectId;
-      try {
-        cityObjectId = new mongoose.Types.ObjectId(cityId);
-      } catch (e) {
-        cityObjectId = cityId;
-      }
-      
-      query.$or = [
-        { scope: 'GLOBAL' },
-        { scope: 'CITY_SPECIFIC', city: cityObjectId }
+    const globalScopes = ['GLOBAL', 'GLOBAL_INDIA'];
+
+    const hasLocation = Boolean(stateId || districtId || subDistrictId || cityId);
+
+    if (hasLocation) {
+      const scopeConditions = [
+        { scope: { $in: globalScopes } }
       ];
+
+      if (stateId && mongoose.Types.ObjectId.isValid(stateId)) {
+        scopeConditions.push({ scope: 'STATE', stateId: new mongoose.Types.ObjectId(stateId) });
+      }
+      if (districtId && mongoose.Types.ObjectId.isValid(districtId)) {
+        scopeConditions.push({ scope: 'DISTRICT', districtId: new mongoose.Types.ObjectId(districtId) });
+      }
+      if (subDistrictId && mongoose.Types.ObjectId.isValid(subDistrictId)) {
+        scopeConditions.push({ scope: 'SUB_DISTRICT', subDistrictId: new mongoose.Types.ObjectId(subDistrictId) });
+      }
+      if (cityId) {
+        let cityObjectId;
+        try {
+          cityObjectId = new mongoose.Types.ObjectId(cityId);
+        } catch (e) {
+          cityObjectId = cityId;
+        }
+        scopeConditions.push({ scope: 'CITY_SPECIFIC', city: cityObjectId });
+      }
+
+      query.$or = scopeConditions;
     } else {
-      query.scope = 'GLOBAL';
+      query.scope = { $in: globalScopes };
     }
 
     // Calculate total count

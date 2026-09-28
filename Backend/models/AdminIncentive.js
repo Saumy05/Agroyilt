@@ -79,7 +79,16 @@ const adminIncentiveSchema = new mongoose.Schema({
   // Geographic scope snapshot
   scopeType: {
     type: String,
-    default: 'GLOBAL'
+    default: 'GLOBAL_INDIA'
+  },
+  stateId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'State',
+    default: null
+  },
+  stateName: {
+    type: String,
+    default: ''
   },
   districtId: {
     type: mongoose.Schema.Types.ObjectId,

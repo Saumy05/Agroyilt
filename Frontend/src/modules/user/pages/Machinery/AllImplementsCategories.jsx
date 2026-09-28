@@ -1,8 +1,7 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { FiArrowLeft, FiMapPin, FiLayers } from 'react-icons/fi';
 import { Helmet } from 'react-helmet-async';
-import { useCity } from '../../../../context/CityContext';
 import { publicEquipmentService } from '../../../../services/publicEquipmentService';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import CategoryCard from '../../components/common/CategoryCard';
@@ -18,7 +17,6 @@ const toAssetUrl = (url) => {
 const AllImplementsCategories = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { currentCity } = useCity();
   const [implementList, setImplementList] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -34,8 +32,7 @@ const AllImplementsCategories = () => {
     const fetchImplements = async () => {
       try {
         setLoading(true);
-        const cityId = currentCity?._id || currentCity?.id;
-        const res = await publicEquipmentService.getImplementsForCategory(selectedCat.id || selectedCat._id, cityId);
+        const res = await publicEquipmentService.getImplementsForCategory(selectedCat.id || selectedCat._id);
         
         if (res && res.success) {
           setImplementList(res.data || []);
@@ -50,7 +47,7 @@ const AllImplementsCategories = () => {
     };
     
     fetchImplements();
-  }, [currentCity, selectedCat, navigate]);
+  }, [selectedCat, navigate]);
 
   const handleImplementClick = (implement) => {
     // Navigate back to the explorer with BOTH the main category and the selected implement pre-selected
@@ -82,7 +79,7 @@ const AllImplementsCategories = () => {
           <div>
             <h1 className="text-xl font-black text-slate-800 tracking-tight">All {selectedCat.title} Implements</h1>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
-              <FiMapPin className="text-orange-500" /> {currentCity?.name || 'Globally Available'}
+              <FiMapPin className="text-orange-500" /> All India
             </p>
           </div>
         </div>

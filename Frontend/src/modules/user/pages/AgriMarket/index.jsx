@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
     FiSearch, 
     FiFilter, 
@@ -14,12 +14,9 @@ import { publicCatalogService } from '../../../../services/catalogService';
 import { useEcommerceCart } from '../../../../context/EcommerceCartContext';
 import { toastManager } from '../../../../utils/toastManager';
 import { motion } from 'framer-motion';
-import { useCity } from '../../../../context/CityContext';
-import CitySelectorModal from '../../components/common/CitySelectorModal';
 
 const AgriMarket = () => {
     const navigate = useNavigate();
-    const { currentCity } = useCity();
     const { addToCart, cartCount } = useEcommerceCart();
     const [products, setProducts] = useState([]);
     const [categories, setCategories] = useState([]);
@@ -40,11 +37,10 @@ const AgriMarket = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('all');
     const [hasOrders, setHasOrders] = useState(false);
-    const [showCityModal, setShowCityModal] = useState(false);
 
     useEffect(() => {
         fetchData();
-    }, [currentCity]);
+    }, []);
 
     const fetchData = async () => {
         setLoading(true);
@@ -52,11 +48,7 @@ const AgriMarket = () => {
 
         // Load products independently
         try {
-            const params = {};
-            if (currentCity) {
-                params.cityId = currentCity._id || currentCity.id;
-            }
-            const prodRes = await ecommerceService.getProducts(params);
+            const prodRes = await ecommerceService.getProducts();
             if (prodRes.success) setProducts(prodRes.data || []);
         } catch (err) {
             console.error('Products fetch error:', err?.response?.data || err.message);
@@ -122,14 +114,6 @@ const AgriMarket = () => {
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0 relative z-50">
-                        <button 
-                            onClick={() => setShowCityModal(true)} 
-                            className="px-3 py-2 bg-teal-50/50 hover:bg-teal-50 border border-teal-100 rounded-2xl flex items-center gap-1 text-[9px] font-black text-teal-700 uppercase tracking-wider transition-all active:scale-95 shadow-sm"
-                        >
-                            <span className="w-1 h-1 bg-teal-500 rounded-full animate-pulse" />
-                            {currentCity?.name || 'Select City'}
-                            <span className="text-[6px]">▼</span>
-                        </button>
 
                         <button 
                             onClick={() => navigate('/user/agri-cart')}
@@ -293,12 +277,6 @@ const AgriMarket = () => {
                     )}
                 </div>
             </div>
-            
-            {/* City Selector Modal Popup */}
-            <CitySelectorModal 
-                isOpen={showCityModal} 
-                onClose={() => setShowCityModal(false)} 
-            />
         </div>
     );
 };

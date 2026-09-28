@@ -238,6 +238,18 @@
     "children": []
   },
   {
+    "title": "Geographic Management",
+    "route": "/admin/geographic-management",
+    "allowedRoles": [
+      "super_admin"
+    ],
+    "children": [
+      "States",
+      "Districts",
+      "Sub-Districts"
+    ]
+  },
+  {
     "title": "Settings",
     "route": "/admin/settings",
     "allowedRoles": [

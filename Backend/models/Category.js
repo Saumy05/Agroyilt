@@ -63,13 +63,32 @@ const categorySchema = new mongoose.Schema({
     ref: 'City',
     index: true
   }],
-  // New Scope and City Architecture
+  // Geographic Scope Architecture
   scope: {
     type: String,
-    enum: ['GLOBAL', 'CITY_SPECIFIC'],
-    default: 'GLOBAL',
+    enum: ['GLOBAL', 'GLOBAL_INDIA', 'STATE', 'DISTRICT', 'SUB_DISTRICT', 'CITY_SPECIFIC'],
+    default: 'GLOBAL_INDIA',
     index: true
   },
+  stateId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'State',
+    default: null,
+    index: true
+  },
+  districtId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'District',
+    default: null,
+    index: true
+  },
+  subDistrictId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'SubDistrict',
+    default: null,
+    index: true
+  },
+  // Legacy city reference (backward compatibility only)
   city: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'City',

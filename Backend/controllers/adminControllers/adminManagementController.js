@@ -1,8 +1,10 @@
 const mongoose = require('mongoose');
 const Admin = require('../../models/Admin');
 const AdminAuditLog = require('../../models/AdminAuditLog');
+const State = require('../../models/State');
 const District = require('../../models/District');
 const SubDistrict = require('../../models/SubDistrict');
+const { validateGeoScope } = require('../geoController');
 const User = require('../../models/User');
 const Vendor = require('../../models/Vendor');
 const Worker = require('../../models/Worker');
@@ -138,6 +140,7 @@ const createAdmin = async (req, res) => {
     const {
       name, email, password, role,
       scopeType,
+      stateId, stateName,
       cityId, cityName,
       districtId, districtName,
       subDistrictId, subDistrictName,
@@ -172,8 +175,20 @@ const createAdmin = async (req, res) => {
       }
     }
 
-    // Determine effective scope
-    const effectiveScopeType = role === 'super_admin' ? 'GLOBAL' : (scopeType || 'CITY');
+    // Determine effective scope: super_admin always gets GLOBAL_INDIA
+    const effectiveScopeType = role === 'super_admin' ? 'GLOBAL_INDIA' : (scopeType || 'GLOBAL_INDIA');
+
+    // Server-side hierarchy validation for scoped admins
+    if (role !== 'super_admin' && !['GLOBAL', 'GLOBAL_INDIA', 'CITY'].includes(effectiveScopeType)) {
+      try {
+        await validateGeoScope(effectiveScopeType, stateId, districtId, subDistrictId);
+      } catch (geoErr) {
+        return res.status(400).json({
+          success: false,
+          message: geoErr.message
+        });
+      }
+    }
 
     const admin = await Admin.create({
       name,
@@ -181,6 +196,8 @@ const createAdmin = async (req, res) => {
       password,
       role: role || 'admin',
       scopeType: effectiveScopeType,
+      stateId: stateId || null,
+      stateName: stateName || '',
       cityId: cityId || null,
       cityName: cityName || '',
       districtId: districtId || null,
@@ -243,6 +260,7 @@ const updateAdmin = async (req, res) => {
     const {
       name, email, password, role,
       scopeType,
+      stateId, stateName,
       cityId, cityName,
       districtId, districtName,
       subDistrictId, subDistrictName,
@@ -269,7 +287,7 @@ const updateAdmin = async (req, res) => {
 
     const before = {
       name: admin.name, email: admin.email, role: admin.role,
-      scopeType: admin.scopeType, cityName: admin.cityName,
+      scopeType: admin.scopeType, stateName: admin.stateName, cityName: admin.cityName,
       districtName: admin.districtName, subDistrictName: admin.subDistrictName,
       isActive: admin.isActive
     };
@@ -284,9 +302,28 @@ const updateAdmin = async (req, res) => {
     }
 
     // Geographic scope
-    const newScopeType = admin.role === 'super_admin' ? 'GLOBAL' : (scopeType || admin.scopeType);
+    const targetRole = (role && ['super_admin', 'admin'].includes(role)) ? role : admin.role;
+    const newScopeType = targetRole === 'super_admin' ? 'GLOBAL_INDIA' : (scopeType || admin.scopeType || 'GLOBAL_INDIA');
+
+    // Server-side hierarchy validation for scoped admins
+    if (targetRole !== 'super_admin' && !['GLOBAL', 'GLOBAL_INDIA', 'CITY'].includes(newScopeType)) {
+      try {
+        const targetStateId = stateId !== undefined ? stateId : admin.stateId;
+        const targetDistrictId = districtId !== undefined ? districtId : admin.districtId;
+        const targetSubDistrictId = subDistrictId !== undefined ? subDistrictId : admin.subDistrictId;
+        await validateGeoScope(newScopeType, targetStateId, targetDistrictId, targetSubDistrictId);
+      } catch (geoErr) {
+        return res.status(400).json({
+          success: false,
+          message: geoErr.message
+        });
+      }
+    }
+
     admin.scopeType = newScopeType;
 
+    if (stateId !== undefined) admin.stateId = stateId || null;
+    if (stateName !== undefined) admin.stateName = stateName || '';
     if (cityId !== undefined) admin.cityId = cityId || null;
     if (cityName !== undefined) admin.cityName = cityName || '';
     if (districtId !== undefined) admin.districtId = districtId || null;

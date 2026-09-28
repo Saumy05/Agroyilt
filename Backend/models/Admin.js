@@ -77,22 +77,30 @@ const adminSchema = new mongoose.Schema({
   // ── Geographic Scope ──────────────────────────────────────────────────────
   scopeType: {
     type: String,
-    enum: ['GLOBAL', 'CITY', 'DISTRICT', 'SUB_DISTRICT'],
-    default: 'CITY'
-    // GLOBAL → Super Admin / unrestricted admin
-    // CITY   → scoped to one city
-    // DISTRICT → scoped to one district within a city
-    // SUB_DISTRICT → scoped to one sub-district within a district
+    enum: [
+      'GLOBAL_INDIA',  // Entire India — new authoritative global scope
+      'STATE',         // Scoped to one Indian state — new scope
+      'DISTRICT',      // Scoped to one district within a state
+      'SUB_DISTRICT',  // Scoped to one sub-district within a district
+      // ── Legacy values kept for backward compatibility ──
+      'GLOBAL',        // @deprecated — use GLOBAL_INDIA instead
+      'CITY',          // @deprecated — city-level scope (migration in progress)
+    ],
+    default: 'GLOBAL_INDIA'
   },
-  cityId: {
+
+  // ── NEW: State-level scope fields ─────────────────────────────────────────
+  stateId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'City',
+    ref: 'State',
     default: null
   },
-  cityName: {
+  stateName: {
     type: String,
     default: ''
   },
+
+  // ── District scope ────────────────────────────────────────────────────────
   districtId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'District',
@@ -108,6 +116,17 @@ const adminSchema = new mongoose.Schema({
     default: null
   },
   subDistrictName: {
+    type: String,
+    default: ''
+  },
+
+  // ── LEGACY: City scope (kept for backward compat — do not use for new logic) ──
+  cityId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'City',
+    default: null
+  },
+  cityName: {
     type: String,
     default: ''
   },
@@ -256,12 +275,16 @@ adminSchema.methods.toPublicJSON = function () {
     email: this.email,
     role: this.role,
     scopeType: this.scopeType,
-    cityId: this.cityId,
-    cityName: this.cityName,
+    // New state-based scope
+    stateId: this.stateId,
+    stateName: this.stateName,
     districtId: this.districtId,
     districtName: this.districtName,
     subDistrictId: this.subDistrictId,
     subDistrictName: this.subDistrictName,
+    // Legacy city scope (kept for backward compat)
+    cityId: this.cityId,
+    cityName: this.cityName,
     permissions: this.permissions || {},
     isActive: this.isActive,
     lastLogin: this.lastLogin,

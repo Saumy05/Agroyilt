@@ -24,6 +24,7 @@ require('./models/Admin');
 require('./models/User');
 require('./models/Vendor');
 require('./models/Worker');
+require('./models/State');
 require('./models/District');
 require('./models/SubDistrict');
 require('./models/City');
@@ -194,6 +195,8 @@ app.get('/api/test/redis', async (req, res) => {
 // API Routes
 
 app.use('/api/public/cities', require('./routes/public-routes/city.routes.js'));
+// New geographic hierarchy routes (State → District → SubDistrict)
+app.use('/api/public', require('./routes/public-routes/geo.routes.js'));
 app.use('/api/public/stats', require('./routes/public-routes/stats.routes.js'));
 app.use('/api/fees', require('./routes/shared/registrationFeeRoutes.js'));
 
@@ -246,7 +249,8 @@ app.use('/api/fcm-tokens', require('./routes/common-routes/fcmToken.routes'));
 
 // Admin routes
 app.use('/api/admin/auth', require('./routes/admin-routes/adminAuth.routes'));
-app.use('/api/admin', require('./routes/admin-routes/cityManagement.routes.js'));
+// Geographic management routes (State → District → SubDistrict)
+app.use('/api/admin', require('./routes/admin-routes/geoManagement.routes.js'));
 app.use('/api/admin', require('./routes/admin-routes/dashboard.routes'));
 app.use('/api/admin', require('./routes/admin-routes/userManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/vendorManagement.routes'));

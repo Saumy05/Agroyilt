@@ -1,12 +1,12 @@
-﻿import React, { useEffect, useMemo, useState } from "react";
-import { FiGrid, FiPlus, FiEdit2, FiTrash2, FiSave, FiChevronUp, FiChevronDown, FiMove, FiX, FiSearch } from "react-icons/fi";
+import React, { useEffect, useMemo, useState } from "react";
+import { FiGrid, FiPlus, FiEdit2, FiTrash2, FiSave, FiChevronUp, FiChevronDown, FiMove, FiX, FiSearch, FiMapPin, FiGlobe } from "react-icons/fi";
 import { toast } from "react-hot-toast";
 import CardShell from "../components/CardShell";
 import Modal from "../components/Modal";
-import SearchableCitySelect from "../components/SearchableCitySelect";
 import { saveCatalog, slugify, toAssetUrl } from "../utils";
 
 import { categoryService, serviceService, homeContentService } from "../../../../../services/catalogService";
+import { stateService, districtService, subDistrictService } from "../../../services/geoService";
 import { z } from "zod";
 
 const categorySchema = z.object({
@@ -23,11 +23,39 @@ const categorySchema = z.object({
   sectionType: z.string().default('General'),
   trackingType: z.string().default('none'),
   bookingType: z.enum(['VENDOR', 'WORKER']).default('VENDOR'),
-  scope: z.enum(['GLOBAL', 'CITY_SPECIFIC']).default('GLOBAL'),
-  city: z.string().nullable().optional(),
+  scope: z.enum(['GLOBAL', 'GLOBAL_INDIA', 'STATE', 'DISTRICT', 'SUB_DISTRICT']).default('GLOBAL_INDIA'),
+  stateId: z.string().nullable().optional(),
+  districtId: z.string().nullable().optional(),
+  subDistrictId: z.string().nullable().optional(),
+}).superRefine((data, ctx) => {
+  if (data.scope === 'STATE') {
+    if (!data.stateId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['stateId'],
+        message: 'Please select a state.'
+      });
+    }
+  } else if (data.scope === 'DISTRICT') {
+    if (!data.districtId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['districtId'],
+        message: 'Please select a district.'
+      });
+    }
+  } else if (data.scope === 'SUB_DISTRICT') {
+    if (!data.subDistrictId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['subDistrictId'],
+        message: 'Please select a sub-district.'
+      });
+    }
+  }
 });
 
-const CategoriesPage = ({ catalog, setCatalog, selectedCity, cities = [] }) => {
+const CategoriesPage = ({ catalog, setCatalog }) => {
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
@@ -37,7 +65,41 @@ const CategoriesPage = ({ catalog, setCatalog, selectedCity, cities = [] }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [uploadingIcon, setUploadingIcon] = useState(false);
   const [premiumOfferings, setPremiumOfferings] = useState([]);
-  const [selectedStateFilter, setSelectedStateFilter] = useState("");
+  const [viewAllSubCatsModal, setViewAllSubCatsModal] = useState({
+    isOpen: false,
+    category: null,
+    subCategories: []
+  });
+  const [subCategorySearchTerm, setSubCategorySearchTerm] = useState("");
+
+  // Geographic management states
+  const [geoStates, setGeoStates] = useState([]);
+  const [geoDistricts, setGeoDistricts] = useState([]);
+  const [geoSubDistricts, setGeoSubDistricts] = useState([]);
+  const [loadingStates, setLoadingStates] = useState(false);
+  const [loadingDistricts, setLoadingDistricts] = useState(false);
+  const [loadingSubDistricts, setLoadingSubDistricts] = useState(false);
+  const [geoError, setGeoError] = useState("");
+  const [geoSearchFilter, setGeoSearchFilter] = useState("");
+
+  const openSubCategoriesModal = (category, subCategories) => {
+    setViewAllSubCatsModal({
+      isOpen: true,
+      category,
+      subCategories
+    });
+    setSubCategorySearchTerm("");
+  };
+
+  const filteredModalSubCats = useMemo(() => {
+    if (!viewAllSubCatsModal.subCategories) return [];
+    if (!subCategorySearchTerm.trim()) return viewAllSubCatsModal.subCategories;
+    const lower = subCategorySearchTerm.trim().toLowerCase();
+    return viewAllSubCatsModal.subCategories.filter(sc => 
+      sc.title?.toLowerCase().includes(lower) ||
+      sc.slug?.toLowerCase().includes(lower)
+    );
+  }, [viewAllSubCatsModal.subCategories, subCategorySearchTerm]);
 
   const [form, setForm] = useState({
     title: "",
@@ -53,8 +115,10 @@ const CategoriesPage = ({ catalog, setCatalog, selectedCity, cities = [] }) => {
     requiresDriver: false,
     sectionType: "General",
     bookingType: "VENDOR",
-    scope: "GLOBAL",
-    city: "",
+    scope: "GLOBAL_INDIA",
+    stateId: "",
+    districtId: "",
+    subDistrictId: ""
   });
 
   const categoriesBase = useMemo(() => {
@@ -64,7 +128,7 @@ const CategoriesPage = ({ catalog, setCatalog, selectedCity, cities = [] }) => {
   const getCategoryId = (value) => {
     if (!value) return null;
     if (typeof value === "string") return value;
-    if (typeof value === "object") return (value.id || value._id || null) ?.toString?.() || null;
+    if (typeof value === "object") return (value.id || value._id || null)?.toString?.() || null;
     return value?.toString?.() || null;
   };
 
@@ -72,7 +136,7 @@ const CategoriesPage = ({ catalog, setCatalog, selectedCity, cities = [] }) => {
     if (!value) return "";
     if (typeof value === "object" && value.title) return value.title;
     const id = getCategoryId(value);
-    return categoriesBase.find(cat => cat.id === id) ?.title || "";
+    return categoriesBase.find(cat => cat.id === id)?.title || "";
   };
 
   const categoriesFiltered = useMemo(() => {
@@ -84,30 +148,207 @@ const CategoriesPage = ({ catalog, setCatalog, selectedCity, cities = [] }) => {
     );
   }, [categoriesBase, searchTerm]);
 
-  const uniqueStates = useMemo(() => {
-    const states = cities.map(c => c.state).filter(Boolean);
-    return [...new Set(states)].sort();
-  }, [cities]);
-
-  const filteredCitiesByState = useMemo(() => {
-    if (!selectedStateFilter) return cities;
-    return cities.filter(c => c.state === selectedStateFilter);
-  }, [cities, selectedStateFilter]);
-
   const editing = useMemo(() => categoriesBase.find((c) => c.id === editingId) || null, [categoriesBase, editingId]);
+
+  // Load all active states from Geographic Management
+  const fetchStates = async () => {
+    try {
+      setLoadingStates(true);
+      setGeoError("");
+      const res = await stateService.getAll();
+      if (res.success && Array.isArray(res.states)) {
+        setGeoStates(res.states.filter(s => s.isActive !== false));
+      }
+    } catch (err) {
+      console.error("Failed to load states:", err);
+      setGeoError("Failed to load geographic states. Please try again.");
+    } finally {
+      setLoadingStates(false);
+    }
+  };
+
+  // Load all active districts from Geographic Management
+  const fetchDistricts = async () => {
+    try {
+      setLoadingDistricts(true);
+      setGeoError("");
+      const res = await districtService.getAll();
+      if (res.success && Array.isArray(res.districts)) {
+        setGeoDistricts(res.districts.filter(d => d.isActive !== false));
+      }
+    } catch (err) {
+      console.error("Failed to load districts:", err);
+      setGeoError("Failed to load geographic districts. Please try again.");
+    } finally {
+      setLoadingDistricts(false);
+    }
+  };
+
+  // Load all active sub-districts from Geographic Management
+  const fetchSubDistricts = async () => {
+    try {
+      setLoadingSubDistricts(true);
+      setGeoError("");
+      const res = await subDistrictService.getAll();
+      if (res.success && Array.isArray(res.subDistricts)) {
+        setGeoSubDistricts(res.subDistricts.filter(sd => sd.isActive !== false));
+      }
+    } catch (err) {
+      console.error("Failed to load sub-districts:", err);
+      setGeoError("Failed to load geographic sub-districts. Please try again.");
+    } finally {
+      setLoadingSubDistricts(false);
+    }
+  };
+
+  // Display label helpers
+  const getDistrictDisplayLabel = (district) => {
+    const stateName = district.stateId?.name || district.stateName || 'State';
+    return `${district.name} — ${stateName}`;
+  };
+
+  const getSubDistrictDisplayLabel = (subDistrict) => {
+    const districtName = subDistrict.districtId?.name || subDistrict.districtName || 'District';
+    const stateName = subDistrict.stateId?.name || subDistrict.districtId?.stateId?.name || subDistrict.stateName || 'State';
+    return `${subDistrict.name} — ${districtName}, ${stateName}`;
+  };
+
+  // Scope change handler with automatic stale ID clearance
+  const handleScopeChange = (newScope) => {
+    setGeoSearchFilter("");
+    setForm(prev => {
+      if (newScope === 'GLOBAL_INDIA' || newScope === 'GLOBAL') {
+        return { ...prev, scope: 'GLOBAL_INDIA', stateId: "", districtId: "", subDistrictId: "" };
+      }
+      if (newScope === 'STATE') {
+        return { ...prev, scope: 'STATE', districtId: "", subDistrictId: "" };
+      }
+      if (newScope === 'DISTRICT') {
+        return { ...prev, scope: 'DISTRICT', stateId: "", districtId: "", subDistrictId: "" };
+      }
+      if (newScope === 'SUB_DISTRICT') {
+        return { ...prev, scope: 'SUB_DISTRICT', stateId: "", districtId: "", subDistrictId: "" };
+      }
+      return { ...prev, scope: newScope };
+    });
+
+    if (newScope === 'STATE' && geoStates.length === 0) fetchStates();
+    if (newScope === 'DISTRICT' && geoDistricts.length === 0) fetchDistricts();
+    if (newScope === 'SUB_DISTRICT' && geoSubDistricts.length === 0) fetchSubDistricts();
+  };
+
+  // Direct state selection handler
+  const handleDirectStateSelect = (selectedStateId) => {
+    setForm(prev => ({
+      ...prev,
+      stateId: selectedStateId,
+      districtId: "",
+      subDistrictId: ""
+    }));
+  };
+
+  // Direct district selection handler with automatic parent state resolution
+  const handleDirectDistrictSelect = (selectedDistrictId) => {
+    if (!selectedDistrictId) {
+      setForm(prev => ({ ...prev, districtId: "", stateId: "", subDistrictId: "" }));
+      return;
+    }
+    const district = geoDistricts.find(d => (d._id || d.id) === selectedDistrictId);
+    const resolvedStateId = district?.stateId?._id || district?.stateId || "";
+    setForm(prev => ({
+      ...prev,
+      districtId: selectedDistrictId,
+      stateId: resolvedStateId,
+      subDistrictId: ""
+    }));
+  };
+
+  // Direct sub-district selection handler with automatic parent district and state resolution
+  const handleDirectSubDistrictSelect = (selectedSubDistrictId) => {
+    if (!selectedSubDistrictId) {
+      setForm(prev => ({ ...prev, subDistrictId: "", districtId: "", stateId: "" }));
+      return;
+    }
+    const subDistrict = geoSubDistricts.find(sd => (sd._id || sd.id) === selectedSubDistrictId);
+    const resolvedDistrictId = subDistrict?.districtId?._id || subDistrict?.districtId || "";
+    const resolvedStateId = subDistrict?.stateId?._id || subDistrict?.stateId || subDistrict?.districtId?.stateId?._id || subDistrict?.districtId?.stateId || "";
+    setForm(prev => ({
+      ...prev,
+      subDistrictId: selectedSubDistrictId,
+      districtId: resolvedDistrictId,
+      stateId: resolvedStateId
+    }));
+  };
+
+  // Resolved geographic entities for confirmation badges
+  const resolvedDistrictObject = useMemo(() => {
+    if (!form.districtId) return null;
+    return geoDistricts.find(d => (d._id || d.id) === form.districtId) || null;
+  }, [form.districtId, geoDistricts]);
+
+  const resolvedSubDistrictObject = useMemo(() => {
+    if (!form.subDistrictId) return null;
+    return geoSubDistricts.find(sd => (sd._id || sd.id) === form.subDistrictId) || null;
+  }, [form.subDistrictId, geoSubDistricts]);
+
+  const resolvedDistrictStateName = useMemo(() => {
+    if (resolvedDistrictObject?.stateId?.name) return resolvedDistrictObject.stateId.name;
+    if (resolvedDistrictObject?.stateName) return resolvedDistrictObject.stateName;
+    if (editing?.state?.name) return editing.state.name;
+    const parentState = geoStates.find(st => (st._id || st.id) === form.stateId);
+    return parentState?.name || "";
+  }, [resolvedDistrictObject, editing, geoStates, form.stateId]);
+
+  const resolvedSubDistrictNames = useMemo(() => {
+    const dName = resolvedSubDistrictObject?.districtId?.name || resolvedSubDistrictObject?.districtName || editing?.district?.name || "";
+    const sName = resolvedSubDistrictObject?.stateId?.name || resolvedSubDistrictObject?.districtId?.stateId?.name || resolvedSubDistrictObject?.stateName || editing?.state?.name || "";
+    return { districtName: dName, stateName: sName };
+  }, [resolvedSubDistrictObject, editing]);
+
+  // Filtered lists for quick search in selectors
+  const filteredGeoStates = useMemo(() => {
+    if (!geoSearchFilter.trim() || form.scope !== 'STATE') return geoStates;
+    const lower = geoSearchFilter.trim().toLowerCase();
+    return geoStates.filter(st =>
+      st.name?.toLowerCase().includes(lower) ||
+      st.code?.toLowerCase().includes(lower)
+    );
+  }, [geoStates, geoSearchFilter, form.scope]);
+
+  const filteredGeoDistricts = useMemo(() => {
+    if (!geoSearchFilter.trim() || form.scope !== 'DISTRICT') return geoDistricts;
+    const lower = geoSearchFilter.trim().toLowerCase();
+    return geoDistricts.filter(dt => {
+      const stateName = dt.stateId?.name || dt.stateName || '';
+      return dt.name?.toLowerCase().includes(lower) || stateName.toLowerCase().includes(lower);
+    });
+  }, [geoDistricts, geoSearchFilter, form.scope]);
+
+  const filteredGeoSubDistricts = useMemo(() => {
+    if (!geoSearchFilter.trim() || form.scope !== 'SUB_DISTRICT') return geoSubDistricts;
+    const lower = geoSearchFilter.trim().toLowerCase();
+    return geoSubDistricts.filter(sd => {
+      const districtName = sd.districtId?.name || sd.districtName || '';
+      const stateName = sd.stateId?.name || sd.districtId?.stateId?.name || sd.stateName || '';
+      return (
+        sd.name?.toLowerCase().includes(lower) ||
+        districtName.toLowerCase().includes(lower) ||
+        stateName.toLowerCase().includes(lower)
+      );
+    });
+  }, [geoSubDistricts, geoSearchFilter, form.scope]);
 
   const fetchCategories = async () => {
     try {
       setFetching(true);
       const params = { status: 'active' };
-      if (selectedCity) params.cityId = selectedCity;
       if (searchTerm) params.search = searchTerm;
 
       const response = await categoryService.getAll(params);
 
       if (response.success && response.categories) {
         const mapped = response.categories.map(cat => ({
-          id: (cat.id || cat._id?.$oid || cat._id) ?.toString() || "",
+          id: (cat.id || cat._id?.$oid || cat._id)?.toString() || "",
           title: cat.title,
           slug: cat.slug,
           homeIconUrl: cat.homeIconUrl || "",
@@ -129,8 +370,13 @@ const CategoriesPage = ({ catalog, setCatalog, selectedCity, cities = [] }) => {
           requiresDriver: cat.requiresDriver || false,
           sectionType: cat.sectionType || 'General',
           bookingType: cat.bookingType || 'VENDOR',
-          scope: cat.scope || 'GLOBAL',
-          city: getCategoryId(cat.city),
+          scope: (!cat.scope || cat.scope === 'GLOBAL') ? 'GLOBAL_INDIA' : cat.scope,
+          stateId: cat.stateId || null,
+          state: cat.state || null,
+          districtId: cat.districtId || null,
+          district: cat.district || null,
+          subDistrictId: cat.subDistrictId || null,
+          subDistrict: cat.subDistrict || null
         }));
 
         setCatalog({ ...catalog, categories: mapped });
@@ -146,62 +392,80 @@ const CategoriesPage = ({ catalog, setCatalog, selectedCity, cities = [] }) => {
 
   useEffect(() => {
     fetchCategories();
+    fetchStates();
+    fetchDistricts();
+    fetchSubDistricts();
 
     const fetchHomeData = async () => {
       try {
-        const response = await homeContentService.get({ cityId: selectedCity });
+        const response = await homeContentService.get();
         if (response.success && response.homeContent) {
           setPremiumOfferings(response.homeContent.premiumOfferings || []);
         }
       } catch (e) { }
     };
     fetchHomeData();
-  }, [selectedCity]);
+  }, []);
 
+  // Direct initialization for Edit Mode
   useEffect(() => {
-    if (!editing) {
-      setForm({
-        title: "", slug: "", homeIconUrl: "", homeBadge: "",
-        hasSaleBadge: false, showOnHome: true, parentCategory: "",
-        parentCategories: [], isAlwaysMain: false,
-        trackingType: "none", requiresDriver: false,
-        sectionType: "General", bookingType: "VENDOR",
-        scope: "GLOBAL", city: "",
-      });
-      setSelectedStateFilter("");
-      return;
-    }
-    setForm({
-      title: editing.title || "",
-      slug: editing.slug || "",
-      homeIconUrl: editing.homeIconUrl || "",
-      homeBadge: editing.homeBadge || "",
-      hasSaleBadge: Boolean(editing.hasSaleBadge),
-      showOnHome: editing.showOnHome !== false,
-      parentCategory: editing.parentCategory || "",
-      parentCategories: Array.isArray(editing.parentCategories)
-        ? editing.parentCategories.map(parent => getCategoryId(parent)).filter(Boolean)
-        : [],
-      isAlwaysMain: !!editing.isAlwaysMain,
-      trackingType: editing.trackingType || "none",
-      requiresDriver: Boolean(editing.requiresDriver),
-      sectionType: editing.sectionType || "General",
-      bookingType: editing.bookingType || "VENDOR",
-      scope: editing.scope || "GLOBAL",
-      city: editing.city || "",
-    });
-    
-    if (editing.city && cities.length > 0) {
-      const cityObj = cities.find(c => c._id === editing.city || c.id === editing.city);
-      if (cityObj && cityObj.state) {
-        setSelectedStateFilter(cityObj.state);
-      } else {
-        setSelectedStateFilter("");
+    const initEditForm = async () => {
+      if (!isModalOpen) return;
+
+      if (!editing) {
+        setForm({
+          title: "", slug: "", homeIconUrl: "", homeBadge: "",
+          hasSaleBadge: false, showOnHome: true, parentCategory: "",
+          parentCategories: [], isAlwaysMain: false,
+          trackingType: "none", requiresDriver: false,
+          sectionType: "General", bookingType: "VENDOR",
+          scope: "GLOBAL_INDIA", stateId: "", districtId: "", subDistrictId: ""
+        });
+        setGeoSearchFilter("");
+        return;
       }
-    } else {
-      setSelectedStateFilter("");
-    }
-  }, [editingId, editing, cities]);
+
+      // Initialize with existing category values
+      const editScope = (!editing.scope || editing.scope === 'GLOBAL') ? 'GLOBAL_INDIA' : editing.scope;
+      const targetStateId = editing.stateId || (editing.state?.id || editing.state?._id) || "";
+      const targetDistrictId = editing.districtId || (editing.district?.id || editing.district?._id) || "";
+      const targetSubDistrictId = editing.subDistrictId || (editing.subDistrict?.id || editing.subDistrict?._id) || "";
+
+      setForm({
+        title: editing.title || "",
+        slug: editing.slug || "",
+        homeIconUrl: editing.homeIconUrl || "",
+        homeBadge: editing.homeBadge || "",
+        hasSaleBadge: Boolean(editing.hasSaleBadge),
+        showOnHome: editing.showOnHome !== false,
+        parentCategory: editing.parentCategory || "",
+        parentCategories: Array.isArray(editing.parentCategories)
+          ? editing.parentCategories.map(parent => getCategoryId(parent)).filter(Boolean)
+          : [],
+        isAlwaysMain: !!editing.isAlwaysMain,
+        trackingType: editing.trackingType || "none",
+        requiresDriver: Boolean(editing.requiresDriver),
+        sectionType: editing.sectionType || "General",
+        bookingType: editing.bookingType || "VENDOR",
+        scope: editScope,
+        stateId: targetStateId,
+        districtId: targetDistrictId,
+        subDistrictId: targetSubDistrictId
+      });
+      setGeoSearchFilter("");
+
+      // Ensure required geographic list is loaded for current scope
+      if (editScope === 'STATE' && geoStates.length === 0) {
+        fetchStates();
+      } else if (editScope === 'DISTRICT' && geoDistricts.length === 0) {
+        fetchDistricts();
+      } else if (editScope === 'SUB_DISTRICT' && geoSubDistricts.length === 0) {
+        fetchSubDistricts();
+      }
+    };
+
+    initEditForm();
+  }, [editingId, isModalOpen]);
 
   const reset = () => {
     setEditingId(null);
@@ -211,14 +475,15 @@ const CategoriesPage = ({ catalog, setCatalog, selectedCity, cities = [] }) => {
       parentCategories: [], isAlwaysMain: false,
       trackingType: "none", requiresDriver: false,
       sectionType: "General", bookingType: "VENDOR",
-      scope: "GLOBAL", city: "",
+      scope: "GLOBAL_INDIA", stateId: "", districtId: "", subDistrictId: ""
     });
-    setSelectedStateFilter("");
+    setGeoSearchFilter("");
+    setGeoError("");
     setIsModalOpen(false);
   };
 
   const normalizeCategory = (cat) => ({
-    id: (cat.id || cat._id?.$oid || cat._id) ?.toString() || "",
+    id: (cat.id || cat._id?.$oid || cat._id)?.toString() || "",
     title: cat.title,
     slug: cat.slug,
     homeIconUrl: cat.homeIconUrl || "",
@@ -240,15 +505,36 @@ const CategoriesPage = ({ catalog, setCatalog, selectedCity, cities = [] }) => {
     requiresDriver: cat.requiresDriver || false,
     sectionType: cat.sectionType || 'General',
     bookingType: cat.bookingType || 'VENDOR',
-    scope: cat.scope || 'GLOBAL',
-    city: getCategoryId(cat.city),
+    scope: (!cat.scope || cat.scope === 'GLOBAL') ? 'GLOBAL_INDIA' : cat.scope,
+    stateId: cat.stateId || null,
+    state: cat.state || null,
+    districtId: cat.districtId || null,
+    district: cat.district || null,
+    subDistrictId: cat.subDistrictId || null,
+    subDistrict: cat.subDistrict || null
   });
 
   const upsert = async () => {
+    if (loadingStates && form.scope === 'STATE') {
+      toast.error("Please wait for states to finish loading");
+      return;
+    }
+    if (loadingDistricts && form.scope === 'DISTRICT') {
+      toast.error("Please wait for districts to finish loading");
+      return;
+    }
+    if (loadingSubDistricts && form.scope === 'SUB_DISTRICT') {
+      toast.error("Please wait for sub-districts to finish loading");
+      return;
+    }
+
     const val = categorySchema.safeParse({
       ...form,
       title: form.title.trim(),
       slug: slugify(form.title.trim()),
+      stateId: (form.scope === 'GLOBAL_INDIA' || form.scope === 'GLOBAL') ? null : (form.stateId || null),
+      districtId: (form.scope === 'DISTRICT' || form.scope === 'SUB_DISTRICT') ? (form.districtId || null) : null,
+      subDistrictId: form.scope === 'SUB_DISTRICT' ? (form.subDistrictId || null) : null,
     });
 
     if (!val.success) {
@@ -262,8 +548,10 @@ const CategoriesPage = ({ catalog, setCatalog, selectedCity, cities = [] }) => {
         ...val.data,
         parentCategories: form.parentCategories || [],
         homeOrder: editing?.homeOrder || 0,
-        scope: form.scope || 'GLOBAL',
-        city: form.scope === 'CITY_SPECIFIC' ? form.city : null,
+        scope: form.scope || 'GLOBAL_INDIA',
+        stateId: (form.scope === 'GLOBAL_INDIA' || form.scope === 'GLOBAL') ? null : (form.stateId || null),
+        districtId: (form.scope === 'DISTRICT' || form.scope === 'SUB_DISTRICT') ? (form.districtId || null) : null,
+        subDistrictId: form.scope === 'SUB_DISTRICT' ? (form.subDistrictId || null) : null,
       };
 
       if (!editing) {
@@ -289,7 +577,7 @@ const CategoriesPage = ({ catalog, setCatalog, selectedCity, cities = [] }) => {
           saveCatalog(nextCatalog);
         }
 
-        toast.success(editing ? "Category updated" : "Category created");
+        toast.success(editing ? "Category updated successfully" : "Category created successfully");
         fetchCategories();
         reset();
       }
@@ -299,6 +587,7 @@ const CategoriesPage = ({ catalog, setCatalog, selectedCity, cities = [] }) => {
       setLoading(false);
     }
   };
+
 
   const remove = async (id) => {
     if (!window.confirm("Delete this category?")) return;
@@ -451,13 +740,51 @@ const CategoriesPage = ({ catalog, setCatalog, selectedCity, cities = [] }) => {
                     </td>
                     <td className="py-4 px-4">
                       <div className="flex flex-col gap-1">
-                        {(c.scope || 'GLOBAL') === 'GLOBAL' ? (
-                          <span className="inline-block whitespace-nowrap px-2 py-1 bg-green-50 text-green-700 rounded text-[10px] font-black border border-green-200 w-fit">
-                            GLOBAL
+                        {(!c.scope || c.scope === 'GLOBAL' || c.scope === 'GLOBAL_INDIA') ? (
+                          <span className="inline-flex items-center gap-1.5 whitespace-nowrap px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-md text-[10px] font-black border border-emerald-200 w-fit">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                            GLOBAL (ALL INDIA)
                           </span>
+                        ) : c.scope === 'STATE' ? (
+                          <div className="flex flex-col gap-0.5">
+                            <span className="inline-flex items-center gap-1 whitespace-nowrap px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] font-black border border-blue-200 w-fit">
+                              STATE
+                            </span>
+                            <span className="text-[11px] font-bold text-slate-800">
+                              {c.state?.name || (typeof c.stateId === 'string' ? 'Assigned State' : c.stateId?.name) || 'State Specific'}
+                            </span>
+                          </div>
+                        ) : c.scope === 'DISTRICT' ? (
+                          <div className="flex flex-col gap-0.5">
+                            <span className="inline-flex items-center gap-1 whitespace-nowrap px-2 py-0.5 bg-amber-50 text-amber-700 rounded text-[10px] font-black border border-amber-200 w-fit">
+                              DISTRICT
+                            </span>
+                            <span className="text-[11px] font-bold text-slate-800">
+                              {c.district?.name || (typeof c.districtId === 'string' ? 'Assigned District' : c.districtId?.name) || 'District Specific'}
+                            </span>
+                            {(c.state?.name || c.stateId?.name) && (
+                              <span className="text-[10px] text-slate-400 font-medium">
+                                ({c.state?.name || c.stateId?.name})
+                              </span>
+                            )}
+                          </div>
+                        ) : c.scope === 'SUB_DISTRICT' ? (
+                          <div className="flex flex-col gap-0.5">
+                            <span className="inline-flex items-center gap-1 whitespace-nowrap px-2 py-0.5 bg-purple-50 text-purple-700 rounded text-[10px] font-black border border-purple-200 w-fit">
+                              SUB-DISTRICT
+                            </span>
+                            <span className="text-[11px] font-bold text-slate-800">
+                              {c.subDistrict?.name || (typeof c.subDistrictId === 'string' ? 'Assigned Sub-District' : c.subDistrictId?.name) || 'Sub-District Specific'}
+                            </span>
+                            {(c.district?.name || c.districtId?.name || c.state?.name || c.stateId?.name) && (
+                              <span className="text-[10px] text-slate-400 font-medium">
+                                ({[c.district?.name || c.districtId?.name, c.state?.name || c.stateId?.name].filter(Boolean).join(', ')})
+                              </span>
+                            )}
+                          </div>
                         ) : (
-                          <span className="inline-block whitespace-nowrap px-2 py-1 bg-blue-50 text-blue-700 rounded text-[10px] font-black border border-blue-200 w-fit">
-                            {cities?.find(cty => cty._id === c.city || cty.id === c.city) ?.name || c.city || 'CITY SPECIFIC'}
+                          <span className="inline-block whitespace-nowrap px-2 py-1 bg-gray-50 text-gray-700 rounded text-[10px] font-black border border-gray-200 w-fit">
+                            {c.scope}
                           </span>
                         )}
                       </div>
@@ -467,7 +794,7 @@ const CategoriesPage = ({ catalog, setCatalog, selectedCity, cities = [] }) => {
                         {c.sectionType || 'General'}
                       </span>
                     </td>
-                    <td className="py-4 px-4">
+                    <td className="py-4 px-4 max-w-[280px]">
                       <div className="flex flex-col gap-1.5">
                         {isSub ? (
                           <>
@@ -477,13 +804,38 @@ const CategoriesPage = ({ catalog, setCatalog, selectedCity, cities = [] }) => {
                         ) : (
                           <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-[10px] font-black border border-green-200 inline-block w-fit">MAIN CATEGORY</span>
                         )}
-                        {children.length > 0 && (
-                          <div className="mt-1 flex flex-wrap gap-1 items-center">
-                            <span className="text-[9px] text-gray-400 font-bold uppercase italic mr-1">Sub Categories:</span>
-                            {children.map(child => (
-                              <span key={child.id} className="text-[9px] text-gray-500 bg-gray-100 px-1 rounded font-bold uppercase">{child.title}</span>
-                            ))}
-                          </div>
+                        {!isSub && (
+                          children.length > 0 ? (
+                            <div className="mt-1 flex flex-col gap-1">
+                              <span className="text-[9px] text-gray-400 font-black uppercase tracking-wider">SUB CATEGORIES</span>
+                              <div className="text-[11px] font-semibold text-slate-700 leading-snug break-words">
+                                {children.slice(0, 3).map((child, i) => (
+                                  <React.Fragment key={child.id || i}>
+                                    {i > 0 && <span className="text-slate-300 mx-1.5 font-bold">•</span>}
+                                    <span className="hover:text-blue-600 transition-colors inline" title={child.title}>
+                                      {child.title}
+                                    </span>
+                                  </React.Fragment>
+                                ))}
+                              </div>
+                              {children.length > 3 && (
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                  <span className="text-[10px] font-bold text-slate-500">
+                                    +{children.length - 3} more
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => openSubCategoriesModal(c, children)}
+                                    className="text-[10px] font-black text-blue-600 hover:text-blue-800 hover:underline cursor-pointer bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded transition-all"
+                                  >
+                                    [View All]
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-gray-400 italic mt-0.5">No sub-categories</span>
+                          )
                         )}
                       </div>
                     </td>
@@ -562,50 +914,276 @@ const CategoriesPage = ({ catalog, setCatalog, selectedCity, cities = [] }) => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 bg-blue-50/50 p-4 rounded-xl border border-blue-100">
-            <div>
-              <label className="block text-base font-bold text-gray-900 mb-2">Catalog Scope</label>
-              <select
-                value={form.scope}
-                onChange={e => setForm({ ...form, scope: e.target.value, city: e.target.value === 'GLOBAL' ? '' : form.city })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold bg-white"
-              >
-                <option value="GLOBAL"> Global (All India)</option>
-                <option value="CITY_SPECIFIC"> City Specific</option>
-              </select>
-              <p className="text-[11px] text-gray-500 mt-1">Global categories are visible in all cities.</p>
+          {/* Geographic Scope Management */}
+          <div className="bg-slate-50/90 p-5 rounded-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="block text-sm font-bold text-gray-900">
+                  Geographic Scope <span className="text-rose-500">*</span>
+                </label>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Select the operational coverage territory for this category.
+                </p>
+              </div>
+              <span className={`text-[10px] font-black px-2.5 py-1 rounded-full uppercase border ${
+                form.scope === 'GLOBAL_INDIA' || form.scope === 'GLOBAL' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                form.scope === 'STATE' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                form.scope === 'DISTRICT' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                'bg-purple-50 text-purple-700 border-purple-200'
+              }`}>
+                {form.scope === 'GLOBAL_INDIA' || form.scope === 'GLOBAL' ? 'All India' : form.scope.replace('_', ' ')}
+              </span>
             </div>
 
-            {form.scope === 'CITY_SPECIFIC' && (
-              <div className="space-y-4">
+            {/* Scope Level Selector */}
+            <div>
+              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+                Scope Level
+              </label>
+              <select
+                value={form.scope === 'GLOBAL' ? 'GLOBAL_INDIA' : form.scope}
+                onChange={e => handleScopeChange(e.target.value)}
+                className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="GLOBAL_INDIA">Global (All India)</option>
+                <option value="STATE">State Specific</option>
+                <option value="DISTRICT">District Specific</option>
+                <option value="SUB_DISTRICT">Sub-District Specific</option>
+              </select>
+            </div>
+
+            {/* Geographic Error Alert */}
+            {geoError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-center justify-between">
+                <span>{geoError}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    fetchStates();
+                    fetchDistricts();
+                    fetchSubDistricts();
+                  }}
+                  className="text-xs font-bold text-rose-800 underline hover:no-underline ml-2"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+
+            {/* Global Info Box */}
+            {(form.scope === 'GLOBAL_INDIA' || form.scope === 'GLOBAL') && (
+              <div className="p-3.5 bg-emerald-50/70 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-start gap-2.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 mt-1 shrink-0"></span>
                 <div>
-                  <label className="block text-base font-bold text-gray-900 mb-2">Select State</label>
+                  <span className="font-bold">Global All-India Scope:</span> This category will be available across all states, districts, and territories in India. No territorial restrictions apply.
+                </div>
+              </div>
+            )}
+
+            {/* STATE SPECIFIC SELECTOR */}
+            {form.scope === 'STATE' && (
+              <div className="space-y-3 pt-2 border-t border-slate-200/80">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    Select State <span className="text-rose-500">*</span>
+                  </label>
+                  <span className="text-[10px] text-slate-400 font-semibold">
+                    {filteredGeoStates.length} state(s) available
+                  </span>
+                </div>
+                {geoStates.length > 5 && (
+                  <div className="relative">
+                    <FiSearch className="absolute left-3 top-2.5 text-gray-400 w-3.5 h-3.5" />
+                    <input
+                      type="text"
+                      placeholder="Search state by name or code..."
+                      value={geoSearchFilter}
+                      onChange={e => setGeoSearchFilter(e.target.value)}
+                      className="w-full pl-9 pr-8 py-2 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
+                    {geoSearchFilter && (
+                      <button
+                        type="button"
+                        onClick={() => setGeoSearchFilter("")}
+                        className="absolute right-2.5 top-2.5 text-gray-400 hover:text-gray-600 p-0.5"
+                      >
+                        <FiX className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                )}
+                <div className="relative">
                   <select
-                    value={selectedStateFilter}
-                    onChange={(e) => {
-                      setSelectedStateFilter(e.target.value);
-                      setForm({ ...form, city: '' }); // Reset city when state changes
-                    }}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold bg-white"
+                    value={form.stateId || ""}
+                    onChange={e => handleDirectStateSelect(e.target.value)}
+                    disabled={loadingStates}
+                    className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                   >
-                    <option value="">All States</option>
-                    {uniqueStates.map(state => (
-                      <option key={state} value={state}>{state}</option>
+                    <option value="">
+                      {loadingStates ? "Loading states..." : "-- Choose State --"}
+                    </option>
+                    {filteredGeoStates.map(st => (
+                      <option key={st._id || st.id} value={st._id || st.id}>
+                        {st.name} {st.code ? `(${st.code})` : ''}
+                      </option>
                     ))}
+                    {form.stateId && !filteredGeoStates.some(st => (st._id || st.id) === form.stateId) && (
+                      <option value={form.stateId}>
+                        {editing?.state?.name || `Selected State (${form.stateId})`}
+                      </option>
+                    )}
                   </select>
+                  {loadingStates && (
+                    <div className="absolute right-3 top-3">
+                      <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <label className="block text-base font-bold text-gray-900 mb-2">Select City</label>
-                  <SearchableCitySelect
-                    cities={filteredCitiesByState}
-                    value={form.city || ''}
-                    onChange={(val) => setForm({ ...form, city: val })}
-                    defaultOptionValue=""
-                    placeholder="Select a city"
-                    theme="light"
+                {geoStates.length === 0 && !loadingStates && (
+                  <p className="text-[11px] text-amber-600 mt-1">No active states available in Geographic Management.</p>
+                )}
+              </div>
+            )}
+
+            {/* DISTRICT SPECIFIC SELECTOR (Direct with auto-resolved parent State) */}
+            {form.scope === 'DISTRICT' && (
+              <div className="space-y-3 pt-2 border-t border-slate-200/80">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    Select District <span className="text-rose-500">*</span>
+                  </label>
+                  <span className="text-[10px] text-slate-400 font-semibold">
+                    {filteredGeoDistricts.length} district(s) available
+                  </span>
+                </div>
+                <div className="relative">
+                  <FiSearch className="absolute left-3 top-2.5 text-gray-400 w-3.5 h-3.5" />
+                  <input
+                    type="text"
+                    placeholder="Search district by name or state (e.g. Indore, Bhopal)..."
+                    value={geoSearchFilter}
+                    onChange={e => setGeoSearchFilter(e.target.value)}
+                    className="w-full pl-9 pr-8 py-2 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
-                  <p className="text-[11px] text-gray-500 mt-1">This category will only be visible in this city.</p>
+                  {geoSearchFilter && (
+                    <button
+                      type="button"
+                      onClick={() => setGeoSearchFilter("")}
+                      className="absolute right-2.5 top-2.5 text-gray-400 hover:text-gray-600 p-0.5"
+                    >
+                      <FiX className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
+                <div className="relative">
+                  <select
+                    value={form.districtId || ""}
+                    onChange={e => handleDirectDistrictSelect(e.target.value)}
+                    disabled={loadingDistricts}
+                    className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  >
+                    <option value="">
+                      {loadingDistricts ? "Loading districts..." : "-- Choose District --"}
+                    </option>
+                    {filteredGeoDistricts.map(dt => (
+                      <option key={dt._id || dt.id} value={dt._id || dt.id}>
+                        {getDistrictDisplayLabel(dt)}
+                      </option>
+                    ))}
+                    {form.districtId && !filteredGeoDistricts.some(dt => (dt._id || dt.id) === form.districtId) && (
+                      <option value={form.districtId}>
+                        {editing?.district?.name ? `${editing.district.name} — ${editing.state?.name || 'State'}` : `Selected District (${form.districtId})`}
+                      </option>
+                    )}
+                  </select>
+                  {loadingDistricts && (
+                    <div className="absolute right-3 top-3">
+                      <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
+                    </div>
+                  )}
+                </div>
+                {form.districtId && resolvedDistrictStateName && (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-amber-50/90 border border-amber-200 rounded-xl text-xs text-amber-900 shadow-xs">
+                    <FiMapPin className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span>
+                      Auto-resolved Parent State: <strong className="font-bold text-amber-950">{resolvedDistrictStateName}</strong>
+                    </span>
+                  </div>
+                )}
+                {geoDistricts.length === 0 && !loadingDistricts && (
+                  <p className="text-[11px] text-amber-600 mt-1">No active districts available in Geographic Management.</p>
+                )}
+              </div>
+            )}
+
+            {/* SUB-DISTRICT SPECIFIC SELECTOR (Direct with auto-resolved parent District & State) */}
+            {form.scope === 'SUB_DISTRICT' && (
+              <div className="space-y-3 pt-2 border-t border-slate-200/80">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    Select Sub-District <span className="text-rose-500">*</span>
+                  </label>
+                  <span className="text-[10px] text-slate-400 font-semibold">
+                    {filteredGeoSubDistricts.length} sub-district(s) available
+                  </span>
+                </div>
+                <div className="relative">
+                  <FiSearch className="absolute left-3 top-2.5 text-gray-400 w-3.5 h-3.5" />
+                  <input
+                    type="text"
+                    placeholder="Search sub-district, district, or state (e.g. Depalpur, Indore)..."
+                    value={geoSearchFilter}
+                    onChange={e => setGeoSearchFilter(e.target.value)}
+                    className="w-full pl-9 pr-8 py-2 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                  {geoSearchFilter && (
+                    <button
+                      type="button"
+                      onClick={() => setGeoSearchFilter("")}
+                      className="absolute right-2.5 top-2.5 text-gray-400 hover:text-gray-600 p-0.5"
+                    >
+                      <FiX className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+                <div className="relative">
+                  <select
+                    value={form.subDistrictId || ""}
+                    onChange={e => handleDirectSubDistrictSelect(e.target.value)}
+                    disabled={loadingSubDistricts}
+                    className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  >
+                    <option value="">
+                      {loadingSubDistricts ? "Loading sub-districts..." : "-- Choose Sub-District --"}
+                    </option>
+                    {filteredGeoSubDistricts.map(sd => (
+                      <option key={sd._id || sd.id} value={sd._id || sd.id}>
+                        {getSubDistrictDisplayLabel(sd)}
+                      </option>
+                    ))}
+                    {form.subDistrictId && !filteredGeoSubDistricts.some(sd => (sd._id || sd.id) === form.subDistrictId) && (
+                      <option value={form.subDistrictId}>
+                        {editing?.subDistrict?.name ? `${editing.subDistrict.name} — ${editing.district?.name || 'District'}, ${editing.state?.name || 'State'}` : `Selected Sub-District (${form.subDistrictId})`}
+                      </option>
+                    )}
+                  </select>
+                  {loadingSubDistricts && (
+                    <div className="absolute right-3 top-3">
+                      <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
+                    </div>
+                  )}
+                </div>
+                {form.subDistrictId && (resolvedSubDistrictNames.districtName || resolvedSubDistrictNames.stateName) && (
+                  <div className="flex flex-wrap items-center gap-2 px-3 py-2 bg-purple-50/90 border border-purple-200 rounded-xl text-xs text-purple-900 shadow-xs">
+                    <FiMapPin className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                    <span>
+                      Auto-resolved Hierarchy: <strong className="font-bold text-purple-950">{[resolvedSubDistrictNames.districtName, resolvedSubDistrictNames.stateName].filter(Boolean).join(", ")}</strong>
+                    </span>
+                  </div>
+                )}
+                {geoSubDistricts.length === 0 && !loadingSubDistricts && (
+                  <p className="text-[11px] text-amber-600 mt-1">No active sub-districts available in Geographic Management.</p>
+                )}
               </div>
             )}
           </div>
@@ -752,6 +1330,103 @@ const CategoriesPage = ({ catalog, setCatalog, selectedCity, cities = [] }) => {
               <FiMove className="text-gray-400" />
             </div>
           ))}
+        </div>
+      </Modal>
+
+      {/* View All Sub-Categories Modal */}
+      <Modal
+        isOpen={viewAllSubCatsModal.isOpen}
+        onClose={() => setViewAllSubCatsModal({ isOpen: false, category: null, subCategories: [] })}
+        size="md"
+        title={
+          <div>
+            <h3 className="text-lg font-bold text-gray-900 leading-tight">
+              {viewAllSubCatsModal.category?.title} Sub Categories
+            </h3>
+            <p className="text-xs font-semibold text-gray-500 mt-0.5">
+              {viewAllSubCatsModal.subCategories.length} sub-categories
+            </p>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          {/* Search bar */}
+          <div className="relative">
+            <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search sub-category..."
+              value={subCategorySearchTerm}
+              onChange={(e) => setSubCategorySearchTerm(e.target.value)}
+              className="w-full pl-10 pr-9 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-800 placeholder:text-gray-400 focus:outline-none focus:bg-white focus:border-blue-500 transition-all"
+              autoFocus
+            />
+            {subCategorySearchTerm && (
+              <button
+                type="button"
+                onClick={() => setSubCategorySearchTerm("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5"
+                aria-label="Clear search"
+              >
+                <FiX className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Sub-category list */}
+          <div className="max-h-80 overflow-y-auto divide-y divide-gray-100 rounded-xl border border-gray-100 bg-white">
+            {filteredModalSubCats.length > 0 ? (
+              filteredModalSubCats.map((sub, sIdx) => (
+                <div
+                  key={sub.id || sIdx}
+                  className="p-3 flex items-center justify-between hover:bg-blue-50/40 transition-colors"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="text-xs font-bold text-gray-400 w-5 shrink-0">
+                      {sIdx + 1}.
+                    </span>
+                    {sub.homeIconUrl ? (
+                      <img 
+                        src={toAssetUrl(sub.homeIconUrl)} 
+                        alt="" 
+                        className="w-8 h-8 object-contain rounded-lg bg-white border border-gray-100 p-0.5 shadow-2xs shrink-0" 
+                      />
+                    ) : null}
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-gray-800 truncate" title={sub.title}>
+                        {sub.title}
+                      </p>
+                      {sub.slug && (
+                        <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider truncate">
+                          {sub.slug}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0 ml-3">
+                    {sub.isAlwaysMain && (
+                      <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-cyan-50 text-cyan-700 border border-cyan-100">
+                        Main List
+                      </span>
+                    )}
+                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
+                      sub.showOnHome !== false 
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' 
+                        : 'bg-gray-100 text-gray-500'
+                    }`}>
+                      {sub.showOnHome !== false ? 'Active' : 'Hidden'}
+                    </span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="p-8 text-center">
+                <p className="text-sm font-bold text-gray-500">No matching sub-categories found.</p>
+                <p className="text-xs text-gray-400 mt-1">Try searching with a different term.</p>
+              </div>
+            )}
+          </div>
         </div>
       </Modal>
     </div>

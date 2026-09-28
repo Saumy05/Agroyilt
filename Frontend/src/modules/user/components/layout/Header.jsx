@@ -7,15 +7,10 @@ import Logo from '../../../../components/common/Logo';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { themeColors } from '../../../../theme';
 
-import CitySelectorModal from '../common/CitySelectorModal';
-import { useCity } from '../../../../context/CityContext';
-import { HiChevronDown } from 'react-icons/hi';
 import Sidebar from './Sidebar';
 
 const Header = ({ location, onLocationClick }) => {
   const logoRef = useRef(null);
-  const { currentCity } = useCity();
-  const [isCityModalOpen, setIsCityModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   useEffect(() => {
@@ -108,11 +103,6 @@ const Header = ({ location, onLocationClick }) => {
           </div>
         </div>
       </div>
-
-      <CitySelectorModal
-        isOpen={isCityModalOpen}
-        onClose={() => setIsCityModalOpen(false)}
-      />
 
       <Sidebar 
         isOpen={isSidebarOpen} 

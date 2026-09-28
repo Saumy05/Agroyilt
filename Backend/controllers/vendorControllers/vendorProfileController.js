@@ -15,37 +15,6 @@ const getProfile = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Vendor not found' });
     }
 
-    // Dynamic resolution of cityId for auto-migration
-    let hasUpdatedCityId = false;
-    if (vendor.address?.city && (!vendor.address?.cityId || !vendor.cityId)) {
-      const City = require('../../models/City');
-      const cityMatch = await City.findOne({ 
-        name: { $regex: new RegExp(`^${vendor.address.city.trim()}$`, 'i') } 
-      });
-      if (cityMatch) {
-        vendor.address.cityId = cityMatch._id;
-        vendor.cityId = cityMatch._id;
-        hasUpdatedCityId = true;
-      } else {
-        const slug = vendor.address.city.toLowerCase().replace(/[^a-z0-9]/g, '');
-        const citySlugMatch = await City.findOne({ slug: { $regex: new RegExp(slug, 'i') } });
-        if (citySlugMatch) {
-          vendor.address.cityId = citySlugMatch._id;
-          vendor.cityId = citySlugMatch._id;
-          hasUpdatedCityId = true;
-        }
-      }
-      if (hasUpdatedCityId) {
-        await vendor.save();
-        // Sync equipment cityIds
-        const VendorEquipment = require('../../models/VendorEquipment');
-        await VendorEquipment.updateMany(
-          { vendorId: vendor._id },
-          { cityIds: [vendor.cityId] }
-        );
-      }
-    }
-
     // Use stored rating if available (and > 0), otherwise calculate
     let rating = vendor.rating || 0;
 

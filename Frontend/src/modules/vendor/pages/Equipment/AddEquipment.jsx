@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { 
   FiChevronLeft, FiPlus, FiTrash2, FiUpload, 
@@ -27,8 +27,6 @@ const AddEquipment = () => {
   const [vendorWorkers, setVendorWorkers] = useState([]);
   const [showWorkerLink, setShowWorkerLink] = useState(false);
   const [isRequestingCategory, setIsRequestingCategory] = useState(false);
-  const [isRequestingCity, setIsRequestingCity] = useState(false);
-  const [cities, setCities] = useState([]);
   const [implementSearch, setImplementSearch] = useState('');
 
   const [form, setForm] = useState({
@@ -78,9 +76,6 @@ const AddEquipment = () => {
 
       const res = await vendorEquipmentService.getMachineTypes(vendorCityId);
       if (res.success) setMachineTypes(res.data);
-
-      const cityRes = await api.get('/public/cities');
-      if (cityRes.data?.success) setCities(cityRes.data.cities || []);
 
       const workerRes = await getWorkers();
       if (workerRes.success) setVendorWorkers(workerRes.data);
@@ -398,59 +393,6 @@ const AddEquipment = () => {
                   </button>
                 </div>
               )}
-
-              <div className="space-y-2 pt-2 border-t border-slate-100">
-                {!isRequestingCity ? (
-                  <div className="space-y-2">
-                    <div className="relative">
-                      <label className="absolute left-4 top-2 text-[9px] font-bold text-slate-400 uppercase">Operating Zone (City)</label>
-                      <select 
-                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 pt-6 text-sm font-black text-slate-800 outline-none appearance-none"
-                        value={form.cityIds?.[0] || ''}
-                        onChange={(e) => setForm(p => ({ ...p, cityIds: [e.target.value] }))}
-                      >
-                        <option value="" className="text-slate-800">Use My Registered City</option>
-                        {cities.map(c => <option key={c._id || c.id} value={c._id || c.id} className="text-slate-800">{c.name}</option>)}
-                      </select>
-                      <FiChevronDown className="absolute right-5 bottom-4 text-slate-400 pointer-events-none" />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsRequestingCity(true);
-                        setForm(p => ({ ...p, cityIds: [] }));
-                      }}
-                      className="text-[10px] text-slate-400 hover:text-blue-600 font-bold transition-colors flex flex-wrap items-center gap-x-1.5 gap-y-1 ml-1"
-                    >
-                      <span>Can't find your city?</span>
-                      <span className="bg-blue-50 text-blue-600 px-2.5 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-wider border border-blue-100 shadow-sm">Request one</span>
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="relative">
-                      <label className="absolute left-4 top-2 text-[9px] font-bold text-slate-400 uppercase">Request Operating Zone</label>
-                      <input 
-                        type="text"
-                        placeholder="e.g. Pune, Maharashtra"
-                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 pt-6 text-sm font-black text-slate-800 outline-none placeholder:text-slate-400 focus:border-blue-500/20 focus:bg-slate-50/50 transition-all"
-                        value={form.requestedCityName}
-                        onChange={e => setForm(p => ({ ...p, requestedCityName: e.target.value }))}
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsRequestingCity(false);
-                        setForm(p => ({ ...p, requestedCityName: '' }));
-                      }}
-                      className="text-[10px] text-slate-400 hover:text-blue-600 font-bold transition-colors flex items-center gap-1 ml-1"
-                    >
-                      <span>← Back to city list</span>
-                    </button>
-                  </div>
-                )}
-              </div>
 
               <AnimatePresence>
                 {machineImplements.length > 0 && (

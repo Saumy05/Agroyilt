@@ -15,14 +15,38 @@ const AdminAuditLog = require('../models/AdminAuditLog');
  * Returns {} for super_admin or GLOBAL scope (unrestricted).
  */
 function buildAdminScopeFilter(admin, entityType = 'general') {
-  // Super Admin and GLOBAL scope → unrestricted
-  if (!admin || admin.role === 'super_admin' || admin.scopeType === 'GLOBAL') {
+  // Super Admin, GLOBAL scope, and GLOBAL_INDIA scope → unrestricted
+  if (!admin || admin.role === 'super_admin' || admin.scopeType === 'GLOBAL' || admin.scopeType === 'GLOBAL_INDIA') {
     return {};
   }
 
   const { scopeType, districtId, districtName, subDistrictId, subDistrictName, cityId, cityName } = admin;
 
-  // ── CITY scope ──────────────────────────────────────────────────────────────
+  // ── NEW: STATE scope ──────────────────────────────────────────────────────────
+  if (scopeType === 'STATE') {
+    const conditions = [];
+    if (admin.stateId) {
+      conditions.push({ stateId: admin.stateId });
+      conditions.push({ 'address.stateId': admin.stateId });
+    }
+    if (admin.stateName && admin.stateName.trim()) {
+      const stateRegex = new RegExp(`^${escapeRegex(admin.stateName.trim())}$`, 'i');
+      if (entityType === 'user') {
+        conditions.push(
+          { 'addresses.state': stateRegex },
+          { stateName: stateRegex }
+        );
+      } else {
+        conditions.push(
+          { 'address.state': stateRegex },
+          { stateName: stateRegex }
+        );
+      }
+    }
+    return conditions.length > 0 ? { $or: conditions } : {};
+  }
+
+  // ── LEGACY: CITY scope ────────────────────────────────────────────────────────────
   if (scopeType === 'CITY') {
     const conditions = [];
     if (cityId) {
@@ -134,14 +158,31 @@ function buildAdminScopeFilter(admin, entityType = 'general') {
  * @param {string} entityType  - 'user' | 'vendor' | 'worker' | 'booking'
  */
 function verifyResourceScope(admin, resource, entityType = 'general') {
-  // Super admins can access everything
-  if (!admin || admin.role === 'super_admin' || admin.scopeType === 'GLOBAL') {
+  // Super admins and GLOBAL_INDIA can access everything
+  if (!admin || admin.role === 'super_admin' || admin.scopeType === 'GLOBAL' || admin.scopeType === 'GLOBAL_INDIA') {
     return true;
   }
 
   const { scopeType } = admin;
 
-  // CITY scope
+  // NEW: STATE scope
+  if (scopeType === 'STATE') {
+    if (admin.stateId) {
+      const resourceStateId = resource.stateId || resource.address?.stateId;
+      if (resourceStateId && resourceStateId.toString() === admin.stateId.toString()) return true;
+    }
+    if (admin.stateName) {
+      const adminState = admin.stateName.trim().toLowerCase();
+      const resState = (resource.stateName || resource.address?.state || '').toLowerCase();
+      if (resState && resState === adminState) return true;
+      for (const a of resource.addresses || []) {
+        if ((a.state || '').toLowerCase() === adminState) return true;
+      }
+    }
+    return false;
+  }
+
+  // LEGACY: CITY scope
   if (scopeType === 'CITY') {
     // City check: match via cityId or city string
     if (admin.cityId) {
@@ -219,9 +260,11 @@ function verifyResourceScope(admin, resource, entityType = 'general') {
  * based on the creating admin's scope.
  */
 function extractAdminScopeFields(admin) {
-  if (!admin || admin.role === 'super_admin' || admin.scopeType === 'GLOBAL') return {};
+  if (!admin || admin.role === 'super_admin' || admin.scopeType === 'GLOBAL' || admin.scopeType === 'GLOBAL_INDIA') return {};
 
   return {
+    stateId: admin.stateId || null,
+    stateName: admin.stateName || null,
     districtId: admin.districtId || null,
     districtName: admin.districtName || null,
     subDistrictId: admin.subDistrictId || null,

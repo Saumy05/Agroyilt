@@ -7,7 +7,7 @@ import SearchBar from './components/SearchBar';
 import ServiceCategories from './components/ServiceCategories';
 import { publicCatalogService } from '../../../../services/catalogService';
 import { useCart } from '../../../../context/CartContext';
-import { useCity } from '../../../../context/CityContext';
+import { useGeo } from '../../../../context/GeoContext';
 import { toastManager } from '../../../../utils/toastManager';
 import { registerFCMToken } from '../../../../services/pushNotificationService';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -51,69 +51,35 @@ const Home = () => {
   const [houseNumber, setHouseNumber] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isLocationSupported, setIsLocationSupported] = useState(true);
-  const [detectedCityName, setDetectedCityName] = useState(localStorage.getItem('currentCity') || null);
 
 
   const { cartCount, addToCart } = useCart();
-  const { currentCity, cities, selectCity, loading: cityLoading } = useCity();
+  const {
+    selectedState,
+    states,
+    selectState,
+    isGlobalIndia,
+    isLocationResolved,
+    detectLocationFromAddress,
+    loading: geoLoading
+  } = useGeo();
+  // Backward-compat alias for code below that still references currentCity
+  const currentCity = selectedState;
+  const cities = states;
+  const cityLoading = geoLoading;
 
-  // Clean up legacy storage keys on mount
+  // Detect state from address string using GeoContext
   useEffect(() => {
-    ['userAddress', 'detectedCity', 'user_formatted_address', 'user_city'].forEach(key => localStorage.removeItem(key));
-  }, []);
-
-  // Sync detectedCityName with Address on mount/update if not already set
-  useEffect(() => {
-    if (address && address !== 'Select Location' && cities && cities.length > 0) {
-      const foundCity = cities.find(c =>
-        address.toLowerCase().includes(c.name.toLowerCase())
-      );
-      if (foundCity) {
-        if (detectedCityName !== foundCity.name) {
-          setDetectedCityName(foundCity.name);
-          localStorage.setItem('currentCity', foundCity.name);
-        }
-      } else {
-        // Address is present but doesn't contain any supported city name
-        // Try to parse ANY city from the address string (e.g. "Bhopal")
-        const parts = address.split(',').map(p => p.trim());
-        // Usually city is 2nd or 3rd to last in Google address strings
-        const cityCandidate = parts.length > 2 ? parts[parts.length - 3] : (parts.length > 1 ? parts[parts.length - 2] : parts[0]);
-
-        if (detectedCityName !== cityCandidate) {
-          setDetectedCityName(cityCandidate);
-          localStorage.setItem('currentCity', cityCandidate);
-        }
+    if (address && address !== 'Select Location' && states && states.length > 0) {
+      const detected = detectLocationFromAddress(address);
+      if (!detected) {
+        // Address present but no matching state found — show fallback info
         setIsLocationSupported(false);
+      } else {
+        setIsLocationSupported(true);
       }
     }
-  }, [address, cities, detectedCityName]);
-
-  // Validate city whenever detected name or cities list changes
-  useEffect(() => {
-    if (!detectedCityName || !cities || cities.length === 0) return;
-
-    const matchedCity = cities.find(c => c.name.toLowerCase() === detectedCityName.toLowerCase()) ||
-                        cities.find(c => c.name.toLowerCase().includes(detectedCityName.toLowerCase()) ||
-                                         detectedCityName.toLowerCase().includes(c.name.toLowerCase()));
-
-    if (matchedCity) {
-      setIsLocationSupported(true);
-      const matchedId = matchedCity._id || matchedCity.id;
-      const currentId = currentCity?._id || currentCity?.id;
-
-      if (!cityLoading && currentId && matchedId !== currentId) {
-        selectCity(matchedCity);
-        toastManager.success(`Location updated to ${matchedCity.name}`);
-        setTimeout(() => {
-          window.location.reload();
-        }, 500);
-      }
-    } else {
-      setIsLocationSupported(false);
-      if (currentCity) selectCity(null);
-    }
-  }, [detectedCityName, cities, currentCity, cityLoading]);
+  }, [address, states]);
 
 
   const handleAddressSave = (savedHouseNumber, locationObj) => {
@@ -122,24 +88,22 @@ const Home = () => {
       setAddress(newAddress);
       localStorage.setItem('currentAddress', newAddress);
 
-      // Try to parse city from location object (Google Places)
+      // Try to parse state from location object (Google Places)
       const components = locationObj.components || locationObj.address_components;
+      let stateName = '';
       let city = '';
       if (components) {
-        const getComponent = (type) => components.find(c => c.types.includes(type)) ?.long_name || '';
+        const getComponent = (type) => components.find(c => c.types.includes(type))?.long_name || '';
+        stateName = getComponent('administrative_area_level_1');
         city = getComponent('locality') || getComponent('administrative_area_level_2');
       }
 
-      // Fallback city parsing from address string if components failed
-      if (!city && newAddress) {
-        const parts = newAddress.split(',').map(p => p.trim());
-        city = parts.length > 2 ? parts[parts.length - 3] : (parts.length > 1 ? parts[parts.length - 2] : parts[0]);
+      // Detect state from address using GeoContext
+      if (newAddress) {
+        detectLocationFromAddress(newAddress);
       }
 
-      if (city) {
-        setDetectedCityName(city);
-        localStorage.setItem('currentCity', city);
-
+      if (city || stateName) {
         // Sync location with profile for Weather Notifications
         const accessToken = authStorage.getAccessToken('user');
         if (accessToken && locationObj.lat && locationObj.lng) {
@@ -147,6 +111,7 @@ const Home = () => {
             addresses: [{
               addressLine1: newAddress,
               city: city,
+              state: stateName,
               lat: locationObj.lat,
               lng: locationObj.lng,
               isDefault: true
@@ -154,19 +119,7 @@ const Home = () => {
           }).catch(err => console.log('Manual location sync failed', err));
         }
 
-        // Immediate update of selected city if supported
-        if (cities && cities.length > 0) {
-          const matchedCity = cities.find(c => c.name.toLowerCase() === city.toLowerCase()) ||
-                              cities.find(c => c.name.toLowerCase().includes(city.toLowerCase()) ||
-                                               city.toLowerCase().includes(c.name.toLowerCase()));
-          if (matchedCity) {
-            selectCity(matchedCity);
-          } else {
-            selectCity(null);
-          }
-        }
-
-        toastManager.success(`Location set to ${city}`);
+        toastManager.success(`Location set to ${city || stateName}`);
         setTimeout(() => {
           window.location.reload();
         }, 500);
@@ -204,9 +157,9 @@ const Home = () => {
                   setAddress(formattedAddress);
                   localStorage.setItem('currentAddress', formattedAddress);
 
-                  if (city) {
-                    setDetectedCityName(city);
-                    localStorage.setItem('currentCity', city);
+                  if (state) {
+                    // Detect state from GeoContext
+                    detectLocationFromAddress(formattedAddress);
 
                     // Sync location with profile for Weather Notifications
                     const accessToken = authStorage.getAccessToken('user');
@@ -221,18 +174,6 @@ const Home = () => {
                           isDefault: true
                         }]
                       }).catch(err => console.log('Location sync failed', err));
-                    }
-
-                    // Immediate update of selected city if supported
-                    if (cities && cities.length > 0) {
-                      const matchedCity = cities.find(c => c.name.toLowerCase() === city.toLowerCase()) ||
-                                          cities.find(c => c.name.toLowerCase().includes(city.toLowerCase()) ||
-                                                           city.toLowerCase().includes(c.name.toLowerCase()));
-                      if (matchedCity) {
-                        selectCity(matchedCity);
-                      } else {
-                        selectCity(null);
-                      }
                     }
                   }
                 }
@@ -275,18 +216,18 @@ const Home = () => {
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [activeSectionTab, setActiveSectionTab] = useState(null); // 'Driver Based', 'Farming Equipment', 'Advance Service'
 
-  // Fetch categories and home content on mount (and when city changes)
+  // Fetch categories and home content on mount (and when location changes)
   useEffect(() => {
-    if (cityLoading) return;
+    if (geoLoading) return;
 
     const fetchData = async () => {
       try {
         setLoading(true);
-        const cityId = currentCity?._id || currentCity?.id;
-
+        // Pass no cityId — new system uses GLOBAL_INDIA by default
+        // The backend now serves all GLOBAL_INDIA-scoped content
         const [categoriesRes, homeContentRes] = await Promise.all([
-          publicCatalogService.getCategories(cityId),
-          publicCatalogService.getHomeContent(cityId)
+          publicCatalogService.getCategories(null),
+          publicCatalogService.getHomeContent(null)
         ]);
 
         let hasData = false;
@@ -546,7 +487,8 @@ const Home = () => {
         </motion.div>
 
         <main className="pt-6 space-y-8 pb-6 max-w-screen-xl mx-auto w-full">
-          {!isLocationSupported && (
+          {/* Location availability notice — shows only if state list is loaded but location is unresolved */}
+          {!isLocationResolved && !geoLoading && states.length > 0 && (
             <div
               className="flex items-center justify-between gap-3 py-2.5 px-4 mx-4 rounded-2xl"
               style={{
@@ -555,15 +497,15 @@ const Home = () => {
               }}
             >
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(251₹46,60,0.18)', border: '1px solid rgba(251₹46,60,0.35)' }}>
+                <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(251,146,60,0.18)', border: '1px solid rgba(251,146,60,0.35)' }}>
                   <span className="text-sm">📍</span>
                 </div>
                 <div className="min-w-0">
                   <p className="text-[11.5px] font-black text-white leading-tight" style={{ letterSpacing: '0.01em' }}>
-                    Service not available in your city
+                    Services available across India
                   </p>
-                  <p className="text-[9.5px] font-semibold leading-tight" style={{ color: 'rgba(251₹46,60,0.75)' }}>
-                    Showing All-India default catalog
+                  <p className="text-[9.5px] font-semibold leading-tight" style={{ color: 'rgba(251,146,60,0.75)' }}>
+                    Select your location for local services
                   </p>
                 </div>
               </div>
@@ -573,10 +515,10 @@ const Home = () => {
                 style={{
                   background: 'linear-gradient(135deg, #f97316, #ea580c)',
                   color: '#fff',
-                  boxShadow: '0 2px 8px rgba(249₹15,22,0.45)'
+                  boxShadow: '0 2px 8px rgba(249,115,22,0.45)'
                 }}
               >
-                Change
+                Set Area
               </button>
             </div>
           )}

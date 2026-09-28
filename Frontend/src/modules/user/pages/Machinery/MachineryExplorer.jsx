@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   FiSearch, FiFilter, FiMapPin, FiTruck, 
@@ -7,14 +7,12 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { Helmet } from 'react-helmet-async';
 import { publicEquipmentService } from '../../../../services/publicEquipmentService';
-import { useCity } from '../../../../context/CityContext';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import { themeColors } from '../../../../theme';
 
 const MachineryExplorer = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { currentCity } = useCity();
   const [loading, setLoading] = useState(true);
   const [equipment, setEquipment] = useState([]);
   const [categories, setCategories] = useState([]);

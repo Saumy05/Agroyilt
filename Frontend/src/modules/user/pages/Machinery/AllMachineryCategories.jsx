@@ -1,8 +1,7 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FiArrowLeft, FiMapPin } from 'react-icons/fi';
 import { Helmet } from 'react-helmet-async';
-import { useCity } from '../../../../context/CityContext';
 import { publicCatalogService } from '../../../../services/catalogService';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import CategoryCard from '../../components/common/CategoryCard';
@@ -17,7 +16,6 @@ const toAssetUrl = (url) => {
 
 const AllMachineryCategories = () => {
   const navigate = useNavigate();
-  const { currentCity } = useCity();
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -25,8 +23,7 @@ const AllMachineryCategories = () => {
     const fetchCategories = async () => {
       try {
         setLoading(true);
-        const cityId = currentCity?._id || currentCity?.id;
-        const res = await publicCatalogService.getCategories(cityId);
+        const res = await publicCatalogService.getCategories();
         if (res.success && Array.isArray(res.categories)) {
           // Filter to only show main categories (isAlwaysMain or has no parent)
           const mains = res.categories.filter(c => {
@@ -44,7 +41,7 @@ const AllMachineryCategories = () => {
       }
     };
     fetchCategories();
-  }, [currentCity]);
+  }, []);
 
   const handleCategoryClick = (category) => {
     navigate('/user/machinery-explorer', { state: { category } });
@@ -68,7 +65,7 @@ const AllMachineryCategories = () => {
           <div>
             <h1 className="text-xl font-black text-slate-800 tracking-tight">All Categories</h1>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
-              <FiMapPin className="text-orange-500" /> {currentCity?.name || 'Globally Available'}
+              <FiMapPin className="text-orange-500" /> All India
             </p>
           </div>
         </div>

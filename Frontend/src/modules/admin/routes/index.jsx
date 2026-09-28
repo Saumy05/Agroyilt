@@ -44,6 +44,7 @@ const Referrals = lazy(() => import('../pages/Referrals'));
 
 const AdminManagement = lazy(() => import('../pages/AdminManagement'));
 const MySalary = lazy(() => import('../pages/MySalary'));
+const GeographicManagement = lazy(() => import('../pages/Geographic'));
 
 // Loading fallback component
 import LogoLoader from '../../../components/common/LogoLoader';
@@ -107,6 +108,7 @@ const AdminRoutes = () => {
             <Route path="admin-salaries" element={<Navigate to="/admin/admin-management" replace />} />
             <Route path="admin-payroll" element={<Navigate to="/admin/admin-management" replace />} />
             <Route path="my-salary" element={<MySalary />} />
+            <Route path="geographic-management" element={<GeographicManagement />} />
           </Route>
         </Routes>
       </Suspense>
