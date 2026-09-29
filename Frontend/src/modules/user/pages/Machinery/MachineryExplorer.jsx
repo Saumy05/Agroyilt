@@ -7,12 +7,21 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { Helmet } from 'react-helmet-async';
 import { publicEquipmentService } from '../../../../services/publicEquipmentService';
+import { useGeo } from '../../../../context/GeoContext';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import { themeColors } from '../../../../theme';
 
 const MachineryExplorer = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { 
+    selectedState, 
+    selectedDistrict, 
+    selectedSubDistrict, 
+    currentCity, 
+    loading: geoLoading 
+  } = useGeo();
+
   const [loading, setLoading] = useState(true);
   const [equipment, setEquipment] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -50,36 +59,42 @@ const MachineryExplorer = () => {
   }, [selectedImplement, equipmentImplements]);
 
   useEffect(() => {
+    if (geoLoading) return;
     fetchData();
-  }, [currentCity, selectedCat, selectedImplement]);
+  }, [selectedState, selectedDistrict, selectedSubDistrict, geoLoading, selectedCat, selectedImplement]);
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      const cityId = currentCity?._id || currentCity?.id;
+      const geoParams = {};
+      if (selectedState?._id) geoParams.stateId = selectedState._id;
+      if (selectedDistrict?._id) geoParams.districtId = selectedDistrict._id;
+      if (selectedSubDistrict?._id) geoParams.subDistrictId = selectedSubDistrict._id;
+      if (currentCity?._id) geoParams.cityId = currentCity._id;
+
       const catId = selectedCat?._id || selectedCat?.id;
       
       const promises = [
         publicEquipmentService.getAllEquipment({ 
-          cityId, 
+          ...geoParams,
           categoryId: catId,
           implementId: selectedImplement?._id || selectedImplement?.id
         }),
-        publicEquipmentService.getMachineryCategories(cityId)
+        publicEquipmentService.getMachineryCategories(geoParams)
       ];
 
       // Only fetch equipmentImplements if a main category is selected
       if (catId) {
-        promises.push(publicEquipmentService.getImplementsForCategory(catId, cityId));
+        promises.push(publicEquipmentService.getImplementsForCategory(catId, geoParams));
       }
 
       const [equipsRes, catsRes, impsRes] = await Promise.all(promises);
 
-      if (equipsRes.success) setEquipment(equipsRes.data);
-      if (catsRes.success) setCategories(catsRes.data);
+      if (equipsRes?.success) setEquipment(equipsRes.data || []);
+      if (catsRes?.success) setCategories(catsRes.data || []);
       
       if (impsRes && impsRes.success) {
-        setEquipmentImplements(impsRes.data);
+        setEquipmentImplements(impsRes.data || []);
       } else {
         setEquipmentImplements([]);
       }
@@ -89,6 +104,10 @@ const MachineryExplorer = () => {
       setLoading(false);
     }
   };
+
+  const locationDisplayName = selectedSubDistrict?.name 
+    ? `${selectedSubDistrict.name}, ${selectedDistrict?.name || ''}`
+    : (selectedDistrict?.name || selectedState?.name || currentCity?.name || 'Globally Available');
 
   const filtered = equipment.filter(e => {
     if (!search) return true;
@@ -103,8 +122,8 @@ const MachineryExplorer = () => {
   return (
     <div className="min-h-screen pb-24" style={{ backgroundColor: '#F8FBFF' }}>
       <Helmet>
-        <title>Rent Agriculture Machinery | {currentCity?.name ? `In ${currentCity.name}` : 'Agroyilt'}</title>
-        <meta name="description" content={`Rent top-quality tractors, harvesters, and tools ${currentCity?.name ? `in ${currentCity.name}` : ''}. Verified machinery from professional vendors on Agroyilt.`} />
+        <title>Rent Agriculture Machinery | {locationDisplayName !== 'Globally Available' ? `In ${locationDisplayName}` : 'Agroyilt'}</title>
+        <meta name="description" content={`Rent top-quality tractors, harvesters, and tools ${locationDisplayName !== 'Globally Available' ? `in ${locationDisplayName}` : ''}. Verified machinery from professional vendors on Agroyilt.`} />
       </Helmet>
       {/* Header Sticky Container */}
       <div className="sticky top-0 z-40 bg-white/80 backdrop-blur-lg border-b border-slate-100 px-5 pt-4 pb-4">
@@ -120,7 +139,7 @@ const MachineryExplorer = () => {
                 <div>
                   <h1 className="text-xl font-black text-slate-800 tracking-tight">Machinery Catalog</h1>
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
-                    <FiMapPin className="text-orange-500" /> {currentCity?.name || 'Globally Available'}
+                    <FiMapPin className="text-orange-500" /> {locationDisplayName}
                   </p>
                 </div>
               </div>
@@ -291,7 +310,7 @@ const MachineryExplorer = () => {
                       <div>
                         <h3 className="text-[17px] font-black text-slate-800 leading-tight truncate max-w-[200px]">{item.name}</h3>
                         <p className="text-[10px] font-bold text-slate-400 mt-0.5 uppercase tracking-tight flex items-center gap-1.5">
-                           {item.modelNumber} {item.modelNumber && item.year ? '?' : ''} {item.year ? `${item.year} Mfg` : ''}
+                           {item.modelNumber} {item.modelNumber && item.year ? '•' : ''} {item.year ? `${item.year} Mfg` : ''}
                         </p>
                       </div>
                       <div className="flex items-center gap-1 text-[10px] font-black text-slate-800 bg-amber-50 px-2 py-1 rounded-lg border border-amber-100">

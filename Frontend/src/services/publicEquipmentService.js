@@ -5,11 +5,14 @@ import api from './api';
  * Handles browsing machinery and checking availability for rentals.
  */
 export const publicEquipmentService = {
-  // Get all approved machinery (with city filter)
+  // Get all approved machinery (with city / state / district filter)
   getAllEquipment: async (filters = {}) => {
-    const { cityId, categoryId, implementId, search, isFeatured } = filters;
+    const { cityId, stateId, districtId, subDistrictId, categoryId, implementId, search, isFeatured } = filters;
     const params = {};
     if (cityId) params.cityId = cityId;
+    if (stateId) params.stateId = stateId;
+    if (districtId) params.districtId = districtId;
+    if (subDistrictId) params.subDistrictId = subDistrictId;
     if (categoryId) params.categoryId = categoryId;
     if (implementId) params.implementId = implementId;
     if (search) params.search = search;
@@ -34,9 +37,13 @@ export const publicEquipmentService = {
   },
 
   // Get categories specifically for machinery (e.g. Tractor, Harvester)
-  getMachineryCategories: async (cityId) => {
+  getMachineryCategories: async (geo = {}) => {
+    const geoParams = typeof geo === 'string' ? { cityId: geo } : (geo || {});
     const params = { type: 'service' }; // Machinery are services in this project
-    if (cityId) params.cityId = cityId;
+    if (geoParams.cityId) params.cityId = geoParams.cityId;
+    if (geoParams.stateId) params.stateId = geoParams.stateId;
+    if (geoParams.districtId) params.districtId = geoParams.districtId;
+    if (geoParams.subDistrictId) params.subDistrictId = geoParams.subDistrictId;
     
     const response = await api.get('/public/categories', { params });
     if (response.data.success && Array.isArray(response.data.categories)) {
@@ -50,9 +57,13 @@ export const publicEquipmentService = {
   },
 
   // Get implements (subcategories) for a specific main category
-  getImplementsForCategory: async (categoryId, cityId = null) => {
+  getImplementsForCategory: async (categoryId, geo = {}) => {
+    const geoParams = typeof geo === 'string' ? { cityId: geo } : (geo || {});
     const params = {};
-    if (cityId) params.cityId = cityId;
+    if (geoParams.cityId) params.cityId = geoParams.cityId;
+    if (geoParams.stateId) params.stateId = geoParams.stateId;
+    if (geoParams.districtId) params.districtId = geoParams.districtId;
+    if (geoParams.subDistrictId) params.subDistrictId = geoParams.subDistrictId;
     const response = await api.get('/public/categories', { params });
     if (response.data.success && Array.isArray(response.data.categories)) {
       return {
