@@ -39,6 +39,10 @@ const { getIO }             = require('../../sockets');
 const { createOrder, verifyPayment } = require('../../services/razorpayService');
 const { getWorkerFinancialSettings } = require('../../services/workerFinancialService');
 const { sendNotificationToWorker } = require('../../services/firebaseAdmin');
+const {
+  getBookingScheduledExpiry,
+  isBookingExpired
+} = require('../../services/workerBookingExpiryService');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -561,7 +565,24 @@ exports.getLeaderGroupRequests = async (req, res) => {
       .populate('memberRequests.workerId', 'name profilePhoto skills rating phone status dailyRate experience')
       .sort({ createdAt: -1 });
 
-    return res.json({ success: true, data: requests });
+    const now = new Date();
+    const validRequests = [];
+    for (const r of requests) {
+      const evalRes = isBookingExpired(r, now);
+      if (evalRes.isExpired) {
+        if (r.status !== 'expired') {
+          r.status = 'expired';
+          r.save().catch(() => {});
+        }
+        if (!status || status === 'expired') {
+          validRequests.push(r);
+        }
+      } else {
+        validRequests.push(r);
+      }
+    }
+
+    return res.json({ success: true, data: validRequests });
   } catch (err) {
     return res.status(500).json({ success: false, message: 'Failed to load requests.' });
   }
@@ -583,7 +604,21 @@ exports.getMemberGroupInvites = async (req, res) => {
       .populate('selectedWorkers', 'name profilePhoto skills rating')
       .sort({ createdAt: -1 });
 
-    return res.json({ success: true, data: requests });
+    const now = new Date();
+    const validRequests = [];
+    for (const r of requests) {
+      const evalRes = isBookingExpired(r, now);
+      if (evalRes.isExpired) {
+        if (r.status !== 'expired') {
+          r.status = 'expired';
+          r.save().catch(() => {});
+        }
+      } else {
+        validRequests.push(r);
+      }
+    }
+
+    return res.json({ success: true, data: validRequests });
   } catch (err) {
     console.error('[getMemberGroupInvites]', err);
     return res.status(500).json({ success: false, message: 'Failed to load member invites.' });
@@ -602,13 +637,23 @@ exports.leaderRespondToRequest = async (req, res) => {
 
     const request = await WorkerGroupRequest.findOne({ _id: req.params.id, teamLeaderId: leaderId });
     if (!request) return res.status(404).json({ success: false, message: 'Request not found.' });
+
+    const expiryEval = isBookingExpired(request);
+    const isTerminal = ['cancelled', 'expired', 'completed'].includes(request.status);
+
+    if (expiryEval.isExpired || isTerminal) {
+      if (!isTerminal) {
+        request.status = 'expired';
+        await request.save();
+      }
+      if (action === 'reject') {
+        return res.json({ success: true, message: 'Request has expired and has been dismissed.', isExpired: true });
+      }
+      return res.status(410).json({ success: false, message: 'Request has expired.', isExpired: true });
+    }
+
     if (request.status !== 'pending') {
       return res.status(400).json({ success: false, message: `Request is already ${request.status}.` });
-    }
-    if (request.expiresAt && request.expiresAt < new Date()) {
-      request.status = 'expired';
-      await request.save();
-      return res.status(410).json({ success: false, message: 'Request has expired.' });
     }
 
     if (action === 'accept') {
@@ -818,14 +863,28 @@ exports.memberRespondToRequest = async (req, res) => {
 
     const request = await WorkerGroupRequest.findOne({
       _id: req.params.id,
-      status: 'collecting_members',
       'memberRequests.workerId': workerId
     });
     if (!request) return res.status(404).json({ success: false, message: 'Request not found.' });
 
     const memberEntry = request.memberRequests.find(m => m.workerId.toString() === workerId);
     if (!memberEntry) return res.status(404).json({ success: false, message: 'You are not part of this request.' });
+
+    const isExpired = isBookingExpired(request).isExpired || ['cancelled', 'expired', 'completed'].includes(request.status);
+    if (isExpired || request.status !== 'collecting_members') {
+      if (action === 'reject') {
+        memberEntry.status = 'rejected';
+        memberEntry.respondedAt = new Date();
+        await request.save();
+        return res.json({ success: true, message: 'Invitation has expired and has been dismissed.', isExpired: true });
+      }
+      return res.status(410).json({ success: false, message: 'This invitation is no longer active.', isExpired: true });
+    }
+
     if (memberEntry.status !== 'pending') {
+      if (action === 'reject' && memberEntry.status === 'rejected') {
+        return res.json({ success: true, message: 'You have already declined this invitation.' });
+      }
       return res.status(400).json({ success: false, message: 'You have already responded.' });
     }
 

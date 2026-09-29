@@ -6,6 +6,7 @@
  * Hierarchy: GLOBAL_INDIA → State → District → SubDistrict
  */
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toastManager } from '../../../../utils/toastManager';
 import { stateService, districtService, subDistrictService } from '../../services/geoService';
@@ -42,7 +43,7 @@ const Modal = ({ isOpen, onClose, title, children }) => {
       >
         <motion.div
           className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
-          initial={{ scale: 0.95, y: 20, opacity: 0 }}
+          initial={{ scale: 0.95, y: 0, opacity: 0 }}
           animate={{ scale: 1, y: 0, opacity: 1 }}
           exit={{ scale: 0.95, y: 20, opacity: 0 }}
         >
@@ -64,8 +65,18 @@ const Modal = ({ isOpen, onClose, title, children }) => {
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 const GeographicManagement = () => {
-  const [activeTab, setActiveTab] = useState('states');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState(
+    tabParam && ['states', 'districts', 'subdistricts'].includes(tabParam) ? tabParam : 'states'
+  );
   const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    if (tabParam && ['states', 'districts', 'subdistricts'].includes(tabParam)) {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
 
   // ── States ──────────────────────────────────────────────────────────────────
   const [states, setStates] = useState([]);

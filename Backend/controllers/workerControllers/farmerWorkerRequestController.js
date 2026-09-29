@@ -24,6 +24,11 @@ const crypto                = require('crypto');
 const { getIO }             = require('../../sockets');
 const { calculateDistance } = require('../../services/locationService');
 const { sendNotificationToUser, sendNotificationToWorker } = require('../../services/firebaseAdmin');
+const {
+  getBookingScheduledExpiry,
+  isBookingExpired,
+  expireWorkerBookingRequest
+} = require('../../services/workerBookingExpiryService');
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -278,22 +283,37 @@ const notify = async ({
       if (type) {
         emitSafe(room, type, broadcastPayload);
       }
-      // 3. Explicit worker alert events (ONLY when the event is an actual booking request)
+      // 3. Explicit worker alert events (ONLY when the event is an actual booking request and not expired)
       if (recipientType === 'worker' && (type === 'worker_booking_request' || type === 'new_booking_request' || type === 'booking_request')) {
+        const isExp = isBookingExpired(data).isExpired;
+        if (isExp) {
+          console.log(`[NOTIFY SUPPRESSED] Suppressing socket alert for expired booking ${relatedId}`);
+          return;
+        }
         emitSafe(room, 'worker_booking_request', broadcastPayload);
         emitSafe(room, 'new_booking_request', broadcastPayload);
         emitSafe(room, 'booking_request', broadcastPayload);
       }
       if (recipientType === 'worker' && type === 'group_booking_request') {
+        const isExp = isBookingExpired(data).isExpired;
+        if (isExp) {
+          console.log(`[NOTIFY SUPPRESSED] Suppressing socket alert for expired group booking ${relatedId}`);
+          return;
+        }
         emitSafe(room, 'group_booking_request', broadcastPayload);
       }
       // 4. Booking update event for refreshing lists
       emitSafe(room, 'worker_booking_update', { requestId: relatedId, type, data });
     });
 
-    // 5. FCM Push Notification Fallback (non-blocking)
+    // 5. FCM Push Notification Fallback (non-blocking, only for active/valid requests)
     try {
       if (recipientType === 'worker') {
+        const isExp = isBookingExpired(data).isExpired;
+        if (isExp) {
+          console.log(`[FCM SUPPRESSED] Suppressing push alert for expired booking ${relatedId}`);
+          return;
+        }
         sendNotificationToWorker(recipientId, {
           title: title || '🌾 Work Alert',
           body: message || 'You have a new work request',
@@ -915,6 +935,17 @@ exports.createFarmerRequest = async (req, res) => {
       });
     }
 
+    // Server-Side Scheduled Window Expiry:
+    // A booking must never expire after its scheduled window has elapsed!
+    const scheduledEnd = getBookingScheduledExpiry(requestDoc);
+    if (scheduledEnd.getTime() <= Date.now()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot create a booking request for a scheduled time window that has already passed.'
+      });
+    }
+    requestDoc.expiresAt = new Date(Math.min(scheduledEnd.getTime(), Date.now() + REQUEST_TTL_MS));
+
     const newRequest = await WorkerBookingRequest.create(requestDoc);
 
     if (requestType === 'independent_broadcast') {
@@ -976,6 +1007,13 @@ async function dispatchToIndependentWorkers({
   workerLocation, radiusKm
 }) {
   try {
+    // Expiry guard: do not dispatch if request already passed its window
+    if (isBookingExpired(request).isExpired) {
+      console.log(`[DISPATCH CANCELLED] Request ${request._id} has already expired.`);
+      await expireWorkerBookingRequest(request, 'Expired before worker dispatch');
+      return;
+    }
+
     // Base query for active workers: broad to avoid excluding workers due to case or status flags
     const baseQuery = {
       $or: [
@@ -1172,6 +1210,13 @@ async function dispatchToIndependentWorkersForDaily({
   request, requiredSkills, startDate, endDate, workerLocation, radiusKm
 }) {
   try {
+    // Expiry guard: do not dispatch if request already passed its window
+    if (isBookingExpired(request).isExpired) {
+      console.log(`[DISPATCH CANCELLED] DAILY Request ${request._id} has already expired.`);
+      await expireWorkerBookingRequest(request, 'Expired before worker dispatch');
+      return;
+    }
+
     const baseQuery = {
       $or: [
         { approvalStatus: { $in: ['approved', 'APPROVED', 'pending', 'PENDING'] } },
@@ -1321,6 +1366,13 @@ async function dispatchToTeamLeaders({
   workerLocation, radiusKm
 }) {
   try {
+    // Expiry guard: do not dispatch if request already passed its window
+    if (isBookingExpired(request).isExpired) {
+      console.log(`[DISPATCH CANCELLED] Team Leader Request ${request._id} has already expired.`);
+      await expireWorkerBookingRequest(request, 'Expired before leader dispatch');
+      return;
+    }
+
     const baseQuery = {
       $or: [
         { approvalStatus: { $in: ['approved', 'APPROVED', 'pending', 'PENDING'] } },
@@ -1563,7 +1615,22 @@ exports.getWorkerPendingFarmerRequests = async (req, res) => {
       'workerOffers.workerId': { $ne: workerId }
     }).sort({ createdAt: -1 });
 
-    return res.json({ success: true, data: pendingRequests });
+    // Server-side authoritative expiry validation:
+    // Filter out and auto-expire any request whose scheduled window has already completely elapsed
+    const now = new Date();
+    const validPendingRequests = [];
+
+    for (const reqDoc of pendingRequests) {
+      const evalResult = isBookingExpired(reqDoc, now);
+      if (evalResult.isExpired) {
+        // Asynchronously transition to expired in database
+        expireWorkerBookingRequest(reqDoc, evalResult.reason).catch(e => console.warn('[AutoExpire Error]:', e.message));
+      } else {
+        validPendingRequests.push(reqDoc);
+      }
+    }
+
+    return res.json({ success: true, data: validPendingRequests });
   } catch (err) {
     console.error('[getWorkerPendingFarmerRequests]', err);
     return res.status(500).json({ success: false, message: 'Failed to fetch pending requests.' });
@@ -1612,9 +1679,16 @@ exports.getMemberInvites = async (req, res) => {
       .lean();
 
     const normalizedInvites = [];
+    const now = new Date();
 
-    // Map bookingRequests
+    // Map bookingRequests (filtering out expired)
     for (const br of bookingRequests) {
+      const evalResult = isBookingExpired(br, now);
+      if (evalResult.isExpired) {
+        expireWorkerBookingRequest(br, evalResult.reason).catch(e => console.warn('[AutoExpire Error]:', e.message));
+        continue;
+      }
+
       const invite = (br.memberInvitations || []).find(
         m => m.workerId?.toString() === workerId.toString() && (m.status === 'member_pending' || m.status === 'pending')
       );
@@ -1664,6 +1738,14 @@ exports.getMemberInvites = async (req, res) => {
 
     // Map groupRequests
     for (const gr of groupRequests) {
+      const evalResult = isBookingExpired(gr, now);
+      if (evalResult.isExpired) {
+        if (gr.status !== 'expired') {
+          WorkerGroupRequest.findByIdAndUpdate(gr._id, { status: 'expired' }).catch(() => {});
+        }
+        continue;
+      }
+
       const invite = (gr.memberRequests || []).find(
         m => m.workerId?.toString() === workerId.toString() && (m.status === 'member_pending' || m.status === 'pending')
       );
@@ -1749,9 +1831,38 @@ exports.memberRespondToRequest = async (req, res) => {
     });
 
     if (bookingReq) {
-      if (['cancelled', 'rejected', 'expired'].includes(bookingReq.status)) {
-        return res.status(410).json({ success: false, message: `This request is no longer active (${bookingReq.status}).` });
+      const expiryEval = isBookingExpired(bookingReq);
+      const isTerminal = ['cancelled', 'rejected', 'expired'].includes(bookingReq.status);
+
+      if (expiryEval.isExpired || isTerminal) {
+        if (!isTerminal) {
+          await expireWorkerBookingRequest(bookingReq, expiryEval.reason);
+        }
+
+        if (action === 'reject') {
+          await WorkerBookingRequest.updateOne(
+            { _id: bookingReq._id, 'memberInvitations.workerId': workerId },
+            {
+              $set: {
+                'memberInvitations.$.status': 'member_rejected',
+                'memberInvitations.$.respondedAt': new Date()
+              }
+            }
+          );
+          return res.json({
+            success: true,
+            message: 'Invitation has expired and has been dismissed.',
+            isExpired: true
+          });
+        }
+
+        return res.status(410).json({
+          success: false,
+          message: `This request is no longer active (${bookingReq.status || 'expired'}).`,
+          isExpired: true
+        });
       }
+
       if (bookingReq.paymentStatus === 'success' || bookingReq.status === 'confirmed') {
         return res.status(409).json({ success: false, message: 'Farmer has already completed payment. Invitation expired.' });
       }
@@ -1764,9 +1875,15 @@ exports.memberRespondToRequest = async (req, res) => {
         return res.json({ success: true, message: 'You have already accepted this invitation.', data: bookingReq });
       }
       if (invite.status === 'member_rejected') {
+        if (action === 'reject') {
+          return res.json({ success: true, message: 'You have already declined this invitation.' });
+        }
         return res.status(400).json({ success: false, message: 'You have already declined this invitation.' });
       }
       if (invite.status === 'member_expired') {
+        if (action === 'reject') {
+          return res.json({ success: true, message: 'Invitation was expired and has been dismissed.', isExpired: true });
+        }
         return res.status(410).json({ success: false, message: 'This invitation has expired.' });
       }
 
@@ -1988,9 +2105,44 @@ exports.workerRespondToFarmerRequest = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Request not found.' });
     }
 
-    // Verify request has not expired
-    if (request.expiresAt < new Date()) {
-      return res.status(410).json({ success: false, message: 'This request has expired.' });
+    // Authoritative Server-Side Expiry Check:
+    // Check both scheduled window completion and database expiry status
+    const expiryEval = isBookingExpired(request);
+    const isTerminal = ['cancelled', 'expired', 'completed'].includes(request.status);
+
+    if (expiryEval.isExpired || isTerminal) {
+      // Ensure backend status is transitioned to expired
+      if (!isTerminal) {
+        await expireWorkerBookingRequest(request, expiryEval.reason);
+      }
+
+      if (action === 'reject') {
+        // Worker clicked Decline on an expired or stale card.
+        // Idempotently mark this worker's dispatch entry as rejected/expired and return success
+        // so the frontend alert modal cleanly dismisses, stops the alarm sound, and updates jobs.
+        await WorkerBookingRequest.updateOne(
+          { _id: request._id, 'dispatchedTo.workerId': workerId },
+          {
+            $set: {
+              'dispatchedTo.$.status': 'rejected',
+              'dispatchedTo.$.respondedAt': new Date()
+            }
+          }
+        );
+
+        return res.json({
+          success: true,
+          message: 'Booking request has expired and has been dismissed from your alerts.',
+          isExpired: true
+        });
+      }
+
+      // If trying to accept an expired request:
+      return res.status(410).json({
+        success: false,
+        message: 'Booking request has expired and can no longer be accepted.',
+        isExpired: true
+      });
     }
 
     // Only broadcast requests handled here
@@ -2013,6 +2165,11 @@ exports.workerRespondToFarmerRequest = async (req, res) => {
       return res.json({ success: true, message: 'You have already accepted this request.', data: request });
     }
 
+    // Idempotent check: if worker already rejected and declines again, return success
+    if (entry.status === 'rejected' && action === 'reject') {
+      return res.json({ success: true, message: 'You have already declined this request.', data: request });
+    }
+
     const newStatus = action === 'accept' ? 'accepted' : 'rejected';
     
     // Add or update workerOffers if accepted
@@ -2023,6 +2180,11 @@ exports.workerRespondToFarmerRequest = async (req, res) => {
         }
     };
     
+    let offersToAdd = [];
+    let invitationsToCreate = [];
+    let eligibleMembers = [];
+    let acceptingWorker = null;
+
     if (action === 'accept') {
         let offeredRate = Number(req.body.offeredRate);
         const maxBudget = Number(request.maxRate || request.farmerOfferedRate || request.minRate || 0);
@@ -2040,11 +2202,7 @@ exports.workerRespondToFarmerRequest = async (req, res) => {
         }
 
         const isTeamLeaderReq = request.requestType === 'team_leader' || request.bookingMode === 'TEAM_LEADER';
-        const acceptingWorker = await Worker.findById(workerId);
-
-        let offersToAdd = [];
-        let invitationsToCreate = [];
-        let eligibleMembers = [];
+        acceptingWorker = await Worker.findById(workerId);
 
         if (isTeamLeaderReq && acceptingWorker && acceptingWorker.workerType === 'TEAM_LEADER' && acceptingWorker.teamId) {
             // Include Leader himself in workerOffers as accepted
@@ -2149,7 +2307,7 @@ exports.workerRespondToFarmerRequest = async (req, res) => {
     );
 
     // If team leader dispatched member invitations, send notifications and sockets NOW
-    if (invitationsToCreate && invitationsToCreate.length > 0) {
+    if (action === 'accept' && invitationsToCreate && invitationsToCreate.length > 0) {
       let farmerDoc = null;
       try {
         if (request.farmerId) {

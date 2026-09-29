@@ -16,6 +16,63 @@ const STATUS_COLORS = {
   confirmed: 'bg-emerald-100 text-emerald-800 border-emerald-300'
 };
 
+const isPastScheduledTime = (req) => {
+  if (!req) return false;
+  if (req.isExpired || req.status === 'expired' || req.status === 'cancelled' || req.status === 'completed') {
+    return true;
+  }
+  try {
+    const isDaily = Boolean(req.startDate || req.bookingType === 'DAILY' || req.rateUnit === 'daily');
+    const now = Date.now();
+    if (isDaily) {
+      const dateSource = req.endDate || req.startDate;
+      if (dateSource) {
+        const d = new Date(dateSource);
+        if (!isNaN(d.getTime())) {
+          const istStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(d);
+          const expiryTime = new Date(`${istStr}T23:59:59.999+05:30`).getTime();
+          if (now >= expiryTime) return true;
+        }
+      }
+    } else {
+      const dateSource = req.scheduledDate || req.date || req.startDate;
+      if (dateSource) {
+        const d = new Date(dateSource);
+        if (!isNaN(d.getTime())) {
+          const istStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(d);
+          let targetDateStr = istStr;
+          let targetHours = 23;
+          let targetMinutes = 59;
+          if (req.endTime && typeof req.endTime === 'string') {
+            const match = req.endTime.trim().match(/^(\d{1,2}):(\d{2})/);
+            if (match) {
+              targetHours = parseInt(match[1], 10);
+              targetMinutes = parseInt(match[2], 10);
+              if (req.startTime && typeof req.startTime === 'string') {
+                const sMatch = req.startTime.trim().match(/^(\d{1,2}):(\d{2})/);
+                if (sMatch) {
+                  const sMins = parseInt(sMatch[1], 10) * 60 + parseInt(sMatch[2], 10);
+                  const eMins = targetHours * 60 + targetMinutes;
+                  if (eMins < sMins) {
+                    const nextDay = new Date(`${istStr}T12:00:00+05:30`);
+                    nextDay.setDate(nextDay.getDate() + 1);
+                    targetDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(nextDay);
+                  }
+                }
+              }
+            }
+          }
+          const hh = String(targetHours).padStart(2, '0');
+          const mm = String(targetMinutes).padStart(2, '0');
+          const scheduledExpiryTime = new Date(`${targetDateStr}T${hh}:${mm}:00+05:30`).getTime();
+          if (now >= scheduledExpiryTime) return true;
+        }
+      }
+    }
+  } catch (e) {}
+  return false;
+};
+
 const WorkerBookingRequests = () => {
   const navigate = useNavigate();
   const [requests, setRequests] = useState([]);
@@ -67,7 +124,13 @@ const WorkerBookingRequests = () => {
         toast.success('Request rejected');
         fetchRequests();
       } catch (err) {
-        toast.error(err.response?.data?.message || 'Action failed');
+        const errMsg = err.response?.data?.message || err.message || '';
+        if (err.response?.status === 410 || errMsg.toLowerCase().includes('expired')) {
+          toast.success('Request has expired and has been dismissed.');
+          fetchRequests();
+        } else {
+          toast.error(errMsg || 'Action failed');
+        }
       } finally {
         setSubmitting(false);
       }
@@ -83,15 +146,16 @@ const WorkerBookingRequests = () => {
        // For safety, fallback to visual display based on status string.
     }
 
-    const isPending = req.status === 'pending' || req.status === 'matching';
+    const isExpired = isPastScheduledTime(req);
+    const isPending = (req.status === 'pending' || req.status === 'matching') && !isExpired;
     const canRespond = myStatus === 'pending' && isPending;
 
     return (
       <div key={req._id} className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden mb-4">
         <div className="p-5">
           <div className="flex justify-between items-start mb-3">
-            <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border ${STATUS_COLORS[req.status] || STATUS_COLORS.pending}`}>
-              {req.status.replace(/_/g, ' ')}
+            <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border ${STATUS_COLORS[isExpired ? 'expired' : req.status] || STATUS_COLORS.pending}`}>
+              {isExpired ? 'EXPIRED' : req.status.replace(/_/g, ' ')}
             </span>
             <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1">
               <FiClock size={10} />

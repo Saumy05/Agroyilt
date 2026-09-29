@@ -52,6 +52,7 @@ const iconMap = {
   "Machinery Approvals": FiTruck,
   Referrals: FiGift,
   "Admin Management": FiShield,
+  "Geographic Management": FiMapPin,
   "My Salary": FiDollarSign,
 };
 
@@ -134,6 +135,11 @@ const getChildRoute = (parentRoute, childName) => {
       "App Guide": "/admin/manage-website/app-guide",
       "Policies": "/admin/manage-website/policies",
     },
+    "/admin/geographic-management": {
+      "States": "/admin/geographic-management?tab=states",
+      "Districts": "/admin/geographic-management?tab=districts",
+      "Sub-Districts": "/admin/geographic-management?tab=subdistricts",
+    },
   };
 
   return routeMap[parentRoute]?.[childName] || parentRoute;
@@ -195,6 +201,7 @@ const AdminSidebar = ({ isOpen, onClose }) => {
     'Manage Website': 'website.view',
     'Referrals': 'referrals.view',
     'Admin Management': null, // strictly super_admin only
+    'Geographic Management': null, // strictly super_admin only
     'Settings': 'settings.view'
   };
 

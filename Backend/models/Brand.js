@@ -31,12 +31,37 @@ const brandSchema = new mongoose.Schema({
     ref: 'Category',
     index: true
   },
-  // Cities where this brand is available
+  // Cities where this brand is available (legacy support)
   cityIds: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'City',
     index: true
   }],
+  // Geographic Scope Architecture
+  scope: {
+    type: String,
+    enum: ['GLOBAL_INDIA', 'STATE', 'DISTRICT', 'SUB_DISTRICT'],
+    default: 'GLOBAL_INDIA',
+    index: true
+  },
+  stateId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'State',
+    default: null,
+    index: true
+  },
+  districtId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'District',
+    default: null,
+    index: true
+  },
+  subDistrictId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'SubDistrict',
+    default: null,
+    index: true
+  },
   iconUrl: {
     type: String,
     default: null

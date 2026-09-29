@@ -4,6 +4,11 @@ const Booking = require('../../models/Booking');
 const Notification = require('../../models/Notification');
 const User = require('../../models/User');
 const { getIO } = require('../../sockets');
+const {
+  getBookingScheduledExpiry,
+  isBookingExpired,
+  expireWorkerBookingRequest
+} = require('../../services/workerBookingExpiryService');
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -155,6 +160,17 @@ exports.createSingleRequest = async (req, res) => {
     // Snapshot worker's current rate
     const workerRate = rateUnit === 'hourly' ? (worker.hourlyRate || 0) : (worker.dailyRate || 0);
 
+    const scheduledEnd = getBookingScheduledExpiry({
+      bookingType: rateUnit === 'daily' ? 'DAILY' : 'HOURLY',
+      scheduledDate: scheduledDateObj,
+      startTime,
+      endTime
+    });
+    if (scheduledEnd.getTime() <= Date.now()) {
+      return res.status(400).json({ success: false, message: 'Cannot create a booking request for a scheduled time window that has already passed.' });
+    }
+    const expiresAt = new Date(Math.min(scheduledEnd.getTime(), Date.now() + 24 * 60 * 60 * 1000));
+
     // Create the request
     const request = await WorkerBookingRequest.create({
       farmerId,
@@ -170,6 +186,7 @@ exports.createSingleRequest = async (req, res) => {
       location:       location || {},
       workerRate,
       farmerOfferedRate: Number(farmerOfferedRate),
+      expiresAt,
       negotiation: [{
         by: 'farmer',
         rate: Number(farmerOfferedRate),
@@ -381,7 +398,24 @@ exports.getWorkerIncomingRequests = async (req, res) => {
       .populate('farmerId', 'name phone profilePhoto')
       .sort({ createdAt: -1 });
 
-    return res.json({ success: true, data: requests });
+    const now = new Date();
+    const validRequests = [];
+    for (const r of requests) {
+      const evalRes = isBookingExpired(r, now);
+      if (evalRes.isExpired) {
+        expireWorkerBookingRequest(r, evalRes.reason).catch(() => {});
+        if (!status) {
+          r.status = 'expired';
+          validRequests.push(r);
+        } else if (status === 'expired') {
+          validRequests.push(r);
+        }
+      } else {
+        validRequests.push(r);
+      }
+    }
+
+    return res.json({ success: true, data: validRequests });
   } catch (err) {
     return res.status(500).json({ success: false, message: 'Failed to load requests.' });
   }
@@ -399,13 +433,23 @@ exports.workerRespondToRequest = async (req, res) => {
 
     const request = await WorkerBookingRequest.findOne({ _id: req.params.id, workerId });
     if (!request) return res.status(404).json({ success: false, message: 'Request not found.' });
+
+    const expiryEval = isBookingExpired(request);
+    const isTerminal = ['cancelled', 'expired', 'completed'].includes(request.status);
+
+    if (expiryEval.isExpired || isTerminal) {
+      if (!isTerminal) {
+        request.status = 'expired';
+        await request.save();
+      }
+      if (action === 'reject') {
+        return res.json({ success: true, message: 'Request has expired and has been dismissed.', isExpired: true });
+      }
+      return res.status(410).json({ success: false, message: 'This request has expired.', isExpired: true });
+    }
+
     if (request.status !== 'pending') {
       return res.status(400).json({ success: false, message: `Request is already ${request.status}.` });
-    }
-    if (request.expiresAt && request.expiresAt < new Date()) {
-      request.status = 'expired';
-      await request.save();
-      return res.status(410).json({ success: false, message: 'This request has expired.' });
     }
 
     if (action === 'accept') {

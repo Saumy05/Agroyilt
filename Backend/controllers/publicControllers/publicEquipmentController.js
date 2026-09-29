@@ -9,7 +9,7 @@ const Vendor = require('../../models/Vendor');
 // GET /api/public/equipment
 exports.getPublicEquipment = async (req, res) => {
   try {
-    const { cityId, categoryId, implementId, search, isFeatured, lat, lng, radius } = req.query;
+    const { cityId, stateId, districtId, subDistrictId, categoryId, implementId, search, isFeatured, lat, lng, radius } = req.query;
 
     const query = { status: { $in: ['active', 'approved'] } }; // Only show active/approved equipment
 
@@ -54,15 +54,46 @@ exports.getPublicEquipment = async (req, res) => {
         query.vendorId = { $in: geoVendorIds };
     }
 
-    if (cityId) {
-        if (hasGeoFilter) {
-            // Intersect with city vendors if both are present
-            const vendorsInCity = await Vendor.find({ cityId }).select('_id');
-            const cityVendorIds = vendorsInCity.map(v => v._id.toString());
-            query.vendorId.$in = query.vendorId.$in.filter(id => cityVendorIds.includes(id.toString()));
-        } else {
-            query.cityIds = cityId;
+    // Geographic Scope Filtering: GLOBAL_INDIA + matching State/District/Sub-District/Legacy City
+    const hasGeoScope = Boolean(stateId || districtId || subDistrictId || cityId);
+    if (hasGeoScope) {
+        const mongoose = require('mongoose');
+        const geoConditions = [
+            { scope: 'GLOBAL_INDIA' }
+        ];
+
+        if (subDistrictId && mongoose.Types.ObjectId.isValid(subDistrictId)) {
+            geoConditions.push({ subDistrictId: new mongoose.Types.ObjectId(subDistrictId) });
         }
+        if (districtId && mongoose.Types.ObjectId.isValid(districtId)) {
+            geoConditions.push({ districtId: new mongoose.Types.ObjectId(districtId) });
+        }
+        if (stateId && mongoose.Types.ObjectId.isValid(stateId)) {
+            geoConditions.push({ stateId: new mongoose.Types.ObjectId(stateId) });
+        }
+        if (cityId) {
+            geoConditions.push({ cityIds: cityId });
+        }
+
+        if (hasGeoFilter) {
+            const vendorScopeFilter = [];
+            if (districtId && mongoose.Types.ObjectId.isValid(districtId)) {
+                vendorScopeFilter.push({ districtId: new mongoose.Types.ObjectId(districtId) });
+            }
+            if (stateId && mongoose.Types.ObjectId.isValid(stateId)) {
+                vendorScopeFilter.push({ stateId: new mongoose.Types.ObjectId(stateId) });
+            }
+            if (cityId) {
+                vendorScopeFilter.push({ cityId });
+            }
+            if (vendorScopeFilter.length > 0) {
+                const scopedVendors = await Vendor.find({ $or: vendorScopeFilter }).select('_id');
+                const scopedVendorIds = scopedVendors.map(v => v._id.toString());
+                query.vendorId.$in = query.vendorId.$in.filter(id => scopedVendorIds.includes(id.toString()));
+            }
+        }
+
+        query.$or = geoConditions;
     }
     
     if (categoryId) query.categoryId = categoryId;
@@ -105,6 +136,9 @@ exports.getPublicEquipment = async (req, res) => {
       .populate('subCategoryIds', 'title slug')
       .populate('implements.subCategoryId', 'title slug')
       .populate('vendorId', 'name phone rating avatar')
+      .populate('stateId', 'name code')
+      .populate('districtId', 'name')
+      .populate('subDistrictId', 'name')
       .sort({ createdAt: -1 })
       .lean();
 
@@ -143,6 +177,9 @@ exports.getPublicEquipmentById = async (req, res) => {
       .populate('subCategoryIds', 'title slug')
       .populate('implements.subCategoryId', 'title slug')
       .populate('vendorId', 'name phone rating avatar address')
+      .populate('stateId', 'name code')
+      .populate('districtId', 'name')
+      .populate('subDistrictId', 'name')
       .lean();
 
     if (!equipment) {

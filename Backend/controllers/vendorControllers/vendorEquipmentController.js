@@ -125,7 +125,13 @@ exports.addEquipment = async (req, res) => {
       }
     }
 
-    // 3. Retrieve vendor cityId for listing location
+    // 3. Retrieve geographic location (State / District / Sub-District)
+    const stateId = req.body.stateId || vendor.stateId || vendor.address?.stateId || null;
+    const districtId = req.body.districtId || vendor.districtId || vendor.address?.districtId || null;
+    const subDistrictId = req.body.subDistrictId || vendor.subDistrictId || vendor.address?.subDistrictId || null;
+    const scope = req.body.scope || (subDistrictId ? 'SUB_DISTRICT' : (districtId ? 'DISTRICT' : (stateId ? 'STATE' : 'GLOBAL_INDIA')));
+
+    // Legacy city support
     let cityIds = req.body.cityIds || [];
     if (!cityIds.length && vendor) {
       cityIds = (vendor.cityId || vendor.address?.cityId)
@@ -153,6 +159,10 @@ exports.addEquipment = async (req, res) => {
       workerId,
       cityIds,
       requestedCityName: requestedCityName || null,
+      scope,
+      stateId,
+      districtId,
+      subDistrictId,
       status: 'pending'
     });
 

@@ -135,7 +135,7 @@ const workerBookingRequestSchema = new mongoose.Schema({
   // ════════════════════════════════════════════════════════════════════════
   dispatchedTo: [{
     workerId:    { type: mongoose.Schema.Types.ObjectId, ref: 'Worker', required: true },
-    status:      { type: String, enum: ['pending', 'accepted', 'rejected', 'withdrawn'], default: 'pending' },
+    status:      { type: String, enum: ['pending', 'accepted', 'rejected', 'withdrawn', 'expired'], default: 'pending' },
     respondedAt: { type: Date, default: null }
   }],
 

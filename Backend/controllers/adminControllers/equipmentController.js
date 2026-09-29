@@ -7,18 +7,24 @@ const { validationResult } = require('express-validator');
  */
 exports.getAllEquipment = async (req, res) => {
   try {
-    const { status, vendorId } = req.query;
+    const { status, vendorId, stateId, districtId, subDistrictId } = req.query;
     const query = {};
     if (status) query.status = status;
     if (vendorId) query.vendorId = vendorId;
+    if (stateId) query.stateId = stateId;
+    if (districtId) query.districtId = districtId;
+    if (subDistrictId) query.subDistrictId = subDistrictId;
 
     const equipment = await VendorEquipment.find(query)
       .populate({ 
         path: 'vendorId', 
-        select: 'name email phone avatar businessName cityId address', 
+        select: 'name email phone avatar businessName cityId address stateId districtId subDistrictId', 
         populate: { path: 'cityId', select: 'name' } 
       })
       .populate('cityIds', 'name')
+      .populate('stateId', 'name code')
+      .populate('districtId', 'name')
+      .populate('subDistrictId', 'name')
       .populate('categoryId', 'title slug')
       .populate('subCategoryIds', 'title')
       .populate('implements.subCategoryId', 'title')

@@ -76,16 +76,21 @@ exports.buildFarmerPaymentSummary = (request, assignments = [], booking = null, 
   );
 
   let durationHours = 1;
+  let diffMinutes = 60;
   if (!isDaily) {
     if (request?.durationMinutes && Number(request.durationMinutes) > 0) {
-      durationHours = Number(request.durationMinutes) / 60;
+      diffMinutes = Number(request.durationMinutes);
+      durationHours = diffMinutes / 60;
     } else if (request?.startTime && request?.endTime) {
       const [sH, sM] = request.startTime.split(':').map(Number);
       const [eH, eM] = request.endTime.split(':').map(Number);
       if (!isNaN(sH) && !isNaN(eH)) {
-        let diffMinutes = (eH * 60 + (eM || 0)) - (sH * 60 + (sM || 0));
-        if (diffMinutes < 0) diffMinutes += 24 * 60;
-        if (diffMinutes > 0) durationHours = diffMinutes / 60;
+        let dm = (eH * 60 + (eM || 0)) - (sH * 60 + (sM || 0));
+        if (dm < 0) dm += 24 * 60;
+        if (dm > 0) {
+          diffMinutes = dm;
+          durationHours = dm / 60;
+        }
       }
     }
   }
@@ -199,7 +204,8 @@ exports.buildFarmerPaymentSummary = (request, assignments = [], booking = null, 
     selectedWorkerCount,
     maxRatePerWorker,
     bookingType: isDaily ? 'DAILY' : 'HOURLY',
-    durationHours: !isDaily ? durationHours : null,
+    durationHours: !isDaily ? Number(durationHours.toFixed(2)) : null,
+    durationMinutes: !isDaily ? diffMinutes : null,
     numberOfDays: isDaily ? days : null,
     workerReserveAmount,
     platformFeeAmount,

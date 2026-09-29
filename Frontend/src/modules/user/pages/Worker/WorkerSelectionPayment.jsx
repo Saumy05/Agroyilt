@@ -173,7 +173,16 @@ const WorkerSelectionPayment = () => {
             {financials.durationMinutes ? (
               <div className="flex justify-between items-center">
                 <span className="text-sm font-medium text-slate-600">Booking Duration</span>
-                <span className="text-sm font-black text-slate-800">{financials.durationMinutes / 60} hour(s)</span>
+                <span className="text-sm font-black text-slate-800">
+                  {(() => {
+                    const totalMins = Number(financials.durationMinutes);
+                    const h = Math.floor(totalMins / 60);
+                    const m = Math.round(totalMins % 60);
+                    if (h > 0 && m > 0) return `${h} hr ${m} min`;
+                    if (h > 0) return `${h} hour${h > 1 ? 's' : ''}`;
+                    return `${m} min${m > 1 ? 's' : ''}`;
+                  })()}
+                </span>
               </div>
             ) : financials.numberOfDays ? (
               <div className="flex justify-between items-center">
@@ -188,7 +197,7 @@ const WorkerSelectionPayment = () => {
                 <span className="text-[11px] text-slate-400 font-mono">
                   {financials.bookingType === 'DAILY'
                     ? `₹${financials.maximumBudget} × ${financials.selectedWorkerCount} × ${financials.numberOfDays || 1} day(s)`
-                    : `₹${financials.maximumBudget} × ${financials.selectedWorkerCount} × ${(financials.durationMinutes || 60) / 60} hr(s)`}
+                    : `₹${financials.maximumBudget} × ${financials.selectedWorkerCount} × ${Number(((financials.durationMinutes || 60) / 60).toFixed(2))} hr(s)`}
                 </span>
               </div>
               <span className="text-sm font-black text-slate-800">₹{financials.maximumWorkerAmount}</span>

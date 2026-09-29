@@ -638,19 +638,25 @@ const FarmerRequestDetail = () => {
 
               // Duration in hours (for hourly booking)
               let durationHours = 1;
+              let diffMinutes = 60;
               if (!isDaily) {
-                if (request.paymentSummary?.durationHours && Number(request.paymentSummary.durationHours) > 0) {
-                  durationHours = Number(request.paymentSummary.durationHours);
-                } else if (request.durationMinutes && Number(request.durationMinutes) > 0) {
-                  durationHours = Number(request.durationMinutes) / 60;
+                if (request.durationMinutes && Number(request.durationMinutes) > 0) {
+                  diffMinutes = Number(request.durationMinutes);
+                  durationHours = diffMinutes / 60;
                 } else if (request.startTime && request.endTime) {
                   const [sH, sM] = request.startTime.split(':').map(Number);
                   const [eH, eM] = request.endTime.split(':').map(Number);
                   if (!isNaN(sH) && !isNaN(eH)) {
-                    let diffMinutes = (eH * 60 + (eM || 0)) - (sH * 60 + (sM || 0));
-                    if (diffMinutes < 0) diffMinutes += 24 * 60;
-                    if (diffMinutes > 0) durationHours = diffMinutes / 60;
+                    let dm = (eH * 60 + (eM || 0)) - (sH * 60 + (sM || 0));
+                    if (dm < 0) dm += 24 * 60;
+                    if (dm > 0) {
+                      diffMinutes = dm;
+                      durationHours = dm / 60;
+                    }
                   }
+                } else if (request.paymentSummary?.durationHours && Number(request.paymentSummary.durationHours) > 0) {
+                  durationHours = Number(request.paymentSummary.durationHours);
+                  diffMinutes = Math.round(durationHours * 60);
                 }
               }
               const numberOfDays = isDaily
@@ -676,9 +682,25 @@ const FarmerRequestDetail = () => {
                 : (reserveAmount + platformFee);
 
               const rateUnitDisplay = isDaily ? '/day' : '/hourly';
+
+              const formatDurationText = (mins, hrs) => {
+                if (mins && mins > 0) {
+                  const h = Math.floor(mins / 60);
+                  const m = Math.round(mins % 60);
+                  if (h > 0 && m > 0) return `${h} hr ${m} min`;
+                  if (h > 0) return `${h} hour${h > 1 ? 's' : ''}`;
+                  return `${m} min${m > 1 ? 's' : ''}`;
+                }
+                const roundedHrs = Number(hrs.toFixed(2));
+                return `${roundedHrs} hour${roundedHrs !== 1 ? 's' : ''}`;
+              };
+
+              const formattedDuration = formatDurationText(diffMinutes, durationHours);
+              const cleanDurationHours = Number(durationHours.toFixed(2));
+
               const calculationFormulaText = isDaily
                 ? `₹${ratePerWorker.toLocaleString('en-IN')} × ${effectiveWorkerCount} worker${effectiveWorkerCount !== 1 ? 's' : ''} × ${numberOfDays} day${numberOfDays !== 1 ? 's' : ''}`
-                : `₹${ratePerWorker.toLocaleString('en-IN')} × ${effectiveWorkerCount} worker${effectiveWorkerCount !== 1 ? 's' : ''} × ${durationHours} hr${durationHours !== 1 ? 's' : ''}`;
+                : `₹${ratePerWorker.toLocaleString('en-IN')} × ${effectiveWorkerCount} worker${effectiveWorkerCount !== 1 ? 's' : ''} × ${cleanDurationHours} hr${cleanDurationHours !== 1 ? 's' : ''}`;
 
               return (
                 <div className="space-y-3 text-sm">
@@ -701,7 +723,7 @@ const FarmerRequestDetail = () => {
                     <div className="flex justify-between items-center text-slate-600">
                       <span className="font-medium">Booking Duration</span>
                       <span className="font-bold text-slate-900">
-                        {durationHours} hour{durationHours !== 1 ? 's' : ''}
+                        {formattedDuration}
                         <span className="text-xs text-slate-400 font-normal ml-1">({request.startTime} - {request.endTime})</span>
                       </span>
                     </div>

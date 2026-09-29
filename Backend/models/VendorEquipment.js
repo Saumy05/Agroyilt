@@ -114,6 +114,31 @@ const vendorEquipmentSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  // Geographic Scope Architecture
+  scope: {
+    type: String,
+    enum: ['GLOBAL_INDIA', 'STATE', 'DISTRICT', 'SUB_DISTRICT'],
+    default: 'DISTRICT',
+    index: true
+  },
+  stateId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'State',
+    default: null,
+    index: true
+  },
+  districtId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'District',
+    default: null,
+    index: true
+  },
+  subDistrictId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'SubDistrict',
+    default: null,
+    index: true
+  },
   // Machine Verification & Status
   status: {
     type: String,

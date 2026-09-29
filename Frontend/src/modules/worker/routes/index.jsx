@@ -66,6 +66,66 @@ const LoadingFallback = () => (
   </div>
 );
 
+// Canonical date/time expiry check using Indian Standard Time (IST)
+const isBookingDateExpired = (data) => {
+  if (!data) return false;
+  if (data.isExpired || data.status === 'expired' || data.status === 'cancelled' || data.status === 'completed') {
+    return true;
+  }
+  try {
+    const isDaily = Boolean(data.startDate || data.bookingType === 'DAILY' || data.rateUnit === 'daily');
+    const now = Date.now();
+
+    if (isDaily) {
+      const dateSource = data.endDate || data.startDate;
+      if (dateSource) {
+        const d = new Date(dateSource);
+        if (!isNaN(d.getTime())) {
+          const istStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(d);
+          const expiryTime = new Date(`${istStr}T23:59:59.999+05:30`).getTime();
+          if (now >= expiryTime) return true;
+        }
+      }
+    } else {
+      const dateSource = data.scheduledDate || data.date || data.startDate;
+      if (dateSource) {
+        const d = new Date(dateSource);
+        if (!isNaN(d.getTime())) {
+          const istStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(d);
+          let targetDateStr = istStr;
+          let targetHours = 23;
+          let targetMinutes = 59;
+
+          if (data.endTime && typeof data.endTime === 'string') {
+            const match = data.endTime.trim().match(/^(\d{1,2}):(\d{2})/);
+            if (match) {
+              targetHours = parseInt(match[1], 10);
+              targetMinutes = parseInt(match[2], 10);
+              if (data.startTime && typeof data.startTime === 'string') {
+                const sMatch = data.startTime.trim().match(/^(\d{1,2}):(\d{2})/);
+                if (sMatch) {
+                  const sMins = parseInt(sMatch[1], 10) * 60 + parseInt(sMatch[2], 10);
+                  const eMins = targetHours * 60 + targetMinutes;
+                  if (eMins < sMins) {
+                    const nextDay = new Date(`${istStr}T12:00:00+05:30`);
+                    nextDay.setDate(nextDay.getDate() + 1);
+                    targetDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(nextDay);
+                  }
+                }
+              }
+            }
+          }
+          const hh = String(targetHours).padStart(2, '0');
+          const mm = String(targetMinutes).padStart(2, '0');
+          const scheduledExpiryTime = new Date(`${targetDateStr}T${hh}:${mm}:00+05:30`).getTime();
+          if (now >= scheduledExpiryTime) return true;
+        }
+      }
+    }
+  } catch (e) {}
+  return false;
+};
+
 const WorkerRoutes = () => {
   const location = useLocation();
   const [incomingRequestData, setIncomingRequestData] = useState(null);
@@ -77,6 +137,8 @@ const WorkerRoutes = () => {
     const isTeam = raw.isTeamInvite === true ||
                    raw.requestType === 'TEAM_MEMBER_INVITATION' ||
                    raw.requestType === 'group_member_request';
+
+    const isExpired = isBookingDateExpired(raw);
 
     return {
       requestId:       raw.requestId || raw._id || raw.id,
@@ -102,6 +164,7 @@ const WorkerRoutes = () => {
       farmerOfferedRate: raw.farmerOfferedRate || raw.minRate || 0,
       rateUnit:        raw.rateUnit || raw.job?.rateUnit || 'daily',
       isFarmerBroadcast: raw.isFarmerBroadcast !== undefined ? raw.isFarmerBroadcast : !isTeam,
+      isExpired:       isExpired,
       // Team invite fields
       requestType:     isTeam ? 'TEAM_MEMBER_INVITATION' : (raw.requestType || null),
       isTeamInvite:    isTeam,
@@ -123,20 +186,22 @@ const WorkerRoutes = () => {
       ]);
 
       // Priority 1: Team Member Invitations (Accept / Decline Card)
-      const invites = memberInvitesRes?.data || [];
-      if (Array.isArray(invites) && invites.length > 0) {
+      const rawInvites = memberInvitesRes?.data || [];
+      const invites = Array.isArray(rawInvites) ? rawInvites.filter(i => !isBookingDateExpired(i)) : [];
+      if (invites.length > 0) {
         const normalized = normalizeRequestData(invites[0]);
-        if (normalized?.requestId) {
+        if (normalized?.requestId && !normalized.isExpired) {
           setIncomingRequestData(normalized);
           return;
         }
       }
 
       // Priority 2: Regular Farmer Requests
-      const requests = farmerRequestsRes?.data || [];
-      if (Array.isArray(requests) && requests.length > 0) {
+      const rawRequests = farmerRequestsRes?.data || [];
+      const requests = Array.isArray(rawRequests) ? rawRequests.filter(r => !isBookingDateExpired(r)) : [];
+      if (requests.length > 0) {
         const normalized = normalizeRequestData(requests[0]);
-        if (normalized?.requestId && normalized?.workTitle) {
+        if (normalized?.requestId && normalized?.workTitle && !normalized.isExpired) {
           setIncomingRequestData(normalized);
         }
       }
@@ -151,10 +216,14 @@ const WorkerRoutes = () => {
     const handleIncomingBooking = (e) => {
       console.log('[WorkerRoutes] Incoming booking request received');
       const raw = e.detail?.data || e.detail;
+      if (isBookingDateExpired(raw)) {
+        console.log('[WorkerRoutes] Suppressing alert for already expired booking');
+        return;
+      }
       const normalized = normalizeRequestData(raw);
 
       // If socket payload has enough data, use it directly
-      if (normalized?.requestId && normalized?.workTitle) {
+      if (normalized?.requestId && normalized?.workTitle && !normalized.isExpired) {
         setIncomingRequestData(normalized);
       } else {
         // Socket payload was incomplete — fall back to API

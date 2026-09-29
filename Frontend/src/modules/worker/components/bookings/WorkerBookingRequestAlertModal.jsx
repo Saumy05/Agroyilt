@@ -8,6 +8,68 @@ import workerRequestService from '../../../../services/workerRequestService';
 import api from '../../../../services/api';
 import { toastManager } from '../../../../utils/toastManager';
 
+// Canonical date/time expiry check using Indian Standard Time (IST)
+const isPastScheduledTime = (data) => {
+  if (!data) return false;
+  if (data.isExpired || data.status === 'expired' || data.status === 'cancelled' || data.status === 'completed') {
+    return true;
+  }
+  try {
+    const isDaily = Boolean(data.startDate || data.bookingType === 'DAILY' || data.rateUnit === 'daily');
+    const now = Date.now();
+
+    if (isDaily) {
+      const dateSource = data.endDate || data.startDate;
+      if (dateSource) {
+        const d = new Date(dateSource);
+        if (!isNaN(d.getTime())) {
+          const istStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(d);
+          const expiryTime = new Date(`${istStr}T23:59:59.999+05:30`).getTime();
+          if (now >= expiryTime) return true;
+        }
+      }
+    } else {
+      const dateSource = data.scheduledDate || data.date || data.startDate;
+      if (dateSource) {
+        const d = new Date(dateSource);
+        if (!isNaN(d.getTime())) {
+          const istStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(d);
+          let targetDateStr = istStr;
+          let targetHours = 23;
+          let targetMinutes = 59;
+
+          if (data.endTime && typeof data.endTime === 'string') {
+            const match = data.endTime.trim().match(/^(\d{1,2}):(\d{2})/);
+            if (match) {
+              targetHours = parseInt(match[1], 10);
+              targetMinutes = parseInt(match[2], 10);
+              if (data.startTime && typeof data.startTime === 'string') {
+                const sMatch = data.startTime.trim().match(/^(\d{1,2}):(\d{2})/);
+                if (sMatch) {
+                  const sMins = parseInt(sMatch[1], 10) * 60 + parseInt(sMatch[2], 10);
+                  const eMins = targetHours * 60 + targetMinutes;
+                  if (eMins < sMins) {
+                    const nextDay = new Date(`${istStr}T12:00:00+05:30`);
+                    nextDay.setDate(nextDay.getDate() + 1);
+                    targetDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(nextDay);
+                  }
+                }
+              }
+            }
+          }
+          const hh = String(targetHours).padStart(2, '0');
+          const mm = String(targetMinutes).padStart(2, '0');
+          const scheduledExpiryTime = new Date(`${targetDateStr}T${hh}:${mm}:00+05:30`).getTime();
+          if (now >= scheduledExpiryTime) return true;
+        }
+      }
+    }
+  } catch (e) {
+    // Fallback on error
+  }
+  return false;
+};
+
 const WorkerBookingRequestAlertModal = ({ isOpen, requestData, onClose, onRequestResponded }) => {
   const [timeLeft, setTimeLeft] = useState(60);
   const [loadingAction, setLoadingAction] = useState(null);
@@ -16,6 +78,8 @@ const WorkerBookingRequestAlertModal = ({ isOpen, requestData, onClose, onReques
   const [teamMembers, setTeamMembers] = useState([]);
   const [selectedMemberIds, setSelectedMemberIds] = useState([]);
   const [isTeamLeader, setIsTeamLeader] = useState(false);
+
+  const isExpired = isPastScheduledTime(requestData);
 
   // isTeamInvite = this worker is a TEAM MEMBER receiving an invitation from their leader
   const isTeamInvite = Boolean(
@@ -49,9 +113,13 @@ const WorkerBookingRequestAlertModal = ({ isOpen, requestData, onClose, onReques
         return;
       }
 
-      try {
-        playAlertRing(true);
-      } catch (e) {}
+      if (!isExpired) {
+        try {
+          playAlertRing(true);
+        } catch (e) {}
+      } else {
+        stopAlertRing();
+      }
       setTimeLeft(60);
       setOfferedRate(requestData.minRate || requestData.farmerOfferedRate || 0);
 
@@ -86,26 +154,29 @@ const WorkerBookingRequestAlertModal = ({ isOpen, requestData, onClose, onReques
         loadTeamData();
       }
 
-      const timer = setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev <= 1) {
-            clearInterval(timer);
-            handleTimeout();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
+      let timer = null;
+      if (!isExpired) {
+        timer = setInterval(() => {
+          setTimeLeft((prev) => {
+            if (prev <= 1) {
+              clearInterval(timer);
+              handleTimeout();
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+      }
 
       return () => {
-        clearInterval(timer);
+        if (timer) clearInterval(timer);
         stopAlertRing();
       };
     } else {
       stopAlertRing();
     }
     return () => stopAlertRing();
-  }, [isOpen, requestData, neededMembersCount, isTeamInvite]);
+  }, [isOpen, requestData, neededMembersCount, isTeamInvite, isExpired]);
 
   const targetRequestId = requestData?.requestId || requestData?._id || requestData?.id;
 
@@ -220,7 +291,18 @@ const WorkerBookingRequestAlertModal = ({ isOpen, requestData, onClose, onReques
         toastManager.error(res.message || 'Failed to accept request');
       }
     } catch (error) {
-      toastManager.error(error?.response?.data?.message || error?.message || 'Failed to accept request');
+      const errStatus = error?.response?.status;
+      const errMsg = error?.response?.data?.message || error?.message || 'Failed to accept request';
+      toastManager.error(errMsg);
+      if (errStatus === 410 || errStatus === 409 ||
+          errMsg.toLowerCase().includes('expired') ||
+          errMsg.toLowerCase().includes('already') ||
+          errMsg.toLowerCase().includes('cancelled')) {
+        stopAlertRing();
+        onRequestResponded && onRequestResponded();
+        window.dispatchEvent(new Event('workerJobsUpdated'));
+        onClose();
+      }
     } finally {
       setLoadingAction(null);
     }
@@ -244,17 +326,30 @@ const WorkerBookingRequestAlertModal = ({ isOpen, requestData, onClose, onReques
           : await workerService.respondToRequest(targetRequestId, 'reject');
       }
 
-      if (res.success) {
+      stopAlertRing();
+      toastManager.success(isTeamInvite ? 'Team Job Declined' : 'Request Declined');
+      onRequestResponded && onRequestResponded();
+      window.dispatchEvent(new Event('workerJobsUpdated'));
+      onClose();
+    } catch (error) {
+      const errStatus = error?.response?.status;
+      const errMsg = error?.response?.data?.message || error?.message || 'Failed to decline request';
+
+      // If request has expired, was already resolved, or no longer active:
+      // Cleanly dismiss the modal, stop ringtone, and update UI state
+      if (errStatus === 410 || errStatus === 409 || errStatus === 404 ||
+          errMsg.toLowerCase().includes('expired') ||
+          errMsg.toLowerCase().includes('already') ||
+          errMsg.toLowerCase().includes('not found') ||
+          errMsg.toLowerCase().includes('cancelled')) {
         stopAlertRing();
-        toastManager.success(isTeamInvite ? 'Team Job Declined' : 'Request Declined');
+        toastManager.success('Request has been dismissed.');
         onRequestResponded && onRequestResponded();
         window.dispatchEvent(new Event('workerJobsUpdated'));
         onClose();
       } else {
-        toastManager.error(res.message || 'Failed to decline request');
+        toastManager.error(errMsg);
       }
-    } catch (error) {
-      toastManager.error(error?.response?.data?.message || error?.message || 'Failed to decline request');
     } finally {
       setLoadingAction(null);
     }
@@ -287,10 +382,24 @@ const WorkerBookingRequestAlertModal = ({ isOpen, requestData, onClose, onReques
         >
           {/* ── HEADER SECTION ── */}
           <div className={`relative overflow-hidden p-6 flex flex-col items-center text-center ${
-            isTeamInvite 
-              ? 'bg-gradient-to-br from-indigo-600 via-blue-600 to-indigo-800' 
-              : 'bg-gradient-to-br from-emerald-600 via-teal-600 to-emerald-700'
+            isExpired
+              ? 'bg-gradient-to-br from-slate-600 via-gray-700 to-slate-800'
+              : isTeamInvite 
+                ? 'bg-gradient-to-br from-indigo-600 via-blue-600 to-indigo-800' 
+                : 'bg-gradient-to-br from-emerald-600 via-teal-600 to-emerald-700'
           }`}>
+            {/* Top Right Close Button */}
+            <button
+              onClick={() => {
+                stopAlertRing();
+                onClose();
+              }}
+              className="absolute top-4 right-4 z-20 w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-md flex items-center justify-center text-white transition-all active:scale-95"
+              aria-label="Close"
+            >
+              <FiX className="w-4 h-4" />
+            </button>
+
             {/* Background Glows */}
             <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl pointer-events-none" />
             <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-white/10 rounded-full blur-xl pointer-events-none" />
@@ -298,24 +407,30 @@ const WorkerBookingRequestAlertModal = ({ isOpen, requestData, onClose, onReques
             {/* Icon */}
             <div className="relative mb-3">
               <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white border border-white/30 shadow-inner">
-                {isTeamInvite ? (
+                {isExpired ? (
+                  <FiClock className="w-8 h-8 text-white" />
+                ) : isTeamInvite ? (
                   <FiUsers className="w-8 h-8 animate-pulse text-white" />
                 ) : (
                   <FiBell className="w-8 h-8 animate-bounce text-white" />
                 )}
               </div>
-              <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-400 rounded-full border-2 border-white animate-pulse" />
+              <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${isExpired ? 'bg-gray-400' : 'bg-emerald-400 animate-pulse'}`} />
             </div>
 
             <h2 className="relative z-10 text-white text-2xl font-black tracking-tight">
-              {isTeamInvite 
-                ? 'Team Job Invitation!' 
-                : (isGroupReq && isTeamLeader ? 'Team Job Request!' : 'New Booking Request!')}
+              {isExpired
+                ? 'Booking Request Expired'
+                : isTeamInvite 
+                  ? 'Team Job Invitation!' 
+                  : (isGroupReq && isTeamLeader ? 'Team Job Request!' : 'New Booking Request!')}
             </h2>
             <div className="relative z-10 px-4 py-1 mt-1 bg-white/20 backdrop-blur-md rounded-full border border-white/10 text-[10px] font-bold text-white uppercase tracking-widest">
-              {isTeamInvite 
-                ? `Invited by ${requestData.teamLeader?.name || 'Team Leader'}` 
-                : (isGroupReq ? `${requestData.requiredWorkers || 4} Workers Needed` : 'Action Required')}
+              {isExpired
+                ? 'EXPIRED / CLOSED'
+                : isTeamInvite 
+                  ? `Invited by ${requestData.teamLeader?.name || 'Team Leader'}` 
+                  : (isGroupReq ? `${requestData.requiredWorkers || 4} Workers Needed` : 'Action Required')}
             </div>
           </div>
 
@@ -602,63 +717,109 @@ const WorkerBookingRequestAlertModal = ({ isOpen, requestData, onClose, onReques
               </div>
             )}
 
-            {/* Timer Section */}
-            <div className="flex items-center justify-between mt-auto pt-2">
-              <div className="flex items-center gap-3">
-                <div className="relative w-10 h-10 flex items-center justify-center">
-                  <svg className="w-full h-full transform -rotate-90">
-                    <circle cx="20" cy="20" r={radius} fill="none" stroke="#f1f5f9" strokeWidth="4" />
-                    <circle
-                      cx="20"
-                      cy="20"
-                      r={radius}
-                      fill="none"
-                      stroke={timeLeft > 15 ? (isTeamInvite ? '#4f46e5' : '#10b981') : '#ef4444'}
-                      strokeWidth="4"
-                      strokeDasharray={circumference}
-                      strokeDashoffset={dashoffset}
-                      className="transition-all duration-1000 ease-linear"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                  <span className={`absolute text-[11px] font-black ${timeLeft > 15 ? (isTeamInvite ? 'text-indigo-600' : 'text-emerald-500') : 'text-red-500 animate-pulse'}`}>
-                    {timeLeft}s
-                  </span>
-                </div>
-                <div>
-                  <p className="text-xs font-black text-gray-800">Act quickly!</p>
-                  <p className="text-[9px] font-bold text-gray-400">Request will expire soon</p>
+            {/* Expired notice banner */}
+            {isExpired && (
+              <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-center my-3">
+                <p className="text-xs font-black text-red-700">This booking request has expired.</p>
+                <p className="text-[10px] font-bold text-red-500 mt-1">The scheduled booking window has already passed and this request is no longer actionable.</p>
+              </div>
+            )}
+
+            {/* Timer Section - only shown for active non-expired requests */}
+            {!isExpired && (
+              <div className="flex items-center justify-between mt-auto pt-2">
+                <div className="flex items-center gap-3">
+                  <div className="relative w-10 h-10 flex items-center justify-center">
+                    <svg className="w-full h-full transform -rotate-90">
+                      <circle cx="20" cy="20" r={radius} fill="none" stroke="#f1f5f9" strokeWidth="4" />
+                      <circle
+                        cx="20"
+                        cy="20"
+                        r={radius}
+                        fill="none"
+                        stroke={timeLeft > 15 ? (isTeamInvite ? '#4f46e5' : '#10b981') : '#ef4444'}
+                        strokeWidth="4"
+                        strokeDasharray={circumference}
+                        strokeDashoffset={dashoffset}
+                        className="transition-all duration-1000 ease-linear"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                    <span className={`absolute text-[11px] font-black ${timeLeft > 15 ? (isTeamInvite ? 'text-indigo-600' : 'text-emerald-500') : 'text-red-500 animate-pulse'}`}>
+                      {timeLeft}s
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-xs font-black text-gray-800">Act quickly!</p>
+                    <p className="text-[9px] font-bold text-gray-400">Request will expire soon</p>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* ── ACTION BUTTONS ── */}
           <div className="px-6 pb-6 pt-2 bg-white flex gap-3 shrink-0">
-            <button
-              onClick={showRateInput ? () => setShowRateInput(false) : handleReject}
-              disabled={loadingAction !== null}
-              className={`flex-1 py-3.5 bg-gray-50 text-gray-600 rounded-2xl font-black text-xs active:scale-95 transition-all border border-gray-200 hover:bg-gray-100 ${loadingAction === 'reject' ? 'opacity-50' : ''}`}
-            >
-              {showRateInput ? 'Back' : (loadingAction === 'reject' ? 'Declining...' : 'Decline')}
-            </button>
-            <button
-              onClick={handleAccept}
-              disabled={loadingAction !== null}
-              className={`flex-[2] py-3.5 text-white rounded-2xl font-black text-xs active:scale-95 transition-all shadow-lg ${
-                isTeamInvite 
-                  ? 'bg-gradient-to-r from-indigo-600 to-blue-600 shadow-indigo-200' 
-                  : 'bg-gradient-to-r from-emerald-500 to-teal-500 shadow-emerald-200'
-              } ${loadingAction === 'accept' ? 'opacity-50' : ''}`}
-            >
-              {isTeamInvite ? (
-                loadingAction === 'accept' ? 'Accepting...' : '✓ Accept Team Job'
-              ) : showRateInput ? (
-                loadingAction === 'accept' ? 'Submitting...' : (isGroupReq && isTeamLeader ? `Submit Team Proposal (${selectedMemberIds.length + 1} Workers)` : 'Submit Rate')
-              ) : (
-                loadingAction === 'accept' ? 'Accepting...' : (isGroupReq && isTeamLeader ? 'Configure Team & Accept' : 'Accept Job')
-              )}
-            </button>
+            {isExpired ? (
+              <button
+                onClick={() => {
+                  stopAlertRing();
+                  onClose();
+                }}
+                className="w-full py-3.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-2xl font-black text-xs active:scale-95 transition-all border border-gray-300"
+              >
+                Dismiss Alert
+              </button>
+            ) : showRateInput ? (
+              <>
+                <button
+                  onClick={handleReject}
+                  disabled={loadingAction !== null}
+                  className={`px-4 py-3.5 bg-red-50 text-red-600 rounded-2xl font-black text-xs active:scale-95 transition-all border border-red-200 hover:bg-red-100 ${loadingAction === 'reject' ? 'opacity-50' : ''}`}
+                >
+                  {loadingAction === 'reject' ? 'Declining...' : 'Decline'}
+                </button>
+                <button
+                  onClick={() => setShowRateInput(false)}
+                  disabled={loadingAction !== null}
+                  className="px-4 py-3.5 bg-gray-50 text-gray-600 rounded-2xl font-black text-xs active:scale-95 transition-all border border-gray-200 hover:bg-gray-100"
+                >
+                  Back
+                </button>
+                <button
+                  onClick={handleAccept}
+                  disabled={loadingAction !== null}
+                  className={`flex-1 py-3.5 text-white rounded-2xl font-black text-xs active:scale-95 transition-all shadow-lg bg-gradient-to-r from-emerald-500 to-teal-500 shadow-emerald-200 ${loadingAction === 'accept' ? 'opacity-50' : ''}`}
+                >
+                  {loadingAction === 'accept' ? 'Submitting...' : (isGroupReq && isTeamLeader ? `Submit (${selectedMemberIds.length + 1} Workers)` : 'Submit Rate')}
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={handleReject}
+                  disabled={loadingAction !== null}
+                  className={`flex-1 py-3.5 bg-gray-50 text-gray-600 rounded-2xl font-black text-xs active:scale-95 transition-all border border-gray-200 hover:bg-gray-100 ${loadingAction === 'reject' ? 'opacity-50' : ''}`}
+                >
+                  {loadingAction === 'reject' ? 'Declining...' : 'Decline'}
+                </button>
+                <button
+                  onClick={handleAccept}
+                  disabled={loadingAction !== null}
+                  className={`flex-[2] py-3.5 text-white rounded-2xl font-black text-xs active:scale-95 transition-all shadow-lg ${
+                    isTeamInvite 
+                      ? 'bg-gradient-to-r from-indigo-600 to-blue-600 shadow-indigo-200' 
+                      : 'bg-gradient-to-r from-emerald-500 to-teal-500 shadow-emerald-200'
+                  } ${loadingAction === 'accept' ? 'opacity-50' : ''}`}
+                >
+                  {isTeamInvite ? (
+                    loadingAction === 'accept' ? 'Accepting...' : '✓ Accept Team Job'
+                  ) : (
+                    loadingAction === 'accept' ? 'Accepting...' : (isGroupReq && isTeamLeader ? 'Configure Team & Accept' : 'Accept Job')
+                  )}
+                </button>
+              </>
+            )}
           </div>
         </motion.div>
       </div>

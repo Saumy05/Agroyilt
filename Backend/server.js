@@ -55,6 +55,10 @@ startBookingReminderScheduler();
 const { startRequirementScheduler } = require('./services/requirementScheduler');
 startRequirementScheduler();
 
+// Initialize Worker Booking Expiry Scheduler (Worker request alerts & auto-expiry)
+const { startWorkerBookingExpiryScheduler } = require('./services/workerBookingExpiryService');
+startWorkerBookingExpiryScheduler();
+
 // Initialize Express app
 const app = express();
 app.set('trust proxy', 1);
@@ -74,7 +78,6 @@ const isOriginAllowed = (origin) => {
     'http://127.0.0.1:5173',
     'https://agroyilt.com',
     'https://www.agroyilt.com',
-    'https://agroyilt.vercel.app',
     process.env.FRONTEND_URL,
     process.env.CLIENT_URL,
     process.env.CORS_ORIGIN

@@ -26,6 +26,31 @@ const serviceSchema = new mongoose.Schema({
     ref: 'Category',
     index: true
   },
+  // Geographic Scope Architecture
+  scope: {
+    type: String,
+    enum: ['GLOBAL_INDIA', 'STATE', 'DISTRICT', 'SUB_DISTRICT'],
+    default: 'GLOBAL_INDIA',
+    index: true
+  },
+  stateId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'State',
+    default: null,
+    index: true
+  },
+  districtId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'District',
+    default: null,
+    index: true
+  },
+  subDistrictId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'SubDistrict',
+    default: null,
+    index: true
+  },
   title: {
     type: String,
     required: [true, 'Please provide a service title'],

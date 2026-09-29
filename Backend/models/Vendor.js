@@ -204,6 +204,24 @@ const vendorSchema = new mongoose.Schema({
       index: true
     },
     state: String,
+    stateId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'State',
+      default: null,
+      index: true
+    },
+    districtId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'District',
+      default: null,
+      index: true
+    },
+    subDistrictId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'SubDistrict',
+      default: null,
+      index: true
+    },
     pincode: String,
     landmark: String,
     lat: {
@@ -373,7 +391,17 @@ const vendorSchema = new mongoose.Schema({
     updatedAt: { type: Date, default: Date.now }
   }],
 
-  // ── Geographic Scope (for Admin filtering by districtId/subDistrictId) ─────
+  // ── Geographic Scope (for Admin filtering by stateId/districtId/subDistrictId) ─────
+  stateId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'State',
+    default: null,
+    index: true
+  },
+  stateName: {
+    type: String,
+    default: null
+  },
   districtId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'District',
