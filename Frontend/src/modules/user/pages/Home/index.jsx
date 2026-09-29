@@ -56,6 +56,8 @@ const Home = () => {
   const { cartCount, addToCart } = useCart();
   const {
     selectedState,
+    selectedDistrict,
+    selectedSubDistrict,
     states,
     selectState,
     isGlobalIndia,
@@ -223,11 +225,14 @@ const Home = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        // Pass no cityId — new system uses GLOBAL_INDIA by default
-        // The backend now serves all GLOBAL_INDIA-scoped content
+        const geoParams = {};
+        if (selectedState?._id) geoParams.stateId = selectedState._id;
+        if (selectedDistrict?._id) geoParams.districtId = selectedDistrict._id;
+        if (selectedSubDistrict?._id) geoParams.subDistrictId = selectedSubDistrict._id;
+
         const [categoriesRes, homeContentRes] = await Promise.all([
-          publicCatalogService.getCategories(null),
-          publicCatalogService.getHomeContent(null)
+          publicCatalogService.getCategories(geoParams),
+          publicCatalogService.getHomeContent(geoParams)
         ]);
 
         let hasData = false;
@@ -261,16 +266,15 @@ const Home = () => {
         if (!hasData && categoriesRes.categories?.length === 0 && !homeContentRes.homeContent) {
           // If no data, maybe we should still stop loading?
         }
-
-        setLoading(false);
       } catch (error) {
-        // Silent fail
+        console.error('Failed to fetch home data:', error);
+      } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, [currentCity, cityLoading]);
+  }, [selectedState, selectedDistrict, selectedSubDistrict, geoLoading]);
   // Open category modal from navigation state (e.g. from Cart 'Add Services')
   useEffect(() => {
     if (!loading && categories.length > 0 && (location.state?.openCategoryId || location.state?.openCategoryName)) {

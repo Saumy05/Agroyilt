@@ -1,4 +1,4 @@
-﻿import api, { apiCache } from './api';
+import api, { apiCache } from './api';
 import { uploadToCloudinary } from '../utils/cloudinaryUpload';
 
 /**
@@ -210,10 +210,13 @@ export const homeContentService = {
 export const publicCatalogService = {
   // Get all active categories (cached for 5 minutes)
   getCategories: async (params = {}) => {
-    // Legacy support for passing cityId directly
-    const normalizedParams = typeof params === 'string' ? { cityId: params } : params;
+    // Legacy support for passing cityId directly or null
+    const normalizedParams = typeof params === 'string' ? { cityId: params } : (params || {});
     
     const queryParams = new URLSearchParams();
+    if (normalizedParams.stateId) queryParams.append('stateId', normalizedParams.stateId);
+    if (normalizedParams.districtId) queryParams.append('districtId', normalizedParams.districtId);
+    if (normalizedParams.subDistrictId) queryParams.append('subDistrictId', normalizedParams.subDistrictId);
     if (normalizedParams.cityId) queryParams.append('cityId', normalizedParams.cityId);
     if (normalizedParams.type) queryParams.append('type', normalizedParams.type);
     
@@ -225,11 +228,15 @@ export const publicCatalogService = {
 
   // Get all active brands (formerly services)
   getBrands: async (params = {}) => {
+    const normalizedParams = typeof params === 'string' ? { categoryId: params } : (params || {});
     const queryParams = new URLSearchParams();
-    if (params.categoryId) queryParams.append('categoryId', params.categoryId);
-    if (params.categorySlug) queryParams.append('categorySlug', params.categorySlug);
-    if (params.search) queryParams.append('search', params.search);
-    if (params.cityId) queryParams.append('cityId', params.cityId);
+    if (normalizedParams.categoryId) queryParams.append('categoryId', normalizedParams.categoryId);
+    if (normalizedParams.categorySlug) queryParams.append('categorySlug', normalizedParams.categorySlug);
+    if (normalizedParams.search) queryParams.append('search', normalizedParams.search);
+    if (normalizedParams.stateId) queryParams.append('stateId', normalizedParams.stateId);
+    if (normalizedParams.districtId) queryParams.append('districtId', normalizedParams.districtId);
+    if (normalizedParams.subDistrictId) queryParams.append('subDistrictId', normalizedParams.subDistrictId);
+    if (normalizedParams.cityId) queryParams.append('cityId', normalizedParams.cityId);
 
     const cacheKey = `public:brands:${queryParams.toString()}`;
     const cached = apiCache.get(cacheKey);
@@ -244,14 +251,17 @@ export const publicCatalogService = {
 
   // Alias for backward compatibility if needed, but preferable to use getBrands
   getServices: async (params = {}) => {
+    const normalizedParams = params || {};
     // New Service model endpoint
     const queryParams = new URLSearchParams();
-    if (params.brandId) queryParams.append('brandId', params.brandId);
-    if (params.brandSlug) queryParams.append('brandSlug', params.brandSlug);
-    if (params.categoryId) queryParams.append('categoryId', params.categoryId);
-    if (params.parentSourceId) queryParams.append('parentSourceId', params.parentSourceId);
-    if (params.pricing_context) queryParams.append('pricing_context', params.pricing_context);
-    if (params.search) queryParams.append('search', params.search);
+    if (normalizedParams.brandId) queryParams.append('brandId', normalizedParams.brandId);
+    if (normalizedParams.brandSlug) queryParams.append('brandSlug', normalizedParams.brandSlug);
+    if (normalizedParams.categoryId) queryParams.append('categoryId', normalizedParams.categoryId);
+    if (normalizedParams.parentSourceId) queryParams.append('parentSourceId', normalizedParams.parentSourceId);
+    if (normalizedParams.pricing_context) queryParams.append('pricing_context', normalizedParams.pricing_context);
+    if (normalizedParams.stateId) queryParams.append('stateId', normalizedParams.stateId);
+    if (normalizedParams.districtId) queryParams.append('districtId', normalizedParams.districtId);
+    if (normalizedParams.search) queryParams.append('search', normalizedParams.search);
 
     const cacheKey = `public:services:${queryParams.toString()}`;
     const cached = apiCache.get(cacheKey);
@@ -279,12 +289,18 @@ export const publicCatalogService = {
   },
 
   // Get home content (cached for 2 minutes)
-  getHomeContent: async (cityId) => {
-    const cacheKey = `public:homeContent:${cityId || 'default'}`;
+  getHomeContent: async (params = {}) => {
+    const normalizedParams = typeof params === 'string' ? { cityId: params } : (params || {});
+    const queryParams = new URLSearchParams();
+    if (normalizedParams.stateId) queryParams.append('stateId', normalizedParams.stateId);
+    if (normalizedParams.districtId) queryParams.append('districtId', normalizedParams.districtId);
+    if (normalizedParams.cityId) queryParams.append('cityId', normalizedParams.cityId);
+
+    const query = queryParams.toString() ? `?${queryParams.toString()}` : '';
+    const cacheKey = `public:homeContent:${queryParams.toString() || 'default'}`;
     const cached = apiCache.get(cacheKey);
     if (cached) return cached;
 
-    const query = cityId ? `?cityId=${cityId}` : '';
     const response = await api.get(`/public/home-content${query}`);
     if (response.data.success) {
       apiCache.set(cacheKey, response.data, 120); // 2 minutes
