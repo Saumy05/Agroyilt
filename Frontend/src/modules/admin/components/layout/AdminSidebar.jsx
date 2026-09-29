@@ -23,6 +23,7 @@ import {
   FiTruck,
   FiGift,
   FiShield,
+  FiMapPin,
 } from "react-icons/fi";
 import adminMenu from "../../config/adminMenu.json";
 import dashboardService from "../../services/dashboardService";
