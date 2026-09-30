@@ -8,11 +8,13 @@ import Header from '../../components/layout/Header';
 import BottomNav from '../../components/layout/BottomNav';
 import workerService from '../../../../services/workerService';
 import { registerFCMToken, removeFCMToken } from '../../../../services/pushNotificationService';
-import authStorage from '../../../../utils/authStorage';
 import BankDetailsSection from '../../../../components/common/BankDetailsSection';
+import LogoutModal from '../../../../components/common/LogoutModal';
 
 const Settings = () => {
   const navigate = useNavigate();
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [settings, setSettings] = useState({
     notifications: true,
     soundAlerts: true,
@@ -114,19 +116,21 @@ const Settings = () => {
   };
 
   const handleLogout = async () => {
-    if (window.confirm('Are you sure you want to logout?')) {
-      try {
-        await workerAuthService.logout();
-        toastManager.success('Logged out successfully');
-        navigate('/worker/login');
-      } catch (error) {
-        // Even if API call fails, clear local storage
-        localStorage.removeItem('workerAccessToken');
-        localStorage.removeItem('workerRefreshToken');
-        localStorage.removeItem('workerData');
-        toastManager.success('Logged out successfully');
-        navigate('/worker/login');
-      }
+    setIsLoggingOut(true);
+    try {
+      await workerAuthService.logout();
+      toastManager.success('Logged out successfully');
+      navigate('/worker/login');
+    } catch (error) {
+      // Even if API call fails, clear local storage
+      localStorage.removeItem('workerAccessToken');
+      localStorage.removeItem('workerRefreshToken');
+      localStorage.removeItem('workerData');
+      toastManager.success('Logged out successfully');
+      navigate('/worker/login');
+    } finally {
+      setIsLoggingOut(false);
+      setShowLogoutModal(false);
     }
   };
 
@@ -269,8 +273,8 @@ const Settings = () => {
 
         {/* Logout */}
         <button
-          onClick={handleLogout}
-          className="w-full bg-white rounded-xl p-4 flex items-center justify-center gap-3 shadow-md transition-all active:scale-95"
+          onClick={() => setShowLogoutModal(true)}
+          className="w-full bg-white rounded-xl p-4 flex items-center justify-center gap-3 shadow-md transition-all active:scale-95 cursor-pointer"
           style={{
             boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
           }}
@@ -279,6 +283,15 @@ const Settings = () => {
           <span className="font-semibold text-red-500">Logout</span>
         </button>
       </main>
+
+      {/* Logout Confirmation Modal */}
+      <LogoutModal
+        isOpen={showLogoutModal}
+        onClose={() => !isLoggingOut && setShowLogoutModal(false)}
+        onConfirm={handleLogout}
+        isLoading={isLoggingOut}
+        role="Worker"
+      />
 
       <BottomNav />
     </div>

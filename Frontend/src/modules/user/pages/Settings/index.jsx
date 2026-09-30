@@ -9,10 +9,13 @@ import { registerFCMToken, removeFCMToken } from '../../../../services/pushNotif
 import authStorage from '../../../../utils/authStorage';
 import BottomNav from '../../components/layout/BottomNav';
 import BankDetailsSection from '../../../../components/common/BankDetailsSection';
+import { LogoutModal } from '../../../../components/common';
 
 const Settings = () => {
   const navigate = useNavigate();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
   // State for notification toggles
@@ -193,15 +196,8 @@ const Settings = () => {
             </button>
 
             <button
-              onClick={async () => {
-                const confirmed = window.confirm('Are you sure you want to log out?');
-                if (confirmed) {
-                  await userAuthService.logout();
-                  navigate('/user/login');
-                  toastManager.success('Logged out successfully');
-                }
-              }}
-              className="w-full bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3 hover:bg-gray-50 active:scale-[0.98] transition-all"
+              onClick={() => setShowLogoutModal(true)}
+              className="w-full bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3 hover:bg-gray-50 active:scale-[0.98] transition-all cursor-pointer"
             >
               <div className="w-8 h-8 rounded-full flex items-center justify-center bg-red-50">
                 <FiLogOut className="w-5 h-5 text-red-500" />
@@ -346,6 +342,31 @@ const Settings = () => {
           </button>
         </div>
       </main>
+
+      {/* Logout Confirmation Modal */}
+      <LogoutModal
+        isOpen={showLogoutModal}
+        onClose={() => !isLoggingOut && setShowLogoutModal(false)}
+        onConfirm={async () => {
+          setIsLoggingOut(true);
+          try {
+            await userAuthService.logout();
+            toastManager.success('Logged out successfully');
+            navigate('/user/login');
+          } catch (error) {
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('refreshToken');
+            localStorage.removeItem('userData');
+            toastManager.success('Logged out successfully');
+            navigate('/user/login');
+          } finally {
+            setIsLoggingOut(false);
+            setShowLogoutModal(false);
+          }
+        }}
+        isLoading={isLoggingOut}
+        role="Farmer"
+      />
 
       {/* BottomNav hidden on this page */}
     </div>

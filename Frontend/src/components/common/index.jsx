@@ -12,5 +12,4 @@ export { default as LazyImage } from './LazyImage.jsx';
 export * from './SkeletonLoaders.jsx';
 export { default as Chatbot } from './Chatbot.jsx';
 export { FormContainer, FormSection } from './FormContainer.jsx';
-
-
+export { default as LogoutModal } from './LogoutModal.jsx';

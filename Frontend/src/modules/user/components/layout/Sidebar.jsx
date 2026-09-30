@@ -18,9 +18,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { themeColors } from '../../../../theme';
 import { userAuthService } from '../../../../services/authService';
 import authStorage from '../../../../utils/authStorage';
+import { LogoutModal } from '../../../../components/common';
 
 const Sidebar = ({ isOpen, onClose }) => {
   const [user, setUser] = useState(null);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -42,11 +45,14 @@ const Sidebar = ({ isOpen, onClose }) => {
   }, [isOpen]);
 
   const handleLogout = async () => {
+    setIsLoggingOut(true);
     try {
       await userAuthService.logout();
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
+      setIsLoggingOut(false);
+      setShowLogoutModal(false);
       setUser(null);
       onClose();
       navigate('/user/login');
@@ -199,8 +205,8 @@ const Sidebar = ({ isOpen, onClose }) => {
             <div className="p-5 bg-white border-t border-slate-100">
               {user ? (
                 <button
-                  onClick={handleLogout}
-                  className="flex items-center justify-center gap-2 w-full px-4 py-3.5 bg-red-50/80 text-red-600 hover:bg-red-100/80 rounded-xl transition-colors font-semibold active:scale-[0.98]"
+                  onClick={() => setShowLogoutModal(true)}
+                  className="flex items-center justify-center gap-2 w-full px-4 py-3.5 bg-red-50/80 text-red-600 hover:bg-red-100/80 rounded-xl transition-colors font-semibold active:scale-[0.98] cursor-pointer"
                 >
                   <HiOutlineLogout className="w-5 h-5 stroke-[2]" />
                   Logout
@@ -222,7 +228,19 @@ const Sidebar = ({ isOpen, onClose }) => {
     </AnimatePresence>
   );
 
-  return createPortal(sidebarContent, document.body);
+  return (
+    <>
+      {createPortal(sidebarContent, document.body)}
+      <LogoutModal
+        isOpen={showLogoutModal}
+        onClose={() => !isLoggingOut && setShowLogoutModal(false)}
+        onConfirm={handleLogout}
+        isLoading={isLoggingOut}
+        userName={user?.name}
+        role="Farmer"
+      />
+    </>
+  );
 };
 
 export default Sidebar;

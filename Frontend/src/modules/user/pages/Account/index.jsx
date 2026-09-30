@@ -32,12 +32,15 @@ import NotificationBell from '../../components/common/NotificationBell';
 import { useSocket } from '../../../../context/SocketContext';
 import authStorage from '../../../../utils/authStorage';
 import BankDetailsSection from '../../../../components/common/BankDetailsSection';
+import { LogoutModal } from '../../../../components/common';
 import api from '../../../../services/api';
 
 const Account = () => {
   const navigate = useNavigate();
   const socket = useSocket();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [showBankModal, setShowBankModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [userProfile, setUserProfile] = useState({
@@ -166,6 +169,7 @@ const Account = () => {
   };
 
   const handleLogout = async () => {
+    setIsLoggingOut(true);
     try {
       await userAuthService.logout();
       toastManager.success('Logged out successfully');
@@ -176,6 +180,9 @@ const Account = () => {
       localStorage.removeItem('userData');
       toastManager.success('Logged out successfully');
       navigate('/user/login');
+    } finally {
+      setIsLoggingOut(false);
+      setShowLogoutModal(false);
     }
   };
 
@@ -444,7 +451,7 @@ const Account = () => {
             <div className="h-4"></div>
             <motion.button
               whileTap={{ scale: 0.98 }}
-              onClick={handleLogout}
+              onClick={() => setShowLogoutModal(true)}
               className="w-full flex items-center justify-center gap-2 p-4 bg-red-500 hover:bg-red-600 active:bg-red-700 text-white font-black uppercase tracking-wider rounded-2xl shadow-lg shadow-red-200 transition-all mb-3"
             >
               <FiLogOut className="w-5 h-5" />
@@ -533,6 +540,16 @@ const Account = () => {
           </div>
         </div>
       )}
+
+      {/* Logout Confirmation Modal */}
+      <LogoutModal
+        isOpen={showLogoutModal}
+        onClose={() => !isLoggingOut && setShowLogoutModal(false)}
+        onConfirm={handleLogout}
+        isLoading={isLoggingOut}
+        userName={userProfile?.name}
+        role="Farmer"
+      />
     </div>
   );
 };

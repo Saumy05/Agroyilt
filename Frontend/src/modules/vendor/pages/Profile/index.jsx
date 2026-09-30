@@ -9,12 +9,14 @@ import Header from '../../components/layout/Header';
 import BottomNav from '../../components/layout/BottomNav';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import vendorProductService from '../../services/vendorProductService';
-import authStorage from '../../../../utils/authStorage';
 import BankDetailsSection from '../../../../components/common/BankDetailsSection';
+import LogoutModal from '../../../../components/common/LogoutModal';
 
 const Profile = () => {
   const navigate = useNavigate();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [showBankModal, setShowBankModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -462,22 +464,12 @@ const Profile = () => {
         <div className="px-4 mb-3">
           <button
             type="button"
-            onClick={async (e) => {
+            onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              try {
-                await vendorAuthService.logout();
-                toastManager.success('Logged out successfully');
-                navigate('/vendor/login');
-              } catch (error) {
-                localStorage.removeItem('vendorAccessToken');
-                localStorage.removeItem('vendorRefreshToken');
-                localStorage.removeItem('vendorData');
-                toastManager.success('Logged out successfully');
-                navigate('/vendor/login');
-              }
+              setShowLogoutModal(true);
             }}
-            className="w-full font-semibold py-3 rounded-xl active:scale-98 transition-all text-white flex items-center justify-center gap-2"
+            className="w-full font-semibold py-3 rounded-xl active:scale-98 transition-all text-white flex items-center justify-center gap-2 cursor-pointer"
             style={{
               backgroundColor: '#EF4444',
               boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)',
@@ -575,6 +567,32 @@ const Profile = () => {
           </div>
         </div>
       )}
+
+      {/* Logout Confirmation Modal */}
+      <LogoutModal
+        isOpen={showLogoutModal}
+        onClose={() => !isLoggingOut && setShowLogoutModal(false)}
+        onConfirm={async () => {
+          setIsLoggingOut(true);
+          try {
+            await vendorAuthService.logout();
+            toastManager.success('Logged out successfully');
+            navigate('/vendor/login');
+          } catch (error) {
+            localStorage.removeItem('vendorAccessToken');
+            localStorage.removeItem('vendorRefreshToken');
+            localStorage.removeItem('vendorData');
+            toastManager.success('Logged out successfully');
+            navigate('/vendor/login');
+          } finally {
+            setIsLoggingOut(false);
+            setShowLogoutModal(false);
+          }
+        }}
+        isLoading={isLoggingOut}
+        userName={profile?.businessName || profile?.name}
+        role="Vendor"
+      />
     </div>
   );
 };

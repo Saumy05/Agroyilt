@@ -6,11 +6,14 @@ import Button from '../Button';
 import NotificationWindow from './NotificationWindow';
 import { adminAuthService } from '../../../../services/authService';
 import authStorage from '../../../../utils/authStorage';
+import LogoutModal from '../../../../components/common/LogoutModal';
 
 const AdminHeader = ({ onMenuClick }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [adminData, setAdminData] = useState(null);
 
   useEffect(() => {
@@ -21,6 +24,7 @@ const AdminHeader = ({ onMenuClick }) => {
   }, []);
 
   const handleLogout = async () => {
+    setIsLoggingOut(true);
     try {
       await adminAuthService.logout();
       toast.success('Logged out successfully');
@@ -31,6 +35,9 @@ const AdminHeader = ({ onMenuClick }) => {
       authStorage.clearAuthSession('admin');
       toast.success('Logged out successfully');
       navigate('/admin/login');
+    } finally {
+      setIsLoggingOut(false);
+      setShowLogoutModal(false);
     }
   };
 
@@ -232,7 +239,7 @@ const AdminHeader = ({ onMenuClick }) => {
 
           {/* Logout Button */}
           <Button
-            onClick={handleLogout}
+            onClick={() => setShowLogoutModal(true)}
             variant="ghost"
             icon={FiLogOut}
             size="sm"
@@ -242,6 +249,16 @@ const AdminHeader = ({ onMenuClick }) => {
           </Button>
         </div>
       </div>
+
+      {/* Logout Confirmation Modal */}
+      <LogoutModal
+        isOpen={showLogoutModal}
+        onClose={() => !isLoggingOut && setShowLogoutModal(false)}
+        onConfirm={handleLogout}
+        isLoading={isLoggingOut}
+        userName={adminData?.name || adminData?.email}
+        role="Admin"
+      />
     </header>
   );
 };

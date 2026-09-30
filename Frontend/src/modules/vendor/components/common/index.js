@@ -9,4 +9,4 @@ export { default as ErrorBoundary } from './ErrorBoundary';
 export { default as ConfirmDialog } from './ConfirmDialog';
 export { default as CashCollectionModal } from './CashCollectionModal';
 export { default as OperatorPaymentModal } from './WorkerPaymentModal';
-
+export { default as LogoutModal } from '../../../../components/common/LogoutModal';

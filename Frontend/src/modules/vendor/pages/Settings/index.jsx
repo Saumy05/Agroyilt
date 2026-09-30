@@ -10,10 +10,13 @@ import authStorage from '../../../../utils/authStorage';
 import Header from '../../components/layout/Header';
 import BottomNav from '../../components/layout/BottomNav';
 import BankDetailsSection from '../../../../components/common/BankDetailsSection';
+import LogoutModal from '../../../../components/common/LogoutModal';
 
 const Settings = () => {
   const navigate = useNavigate();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [sendingTest, setSendingTest] = useState(false);
   const [settings, setSettings] = useState({
@@ -122,6 +125,7 @@ const Settings = () => {
   };
 
   const handleLogout = async () => {
+    setIsLoggingOut(true);
     try {
       await vendorAuthService.logout();
       toastManager.success('Logged out successfully');
@@ -133,6 +137,9 @@ const Settings = () => {
       localStorage.removeItem('vendorData');
       toastManager.success('Logged out successfully');
       navigate('/vendor/login');
+    } finally {
+      setIsLoggingOut(false);
+      setShowLogoutModal(false);
     }
   };
 
@@ -326,9 +333,9 @@ const Settings = () => {
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            handleLogout();
+            setShowLogoutModal(true);
           }}
-          className="w-full py-4 rounded-xl font-semibold text-white mb-4 flex items-center justify-center gap-2 transition-all active:scale-95"
+          className="w-full py-4 rounded-xl font-semibold text-white mb-4 flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
           style={{
             background: themeColors.button,
             boxShadow: `0 4px 12px ${themeColors.button}40`,
@@ -399,6 +406,15 @@ const Settings = () => {
           </div>
         )}
       </main>
+
+      {/* Logout Confirmation Modal */}
+      <LogoutModal
+        isOpen={showLogoutModal}
+        onClose={() => !isLoggingOut && setShowLogoutModal(false)}
+        onConfirm={handleLogout}
+        isLoading={isLoggingOut}
+        role="Vendor"
+      />
 
       <BottomNav />
     </div>

@@ -11,6 +11,7 @@ import LogoLoader from '../../../../components/common/LogoLoader';
 import authStorage from '../../../../utils/authStorage';
 import { useSocket } from '../../../../context/SocketContext';
 import BankDetailsSection from '../../../../components/common/BankDetailsSection';
+import LogoutModal from '../../../../components/common/LogoutModal';
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -20,6 +21,8 @@ const Profile = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showBankModal, setShowBankModal] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isTogglingStatus, setIsTogglingStatus] = useState(false);
   const statusSeqRef = useRef(0);
 
@@ -213,6 +216,7 @@ const Profile = () => {
   };
 
   const handleLogout = async () => {
+    setIsLoggingOut(true);
     try {
       await workerAuthService.logout();
       toastManager.success('Logged out successfully');
@@ -224,6 +228,9 @@ const Profile = () => {
       localStorage.removeItem('workerData');
       toastManager.success('Logged out successfully');
       navigate('/worker/login');
+    } finally {
+      setIsLoggingOut(false);
+      setShowLogoutModal(false);
     }
   };
 
@@ -520,9 +527,9 @@ const Profile = () => {
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            handleLogout();
+            setShowLogoutModal(true);
           }}
-          className="w-full bg-white rounded-xl p-4 flex items-center justify-between shadow-md transition-all active:scale-95"
+          className="w-full bg-white rounded-xl p-4 flex items-center justify-between shadow-md transition-all active:scale-95 cursor-pointer"
           style={{
             boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
             cursor: 'pointer'
@@ -553,6 +560,16 @@ const Profile = () => {
           </div>
         </div>
       )}
+
+      {/* Logout Confirmation Modal */}
+      <LogoutModal
+        isOpen={showLogoutModal}
+        onClose={() => !isLoggingOut && setShowLogoutModal(false)}
+        onConfirm={handleLogout}
+        isLoading={isLoggingOut}
+        userName={profile?.name}
+        role="Worker"
+      />
     </div>
   );
 };
