@@ -249,6 +249,7 @@ const Home = () => {
             requiresDriver: cat.requiresDriver,
             sectionType: cat.sectionType || 'General',
             showOnHome: cat.showOnHome ?? true,
+            homeOrder: cat.homeOrder ?? 0,
             isAlwaysMain: cat.isAlwaysMain,
             parentCategory: cat.parentCategory,
             parentCategories: cat.parentCategories,
@@ -643,7 +644,7 @@ const Home = () => {
                   return c.isAlwaysMain === true;
                 }
                 return true;
-              });
+              }).sort((a, b) => (a.homeOrder ?? 0) - (b.homeOrder ?? 0));
 
               if (activeCategories.length === 0) return null;
 

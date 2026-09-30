@@ -219,6 +219,8 @@ export const publicCatalogService = {
     if (normalizedParams.subDistrictId) queryParams.append('subDistrictId', normalizedParams.subDistrictId);
     if (normalizedParams.cityId) queryParams.append('cityId', normalizedParams.cityId);
     if (normalizedParams.type) queryParams.append('type', normalizedParams.type);
+    if (normalizedParams.showOnHome !== undefined) queryParams.append('showOnHome', normalizedParams.showOnHome);
+    if (normalizedParams.all !== undefined) queryParams.append('all', normalizedParams.all);
     
     const queryStr = queryParams.toString() ? `?${queryParams.toString()}` : '';
 

@@ -1,4 +1,4 @@
-﻿export const LS_KEY = "adminUserAppCatalog";
+export const LS_KEY = "adminUserAppCatalog";
 
 export const toAssetUrl = (url) => {
   if (!url) return '';
@@ -29,10 +29,17 @@ export const loadCatalog = () => {
   }
   try {
     const parsed = JSON.parse(raw);
+    const rawCategories = Array.isArray(parsed?.categories) ? parsed.categories : [];
+    // Only keep real MongoDB categories (24-char hex id)
+    const validCategories = rawCategories.filter(c => {
+      const id = (c.id || c._id)?.toString();
+      return id && /^[0-9a-fA-F]{24}$/.test(id);
+    });
+
     return {
       mode: parsed?.mode === "single" ? "single" : "multi",
       home: parsed?.home && typeof parsed.home === "object" ? parsed.home : { banners: [] },
-      categories: Array.isArray(parsed?.categories) ? parsed.categories : [],
+      categories: validCategories,
       services: Array.isArray(parsed?.services) ? parsed.services : [],
       updatedAt: parsed?.updatedAt || new Date().toISOString(),
     };

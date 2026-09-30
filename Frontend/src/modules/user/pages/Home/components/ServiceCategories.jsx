@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import CategoryCard from '../../../components/common/CategoryCard';
 import TranslatedText from '../../../../../components/TranslatedText';
 const toAssetUrl = (url) => {
@@ -60,8 +60,10 @@ const ServiceCategories = React.memo(({ categories, onCategoryClick, onSeeAllCli
                       onError={(e) => { e.currentTarget.style.display = 'none'; }}
                     />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-green-100 to-emerald-50 text-green-600 text-lg font-black">
-                      {category.title?.charAt(0) ?.toUpperCase() || '?'}
+                    <div className="w-full h-full flex items-center justify-center bg-white/30 backdrop-blur-xs rounded-xl">
+                      <div className="w-8 h-8 rounded-xl bg-white/90 shadow-sm flex items-center justify-center font-black text-emerald-800 text-sm">
+                        {category.title?.charAt(0)?.toUpperCase() || 'A'}
+                      </div>
                     </div>
                   )
                 }

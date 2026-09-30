@@ -512,6 +512,14 @@ const updateCategory = async (req, res) => {
     }
 
     const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid category ID'
+      });
+    }
+
     const category = await Category.findById(id);
 
     if (!category) {

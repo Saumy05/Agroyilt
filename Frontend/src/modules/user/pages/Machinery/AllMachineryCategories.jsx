@@ -23,11 +23,10 @@ const AllMachineryCategories = () => {
     const fetchCategories = async () => {
       try {
         setLoading(true);
-        const res = await publicCatalogService.getCategories();
+        const res = await publicCatalogService.getCategories({ all: true });
         if (res.success && Array.isArray(res.categories)) {
           // Filter to only show main categories (isAlwaysMain or has no parent)
           const mains = res.categories.filter(c => {
-            if (c.showOnHome === false) return false;
             const hasParent = c.parentCategory || (c.parentCategories && c.parentCategories.length > 0);
             if (hasParent) return c.isAlwaysMain === true;
             return true;

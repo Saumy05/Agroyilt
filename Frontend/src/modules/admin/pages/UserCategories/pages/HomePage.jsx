@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { FiGrid, FiPlus, FiTrash2, FiSave, FiEdit2, FiX } from "react-icons/fi";
 import { toast } from "react-hot-toast";
 import CardShell from "../components/CardShell";
@@ -6,7 +6,7 @@ import Modal from "../components/Modal";
 import ToggleSwitch from "../components/ToggleSwitch"; // Import ToggleSwitch
 import { ensureIds, saveCatalog, slugify, toAssetUrl } from "../utils";
 
-import { homeContentService, serviceService } from "../../../../../services/catalogService";
+import { homeContentService, serviceService, categoryService } from "../../../../../services/catalogService";
 import { toastManager } from '../../../../../utils/toastManager';
 
 
@@ -189,7 +189,9 @@ const HomePage = ({ catalog, setCatalog, selectedCity }) => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isFetchingCityData, setIsFetchingCityData] = useState(false);
 
-  const categories = useMemo(() => {
+  const [activeCategoryTab, setActiveCategoryTab] = useState('main'); // 'main' | 'all'
+
+  const allCategoriesList = useMemo(() => {
     const list = ensureIds(catalog).categories || [];
     return [...list].sort((a, b) => {
       const ao = Number.isFinite(a.homeOrder) ? a.homeOrder : 0;
@@ -198,6 +200,17 @@ const HomePage = ({ catalog, setCatalog, selectedCity }) => {
       return (a.title || "").localeCompare(b.title || "");
     });
   }, [catalog]);
+
+  const mainCategoriesList = useMemo(() => {
+    return allCategoriesList.filter(c => {
+      const hasParent = c.parentCategory || (Array.isArray(c.parentCategories) && c.parentCategories.length > 0);
+      return !hasParent || c.isAlwaysMain;
+    });
+  }, [allCategoriesList]);
+
+  const categories = useMemo(() => {
+    return activeCategoryTab === 'main' ? mainCategoriesList : allCategoriesList;
+  }, [activeCategoryTab, mainCategoriesList, allCategoriesList]);
 
   const home = ensureIds(catalog).home;
 
@@ -296,7 +309,7 @@ const HomePage = ({ catalog, setCatalog, selectedCity }) => {
     saveCatalog(next);
   };
 
-  const moveCategory = (id, dir) => {
+  const moveCategory = async (id, dir) => {
     const next = ensureIds(catalog);
     const list = [...next.categories].sort((a, b) => (a.homeOrder || 0) - (b.homeOrder || 0));
     const idx = list.findIndex((c) => c.id === id);
@@ -307,13 +320,93 @@ const HomePage = ({ catalog, setCatalog, selectedCity }) => {
     const b = list[targetIdx];
     const aOrder = a.homeOrder || 0;
     const bOrder = b.homeOrder || 0;
+    const newAOrder = bOrder === aOrder ? (dir === "up" ? aOrder - 1 : aOrder + 1) : bOrder;
+    const newBOrder = aOrder;
+
     next.categories = next.categories.map((c) => {
-      if (c.id === a.id) return { ...c, homeOrder: bOrder };
-      if (c.id === b.id) return { ...c, homeOrder: aOrder };
+      if (c.id === a.id) return { ...c, homeOrder: newAOrder };
+      if (c.id === b.id) return { ...c, homeOrder: newBOrder };
       return c;
     });
     setCatalog(next);
     saveCatalog(next);
+
+    try {
+      await Promise.all([
+        categoryService.updateOrder(a.id, newAOrder),
+        categoryService.updateOrder(b.id, newBOrder)
+      ]);
+      toast.success("Category order saved");
+    } catch (e) {
+      console.error("Failed to persist category order:", e);
+    }
+  };
+
+  // Fetch real categories from database on mount so HomePage has live MongoDB data
+  useEffect(() => {
+    const fetchRealCategories = async () => {
+      try {
+        const res = await categoryService.getAll({ status: 'active' });
+        if (res.success && Array.isArray(res.categories)) {
+          const mapped = res.categories.map(cat => ({
+            id: (cat.id || cat._id?.$oid || cat._id)?.toString() || "",
+            title: cat.title,
+            slug: cat.slug,
+            homeIconUrl: cat.homeIconUrl || "",
+            homeBadge: cat.homeBadge || "",
+            hasSaleBadge: cat.hasSaleBadge || false,
+            showOnHome: cat.showOnHome !== false,
+            homeOrder: cat.homeOrder || 0,
+            bookingType: cat.bookingType || 'VENDOR'
+          }));
+          setCatalog(prev => {
+            const next = { ...prev, categories: mapped };
+            saveCatalog(next);
+            return next;
+          });
+        }
+      } catch (err) {
+        console.error("Failed to load real categories in HomePage:", err);
+      }
+    };
+    fetchRealCategories();
+  }, []);
+
+  const handleToggleCategoryVisibility = async (id, nextState, title) => {
+    if (!id || !/^[0-9a-fA-F]{24}$/.test(id)) {
+      toast.error('Invalid category ID. Please refresh to load active agricultural categories.');
+      return;
+    }
+
+    const next = ensureIds(catalog);
+    next.categories = (next.categories || []).map((c) =>
+      c.id === id ? { ...c, showOnHome: nextState } : c
+    );
+    setCatalog(next);
+    saveCatalog(next);
+
+    try {
+      const res = await categoryService.update(id, { showOnHome: nextState });
+      if (res.success) {
+        toast.success(`"${title || 'Category'}" is now ${nextState ? 'visible on' : 'hidden from'} Homepage`);
+      } else {
+        // Revert
+        next.categories = (next.categories || []).map((c) =>
+          c.id === id ? { ...c, showOnHome: !nextState } : c
+        );
+        setCatalog(next);
+        saveCatalog(next);
+        toast.error(res.message || 'Failed to update visibility');
+      }
+    } catch (err) {
+      console.error('Failed to toggle category visibility:', err);
+      next.categories = (next.categories || []).map((c) =>
+        c.id === id ? { ...c, showOnHome: !nextState } : c
+      );
+      setCatalog(next);
+      saveCatalog(next);
+      toast.error('Failed to update visibility');
+    }
   };
 
   const syncHomeToBackend = async (homeData) => {
@@ -1358,8 +1451,31 @@ const HomePage = ({ catalog, setCatalog, selectedCity }) => {
       </CardShell>
 
       <CardShell icon={FiGrid} title="Home Categories">
-        <div className="flex items-center justify-between mb-4">
-          <div className="text-sm text-gray-600">{categories.length} categories</div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 border-b border-gray-100 pb-3">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveCategoryTab('main')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                activeCategoryTab === 'main'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              🚜 Main Machinery ({mainCategoriesList.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveCategoryTab('all')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                activeCategoryTab === 'all'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              📑 All Categories ({allCategoriesList.length})
+            </button>
+          </div>
           <ToggleSwitch
             label="Show Home Categories"
             checked={home?.isCategoriesVisible !== false}
@@ -1409,9 +1525,15 @@ const HomePage = ({ catalog, setCatalog, selectedCity }) => {
                       )}
                     </td>
                     <td className="py-4 px-4 text-center">
-                      <span className={`inline-block px-3 py-1 text-xs font-bold rounded ${c.showOnHome !== false ? "bg-green-500 text-white" : "bg-gray-300 text-gray-700"}`}>
-                        {c.showOnHome !== false ? "VISIBLE" : "HIDDEN"}
-                      </span>
+                      <div className="flex flex-col items-center justify-center gap-1.5">
+                        <ToggleSwitch
+                          checked={c.showOnHome !== false}
+                          onChange={(newVal) => handleToggleCategoryVisibility(c.id, newVal, c.title)}
+                        />
+                        <span className={`text-[10px] font-black uppercase tracking-wider ${c.showOnHome !== false ? "text-emerald-600" : "text-gray-400"}`}>
+                          {c.showOnHome !== false ? "Visible" : "Hidden"}
+                        </span>
+                      </div>
                     </td>
                     <td className="py-4 px-4">
                       <div className="flex items-center justify-center gap-2">

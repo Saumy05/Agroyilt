@@ -14,10 +14,15 @@ const HomeContent = require('../../models/HomeContent');
  */
 const getPublicCategories = async (req, res) => {
   try {
-    const { cityId, stateId, districtId, subDistrictId, type } = req.query;
+    const { cityId, stateId, districtId, subDistrictId, type, showOnHome, all } = req.query;
     const mongoose = require('mongoose');
 
-    let query = { status: 'active', showOnHome: true };
+    let query = { status: 'active' };
+    if (showOnHome !== undefined) {
+      query.showOnHome = showOnHome === 'true';
+    } else if (all !== 'true') {
+      query.showOnHome = true;
+    }
     const globalScopes = ['GLOBAL', 'GLOBAL_INDIA'];
 
     const hasLocation = Boolean(stateId || districtId || subDistrictId || cityId);

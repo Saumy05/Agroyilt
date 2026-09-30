@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ensureIds, loadCatalog } from "./utils";
+import { ensureIds, loadCatalog, saveCatalog } from "./utils";
+import { categoryService } from "../../../../services/catalogService";
 import HomePage from "./pages/HomePage";
 import CategoriesPage from "./pages/CategoriesPage";
 import ServicesPage from "./pages/ServicesPage";
@@ -9,6 +10,39 @@ import BrandsPage from "./pages/BrandsPage";
 
 const UserCategories = () => {
   const [catalog, setCatalog] = useState(() => ensureIds(loadCatalog()));
+
+  // Fetch real database categories on mount so all child tabs have real data
+  useEffect(() => {
+    const fetchRealCategories = async () => {
+      try {
+        const res = await categoryService.getAll({ status: 'active' });
+        if (res.success && Array.isArray(res.categories)) {
+          const mapped = res.categories.map(cat => ({
+            id: (cat.id || cat._id?.$oid || cat._id)?.toString() || "",
+            title: cat.title,
+            slug: cat.slug,
+            homeIconUrl: cat.homeIconUrl || "",
+            homeBadge: cat.homeBadge || "",
+            hasSaleBadge: cat.hasSaleBadge || false,
+            showOnHome: cat.showOnHome !== false,
+            homeOrder: cat.homeOrder || 0,
+            bookingType: cat.bookingType || 'VENDOR',
+            parentCategory: cat.parentCategory ? (cat.parentCategory._id || cat.parentCategory.id || cat.parentCategory).toString() : null,
+            parentCategories: Array.isArray(cat.parentCategories) ? cat.parentCategories.map(p => (p._id || p.id || p).toString()) : [],
+            isAlwaysMain: Boolean(cat.isAlwaysMain)
+          }));
+          setCatalog(prev => {
+            const next = { ...prev, categories: mapped };
+            saveCatalog(next);
+            return next;
+          });
+        }
+      } catch (err) {
+        console.error("Failed to load real categories in UserCategories:", err);
+      }
+    };
+    fetchRealCategories();
+  }, []);
 
   useEffect(() => {
     const handler = () => setCatalog(ensureIds(loadCatalog()));

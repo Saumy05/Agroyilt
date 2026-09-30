@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { FiGrid, FiPlus, FiEdit2, FiTrash2, FiPackage, FiSearch } from "react-icons/fi";
 import { toast } from "react-hot-toast";
 import CardShell from "../components/CardShell";
@@ -25,9 +25,17 @@ const ServicesPage = ({ catalog, setCatalog, selectedCity }) => {
   const [fetching, setFetching] = useState(false);
   const categories = catalog.categories || [];
 
+  // Filter only Main Machinery categories (excluding subcategory implements)
+  const mainCategories = useMemo(() => {
+    return categories.filter(c => {
+      const hasParent = c.parentCategory || (Array.isArray(c.parentCategories) && c.parentCategories.length > 0);
+      return !hasParent;
+    });
+  }, [categories]);
+
   // Selected Category State
   const [activeCategoryId, setActiveCategoryId] = useState(null);
-  const activeCategory = categories.find(c => c.id === activeCategoryId) || null;
+  const activeCategory = mainCategories.find(c => c.id === activeCategoryId) || null;
 
   // Services List State
   const [categoryServices, setCategoryServices] = useState([]);
@@ -78,15 +86,15 @@ const ServicesPage = ({ catalog, setCatalog, selectedCity }) => {
 
   // Auto-select first Category
   useEffect(() => {
-    if (categories.length > 0) {
-      if (!activeCategoryId || !categories.find(c => c.id === activeCategoryId)) {
-        setActiveCategoryId(categories[0].id);
+    if (mainCategories.length > 0) {
+      if (!activeCategoryId || !mainCategories.find(c => c.id === activeCategoryId)) {
+        setActiveCategoryId(mainCategories[0].id);
       }
     } else {
       setActiveCategoryId(null);
       setCategoryServices([]);
     }
-  }, [categories]);
+  }, [mainCategories, activeCategoryId]);
 
   // Fetch Services when Active Category Changes
   useEffect(() => {
@@ -240,17 +248,17 @@ const ServicesPage = ({ catalog, setCatalog, selectedCity }) => {
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
         {/* LEFT COLUMN: LIST OF CATEGORIES */}
         <div className="lg:col-span-1">
-          <CardShell icon={FiGrid} title="Select Category">
+          <CardShell icon={FiGrid} title={`Select Machine (${mainCategories.length})`}>
             <div className="max-h-[600px] overflow-y-auto space-y-2 pr-1">
               {fetching ? (
                 <div className="text-center py-8 text-sm text-gray-500 flex flex-col items-center justify-center">
                   <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-3"></div>
                   Loading categories...
                 </div>
-              ) : categories.length === 0 ? (
-                <div className="text-center text-gray-400 py-4 text-sm">No categories found</div>
+              ) : mainCategories.length === 0 ? (
+                <div className="text-center text-gray-400 py-4 text-sm">No machines found</div>
               ) : (
-                categories.map(cat => (
+                mainCategories.map(cat => (
                   <div
                     key={cat.id}
                     onClick={() => setActiveCategoryId(cat.id)}
@@ -431,7 +439,7 @@ const ServicesPage = ({ catalog, setCatalog, selectedCity }) => {
               required
             >
               <option value="">Select Category</option>
-              {categories.map(cat => (
+              {mainCategories.map(cat => (
                 <option key={cat.id} value={cat.id}>{cat.title}</option>
               ))}
             </select>

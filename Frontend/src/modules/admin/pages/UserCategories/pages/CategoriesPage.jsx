@@ -3,6 +3,7 @@ import { FiGrid, FiPlus, FiEdit2, FiTrash2, FiSave, FiChevronUp, FiChevronDown, 
 import { toast } from "react-hot-toast";
 import CardShell from "../components/CardShell";
 import Modal from "../components/Modal";
+import ToggleSwitch from "../components/ToggleSwitch";
 import { saveCatalog, slugify, toAssetUrl } from "../utils";
 
 import { categoryService, serviceService, homeContentService } from "../../../../../services/catalogService";
@@ -57,6 +58,7 @@ const categorySchema = z.object({
 
 const CategoriesPage = ({ catalog, setCatalog }) => {
   const [editingId, setEditingId] = useState(null);
+  const [activeTab, setActiveTab] = useState('main'); // 'main' | 'all'
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -139,14 +141,28 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
     return categoriesBase.find(cat => cat.id === id)?.title || "";
   };
 
+  const mainCount = useMemo(() => {
+    return categoriesBase.filter(c => {
+      const hasParent = c.parentCategory || (Array.isArray(c.parentCategories) && c.parentCategories.length > 0);
+      return !hasParent || c.isAlwaysMain;
+    }).length;
+  }, [categoriesBase]);
+
   const categoriesFiltered = useMemo(() => {
-    if (!searchTerm) return categoriesBase;
+    let list = categoriesBase;
+    if (activeTab === 'main') {
+      list = list.filter(c => {
+        const hasParent = c.parentCategory || (Array.isArray(c.parentCategories) && c.parentCategories.length > 0);
+        return !hasParent || c.isAlwaysMain;
+      });
+    }
+    if (!searchTerm) return list;
     const lower = searchTerm.trim().toLowerCase();
-    return categoriesBase.filter(c =>
+    return list.filter(c =>
       c.title?.toLowerCase().includes(lower) ||
       c.slug?.toLowerCase().includes(lower)
     );
-  }, [categoriesBase, searchTerm]);
+  }, [categoriesBase, searchTerm, activeTab]);
 
   const editing = useMemo(() => categoriesBase.find((c) => c.id === editingId) || null, [categoriesBase, editingId]);
 
@@ -612,6 +628,48 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
     } catch (e) { toast.error("Move failed"); }
   };
 
+  const handleToggleVisibility = async (id, nextState, title) => {
+    // Optimistically update catalog
+    setCatalog(prev => {
+      const nextCats = (prev.categories || []).map(cat => 
+        cat.id === id ? { ...cat, showOnHome: nextState } : cat
+      );
+      const next = { ...prev, categories: nextCats };
+      saveCatalog(next);
+      return next;
+    });
+
+    try {
+      const res = await categoryService.update(id, { showOnHome: nextState });
+      if (res.success) {
+        toast.success(`"${title || 'Category'}" is now ${nextState ? 'visible on' : 'hidden from'} Homepage`);
+      } else {
+        // Revert
+        setCatalog(prev => {
+          const nextCats = (prev.categories || []).map(cat => 
+            cat.id === id ? { ...cat, showOnHome: !nextState } : cat
+          );
+          const next = { ...prev, categories: nextCats };
+          saveCatalog(next);
+          return next;
+        });
+        toast.error(res.message || 'Failed to update visibility');
+      }
+    } catch (err) {
+      console.error('Toggle visibility error:', err);
+      // Revert
+      setCatalog(prev => {
+        const nextCats = (prev.categories || []).map(cat => 
+          cat.id === id ? { ...cat, showOnHome: !nextState } : cat
+        );
+        const next = { ...prev, categories: nextCats };
+        saveCatalog(next);
+        return next;
+      });
+      toast.error('Failed to update visibility');
+    }
+  };
+
   const handleDragStart = (e, index) => { setDraggedItem(index); e.dataTransfer.effectAllowed = 'move'; };
   const handleDragOver = (e) => e.preventDefault();
   const handleDrop = async (e, dropIndex) => {
@@ -642,6 +700,47 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
     <div className="space-y-6">
       <CardShell icon={FiGrid}>
         <div className="flex flex-col gap-4 mb-4">
+          {/* TAB SWITCHER */}
+          <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
+            <button
+              onClick={() => setActiveTab('main')}
+              className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${
+                activeTab === 'main'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              🚜 Main Machinery ({mainCount})
+            </button>
+            <button
+              onClick={() => setActiveTab('all')}
+              className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${
+                activeTab === 'all'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              📑 All Categories ({categoriesBase.length})
+            </button>
+          </div>
+
+          {activeTab === 'main' && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-amber-900">
+              <div className="flex items-center gap-2">
+                <span className="text-base">💡</span>
+                <span>
+                  Showing primary machines. Looking to manage <strong>implements & attachments</strong> (Rotavator, Trolley, Baler, Cultivator) with price caps?
+                </span>
+              </div>
+              <a
+                href="/admin/equipment-catalog/sections"
+                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-md shrink-0 transition-colors"
+              >
+                Manage Equipment Types →
+              </a>
+            </div>
+          )}
+
           <div className="flex items-center justify-between">
             <div className="text-sm text-gray-600 font-bold uppercase tracking-tight">{categoriesFiltered.length} Items</div>
             <button
@@ -682,7 +781,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
                 <th className="text-left py-3 px-4 text-xs font-black text-gray-400 uppercase tracking-widest">Hierarchy</th>
                 <th className="text-left py-3 px-4 text-xs font-black text-gray-400 uppercase tracking-widest">Tracking</th>
                 <th className="text-center py-3 px-4 text-xs font-black text-gray-400 uppercase tracking-widest w-20">Sort</th>
-                <th className="text-center py-3 px-4 text-xs font-black text-gray-400 uppercase tracking-widest w-30">Status</th>
+                <th className="text-center py-3 px-4 text-xs font-black text-gray-400 uppercase tracking-widest w-32">Home Display</th>
                 <th className="text-center py-3 px-4 text-xs font-black text-gray-400 uppercase tracking-widest">Actions</th>
               </tr>
             </thead>
@@ -854,9 +953,15 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
                       </div>
                     </td>
                     <td className="py-4 px-4 text-center">
-                      <span className={`px-2 py-1 text-[10px] font-black rounded uppercase ${c.showOnHome ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-gray-600'}`}>
-                        {c.showOnHome ? 'Visible' : 'Hidden'}
-                      </span>
+                      <div className="flex flex-col items-center justify-center gap-1.5">
+                        <ToggleSwitch
+                          checked={c.showOnHome !== false}
+                          onChange={(newVal) => handleToggleVisibility(c.id, newVal, c.title)}
+                        />
+                        <span className={`text-[10px] font-black uppercase tracking-wider ${c.showOnHome !== false ? 'text-emerald-600' : 'text-gray-400'}`}>
+                          {c.showOnHome !== false ? 'Visible' : 'Hidden'}
+                        </span>
+                      </div>
                     </td>
                     <td className="py-4 px-4">
                       <div className="flex justify-center gap-2">
