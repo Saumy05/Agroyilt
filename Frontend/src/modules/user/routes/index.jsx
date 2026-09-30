@@ -78,6 +78,7 @@ const FarmerRequestDetail = lazyLoad(() => import('../pages/Worker/FarmerRequest
 const WorkerSelectionPayment = lazyLoad(() => import('../pages/Worker/WorkerSelectionPayment'));
 
 const MachineryCheckout = lazyLoad(() => import('../pages/Machinery/MachineryCheckout'));
+const AvailableVendors = lazyLoad(() => import('../pages/Machinery/AvailableVendors'));
 const EquipmentDetail = lazyLoad(() => import('../pages/Machinery/EquipmentDetail'));
 const SoilTesting = lazyLoad(() => import('../pages/SoilTesting'));
 const AgriMarket = lazyLoad(() => import('../pages/AgriMarket'));
@@ -179,6 +180,8 @@ const UserRoutes = () => {
               <Route path="/worker-request/:id" element={<ProtectedRoute userType="user"><WorkerRequestForm /></ProtectedRoute>} />
               <Route path="/group-request/:id" element={<ProtectedRoute userType="user"><GroupRequestForm /></ProtectedRoute>} />
 
+              <Route path="/machinery/vendors" element={<ProtectedRoute userType="user"><AvailableVendors /></ProtectedRoute>} />
+              <Route path="/machinery/available-vendors" element={<ProtectedRoute userType="user"><AvailableVendors /></ProtectedRoute>} />
               <Route path="/machinery/checkout" element={<ProtectedRoute userType="user"><MachineryCheckout /></ProtectedRoute>} />
               <Route path="/machinery/:id" element={<ProtectedRoute userType="user"><EquipmentDetail /></ProtectedRoute>} />
               <Route path="/soil-testing" element={<ProtectedRoute userType="user"><SoilTesting /></ProtectedRoute>} />

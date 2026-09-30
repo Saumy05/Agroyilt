@@ -86,6 +86,12 @@ export const publicEquipmentService = {
       };
     }
     return { success: false, data: [] };
+  },
+
+  // Find qualified nearby vendors for tractor/equipment with HP, implement, and real availability
+  getQualifiedVendors: async (payload = {}) => {
+    const response = await api.post('/public/equipment/qualified-vendors', payload);
+    return response.data;
   }
 };
 
