@@ -6,7 +6,7 @@ import { themeColors } from '../../../../theme';
 import api from '../../../../services/api';
 import authStorage from '../../../../utils/authStorage';
 
-const NotificationBell = ({ notificationCount = 0 }) => {
+const NotificationBell = ({ notificationCount = 0, size = 38 }) => {
   const navigate = useNavigate();
   const bellRef = useRef(null);
   const bellButtonRef = useRef(null);
@@ -45,12 +45,12 @@ const NotificationBell = ({ notificationCount = 0 }) => {
       ref={bellButtonRef}
       className="relative rounded-full cursor-pointer group active:scale-95 transition-transform duration-300 z-50 shrink-0"
       style={{
-        width: '42px',
-        height: '42px',
+        width: `${size}px`,
+        height: `${size}px`,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        margin: '2px'
+        margin: '1px'
       }}
       onClick={(e) => {
         e.stopPropagation();
@@ -123,7 +123,7 @@ const NotificationBell = ({ notificationCount = 0 }) => {
 
         <FiBell
           ref={bellRef}
-          className="w-5 h-5 transition-all duration-300"
+          className={`${size <= 38 ? 'w-4 h-4' : 'w-5 h-5'} transition-all duration-300`}
           style={{
             stroke: count > 0 ? '#EF4444' : 'url(#groo-bell-gradient)',
             strokeWidth: '2.5',
@@ -138,11 +138,11 @@ const NotificationBell = ({ notificationCount = 0 }) => {
       {/* 4. Active Badge (Moved outside for robustness and to prevent clipping) */}
       {count > 0 && (
         <span
-          className="absolute -top-1.5 -right-1.5 bg-gradient-to-br from-red-500 to-red-600 text-white text-[10px] font-black rounded-full flex items-center justify-center z-20"
+          className="absolute -top-1 -right-1 bg-gradient-to-br from-red-500 to-red-600 text-white text-[9px] font-black rounded-full flex items-center justify-center z-20"
           style={{
-            minWidth: '20px',
-            height: '20px',
-            boxShadow: '0 3px 8px rgba(239, 68, 68, 0.5), 0 0 0 2px #fff',
+            minWidth: size <= 38 ? '17px' : '20px',
+            height: size <= 38 ? '17px' : '20px',
+            boxShadow: '0 2px 6px rgba(239, 68, 68, 0.5), 0 0 0 2px #fff',
             border: '2px solid #fff'
           }}
         >
