@@ -8,7 +8,8 @@ import { toastManager } from '../../../../../utils/toastManager';
 import { themeColors } from '../../../../../theme';
 
 const toAssetUrl = (url) => {
-    if (!url) return '';
+    if (!url) return '/landing_images/fertilizer_seeds.jpg';
+    if (url.startsWith('/landing_images')) return url;
     const clean = url.replace('/api/upload', '/upload');
     if (clean.startsWith('http')) return clean;
     const base = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000').replace(/\/api$/, '');
@@ -95,11 +96,15 @@ const AgriMarketplaceSection = () => {
                             onClick={() => navigate(`/user/agri-marketplace/${product._id}`)}
                             className="min-w-[170px] bg-white rounded-3xl border border-slate-100 overflow-hidden shadow-sm flex flex-col cursor-pointer"
                         >
-                            <div className="h-28 bg-slate-50 relative group">
+                            <div className="h-32 bg-slate-100 relative group overflow-hidden">
                                 <img
                                     src={toAssetUrl(product.imageUrl)}
                                     alt={product.title}
-                                    className="w-full h-full object-contain p-4 group-hover:scale-110 transition-transform duration-500"
+                                    onError={(e) => {
+                                        e.currentTarget.onerror = null;
+                                        e.currentTarget.src = '/landing_images/fertilizer_seeds.jpg';
+                                    }}
+                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                                 />
                                 {product.discountPrice && (
                                     <div className="absolute top-2 left-2 bg-amber-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase">

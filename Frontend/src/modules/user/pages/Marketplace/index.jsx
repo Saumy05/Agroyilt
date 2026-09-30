@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FiSearch, FiShoppingCart, FiArrowLeft, FiPlus, FiFilter, FiTag } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -9,7 +9,8 @@ import { toastManager } from '../../../../utils/toastManager';
 import { themeColors } from '../../../../theme';
 
 const toAssetUrl = (url) => {
-    if (!url) return '';
+    if (!url) return '/landing_images/fertilizer_seeds.jpg';
+    if (url.startsWith('/landing_images')) return url;
     const clean = url.replace('/api/upload', '/upload');
     if (clean.startsWith('http')) return clean;
     const base = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000').replace(/\/api$/, '');
@@ -240,11 +241,15 @@ const MarketplacePage = () => {
                                 className="bg-white rounded-[32px] border border-slate-100 overflow-hidden shadow-sm flex flex-col group"
                             >
                                 {/* Product Image */}
-                                <div className="h-40 bg-slate-50 relative p-4 flex items-center justify-center overflow-hidden">
+                                <div className="h-40 bg-slate-50 relative overflow-hidden flex items-center justify-center">
                                     <img
                                         src={toAssetUrl(product.imageUrl)}
                                         alt={product.title}
-                                        className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-500"
+                                        onError={(e) => {
+                                            e.currentTarget.onerror = null;
+                                            e.currentTarget.src = '/landing_images/fertilizer_seeds.jpg';
+                                        }}
+                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                                     />
                                     {product.discountPrice && (
                                         <div className="absolute top-3 left-3 bg-rose-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest shadow-lg shadow-rose-100">
