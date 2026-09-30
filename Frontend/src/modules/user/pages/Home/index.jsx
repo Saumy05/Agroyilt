@@ -573,7 +573,7 @@ const Home = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-4 gap-2 sm:gap-4">
                   {(homeContent?.premiumOfferings || []).sort((a, b) => (a.order || 0) - (b.order || 0)).map((item, idx) => (
                     <motion.div
                       key={item.id || item._id || idx}
@@ -607,22 +607,33 @@ const Home = () => {
                           if (tabKey) setActiveSectionTab(tabKey);
                         }
                       }}
-                      className="relative overflow-hidden bg-white border border-slate-100 rounded-[20px] p-3 shadow-[0_4px_12px_rgba(0,0,0,0.02)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] transition-all active:scale-95 group flex items-center gap-3 cursor-pointer"
+                      className="flex flex-col items-center cursor-pointer group active:scale-95 transition-transform"
                     >
-                      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity" style={{ background: `linear-gradient(to bottom right, ${item.colorCode}1a, transparent)` }} />
-                      <div className="w-[42px] h-[42px] rounded-[14px] flex items-center justify-center flex-shrink-0 transition-all duration-300 shadow-sm border z-10 overflow-hidden" style={{ backgroundColor: `${item.colorCode}1a`, color: item.colorCode, borderColor: `${item.colorCode}33` }}>
+                      <div className="relative w-[54px] h-[54px] sm:w-[60px] sm:h-[60px] rounded-[18px] bg-white border border-slate-100 shadow-[0_4px_14px_rgba(0,0,0,0.04)] group-hover:shadow-[0_6px_20px_rgba(0,0,0,0.08)] flex items-center justify-center p-2 transition-all duration-300 overflow-hidden">
+                        <div
+                          className="absolute inset-0 opacity-15 group-hover:opacity-25 transition-opacity"
+                          style={{ backgroundColor: item.colorCode || '#2E7D32' }}
+                        />
                         {item.imageUrl ? (
-                          <img src={toAssetUrl(item.imageUrl)} alt={item.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
+                          <img
+                            src={toAssetUrl(item.imageUrl)}
+                            alt={item.title}
+                            className="w-full h-full object-cover rounded-[12px] group-hover:scale-110 transition-transform duration-500"
+                          />
                         ) : (
-                          <span className="text-xl font-bold">{item.title?.charAt(0)}</span>
+                          <span className="text-xl font-bold" style={{ color: item.colorCode || '#2E7D32' }}>
+                            {item.title?.charAt(0)}
+                          </span>
                         )}
                       </div>
-                      <div className="flex-1 min-w-0 z-10">
-                        <p className="text-[13px] sm:text-sm font-black text-slate-800 leading-tight truncate tracking-tight">
-                          {item.title === 'Rent Machinery' ? 'Machinery Catalog' : item.title}
+                      <p className="text-[12px] font-bold text-slate-800 text-center leading-snug mt-1.5 line-clamp-1">
+                        {item.title === 'Rent Machinery' ? 'Machinery' : item.title}
+                      </p>
+                      {item.subtitle && (
+                        <p className="text-[9.5px] font-semibold text-slate-400 text-center leading-tight truncate max-w-full">
+                          {item.subtitle}
                         </p>
-                        <p className="text-[10px] font-bold text-slate-400 mt-0.5 truncate tracking-wide">{item.subtitle}</p>
-                      </div>
+                      )}
                     </motion.div>
                   ))}
                   {/* Weather Button */}
