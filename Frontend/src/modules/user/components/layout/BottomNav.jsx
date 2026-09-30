@@ -1,4 +1,4 @@
-﻿import React, { useRef, useEffect, useState, useMemo } from 'react';
+import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { FiHome, FiGift, FiShoppingCart, FiUser, FiCalendar } from 'react-icons/fi';
 import { HiHome, HiGift, HiShoppingCart, HiUser, HiCalendar } from 'react-icons/hi';
@@ -99,7 +99,7 @@ const BottomNav = React.memo(() => {
       }}
     >
       <div
-        className="w-full pb-4 pt-3 px-2"
+        className="w-full pb-2 pt-2 px-2"
         style={{
           background: 'rgba(255, 255, 255, 0.98)',
           backdropFilter: 'blur(20px)',
@@ -138,7 +138,7 @@ const BottomNav = React.memo(() => {
                 key={item.id}
                 onClick={() => handleTabClick(item.path)}
                 whileTap={{ scale: 0.9 }}
-                className="flex flex-col items-center justify-center w-16 h-14 rounded-2xl transition-all duration-200 relative"
+                className="flex flex-col items-center justify-center w-14 h-11 rounded-2xl transition-all duration-200 relative"
               >
                 {/* Active Background Glow */}
                 <AnimatePresence>
@@ -158,7 +158,7 @@ const BottomNav = React.memo(() => {
 
                 <div className="relative z-10 flex flex-col items-center justify-center">
                   <motion.div
-                    className="relative mb-1"
+                    className="relative mb-0.5"
                     animate={{
                       scale: isActive ? 1.1 : 1,
                       y: isActive ? -2 : 0
