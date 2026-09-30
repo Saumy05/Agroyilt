@@ -16,6 +16,7 @@ const { BOOKING_STATUS, PAYMENT_STATUS } = require('../../utils/constants');
 const { createNotification } = require('../notificationControllers/notificationController');
 const { sendNotificationToUser, sendNotificationToVendor, sendNotificationToWorker } = require('../../services/firebaseAdmin');
 const { sendNewBookingNotification } = require('../../services/firebaseNotificationService');
+const { parseTimeToMinutes, parseSlotInterval, isIntervalOverlapping } = require('../../utils/timeSlotHelper');
 
 /**
  * Create a new booking
@@ -330,29 +331,30 @@ const createBooking = async (req, res) => {
     const searchRadii = [2, 5, 8, 10, 15, 20, 30];
 
     if (providerType === 'VENDOR') {
-      // If equipmentObj exists (Marketplace flow), include the specific equipment vendor
-      if (equipmentObj && equipmentObj.vendorId) {
-        const specificVendor = await Vendor.findById(equipmentObj.vendorId);
+      const targetedVendorId = vendorId || (equipmentObj ? equipmentObj.vendorId : null);
+      if (targetedVendorId) {
+        // Targeted single-vendor flow: alert ONLY the selected vendor
+        const specificVendor = await Vendor.findById(targetedVendorId);
         if (specificVendor) {
-          specificVendor.distance = 0; // Directly assigned
+          specificVendor.distance = 0;
           nearbyVendors.push(specificVendor);
-          console.log(`[CreateBooking] Equipment vendor added: ${specificVendor._id}`);
+          console.log(`[CreateBooking] Single-vendor targeted flow: vendor directly added ${specificVendor._id}`);
         }
-      }
+      } else {
+        // Non-targeted standard services: broadcast to nearby vendors
+        const vendorFilters = {
+          ...(category ? { service: category.title } : {}),
+          checkCashLimit: paymentMethod === 'cash'
+        };
 
-      // Also search nearby vendors for broadcast so surrounding vendors get the alert
-      const vendorFilters = {
-        ...(category ? { service: category.title } : {}),
-        checkCashLimit: paymentMethod === 'cash'
-      };
-
-      for (const radius of searchRadii) {
-        usedRadius = radius;
-        const found = await findNearbyVendors(bookingLocation, radius, vendorFilters);
-        const filtered = (found || []).filter(v => v.availability === 'AVAILABLE' || v.availability === 'OFFLINE');
-        if (filtered.length > 0) {
-          nearbyVendors = [...nearbyVendors, ...filtered];
-          break; // Stop expanding radius if we found available vendors
+        for (const radius of searchRadii) {
+          usedRadius = radius;
+          const found = await findNearbyVendors(bookingLocation, radius, vendorFilters);
+          const filtered = (found || []).filter(v => v.availability === 'AVAILABLE' || v.availability === 'OFFLINE');
+          if (filtered.length > 0) {
+            nearbyVendors = [...nearbyVendors, ...filtered];
+            break; // Stop expanding radius if we found available vendors
+          }
         }
       }
 
@@ -619,8 +621,8 @@ const createBooking = async (req, res) => {
     const booking = await Booking.create({
       bookingNumber,
       userId,
-      vendorId: equipmentObj ? equipmentObj.vendorId : null, // Assigned directly if Marketplace flow
-      equipmentId: equipmentId || null,
+      vendorId: (vendorId || (equipmentObj ? equipmentObj.vendorId : null)) || null,
+      equipmentId: equipmentId || (equipmentObj ? equipmentObj._id : null),
       workerId: requestedWorker ? requestedWorker._id : null, // Set workerId if directly requested
       providerType,
       serviceId,
@@ -671,7 +673,7 @@ const createBooking = async (req, res) => {
         end: timeSlot.end
       },
       paymentMethod: paymentMethod || null,
-      status: bookingStatus,
+      status: (providerType === 'VENDOR' && (vendorId || (equipmentObj && equipmentObj.vendorId))) ? BOOKING_STATUS.REQUESTED : bookingStatus,
       paymentStatus: bookingPaymentStatus,
       selectedImplements: selectedImplements || []
     });
@@ -695,83 +697,181 @@ const createBooking = async (req, res) => {
     const BookingRequest = require('../../models/BookingRequest');
 
     if (providerType === 'VENDOR') {
-      const sortedVendors = nearbyVendors.sort((a, b) => (a.distance || 0) - (b.distance || 0));
-      const wave1Vendors = sortedVendors.slice(0, WAVE_1_COUNT);
+      const targetVendorId = vendorId || (equipmentObj ? equipmentObj.vendorId : null);
 
-      booking.potentialVendors = sortedVendors.map(v => ({
-        vendorId: v._id,
-        distance: v.distance || 0
-      }));
-      booking.currentWave = 1;
-      booking.waveStartedAt = new Date();
-      booking.notifiedVendors = wave1Vendors.map(v => v._id);
-      await booking.save();
+      if (targetVendorId) {
+        // TARGETED SINGLE-VENDOR FLOW: Send ONLY to the farmer's selected vendor
+        const chosenVendor = nearbyVendors.find(v => (v._id || v.id).toString() === targetVendorId.toString())
+          || await Vendor.findById(targetVendorId);
 
-      if (wave1Vendors.length > 0) {
-        console.log(`[CreateBooking] Wave 1: Alerting ${wave1Vendors.length} closest vendors (of ${sortedVendors.length} total)`);
+        if (!chosenVendor) {
+          await Booking.findByIdAndDelete(booking._id);
+          return res.status(404).json({
+            success: false,
+            message: 'Selected vendor not found'
+          });
+        }
 
-        const bookingRequests = wave1Vendors.map(vendor => ({
+        // Concurrency / conflict check: verify vendor doesn't have an overlapping booking for this slot
+        const startOfDay = new Date(new Date(scheduledDate).setHours(0, 0, 0, 0));
+        const endOfDay = new Date(new Date(scheduledDate).setHours(23, 59, 59, 999));
+        const conflictingBookings = await Booking.find({
+          _id: { $ne: booking._id },
+          vendorId: targetVendorId,
+          scheduledDate: { $gte: startOfDay, $lte: endOfDay },
+          status: {
+            $in: [
+              BOOKING_STATUS.REQUESTED,
+              BOOKING_STATUS.CONFIRMED,
+              BOOKING_STATUS.ACCEPTED,
+              BOOKING_STATUS.ASSIGNED,
+              BOOKING_STATUS.JOURNEY_STARTED,
+              BOOKING_STATUS.IN_PROGRESS,
+              BOOKING_STATUS.WORK_DONE
+            ]
+          }
+        }).select('equipmentId scheduledDate scheduledTime timeSlot rental_type status bookingNumber');
+
+        const reqInterval = parseSlotInterval(timeSlot, scheduledTime, rental_type);
+        const resolvedEquipId = equipmentId || (equipmentObj ? equipmentObj._id : null);
+
+        let conflictBooking = null;
+        for (const cb of conflictingBookings) {
+          const isSameMachine = !resolvedEquipId || !cb.equipmentId || cb.equipmentId.toString() === resolvedEquipId.toString();
+          if (!isSameMachine) continue;
+
+          const cbInterval = parseSlotInterval(cb.timeSlot, cb.scheduledTime, cb.rental_type);
+          if (isIntervalOverlapping(cbInterval, reqInterval)) {
+            conflictBooking = cb;
+            break;
+          }
+        }
+
+        if (conflictBooking) {
+          await Booking.findByIdAndDelete(booking._id);
+          const isRequested = conflictBooking.status === BOOKING_STATUS.REQUESTED;
+          return res.status(409).json({
+            success: false,
+            conflict: true,
+            message: isRequested
+              ? 'This vendor currently has a pending request for this time slot. Please choose another vendor or time slot.'
+              : 'This vendor is already booked for this time slot. Please choose another vendor or time slot.'
+          });
+        }
+
+        let vendorDist = chosenVendor?.distance || null;
+        if (!vendorDist && chosenVendor?.geoLocation?.coordinates?.length === 2 && bookingLocation) {
+          const { calculateDistance } = require('../../services/locationService');
+          const [vLng, vLat] = chosenVendor.geoLocation.coordinates;
+          if (vLat && vLng) {
+            vendorDist = Math.round(calculateDistance(bookingLocation, { lat: vLat, lng: vLng }) * 10) / 10;
+          }
+        }
+
+        booking.vendorId = targetVendorId;
+        booking.equipmentId = equipmentId || (equipmentObj ? equipmentObj._id : null);
+        booking.status = BOOKING_STATUS.REQUESTED;
+        booking.potentialVendors = []; // NO WAVES
+        booking.currentWave = 1;
+        booking.waveStartedAt = new Date();
+        booking.notifiedVendors = [targetVendorId];
+        await booking.save();
+
+        console.log(`[CreateBooking] Targeted flow: Alerting selected vendor ${targetVendorId} only`);
+
+        const singleRequest = {
           bookingId: booking._id,
           providerType: 'VENDOR',
-          vendorId: vendor._id,
+          vendorId: targetVendorId,
           status: 'PENDING',
           wave: 1,
-          distance: vendor.distance || null,
+          distance: vendorDist,
           sentAt: new Date(),
-          expiresAt: new Date(Date.now() + 60 * 60 * 1000) // Expires in 1 hour
-        }));
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000) // 15 mins window
+        };
 
         try {
-          await BookingRequest.insertMany(bookingRequests, { ordered: false });
+          await BookingRequest.create(singleRequest);
         } catch (err) {
-          if (err.code !== 11000) console.error('[CreateBooking] BookingRequest insert error:', err);
+          if (err.code !== 11000) console.error('[CreateBooking] BookingRequest create error:', err);
         }
 
         if (io) {
-          wave1Vendors.forEach(vendor => {
-            const bookingData = {
-              bookingId: booking._id,
-              bookingNumber: booking.bookingNumber,
-              serviceName: service.title,
-              serviceCategory: category ? category.title : 'Category',
-              customerName: user.name,
-              customerPhone: user.phone,
-              scheduledDate: scheduledDate,
-              scheduledTime: scheduledTime,
-              price: finalAmount,
-              basePrice: basePrice,
-              address: address,
-              distance: vendor.distance,
-              brandName: service.brand || '',
-              brandIcon: service.brandIcon || '',
-              rental_type: service.pricingType || '',
-              estimatedDuration: booking.estimatedDuration || '',
-              landSize: address.landSize || '',
-              playSound: true,
-              message: `New booking request within ${vendor.distance?.toFixed(1) || '?'}km!`
-            };
-            
-            const vendorIdStr = (vendor._id || vendor.id || vendor).toString();
-            const room = `vendor_${vendorIdStr}`;
-            const socketsInRoom = io.sockets.adapter.rooms.get(room);
-            console.log(`[BOOKING SOCKET] Emitting new_booking_request to room: ${room}`);
-            console.log(`[BOOKING SOCKET] Booking ID: ${booking._id}`);
-            console.log(`[BOOKING SOCKET] Sockets in room ${room}: ${socketsInRoom ? socketsInRoom.size : 0}`);
-            
-            io.to(room).emit('new_booking_request', bookingData);
-            io.to(room).emit('booking_updated', { bookingId: booking._id, status: 'requested' });
-            console.log(`[BOOKING SOCKET] ✅ Emitted new_booking_request to ${room}`);
+          const bookingData = {
+            bookingId: booking._id,
+            bookingNumber: booking.bookingNumber,
+            serviceName: service.title,
+            serviceCategory: category ? category.title : 'Category',
+            customerName: user.name,
+            customerPhone: user.phone,
+            scheduledDate: scheduledDate,
+            scheduledTime: scheduledTime,
+            timeSlot: timeSlot,
+            price: finalAmount,
+            basePrice: basePrice,
+            address: address,
+            distance: vendorDist,
+            rental_type: rental_type || '',
+            estimatedDuration: booking.estimatedDuration || '',
+            landSize: landSize || '',
+            selectedImplements: selectedImplements || [],
+            playSound: true,
+            message: `New booking request from ${user.name}!`
+          };
 
-            // Trigger FCM Push Notification
-            sendNewBookingNotification(vendor, bookingData).catch(err => {
-              console.error('[FCM] Push notification failed for vendor', vendorIdStr, err);
-            });
-          });
-        } else {
-          console.error('[BOOKING SOCKET] ❌ io is null/undefined! Socket.io not initialized. Booking ID:', booking._id);
+          const room = `vendor_${targetVendorId.toString()}`;
+          console.log(`[BOOKING SOCKET] Emitting to selected vendor room: ${room}`);
+          io.to(room).emit('new_booking_request', bookingData);
+          io.to(room).emit('new_booking', bookingData);
+          io.to(room).emit('booking_updated', { bookingId: booking._id, status: 'requested' });
         }
+
+        // Push notification ONLY to targeted vendor
+        try {
+          const vendorDoc = chosenVendor?.fcmTokens ? chosenVendor : await Vendor.findById(targetVendorId);
+          if (vendorDoc && vendorDoc.fcmTokens && vendorDoc.fcmTokens.length > 0) {
+            await sendNewBookingNotification(
+              vendorDoc.fcmTokens,
+              booking._id,
+              service.title,
+              `${address.city || ''}, ${address.state || ''}`.trim()
+            );
+          }
+        } catch (err) {
+          console.error('[FCM] Push notification failed for vendor', targetVendorId, err);
+        }
+
+        // Database notification for targeted vendor
+        createNotification({
+          vendorId: targetVendorId,
+          type: 'booking_request',
+          title: 'New Booking Request',
+          message: `New booking request for ${service.title} from ${user.name}`,
+          relatedId: booking._id,
+          relatedType: 'booking',
+          data: {
+            bookingId: booking._id,
+            serviceName: service.title,
+            customerName: user.name,
+            customerPhone: user.phone,
+            scheduledDate: scheduledDate,
+            scheduledTime: scheduledTime,
+            location: address,
+            price: finalAmount,
+            distance: vendorDist
+          },
+          pushData: {
+            type: 'new_booking',
+            dataOnly: false,
+            link: `/vendor/bookings/${booking._id}`
+          }
+        }).catch(err => console.error('[Notification] Background save error (vendor):', err));
       } else {
-        console.warn(`[CreateBooking] NO VENDORS FOUND nearby! Push notifications will not be sent.`);
+        // Fallback if no specific vendor requested
+        booking.vendorId = null;
+        booking.status = BOOKING_STATUS.SEARCHING;
+        booking.potentialVendors = [];
+        await booking.save();
       }
     } else {
       // WORKER BLOCK
@@ -1000,13 +1100,16 @@ const createBooking = async (req, res) => {
       // specific error shouldn't fail the booking response
     }
 
-    // Clear user's cart COMPLETELY after booking setup (if providers were found)
-    const activeProviders = providerType === 'WORKER' 
-      ? (typeof wave1Workers !== 'undefined' ? wave1Workers : []) 
-      : (typeof wave1Vendors !== 'undefined' ? wave1Vendors : []);
+    // Clear user's cart COMPLETELY after booking setup (if providers were found or vendor targeted)
+    const hasTargetVendor = !!(booking.vendorId);
+    const activeProviders = hasTargetVendor
+      ? [booking.vendorId]
+      : (providerType === 'WORKER' 
+          ? (typeof wave1Workers !== 'undefined' ? wave1Workers : []) 
+          : (typeof wave1Vendors !== 'undefined' ? wave1Vendors : []));
 
     try {
-      if (activeProviders.length > 0) {
+      if (activeProviders.length > 0 || hasTargetVendor) {
         await Cart.findOneAndUpdate({ userId }, { $set: { items: [] } });
       }
     } catch (e) {
@@ -1015,8 +1118,10 @@ const createBooking = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: activeProviders.length > 0 ? 'Booking created successfully' : (providerType === 'WORKER' ? 'No workers found nearby' : 'No vendors found nearby'),
-      noVendorsFound: activeProviders.length === 0,
+      message: hasTargetVendor 
+        ? 'Booking request sent to selected vendor' 
+        : (activeProviders.length > 0 ? 'Booking created successfully' : (providerType === 'WORKER' ? 'No workers found nearby' : 'No vendors found nearby')),
+      noVendorsFound: !hasTargetVendor && activeProviders.length === 0,
       data: populatedBooking
     });
   } catch (error) {
@@ -2081,6 +2186,242 @@ const calculatePrice = async (req, res) => {
   }
 };
 
+/**
+ * Reselect a vendor for an equipment/machinery booking when the previous vendor
+ * rejected, timed out, or became unavailable.
+ * Never auto-switches vendors; triggered exclusively by the farmer.
+ */
+const reselectVendor = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { vendorId, equipmentId, priceDetails } = req.body;
+    const userId = req.user.id;
+
+    if (!vendorId) {
+      return res.status(400).json({ success: false, message: 'vendorId is required' });
+    }
+
+    const booking = await Booking.findOne({ _id: id, userId });
+    if (!booking) {
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+
+    // Reselection allowed if booking was rejected, timed out, cancelled, or still searching/requested
+    const allowedStatuses = [
+      BOOKING_STATUS.REQUESTED,
+      BOOKING_STATUS.REJECTED,
+      BOOKING_STATUS.SEARCHING,
+      BOOKING_STATUS.CANCELLED,
+      'vendor_rejected',
+      'timed_out'
+    ];
+
+    if (!allowedStatuses.includes(booking.status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot reselect vendor when booking is in status: ${booking.status}`
+      });
+    }
+
+    const Vendor = require('../../models/Vendor');
+    const targetVendor = await Vendor.findById(vendorId);
+    if (!targetVendor) {
+      return res.status(404).json({ success: false, message: 'Selected vendor not found' });
+    }
+
+    // Check real-time slot availability for the newly selected vendor
+    const startOfDay = new Date(new Date(booking.scheduledDate).setHours(0, 0, 0, 0));
+    const endOfDay = new Date(new Date(booking.scheduledDate).setHours(23, 59, 59, 999));
+    const conflictingBookings = await Booking.find({
+      _id: { $ne: booking._id },
+      vendorId: vendorId,
+      scheduledDate: { $gte: startOfDay, $lte: endOfDay },
+      status: {
+        $in: [
+          BOOKING_STATUS.REQUESTED,
+          BOOKING_STATUS.CONFIRMED,
+          BOOKING_STATUS.ACCEPTED,
+          BOOKING_STATUS.ASSIGNED,
+          BOOKING_STATUS.JOURNEY_STARTED,
+          BOOKING_STATUS.IN_PROGRESS,
+          BOOKING_STATUS.WORK_DONE
+        ]
+      }
+    }).select('equipmentId scheduledDate scheduledTime timeSlot rental_type status bookingNumber');
+
+    const reqInterval = parseSlotInterval(booking.timeSlot, booking.scheduledTime, booking.rental_type);
+    const targetEquipId = equipmentId || booking.equipmentId;
+
+    let conflictBooking = null;
+    for (const cb of conflictingBookings) {
+      const isSameMachine = !targetEquipId || !cb.equipmentId || cb.equipmentId.toString() === targetEquipId.toString();
+      if (!isSameMachine) continue;
+
+      const cbInterval = parseSlotInterval(cb.timeSlot, cb.scheduledTime, cb.rental_type);
+      if (isIntervalOverlapping(cbInterval, reqInterval)) {
+        conflictBooking = cb;
+        break;
+      }
+    }
+
+    if (conflictBooking) {
+      const isRequested = conflictBooking.status === BOOKING_STATUS.REQUESTED;
+      return res.status(409).json({
+        success: false,
+        message: isRequested
+          ? 'This vendor currently has a pending request for this time slot. Please choose another vendor.'
+          : 'This vendor already has a confirmed booking for this date and time slot. Please choose another vendor.'
+      });
+    }
+
+    // Update equipment if provided
+    if (equipmentId) {
+      booking.equipmentId = equipmentId;
+    }
+
+    // Update pricing if passed from authoritative calculation
+    if (priceDetails) {
+      if (priceDetails.basePrice !== undefined) booking.basePrice = priceDetails.basePrice;
+      if (priceDetails.tax !== undefined) booking.tax = priceDetails.tax;
+      if (priceDetails.visitingCharges !== undefined) booking.visitingCharges = priceDetails.visitingCharges;
+      if (priceDetails.finalAmount !== undefined) {
+        booking.finalAmount = priceDetails.finalAmount;
+        booking.userPayableAmount = priceDetails.finalAmount;
+      }
+      if (priceDetails.pricing) booking.pricing = { ...booking.pricing, ...priceDetails.pricing };
+    }
+
+    // Update distance
+    let vendorDist = null;
+    if (targetVendor.geoLocation?.coordinates?.length === 2 && booking.address?.lat && booking.address?.lng) {
+      const { calculateDistance } = require('../../services/locationService');
+      const [vLng, vLat] = targetVendor.geoLocation.coordinates;
+      if (vLat && vLng) {
+        vendorDist = Math.round(calculateDistance({ lat: booking.address.lat, lng: booking.address.lng }, { lat: vLat, lng: vLng }) * 10) / 10;
+      }
+    }
+
+    // Reset status to REQUESTED for the newly chosen vendor ONLY
+    booking.vendorId = vendorId;
+    booking.status = BOOKING_STATUS.REQUESTED;
+    booking.rejectionReason = undefined;
+    booking.cancellationReason = undefined;
+    booking.cancelledAt = undefined;
+    booking.cancelledBy = undefined;
+    booking.notifiedVendors = [vendorId];
+    booking.potentialVendors = [];
+    booking.currentWave = 1;
+    booking.waveStartedAt = new Date();
+    await booking.save();
+
+    // Expire any previous requests
+    const BookingRequest = require('../../models/BookingRequest');
+    await BookingRequest.updateMany(
+      { bookingId: booking._id },
+      { status: 'EXPIRED', respondedAt: new Date() }
+    );
+
+    // Create a single BookingRequest for the newly selected vendor
+    await BookingRequest.create({
+      bookingId: booking._id,
+      providerType: 'VENDOR',
+      vendorId: vendorId,
+      status: 'PENDING',
+      wave: 1,
+      distance: vendorDist,
+      sentAt: new Date(),
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000)
+    });
+
+    // Notify new vendor via Socket.io
+    const io = req.app.get('io');
+    if (io) {
+      const bookingData = {
+        bookingId: booking._id,
+        bookingNumber: booking.bookingNumber,
+        serviceName: booking.serviceName || 'Equipment Booking',
+        customerName: req.user.name,
+        customerPhone: req.user.phone,
+        scheduledDate: booking.scheduledDate,
+        scheduledTime: booking.scheduledTime,
+        timeSlot: booking.timeSlot,
+        price: booking.finalAmount,
+        basePrice: booking.basePrice,
+        address: booking.address,
+        distance: vendorDist,
+        rental_type: booking.rental_type || '',
+        estimatedDuration: booking.estimatedDuration || '',
+        landSize: booking.landSize || '',
+        selectedImplements: booking.selectedImplements || [],
+        playSound: true,
+        message: `New booking request from ${req.user.name}!`
+      };
+
+      const room = `vendor_${vendorId.toString()}`;
+      io.to(room).emit('new_booking_request', bookingData);
+      io.to(room).emit('new_booking', bookingData);
+      io.to(room).emit('booking_updated', { bookingId: booking._id, status: 'requested' });
+
+      // Notify farmer room
+      io.to(`user_${booking.userId}`).emit('booking_updated', {
+        bookingId: booking._id,
+        status: booking.status,
+        vendorId: vendorId,
+        message: 'Request sent to selected vendor'
+      });
+    }
+
+    // Push notification to vendor
+    try {
+      if (targetVendor.fcmTokens && targetVendor.fcmTokens.length > 0) {
+        const { sendNewBookingNotification } = require('../../services/pushNotificationService');
+        await sendNewBookingNotification(
+          targetVendor.fcmTokens,
+          booking._id,
+          booking.serviceName || 'Machinery Booking',
+          `${booking.address?.city || ''}, ${booking.address?.state || ''}`.trim()
+        );
+      }
+    } catch (err) {
+      console.error('[FCM] Push notification failed for reselected vendor', vendorId, err);
+    }
+
+    // In-app notification for vendor
+    createNotification({
+      vendorId: vendorId,
+      type: 'booking_request',
+      title: 'New Booking Request',
+      message: `New booking request for ${booking.serviceName || 'Machinery'} from ${req.user.name}`,
+      relatedId: booking._id,
+      relatedType: 'booking',
+      data: {
+        bookingId: booking._id,
+        serviceName: booking.serviceName || 'Machinery Booking',
+        customerName: req.user.name,
+        scheduledDate: booking.scheduledDate,
+        scheduledTime: booking.scheduledTime,
+        location: booking.address,
+        price: booking.finalAmount,
+        distance: vendorDist
+      },
+      pushData: {
+        type: 'new_booking',
+        dataOnly: false,
+        link: `/vendor/bookings/${booking._id}`
+      }
+    }).catch(err => console.error('[Notification] Error creating vendor notification:', err));
+
+    res.status(200).json({
+      success: true,
+      message: 'Booking request sent to selected vendor',
+      data: { booking }
+    });
+  } catch (error) {
+    console.error('Reselect vendor error:', error);
+    res.status(500).json({ success: false, message: 'Failed to reselect vendor. Please try again.' });
+  }
+};
+
 module.exports = {
   createBooking,
   getUserBookings,
@@ -2090,7 +2431,8 @@ module.exports = {
   addReview,
   getUserRatings,
   checkEquipmentAvailability,
-  calculatePrice
+  calculatePrice,
+  reselectVendor
 };
 
 /**

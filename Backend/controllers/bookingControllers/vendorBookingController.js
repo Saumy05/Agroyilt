@@ -133,6 +133,52 @@ const acceptBooking = async (req, res) => {
     const vendorId = req.user.id;
     const { id } = req.params;
 
+    const existingBooking = await Booking.findById(id);
+    if (!existingBooking) {
+      return res.status(404).json({
+        success: false,
+        message: 'Booking not found.'
+      });
+    }
+
+    // Check if this vendor already has an active/confirmed booking overlapping with this time slot
+    if (existingBooking.scheduledDate) {
+      const { parseSlotInterval, isIntervalOverlapping } = require('../../utils/timeSlotHelper');
+      const startOfDay = new Date(new Date(existingBooking.scheduledDate).setHours(0, 0, 0, 0));
+      const endOfDay = new Date(new Date(existingBooking.scheduledDate).setHours(23, 59, 59, 999));
+
+      const confirmedBookings = await Booking.find({
+        _id: { $ne: existingBooking._id },
+        vendorId: vendorId,
+        scheduledDate: { $gte: startOfDay, $lte: endOfDay },
+        status: {
+          $in: [
+            BOOKING_STATUS.CONFIRMED,
+            BOOKING_STATUS.ACCEPTED,
+            BOOKING_STATUS.ASSIGNED,
+            BOOKING_STATUS.JOURNEY_STARTED,
+            BOOKING_STATUS.IN_PROGRESS,
+            BOOKING_STATUS.WORK_DONE
+          ]
+        }
+      }).select('equipmentId scheduledDate scheduledTime timeSlot rental_type status bookingNumber');
+
+      const reqInterval = parseSlotInterval(existingBooking.timeSlot, existingBooking.scheduledTime, existingBooking.rental_type);
+
+      for (const cb of confirmedBookings) {
+        const isSameMachine = !existingBooking.equipmentId || !cb.equipmentId || cb.equipmentId.toString() === existingBooking.equipmentId.toString();
+        if (!isSameMachine) continue;
+
+        const cbInterval = parseSlotInterval(cb.timeSlot, cb.scheduledTime, cb.rental_type);
+        if (isIntervalOverlapping(cbInterval, reqInterval)) {
+          return res.status(409).json({
+            success: false,
+            message: `You already have a confirmed booking (${cb.bookingNumber || ''}) for this time slot. Cannot accept overlapping bookings.`
+          });
+        }
+      }
+    }
+
     // ATOMIC UPDATE: Check status and vendorId in query to prevent race conditions
     // Only accept if status is REQUESTED/SEARCHING and NO vendor is assigned yet
     const updatedBooking = await Booking.findOneAndUpdate(
@@ -158,7 +204,7 @@ const acceptBooking = async (req, res) => {
     if (!updatedBooking) {
       // If update failed, check why (likely already taken)
       const existing = await Booking.findById(id);
-      if (existing && existing.vendorId) {
+      if (existing && existing.vendorId && existing.vendorId.toString() !== vendorId.toString()) {
         return res.status(409).json({ // 409 Conflict
           success: false,
           message: 'Sorry, this job has already been accepted by another vendor.'
@@ -430,29 +476,50 @@ const rejectBooking = async (req, res) => {
 
     const remainingPotential = booking.potentialVendors.length;
 
-    if (pendingRequests === 0 && remainingPotential === 0) {
-      // No vendors left - mark booking as rejected/failed
-      booking.status = BOOKING_STATUS.REJECTED;
-      booking.cancelledAt = new Date();
-      booking.cancelledBy = 'system';
-      booking.cancellationReason = 'No vendors available';
+    const isSingleVendorTargeted = !!booking.vendorId;
 
-      // Notify user that no vendors are available
+    if (isSingleVendorTargeted || (pendingRequests === 0 && remainingPotential === 0)) {
+      // Vendor rejected or no vendors left - mark booking as rejected
+      booking.status = BOOKING_STATUS.REJECTED;
+      booking.rejectionReason = reason || 'Vendor declined the request';
+      booking.cancelledAt = new Date();
+      booking.cancelledBy = 'vendor';
+      booking.cancellationReason = reason || 'Vendor declined the request';
+
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`user_${booking.userId}`).emit('vendor_rejected', {
+          bookingId: booking._id,
+          bookingNumber: booking.bookingNumber,
+          vendorId,
+          reason: booking.rejectionReason,
+          canReselect: true,
+          message: 'The selected vendor declined your request. You can choose another available vendor.'
+        });
+        io.to(`user_${booking.userId}`).emit('booking_updated', {
+          bookingId: booking._id,
+          status: BOOKING_STATUS.REJECTED,
+          rejectionReason: booking.rejectionReason,
+          canReselect: true
+        });
+      }
+
+      // Notify user that vendor declined and they can choose another available vendor
       await createNotification({
         userId: booking.userId,
         type: 'booking_rejected',
-        title: 'No Vendors Available',
-        message: `Sorry, no vendors are available for booking ${booking.bookingNumber}. Please try again later.`,
+        title: 'Vendor Declined Request',
+        message: `The selected vendor declined your booking request for ${booking.bookingNumber}. Tap to choose another available vendor.`,
         relatedId: booking._id,
         relatedType: 'booking',
         pushData: {
-          type: 'booking_rejected',
+          type: 'vendor_rejected',
           bookingId: booking._id.toString(),
+          canReselect: true,
           link: `/user/booking/${booking._id}`
         }
       });
     }
-    // Otherwise, booking stays SEARCHING for other vendors
 
     await booking.save();
 

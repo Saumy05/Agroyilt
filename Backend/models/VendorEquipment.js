@@ -73,6 +73,18 @@ const vendorEquipmentSchema = new mongoose.Schema({
     min: 1900,
     max: new Date().getFullYear() + 1
   },
+  horsepower: {
+    type: Number,
+    min: 10,
+    max: 300,
+    default: null
+  },
+  hp: {
+    type: Number,
+    min: 10,
+    max: 300,
+    default: null
+  },
   description: {
     type: String,
     trim: true

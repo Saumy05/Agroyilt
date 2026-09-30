@@ -13,6 +13,7 @@ const {
   getUserRatings,
   checkEquipmentAvailability,
   calculatePrice,
+  reselectVendor,
   farmerConfirmFinalAmount,
   farmerSelectOfflinePayment
 } = require('../../controllers/bookingControllers/userBookingController');
@@ -67,6 +68,7 @@ router.put('/:id/reschedule', authenticate, isUser, rescheduleBookingValidation,
 router.post('/:id/review', authenticate, isUser, addReviewValidation, addReview);
 router.post('/:id/confirm-amount', authenticate, isUser, farmerConfirmFinalAmount);
 router.post('/:id/select-offline-payment', authenticate, isUser, farmerSelectOfflinePayment);
+router.put('/:id/reselect-vendor', authenticate, isUser, reselectVendor);
 
 module.exports = router;
 
