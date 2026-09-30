@@ -95,6 +95,13 @@ export const bookingService = {
   selectOfflinePayment: async (id) => {
     const response = await api.post(`/users/bookings/${id}/select-offline-payment`);
     return response.data;
+  },
+
+  // Reselect a new vendor when previous vendor rejects, times out, or becomes unavailable
+  reselectVendor: async (id, payload) => {
+    apiCache.invalidatePrefix('/users/bookings');
+    const response = await api.put(`/users/bookings/${id}/reselect-vendor`, payload);
+    return response.data;
   }
 };
 

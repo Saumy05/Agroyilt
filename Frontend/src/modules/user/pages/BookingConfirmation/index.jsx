@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { toastManager } from '../../../../utils/toastManager';
 import { themeColors } from '../../../../theme';
@@ -14,11 +14,14 @@ import {
   FiLoader,
   FiArrowLeft,
   FiBell,
-  FiXCircle
+  FiXCircle,
+  FiRefreshCw
 } from 'react-icons/fi';
 import { bookingService } from '../../../../services/bookingService';
+import { useSocket } from '../../../../context/SocketContext';
 import NotificationBell from '../../components/common/NotificationBell';
 import ConfirmDialog from '../../../../components/common/ConfirmDialog';
+import ReselectVendorModal from '../../components/booking/ReselectVendorModal';
 
 // Inline Searching Animation Component
 const SearchingAnimation = ({ isWorker }) => {
@@ -94,10 +97,12 @@ const BookingConfirmation = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { id } = useParams();
+  const socket = useSocket();
   const [booking, setBooking] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [isSearching, setIsSearching] = useState(!location.state?.noVendorsFound); // Respect passed state
+  const [isSearching, setIsSearching] = useState(!location.state?.noVendorsFound);
   const [confirmDialog, setConfirmDialog] = useState(false);
+  const [showReselectModal, setShowReselectModal] = useState(false);
 
   useEffect(() => {
     const loadBooking = async () => {
@@ -113,11 +118,9 @@ const BookingConfirmation = () => {
           }
           setBooking(data);
 
-          // Check if vendor is already assigned
+          // We are actively searching/waiting ONLY if status is requested or searching
           const currentStatus = data.status?.toLowerCase();
-          if (data.vendorId || (currentStatus !== 'requested' && currentStatus !== 'searching')) {
-            setIsSearching(false);
-          }
+          setIsSearching(['requested', 'searching'].includes(currentStatus));
         } else {
           toastManager.error(response.message || 'Booking not found');
           navigate('/user/my-bookings');
@@ -135,7 +138,64 @@ const BookingConfirmation = () => {
     }
   }, [id, navigate]);
 
-  // Poll for vendor acceptance
+  // Real-time socket event listeners for instant status updates
+  useEffect(() => {
+    if (!socket || !id) return;
+
+    const handleVendorRejected = (data) => {
+      if ((data.bookingId || data.id)?.toString() === id.toString()) {
+        console.log('[Socket] Vendor rejected booking:', data);
+        setBooking(prev => ({
+          ...prev,
+          status: 'rejected',
+          rejectionReason: data.reason || 'Selected vendor declined the booking request.'
+        }));
+        setIsSearching(false);
+        toastManager.error(data.message || 'Selected vendor declined the request.');
+        setShowReselectModal(true);
+      }
+    };
+
+    const handleBookingAccepted = (data) => {
+      if ((data.bookingId || data.id)?.toString() === id.toString()) {
+        console.log('[Socket] Booking accepted by vendor:', data);
+        setBooking(prev => ({
+          ...prev,
+          status: 'confirmed'
+        }));
+        setIsSearching(false);
+        toastManager.success('Booking confirmed by vendor!');
+      }
+    };
+
+    const handleBookingUpdated = (data) => {
+      if ((data.bookingId || data.id)?.toString() === id.toString()) {
+        console.log('[Socket] Booking updated:', data);
+        setBooking(prev => ({
+          ...prev,
+          status: data.status,
+          rejectionReason: data.rejectionReason || prev?.rejectionReason
+        }));
+        const newStatus = data.status?.toLowerCase();
+        setIsSearching(['requested', 'searching'].includes(newStatus));
+        if (['rejected', 'vendor_rejected', 'timed_out'].includes(newStatus)) {
+          setShowReselectModal(true);
+        }
+      }
+    };
+
+    socket.on('vendor_rejected', handleVendorRejected);
+    socket.on('booking_accepted', handleBookingAccepted);
+    socket.on('booking_updated', handleBookingUpdated);
+
+    return () => {
+      socket.off('vendor_rejected', handleVendorRejected);
+      socket.off('booking_accepted', handleBookingAccepted);
+      socket.off('booking_updated', handleBookingUpdated);
+    };
+  }, [socket, id]);
+
+  // Poll for vendor acceptance as fallback
   useEffect(() => {
     if (!isSearching || !id) return;
 
@@ -145,24 +205,23 @@ const BookingConfirmation = () => {
         if (response.success) {
           const updatedBooking = { ...response.data };
 
-          // Calculate notional display values for plan_benefit
           if (updatedBooking.paymentMethod === 'plan_benefit') {
             if (!updatedBooking.tax) updatedBooking.tax = (updatedBooking.basePrice || 0) * 0.18;
             if (!updatedBooking.visitingCharges && !updatedBooking.visitationFee) updatedBooking.visitingCharges = 49;
           }
 
           setBooking(updatedBooking);
-          // If vendor accepted or status changed
           const currentStatus = updatedBooking.status?.toLowerCase();
-          if (updatedBooking.vendorId || (currentStatus !== 'requested' && currentStatus !== 'searching')) {
-            setIsSearching(false);
+          const stillAwaiting = ['requested', 'searching'].includes(currentStatus);
+          setIsSearching(stillAwaiting);
+          if (!stillAwaiting) {
             clearInterval(pollInterval);
           }
         }
       } catch (error) {
         console.error('Polling error:', error);
       }
-    }, 5000); // Poll every 5 seconds
+    }, 5000);
 
     return () => clearInterval(pollInterval);
   }, [isSearching, id]);
@@ -302,36 +361,51 @@ const BookingConfirmation = () => {
                   </div>
                 )}
 
-                {/* Request Sent Icon - Show when status is requested but searching animation is stopped */}
+                {/* Request Sent Icon - Targeted Single-Vendor flow */}
                 {!isSearching && booking?.status?.toLowerCase() === 'requested' && (
                   <div className="flex flex-col items-center justify-center mb-6">
                     <div className="w-20 h-20 rounded-full bg-amber-50 flex items-center justify-center mb-4 border border-amber-100 shadow-sm">
                       <FiBell className="w-10 h-10 text-amber-500 animate-pulse" />
                     </div>
                     <h1 className="text-2xl font-black text-gray-900 mb-2 italic tracking-tight">REQUEST SENT!</h1>
-                    <p className="text-sm text-gray-500 text-center max-w-[260px] font-medium leading-relaxed">
-                      Your request has been broadcasted to all nearby {isWorker ? 'independent workers' : 'experts'}. We'll notify you the moment someone accepts.
+                    <p className="text-sm text-gray-600 text-center max-w-[280px] font-medium leading-relaxed">
+                      Your booking request has been sent to <span className="font-bold text-gray-900">{booking.vendorId?.businessName || booking.vendorId?.name || 'your chosen vendor'}</span>. Waiting for their confirmation.
                     </p>
+                    <div className="mt-3 flex items-center gap-1.5 px-3 py-1 bg-amber-50 border border-amber-200 rounded-full text-xs font-bold text-amber-700">
+                      <FiClock size={12} />
+                      <span>15-min response window</span>
+                    </div>
                   </div>
                 )}
 
-                {/* Failure Icon - Show when expired/cancelled/rejected */}
-                {!isSearching && ['expired', 'cancelled', 'rejected', 'failed', 'timeout'].includes(booking?.status?.toLowerCase()) && (
+                {/* Failure Icon - Show when expired/cancelled/rejected with Reselect Vendor CTA */}
+                {!isSearching && ['expired', 'cancelled', 'rejected', 'failed', 'timeout', 'vendor_rejected'].includes(booking?.status?.toLowerCase()) && (
                   <div className="flex flex-col items-center justify-center mb-6">
                     <div className="w-20 h-20 rounded-full bg-red-100 flex items-center justify-center mb-4">
                       <FiXCircle className="w-12 h-12 text-red-600" />
                     </div>
-                    <h1 className="text-2xl font-bold text-gray-900 mb-2">No {isWorker ? 'Worker' : 'Expert'} Found</h1>
-                    <p className="text-sm text-gray-500 text-center max-w-[260px] mb-6">
-                      We couldn't find a nearby {isWorker ? 'independent worker' : 'expert'} for your request at this moment.
+                    <h1 className="text-2xl font-bold text-gray-900 mb-2">Vendor Declined / Unavailable</h1>
+                    <p className="text-sm text-gray-600 text-center max-w-[280px] mb-2 font-medium">
+                      {booking?.rejectionReason || 'The selected vendor was unable to take your booking request at this time.'}
                     </p>
-                    <button
-                      onClick={() => navigate('/')}
-                      className="px-8 py-3 bg-teal-600 text-white rounded-xl font-bold shadow-lg shadow-teal-600/20 active:scale-95 transition-all flex items-center gap-2"
-                    >
-                      <FiArrowRight className="w-5 h-5" />
-                      Search Again
-                    </button>
+                    <p className="text-xs text-slate-400 text-center max-w-[260px] mb-5">
+                      We never auto-assign other vendors. Please pick another qualified available vendor below:
+                    </p>
+                    <div className="flex flex-col gap-2.5 w-full max-w-xs">
+                      <button
+                        onClick={() => setShowReselectModal(true)}
+                        className="w-full px-6 py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-xs uppercase tracking-wider shadow-lg shadow-blue-500/25 active:scale-95 transition-all flex items-center justify-center gap-2"
+                      >
+                        <FiRefreshCw size={14} />
+                        <span>Select Another Vendor</span>
+                      </button>
+                      <button
+                        onClick={() => navigate('/user/machinery-explorer')}
+                        className="w-full px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-bold text-xs active:scale-95 transition-all flex items-center justify-center gap-2"
+                      >
+                        <span>View Machinery Catalog</span>
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -342,12 +416,19 @@ const BookingConfirmation = () => {
                       <p className="text-xs text-gray-500 mb-1">Booking ID</p>
                       <p className="text-base font-bold text-black">{booking.bookingNumber || booking._id || booking.id}</p>
                     </div>
-                    <div className={`px-3 py-1.5 rounded-full ${(isSearching || booking?.status?.toLowerCase() === 'requested')
-                      ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                      : 'bg-green-50 text-green-700 border border-green-200'
-                      }`}>
+                    <div className={`px-3 py-1.5 rounded-full ${
+                      ['rejected', 'vendor_rejected', 'cancelled', 'timeout', 'expired'].includes(booking?.status?.toLowerCase())
+                        ? 'bg-red-50 text-red-700 border border-red-200'
+                        : (isSearching || booking?.status?.toLowerCase() === 'requested')
+                        ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                        : 'bg-green-50 text-green-700 border border-green-200'
+                    }`}>
                       <span className="text-sm font-semibold">
-                        {isSearching ? (isWorker ? 'Finding Worker...' : 'Finding Vendor...') : (booking?.status?.toLowerCase() === 'requested' ? 'Request Sent' : 'Confirmed')}
+                        {['rejected', 'vendor_rejected', 'cancelled', 'timeout', 'expired'].includes(booking?.status?.toLowerCase())
+                          ? 'Vendor Unavailable'
+                          : isSearching
+                          ? (isWorker ? 'Finding Worker...' : 'Awaiting Response...')
+                          : (booking?.status?.toLowerCase() === 'requested' ? 'Request Sent' : 'Confirmed')}
                       </span>
                     </div>
                   </div>
@@ -614,6 +695,18 @@ const BookingConfirmation = () => {
         confirmLabel="Yes, Cancel"
         cancelLabel="No, Keep It"
         type="danger"
+      />
+
+      <ReselectVendorModal
+        isOpen={showReselectModal}
+        onClose={() => setShowReselectModal(false)}
+        booking={booking}
+        onVendorSelected={(newBooking) => {
+          if (newBooking) {
+            setBooking(newBooking);
+            setIsSearching(true);
+          }
+        }}
       />
     </div>
   );

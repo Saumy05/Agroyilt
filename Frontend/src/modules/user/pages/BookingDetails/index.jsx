@@ -27,7 +27,8 @@ import {
   FiCamera,
   FiAlertTriangle,
   FiCheckSquare,
-  FiDollarSign
+  FiDollarSign,
+  FiRefreshCw
 } from 'react-icons/fi';
 import { FaRupeeSign } from 'react-icons/fa';
 import { bookingService } from '../../../../services/bookingService';
@@ -40,6 +41,7 @@ import disputeService from '../../../../services/disputeService'; // NEW
 import { ConfirmDialog } from '../../../../components/common';
 import ReviewCard from '../../components/booking/ReviewCard';
 import NotificationBell from '../../components/common/NotificationBell';
+import ReselectVendorModal from '../../components/booking/ReselectVendorModal';
 import api from '../../../../services/api';
 
 const toAssetUrl = (url) => {
@@ -151,6 +153,7 @@ const BookingDetails = () => {
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showDisputeModal, setShowDisputeModal] = useState(false); // NEW
+  const [showReselectModal, setShowReselectModal] = useState(false);
   const [paying, setPaying] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState({
     isOpen: false,
@@ -879,10 +882,27 @@ const BookingDetails = () => {
 
 
           {/* Visual Progress Stepper */}
-          {['cancelled', 'rejected'].includes(booking.status?.toLowerCase()) ? (
-            <div className="bg-red-50 rounded-2xl p-4 border border-red-100 flex items-center gap-3 text-red-700">
-              <FiXCircle className="w-5 h-5 shrink-0" />
-              <p className="font-medium text-sm">This booking has been {booking.status.toLowerCase()}.</p>
+          {['cancelled', 'rejected', 'vendor_rejected', 'timed_out'].includes(booking.status?.toLowerCase()) ? (
+            <div className="bg-red-50 rounded-2xl p-5 border border-red-100 space-y-3">
+              <div className="flex items-start gap-3 text-red-700">
+                <FiXCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-black text-sm">Booking {booking.status.toLowerCase().replace('_', ' ')}</p>
+                  <p className="text-xs text-red-600 mt-0.5">
+                    {booking.rejectionReason || 'The selected vendor was unable to take this booking.'}
+                  </p>
+                </div>
+              </div>
+              <p className="text-[11px] text-slate-500">
+                We never automatically switch vendors. You can pick another qualified available vendor for this work:
+              </p>
+              <button
+                onClick={() => setShowReselectModal(true)}
+                className="w-full sm:w-auto px-5 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm transition-all"
+              >
+                <FiRefreshCw size={13} />
+                <span>Select Another Available Vendor</span>
+              </button>
             </div>
           ) : (
             <div className="bg-white rounded-3xl p-6 shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-gray-100">
@@ -952,7 +972,7 @@ const BookingDetails = () => {
             </div>
           </div>
 
-          {/* Broadcast/Searching State Card */}
+          {/* Targeted Vendor / Searching State Card */}
           {!booking.workerId && !booking.assignedTo && ['requested', 'searching'].includes(booking.status?.toLowerCase()) && (
             <div className="bg-white rounded-3xl p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-amber-100 relative overflow-hidden group">
               <div className="absolute top-0 right-0 w-32 h-32 bg-amber-50 rounded-full -translate-y-16 translate-x-16 blur-3xl opacity-50 group-hover:opacity-80 transition-opacity"></div>
@@ -963,19 +983,27 @@ const BookingDetails = () => {
                     <FiSearch className="w-6 h-6 text-amber-500 animate-pulse" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-black text-gray-900 leading-tight">Finding Your Expert</h3>
-                    <p className="text-[10px] font-bold text-amber-600 uppercase tracking-widest">Broadcast in Progress</p>
+                    <h3 className="text-lg font-black text-gray-900 leading-tight">
+                      {booking.vendorId ? 'Waiting for Vendor Confirmation' : 'Finding Your Expert'}
+                    </h3>
+                    <p className="text-[10px] font-bold text-amber-600 uppercase tracking-widest">
+                      {booking.vendorId ? 'Request Sent' : 'Search in Progress'}
+                    </p>
                   </div>
                 </div>
 
                 <p className="text-sm text-gray-600 mb-4 leading-relaxed font-medium">
-                  We've sent your request to all verified experts in your area. You'll be notified automatically as soon as someone accepts.
+                  {booking.vendorId ? (
+                    <>Your booking request was sent directly to <span className="font-bold text-gray-900">{booking.vendorId?.businessName || booking.vendorId?.name || 'the selected vendor'}</span>. You will receive an immediate confirmation once they accept.</>
+                  ) : (
+                    <>We've sent your request to verified experts in your area. You'll be notified automatically as soon as someone accepts.</>
+                  )}
                 </p>
 
                 <div className="flex flex-col gap-2">
-                  <div className="flex items-center gap-2 text-xs text-gray-400 bg-gray-50 rounded-xl p-3 border border-gray-100">
+                  <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-50 rounded-xl p-3 border border-gray-100">
                     <span className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-ping"></span>
-                    <span>Waiting for response from 12+ nearby partners...</span>
+                    <span>{booking.vendorId ? 'Vendor has 15 minutes to respond' : 'Awaiting response...'}</span>
                   </div>
                 </div>
               </div>
@@ -2263,6 +2291,17 @@ const BookingDetails = () => {
           title={confirmDialog.title}
           message={confirmDialog.message}
           type={confirmDialog.type}
+        />
+
+        <ReselectVendorModal
+          isOpen={showReselectModal}
+          onClose={() => setShowReselectModal(false)}
+          booking={booking}
+          onVendorSelected={(newBooking) => {
+            if (newBooking) {
+              setBooking(newBooking);
+            }
+          }}
         />
       </div>
     </div>
