@@ -236,12 +236,12 @@ const MarketplacePage = () => {
                             <motion.div
                                 key={product._id}
                                 layout
-                                initial={{ opacity: 0, scale: 0.9 }}
+                                initial={{ opacity: 0, scale: 0.95 }}
                                 animate={{ opacity: 1, scale: 1 }}
-                                className="bg-white rounded-[32px] border border-slate-100 overflow-hidden shadow-sm flex flex-col group"
+                                className="flex flex-col group cursor-pointer"
                             >
-                                {/* Product Image */}
-                                <div className="h-40 bg-slate-50 relative overflow-hidden flex items-center justify-center">
+                                {/* Standalone Elevated Image Frame */}
+                                <div className="w-full aspect-square rounded-[24px] bg-white border border-slate-100/90 shadow-[0_3px_12px_rgba(0,0,0,0.05)] group-hover:shadow-[0_8px_20px_rgba(0,0,0,0.09)] group-hover:border-emerald-300/70 transition-all duration-300 relative overflow-hidden flex items-center justify-center p-2">
                                     <img
                                         src={toAssetUrl(product.imageUrl)}
                                         alt={product.title}
@@ -249,31 +249,26 @@ const MarketplacePage = () => {
                                             e.currentTarget.onerror = null;
                                             e.currentTarget.src = '/landing_images/fertilizer_seeds.jpg';
                                         }}
-                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                        className="w-full h-full object-cover rounded-[18px] group-hover:scale-105 transition-transform duration-500"
                                     />
                                     {product.discountPrice && (
-                                        <div className="absolute top-3 left-3 bg-rose-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest shadow-lg shadow-rose-100">
+                                        <div className="absolute top-2.5 left-2.5 bg-rose-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest shadow-sm">
                                             {Math.round((1 - product.discountPrice / product.price) * 100)}% Off
                                         </div>
                                     )}
-                                    <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <div className="w-8 h-8 bg-white/80 backdrop-blur rounded-xl flex items-center justify-center shadow-sm">
-                                            <FiTag className="w-3 h-3 text-slate-400" />
-                                        </div>
-                                    </div>
                                 </div>
 
-                                {/* Product Info */}
-                                <div className="p-4 flex flex-col flex-1">
-                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter mb-1">
+                                {/* Separated Product Info Underneath */}
+                                <div className="pt-2 px-1 flex flex-col flex-1">
+                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5 truncate">
                                         {product.brandName || 'Quality Assured'}
                                     </p>
-                                    <h3 className="text-xs font-black text-slate-800 line-clamp-2 leading-tight mb-2 min-h-[2rem]">
+                                    <h3 className="text-xs font-black text-slate-800 line-clamp-2 leading-tight mb-2 group-hover:text-emerald-700 transition-colors min-h-[30px]">
                                         {product.title}
                                     </h3>
 
                                     {/* Tech Specs Tags */}
-                                    <div className="flex flex-wrap gap-1 mb-3">
+                                    <div className="flex flex-wrap gap-1 mb-2.5">
                                         {product.distance !== undefined && (
                                             <span className="text-[7px] font-black uppercase tracking-widest bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-md border border-blue-100 flex items-center gap-0.5">
                                                 📍 {product.distance.toFixed(1)} km
@@ -302,10 +297,15 @@ const MarketplacePage = () => {
                                             </div>
                                         </div>
                                         <button
-                                            onClick={() => handleAddToCart(product)}
-                                            className="w-10 h-10 rounded-2xl bg-slate-900 text-white flex items-center justify-center shadow-xl shadow-slate-200 active:scale-90 transition-all group-hover:bg-emerald-600 group-hover:shadow-emerald-100"
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleAddToCart(product);
+                                            }}
+                                            className="w-9 h-9 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-md active:scale-90 transition-all hover:bg-emerald-600"
+                                            title="Add to Cart"
                                         >
-                                            <FiPlus className="w-5 h-5" />
+                                            <FiPlus className="w-4 h-4" />
                                         </button>
                                     </div>
                                 </div>

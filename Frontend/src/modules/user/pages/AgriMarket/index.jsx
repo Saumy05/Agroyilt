@@ -15,6 +15,14 @@ import { useEcommerceCart } from '../../../../context/EcommerceCartContext';
 import { toastManager } from '../../../../utils/toastManager';
 import { motion } from 'framer-motion';
 
+const toAssetUrl = (url) => {
+    if (!url) return '/landing_images/fertilizer_seeds.jpg';
+    if (url.startsWith('/landing_images/')) return url;
+    if (url.startsWith('http://') || url.startsWith('https://')) return url;
+    const base = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace(/\/api\/?$/, '');
+    return `${base}${url.startsWith('/') ? '' : '/'}${url}`;
+};
+
 const AgriMarket = () => {
     const navigate = useNavigate();
     const { addToCart, cartCount } = useEcommerceCart();
@@ -186,49 +194,53 @@ const AgriMarket = () => {
                                 transition={{ delay: idx * 0.03 }}
                                 key={product._id || `prod-${idx}`} 
                                 onClick={() => navigate(`/user/agri-marketplace/${product._id}`)}
-                                className="bg-white rounded-[20px] p-1.5 shadow-[0_2px_12px_rgba(0,0,0,0.03)] border border-slate-100 flex flex-col gap-1.5 group active:scale-[0.98] transition-all relative"
+                                className="flex flex-col group cursor-pointer"
                             >
-                                {/* Image Container - Smaller aspect */}
-                                <div className="aspect-[1/1] rounded-[16px] bg-slate-50 overflow-hidden relative border border-slate-50">
-                                    {product.imageUrl ? (
-                                        <img 
-                                            src={product.imageUrl} 
-                                            alt={product.title} 
-                                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
-                                        />
-                                    ) : (
-                                        <div className="w-full h-full flex items-center justify-center text-slate-200">
-                                            <FiPackage className="w-8 h-8 stroke-[1]" />
-                                        </div>
-                                    )}
+                                {/* Standalone Elevated Image Frame */}
+                                <div className="w-full aspect-square rounded-[22px] bg-white border border-slate-100/90 shadow-[0_3px_12px_rgba(0,0,0,0.05)] group-hover:shadow-[0_8px_20px_rgba(0,0,0,0.09)] group-hover:border-teal-300/70 transition-all duration-300 relative overflow-hidden flex items-center justify-center p-1.5">
+                                    <img 
+                                        src={toAssetUrl(product.imageUrl)} 
+                                        alt={product.title} 
+                                        onError={(e) => {
+                                            e.currentTarget.onerror = null;
+                                            e.currentTarget.src = '/landing_images/fertilizer_seeds.jpg';
+                                        }}
+                                        className="w-full h-full object-cover rounded-[16px] group-hover:scale-105 transition-transform duration-500" 
+                                    />
                                     
                                     {/* Small Verified Badge */}
-                                    <div className="absolute top-1.5 left-1.5 px-1.5 py-0.5 bg-white/80 backdrop-blur-md rounded-md border border-white/50">
+                                    <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-white/90 backdrop-blur-md rounded-md border border-white/60 shadow-xs">
                                         <div className="flex items-center gap-1">
-                                            <div className="w-1 h-1 bg-teal-500 rounded-full" />
+                                            <div className="w-1.5 h-1.5 bg-teal-500 rounded-full" />
                                             <p className="text-[7px] font-black text-teal-700 uppercase tracking-tighter">Verified</p>
                                         </div>
                                     </div>
+
+                                    {(product.discountPrice || product.calculatorPrice?.discountPercentage > 0) && (
+                                        <div className="absolute top-2 right-2 bg-amber-500 text-white text-[7px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider shadow-xs">
+                                            Offer
+                                        </div>
+                                    )}
                                 </div>
 
-                                {/* Content - Reduced gaps */}
-                                <div className="px-1 pb-1 flex flex-col">
-                                    <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest truncate">
+                                {/* Separated Details Underneath */}
+                                <div className="pt-2 px-1 flex flex-col flex-1">
+                                    <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest truncate mb-0.5">
                                         {product.brandName || 'Agri Best'}
                                     </p>
                                     
-                                    <h3 className="font-bold text-slate-800 text-[12px] leading-tight line-clamp-1 mb-1">
+                                    <h3 className="font-bold text-slate-800 text-xs leading-tight line-clamp-1 mb-1 group-hover:text-teal-700 transition-colors">
                                         {product.title}
                                     </h3>
                                     
-                                    <div className="flex flex-col">
+                                    <div className="flex flex-col mt-auto">
                                         <div className="flex items-baseline gap-0.5">
-                                            <span className="text-sm font-black text-slate-900">₹{product.calculatorPrice?.totalPrice || product.price}</span>
+                                            <span className="text-sm font-black text-slate-900">₹{product.calculatorPrice?.totalPrice || product.discountPrice || product.price}</span>
                                             <span className="text-[8px] font-bold text-slate-400 uppercase">/ {product.unit}</span>
                                         </div>
 
                                         {/* Compact Stock Indicator */}
-                                        <div className="flex items-center justify-between mt-0.5">
+                                        <div className="flex items-center justify-between mt-1">
                                             <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full ${
                                                 product.stock > 10 
                                                     ? 'bg-emerald-50 text-emerald-600' 
@@ -236,7 +248,7 @@ const AgriMarket = () => {
                                                         ? 'bg-amber-50 text-amber-600' 
                                                         : 'bg-red-50 text-red-600'
                                             }`}>
-                                                <div className={`w-0.5 h-0.5 rounded-full ${
+                                                <div className={`w-1 h-1 rounded-full ${
                                                     product.stock > 10 ? 'bg-emerald-500' : product.stock > 0 ? 'bg-amber-500' : 'bg-red-500'
                                                 }`} />
                                                 <span className="text-[7px] font-black uppercase tracking-tight">
@@ -245,7 +257,7 @@ const AgriMarket = () => {
                                             </div>
                                             
                                             {product.stock > 0 && (
-                                                <p className="text-[8px] font-bold text-slate-300">
+                                                <p className="text-[8px] font-bold text-slate-400">
                                                     {product.stock} left
                                                 </p>
                                             )}
@@ -254,11 +266,12 @@ const AgriMarket = () => {
                                         {/* Add to Cart button */}
                                         {product.stock > 0 ? (
                                             <button
+                                                type="button"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     handleAddToCartClick(product);
                                                 }}
-                                                className="mt-2 w-full py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 flex items-center justify-center gap-1 shadow-sm cursor-pointer pointer-events-auto border border-teal-600/10"
+                                                className="mt-2 w-full py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 flex items-center justify-center gap-1 shadow-sm cursor-pointer border border-teal-600/10"
                                             >
                                                 <FiPlus className="w-3 h-3" /> Add to Cart
                                             </button>
