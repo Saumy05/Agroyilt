@@ -28,7 +28,7 @@ const ServiceCategories = React.memo(({ categories, onCategoryClick, onSeeAllCli
   return (
     <div className="px-5">
       {/* Section Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-3">
         <div className="flex flex-col">
           <h2 className="text-[18px] sm:text-[20px] font-black text-gray-900 tracking-tight flex items-center gap-2">
             <TranslatedText>{title}</TranslatedText>
@@ -42,7 +42,7 @@ const ServiceCategories = React.memo(({ categories, onCategoryClick, onSeeAllCli
       </div>
 
       {/* Professional Grid Layout */}
-      <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-y-7 gap-x-3">
+      <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-y-4 gap-x-3">
         {serviceCategories.map((category, index) => {
           const iconSrc = toAssetUrl(category.icon || category.image);
           return (
@@ -112,7 +112,7 @@ const ServiceCategories = React.memo(({ categories, onCategoryClick, onSeeAllCli
       </div>
 
       {/* Subtle Bottom Separator */}
-      <div className="mt-10 h-[1px] w-full bg-gradient-to-r from-transparent via-gray-100 to-transparent"></div>
+      <div className="mt-5 h-[1px] w-full bg-gradient-to-r from-transparent via-gray-100 to-transparent"></div>
     </div>
   );
 });

@@ -486,12 +486,12 @@ const Home = () => {
             location={address}
             onLocationClick={handleLocationClick}
           />
-          <div className="px-5 pb-5 pt-1 max-w-lg mx-auto w-full">
+          <div className="px-5 pb-3 pt-0 max-w-lg mx-auto w-full">
             <SearchBar onInputClick={() => setIsSearchOpen(true)} categories={categories} />
           </div>
         </motion.div>
 
-        <main className="pt-6 space-y-8 pb-6 max-w-screen-xl mx-auto w-full">
+        <main className="pt-3 space-y-4 pb-6 max-w-screen-xl mx-auto w-full">
           {/* Location availability notice — shows only if state list is loaded but location is unresolved */}
           {!isLocationResolved && !geoLoading && states.length > 0 && (
             <div
@@ -566,11 +566,10 @@ const Home = () => {
 
             {/* Quick Agri Actions (Modern Premium Grid) */}
             {homeContent?.isPremiumOfferingsVisible !== false && (
-              <motion.section variants={itemVariants} className="px-5 py-4">
-                <div className="flex items-center justify-between mb-4">
+              <motion.section variants={itemVariants} className="px-5 py-2">
+                <div className="flex items-center justify-between mb-2.5">
                   <div className="flex flex-col">
-                    <h2 className="text-[18px] sm:text-[20px] font-black text-slate-900 tracking-tight">Explore Services</h2>
-                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">Tab Create</p>
+                    <h2 className="text-[17px] sm:text-[19px] font-black text-slate-900 tracking-tight">Explore Services</h2>
                   </div>
                 </div>
 
@@ -655,7 +654,7 @@ const Home = () => {
                     const sectionCategories = activeCategories.filter(c => (c.sectionType || 'General').trim() === sectionType);
                     if (sectionCategories.length === 0) return null;
                     return (
-                      <motion.section key={sectionType} variants={itemVariants} className="relative overflow-hidden pt-2 mb-4">
+                      <motion.section key={sectionType} variants={itemVariants} className="relative overflow-hidden pt-1 mb-1">
                         <div className="absolute inset-0 bg-gradient-to-b from-gray-50/30 to-transparent pointer-events-none -z-10" />
                         <ServiceCategories
                           title={sectionType === 'General' ? 'All Services' : sectionType}

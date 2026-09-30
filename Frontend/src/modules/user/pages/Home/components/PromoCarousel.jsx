@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef, memo } from 'react';
+import React, { useState, useEffect, useRef, memo } from 'react';
 import { gsap } from 'gsap';
 import PromoCard from '../../../components/common/PromoCard';
 import { themeColors } from '../../../../../theme';
@@ -116,7 +116,7 @@ const PromoCarousel = memo(({ promos, onPromoClick }) => {
         ))}
       </div>
       {/* Carousel indicator dots */}
-      <div className="flex justify-center gap-1.5 mt-3 mb-4">
+      <div className="flex justify-center gap-1.5 mt-2 mb-2">
         {promotionalCards.map((_, index) => (
           <div
             key={index}
