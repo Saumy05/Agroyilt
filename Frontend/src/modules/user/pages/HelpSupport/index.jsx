@@ -6,6 +6,8 @@ import {
   FiCheckCircle, FiClock, FiSend, FiPlus, FiMessageSquare,
   FiFileText, FiTag, FiRefreshCw, FiX, FiCheck, FiCornerDownLeft
 } from 'react-icons/fi';
+import { BsRobot } from 'react-icons/bs';
+import { Chatbot } from '../../../../components/common';
 import { toastManager } from '../../../../utils/toastManager';
 import api from '../../../../services/api';
 import supportService from '../../../../services/supportService';
@@ -36,6 +38,15 @@ const HelpSupport = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [categories, setCategories] = useState([]);
+
+  // AI Assistant Chat Modal State
+  const [showAiChat, setShowAiChat] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState('');
+
+  const handleOpenAiWithPrompt = (prompt = '') => {
+    setAiPrompt(prompt);
+    setShowAiChat(true);
+  };
 
   // Configurable Support Contacts from Settings
   const [supportInfo, setSupportInfo] = useState({
@@ -432,9 +443,92 @@ const HelpSupport = () => {
       </header>
 
       <main className="px-4 py-4 max-w-lg mx-auto space-y-6">
+        {/* Primary Support Card: Agroyilt AI Assistant */}
+        <div>
+          <div className="flex items-center justify-between mb-2 pl-1">
+            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200/60 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              24/7 AI Smart Assistant
+            </span>
+            <span className="text-[10px] font-bold text-slate-400">Voice & Hindi</span>
+          </div>
+
+          <div
+            onClick={() => handleOpenAiWithPrompt('')}
+            className="relative overflow-hidden rounded-[28px] p-5 bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 text-white shadow-xl shadow-emerald-700/20 active:scale-[0.99] transition-all cursor-pointer group border border-emerald-500/40"
+          >
+            {/* Ambient Background Accents */}
+            <div className="absolute -top-12 -right-12 w-36 h-36 bg-emerald-400/20 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-700 pointer-events-none" />
+            <div className="absolute -bottom-8 -left-8 w-28 h-28 bg-teal-300/20 rounded-full blur-xl pointer-events-none" />
+
+            <div className="relative z-10 flex items-start gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-white/15 backdrop-blur-md border border-white/25 flex items-center justify-center text-white shadow-inner shrink-0 group-hover:scale-105 transition-transform">
+                <BsRobot className="w-6 h-6" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-black tracking-tight text-white">Agroyilt AI Assistant</h2>
+                  <span className="px-1.5 py-0.5 rounded-md bg-emerald-400/30 border border-emerald-300/40 text-[9px] font-black uppercase tracking-wider text-emerald-100">
+                    कृषि सहायक
+                  </span>
+                </div>
+                <p className="text-xs text-emerald-100/95 font-medium mt-1 leading-snug">
+                  मशीनरी रेंटल, बीज व खाद ऑर्डर, लेबर बुकिंग या पेमेंट से जुड़े सवाल तुरंत पूछें। बोलकर भी पूछ सकते हैं!
+                </p>
+              </div>
+            </div>
+
+            {/* Quick Question Chips inside Hero Card */}
+            <div className="relative z-10 mt-4 pt-3.5 border-t border-white/15 flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleOpenAiWithPrompt('ट्रैक्टर और मशीनरी रेंटल कैसे बुक करें?');
+                }}
+                className="px-2.5 py-1 rounded-xl bg-white/15 hover:bg-white/25 text-white text-[11px] font-bold border border-white/20 active:scale-95 transition-all flex items-center gap-1.5 backdrop-blur-xs"
+              >
+                🚜 <span>मशीनरी रेंटल</span>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleOpenAiWithPrompt('बीज और खाद का ऑर्डर डिलीवरी स्टेटस');
+                }}
+                className="px-2.5 py-1 rounded-xl bg-white/15 hover:bg-white/25 text-white text-[11px] font-bold border border-white/20 active:scale-95 transition-all flex items-center gap-1.5 backdrop-blur-xs"
+              >
+                🌾 <span>खाद-बीज ऑर्डर</span>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleOpenAiWithPrompt('खेत के लिए लेबर और वर्कर बुकिंग सहायता');
+                }}
+                className="px-2.5 py-1 rounded-xl bg-white/15 hover:bg-white/25 text-white text-[11px] font-bold border border-white/20 active:scale-95 transition-all flex items-center gap-1.5 backdrop-blur-xs"
+              >
+                👨‍🌾 <span>वर्कर बुकिंग</span>
+              </button>
+            </div>
+
+            {/* Action Bottom Bar */}
+            <div className="relative z-10 mt-4 flex items-center justify-between">
+              <span className="text-[11px] font-bold text-emerald-200 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse" />
+                ऑनलाइन सहायता उपलब्ध
+              </span>
+              <div className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white text-emerald-900 text-xs font-black shadow-md group-hover:bg-emerald-50 transition-colors">
+                <span>बातचीत करें</span>
+                <FiChevronRight className="w-3.5 h-3.5" />
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Contact Us Section */}
         <div>
-          <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3 pl-1">Contact Us</h2>
+          <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3 pl-1">Direct Support</h2>
           <div className="grid grid-cols-1 gap-2.5">
             {quickActions.map(action => (
               <button
@@ -930,6 +1024,15 @@ const HelpSupport = () => {
           </div>
         </div>
       )}
+      {/* AI Assistant Chat Modal */}
+      <Chatbot
+        isOpen={showAiChat}
+        onClose={() => {
+          setShowAiChat(false);
+          setAiPrompt('');
+        }}
+        initialPrompt={aiPrompt}
+      />
     </div>
   );
 };

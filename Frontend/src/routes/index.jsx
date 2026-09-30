@@ -16,7 +16,7 @@ import AboutPage from '../modules/landing/pages/AboutPage';
 import ServicesPage from '../modules/landing/pages/ServicesPage';
 import WorkflowPage from '../modules/landing/pages/WorkflowPage';
 import FAQPage from '../modules/landing/pages/FAQPage';
-import { LocationPermissionChecker, Chatbot } from '../components/common';
+import { LocationPermissionChecker } from '../components/common';
 import { isMobileApp } from '../utils/platformUtils';
 import authStorage from '../utils/authStorage';
 
@@ -113,7 +113,6 @@ const AppRoutes = () => {
       {!hideGlobalElements && (
         <>
           <LocationPermissionChecker />
-          <Chatbot />
         </>
       )}
     </>

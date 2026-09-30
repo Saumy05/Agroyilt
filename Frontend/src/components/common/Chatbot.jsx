@@ -1,39 +1,65 @@
-﻿import React, { useState, useRef, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 import { BsRobot } from 'react-icons/bs';
-import { IoClose, IoSend, IoMic, IoMicOutline } from 'react-icons/io5';
-import { motion } from 'framer-motion';
+import { IoClose, IoSend, IoMic, IoMicOutline, IoVolumeHighOutline, IoVolumeMuteOutline } from 'react-icons/io5';
+import { motion, AnimatePresence } from 'framer-motion';
 import { toastManager } from '../../utils/toastManager';
-
 
 const API_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
-const Chatbot = () => {
-  const location = useLocation();
-  const isAuthPage = location.pathname.includes('/login') || location.pathname.includes('/signup');
-  const [isOpen, setIsOpen] = useState(false);
+const DEFAULT_WELCOME = "नमस्ते! 🙏 मैं Agroyilt का AI सहायक हूँ।\n\nआप ट्रैक्टर, कंबाइन या ड्रोन रेंटल, बीज व खाद ऑर्डर, लेबर बुकिंग या पेमेंट से जुड़े सवाल हिंदी या अंग्रेजी में पूछ सकते हैं। बोलकर भी पूछ सकते हैं!";
+
+const QUICK_PROMPTS = [
+  "🚜 ट्रैक्टर रेंटल कैसे बुक करें?",
+  "🌾 बीज और खाद की डिलीवरी कब होगी?",
+  "👨‍🌾 लेबर वर्कर बुकिंग सहायता",
+  "💳 पेमेंट और रिफंड की जानकारी"
+];
+
+const Chatbot = ({ isOpen = false, onClose, initialPrompt = '' }) => {
   const [messages, setMessages] = useState([
-    { text: "नमस्ते! मैं Agroyilt का AI असिस्टेंट हूँ। मैं आपकी कैसे मदद कर सकता हूँ?", sender: 'bot' }
+    { text: DEFAULT_WELCOME, sender: 'bot', time: new Date() }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [lastUsedVoice, setLastUsedVoice] = useState(false);
   const messagesEndRef = useRef(null);
 
+  // Stop speech when modal closes or unmounts
   useEffect(() => {
     return () => {
       if (window.speechSynthesis) window.speechSynthesis.cancel();
     };
   }, []);
 
+  useEffect(() => {
+    if (!isOpen && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+  }, [isOpen]);
+
+  // Handle auto-sending initialPrompt if provided
+  useEffect(() => {
+    if (isOpen && initialPrompt && initialPrompt.trim()) {
+      sendMessage(initialPrompt.trim());
+    }
+  }, [isOpen, initialPrompt]);
+
   const speakText = (text) => {
-    if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'hi-IN';
-    window.speechSynthesis.speak(utterance);
+    if (!voiceEnabled || !window.speechSynthesis) return;
+    try {
+      window.speechSynthesis.cancel();
+      // Clean up emojis and markdown symbols for cleaner speech
+      const clean = text.replace(/[*_#`~🚜🌾👨‍🌾💳🙏]/g, '').trim();
+      const utterance = new SpeechSynthesisUtterance(clean);
+      utterance.lang = 'hi-IN';
+      utterance.rate = 1.0;
+      window.speechSynthesis.speak(utterance);
+    } catch (e) {
+      console.error('Speech error:', e);
+    }
   };
 
   const startListening = () => {
@@ -43,66 +69,71 @@ const Chatbot = () => {
       return;
     }
 
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'hi-IN';
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'hi-IN';
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
 
-    recognition.onstart = () => {
-      setIsListening(true);
-      setLastUsedVoice(true);
-    };
+      recognition.onstart = () => {
+        setIsListening(true);
+        setLastUsedVoice(true);
+      };
 
-    recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      setInput(prev => prev ? prev + " " + transcript : transcript);
-    };
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        setInput(prev => prev ? prev + " " + transcript : transcript);
+      };
 
-    recognition.onerror = (event) => {
-      console.error("Speech recognition error:", event.error);
+      recognition.onerror = (event) => {
+        console.error("Speech recognition error:", event.error);
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognition.start();
+    } catch (err) {
+      console.error("Mic error:", err);
       setIsListening(false);
-    };
-
-    recognition.onend = () => {
-      setIsListening(false);
-    };
-
-    recognition.start();
+    }
   };
-
-  const toggleChat = () => setIsOpen(!isOpen);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    if (isOpen) {
+      scrollToBottom();
+    }
+  }, [messages, isOpen]);
 
-  const handleSend = async (e) => {
-    e?.preventDefault();
-    if (!input.trim()) return;
+  const sendMessage = async (textToSend) => {
+    if (!textToSend || !textToSend.trim() || isLoading) return;
 
-    const userMessage = input;
+    const userMessage = textToSend.trim();
     setInput('');
-    setMessages(prev => [...prev, { text: userMessage, sender: 'user' }]);
+    setMessages(prev => [...prev, { text: userMessage, sender: 'user', time: new Date() }]);
     setIsLoading(true);
 
     try {
       const response = await axios.post(`${API_URL}/chat`, { message: userMessage });
-      if (response.data.success) {
-        setMessages(prev => [...prev, { text: response.data.reply, sender: 'bot' }]);
-        if (lastUsedVoice) speakText(response.data.reply);
+      if (response.data && response.data.success) {
+        const reply = response.data.reply;
+        setMessages(prev => [...prev, { text: reply, sender: 'bot', time: new Date() }]);
+        if (lastUsedVoice) speakText(reply);
       } else {
-        const errorMsg = "माफ़ करें, कुछ तकनीकी समस्या आ गई है।";
-        setMessages(prev => [...prev, { text: errorMsg, sender: 'bot' }]);
+        const errorMsg = "माफ़ करें, कुछ तकनीकी समस्या आ गई है। कृपया थोड़ी देर बाद पुनः प्रयास करें।";
+        setMessages(prev => [...prev, { text: errorMsg, sender: 'bot', time: new Date() }]);
         if (lastUsedVoice) speakText(errorMsg);
       }
     } catch (error) {
       console.error("Chatbot error:", error);
-      const errorMsg = "माफ़ करें, सर्वर से कनेक्ट करने में समस्या हुई।";
-      setMessages(prev => [...prev, { text: errorMsg, sender: 'bot' }]);
+      const errorMsg = "माफ़ करें, सर्वर से कनेक्ट करने में समस्या हुई। कृपया इंटरनेट कनेक्शन जांचें।";
+      setMessages(prev => [...prev, { text: errorMsg, sender: 'bot', time: new Date() }]);
       if (lastUsedVoice) speakText(errorMsg);
     } finally {
       setIsLoading(false);
@@ -110,114 +141,153 @@ const Chatbot = () => {
     }
   };
 
-  if (isAuthPage) return null;
+  const handleFormSubmit = (e) => {
+    e?.preventDefault();
+    sendMessage(input);
+  };
+
+  if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 pointer-events-none z-[9999] flex justify-center">
-      <div className="w-full sm:max-w-md h-full relative">
-        {/* Floating Draggable Button */}
-        {!isOpen && (
-          <motion.div
-            drag
-            dragConstraints={{ left: -300, right: 0, top: -500, bottom: 0 }}
-            whileDrag={{ scale: 1.1 }}
-            className="absolute bottom-24 right-6 pointer-events-auto"
-            initial={{ x: 0, y: 0 }}
-          >
-            <button
-              onClick={toggleChat}
-              className="bg-green-600 text-white p-4 rounded-full shadow-2xl flex items-center justify-center focus:outline-none active:cursor-grabbing cursor-grab"
-              style={{ boxShadow: '0 8px 32px rgba(22, 163, 74, 0.3)' }}
-            >
-              <BsRobot size={28} />
-            </button>
-          </motion.div>
-        )}
+    <AnimatePresence>
+      <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-sm">
+        {/* Backdrop click to close */}
+        <div className="absolute inset-0" onClick={onClose} />
 
-        {/* Chat Window */}
-        {isOpen && (
-          <div className="absolute font-sans transition-all duration-300 inset-0 sm:inset-auto sm:bottom-6 sm:right-6 pointer-events-auto">
-          <div className="bg-white w-full h-full sm:w-96 sm:h-[500px] sm:rounded-2xl shadow-2xl flex flex-col sm:border border-gray-200 overflow-hidden transform transition-all">
+        <motion.div
+          initial={{ y: '100%', opacity: 0.5 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: '100%', opacity: 0 }}
+          transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+          className="relative bg-white w-full sm:max-w-md h-[90vh] sm:h-[640px] rounded-t-[32px] sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden z-10 border border-slate-100"
+        >
           {/* Header */}
-          <div className="bg-green-600 text-white p-4 flex justify-between items-center shadow-md z-10">
+          <div className="bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-800 text-white px-5 py-4 flex justify-between items-center shadow-md shrink-0">
             <div className="flex items-center gap-3">
-              <div className="bg-white text-green-600 p-2 rounded-full">
-                <BsRobot size={20} />
+              <div className="w-10 h-10 bg-white/15 backdrop-blur-md rounded-2xl flex items-center justify-center text-white border border-white/20 shadow-inner shrink-0">
+                <BsRobot className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="font-bold text-lg">Agroyilt Assistant</h3>
-                <p className="text-xs text-green-100">हमेशा आपकी मदद के लिए तैयार</p>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-black text-sm tracking-tight">Agroyilt AI Assistant</h3>
+                  <span className="flex h-2 w-2 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-300 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
+                  </span>
+                </div>
+                <p className="text-[10px] text-emerald-100 font-medium">कृषि व सहायता AI • 24/7 Voice & Hindi</p>
               </div>
             </div>
-            <button onClick={toggleChat} className="text-white hover:text-gray-200 focus:outline-none">
-              <IoClose size={24} />
-            </button>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  if (voiceEnabled && window.speechSynthesis) window.speechSynthesis.cancel();
+                  setVoiceEnabled(!voiceEnabled);
+                }}
+                className={`p-2 rounded-xl transition-all active:scale-90 ${voiceEnabled ? 'bg-white/15 text-white' : 'bg-white/5 text-white/50'}`}
+                title={voiceEnabled ? "Mute Voice Replies" : "Enable Voice Replies"}
+              >
+                {voiceEnabled ? <IoVolumeHighOutline className="w-4 h-4" /> : <IoVolumeMuteOutline className="w-4 h-4" />}
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white active:scale-90 transition-all"
+                aria-label="Close"
+              >
+                <IoClose className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
-          {/* Messages Area */}
-          <div className="flex-1 p-4 overflow-y-auto bg-gray-50 flex flex-col gap-3">
-            {messages.map((msg, idx) => (
-              <div key={idx} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div
-                  className={`max-w-[80%] p-3 rounded-2xl text-sm shadow-sm whitespace-pre-wrap ${
-                    msg.sender === 'user'
-                      ? 'bg-green-600 text-white rounded-tr-none'
-                      : 'bg-white text-gray-800 border border-gray-100 rounded-tl-none'
-                  }`}
-                >
-                  {msg.text}
+          {/* Messages Container */}
+          <div className="flex-1 p-4 overflow-y-auto bg-slate-50/70 flex flex-col gap-3.5 no-scrollbar">
+            {messages.map((msg, idx) => {
+              const isUser = msg.sender === 'user';
+              return (
+                <div key={idx} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+                  <div
+                    className={`max-w-[85%] p-3.5 rounded-2xl text-xs leading-relaxed whitespace-pre-wrap ${
+                      isUser
+                        ? 'bg-emerald-600 text-white rounded-br-xs shadow-md shadow-emerald-600/20 font-medium'
+                        : 'bg-white text-slate-800 border border-slate-100 rounded-bl-xs shadow-sm font-normal'
+                    }`}
+                  >
+                    {msg.text}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
+
             {isLoading && (
               <div className="flex justify-start">
-                <div className="bg-white border border-gray-100 text-gray-800 p-3 rounded-2xl rounded-tl-none shadow-sm flex items-center gap-2">
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+                <div className="bg-white border border-slate-100 text-slate-700 px-4 py-3 rounded-2xl rounded-bl-xs shadow-sm flex items-center gap-2">
+                  <div className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce" />
+                  <div className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce [animation-delay:0.2s]" />
+                  <div className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce [animation-delay:0.4s]" />
+                  <span className="text-[11px] font-bold text-slate-400 ml-1">सोच रहा है...</span>
                 </div>
               </div>
             )}
+
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Input Area */}
-          <form onSubmit={handleSend} className="p-3 bg-white border-t border-gray-200 flex items-center gap-2">
+          {/* Quick Prompts (if chat has 1 or 2 messages) */}
+          {messages.length <= 2 && (
+            <div className="px-3 py-2 bg-white border-t border-slate-100 overflow-x-auto flex gap-1.5 no-scrollbar shrink-0">
+              {QUICK_PROMPTS.map((prompt, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => sendMessage(prompt)}
+                  className="shrink-0 px-3 py-1.5 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-[11px] font-bold border border-emerald-200/60 active:scale-95 transition-all text-left"
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Input Form */}
+          <form
+            onSubmit={handleFormSubmit}
+            className="p-3 bg-white border-t border-slate-100 flex items-center gap-2 shrink-0"
+          >
             <button
               type="button"
               onClick={startListening}
-              className={`p-2 rounded-full transition-colors ${
-                isListening 
-                  ? 'bg-red-100 text-red-600 animate-pulse' 
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              className={`p-2.5 rounded-full transition-all active:scale-90 shrink-0 ${
+                isListening
+                  ? 'bg-rose-100 text-rose-600 ring-2 ring-rose-400 animate-pulse'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
-              title="बोलकर टाइप करें"
+              title="बोलकर पूछें (Voice Input)"
             >
-              {isListening ? <IoMic size={20} /> : <IoMicOutline size={20} />}
+              {isListening ? <IoMic className="w-5 h-5" /> : <IoMicOutline className="w-5 h-5" />}
             </button>
+
             <input
               type="text"
               value={input}
-              onChange={(e) => {
-                setInput(e.target.value);
-                setLastUsedVoice(false);
-              }}
-              placeholder="अपना सवाल पूछें..."
-              className="flex-1 bg-gray-100 border-none rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+              onChange={(e) => setInput(e.target.value)}
+              placeholder={isListening ? "सुन रहा हूँ... बोलिए" : "अपना सवाल पूछें (उदा. ट्रैक्टर रेंटल)..."}
+              className="flex-1 bg-slate-50 border border-slate-200 rounded-full px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-xs font-medium text-slate-800 transition-all placeholder:text-slate-400"
             />
+
             <button
               type="submit"
               disabled={isLoading || !input.trim()}
-              className="bg-green-600 text-white p-2 rounded-full hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed transition-all active:scale-90 shadow-md shadow-emerald-600/20 shrink-0"
             >
-              <IoSend size={20} />
+              <IoSend className="w-4 h-4 ml-0.5" />
             </button>
           </form>
-        </div>
+        </motion.div>
       </div>
-    )}
-      </div>
-    </div>
+    </AnimatePresence>
   );
 };
 
