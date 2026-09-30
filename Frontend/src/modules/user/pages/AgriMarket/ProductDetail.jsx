@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
     FiChevronLeft, 
     FiChevronRight,
@@ -17,6 +17,15 @@ import { useEcommerceCart } from '../../../../context/EcommerceCartContext';
 import { toastManager } from '../../../../utils/toastManager';
 import { motion, AnimatePresence } from 'framer-motion';
 import LocationPicker from '../Checkout/components/LocationPicker';
+
+const toAssetUrl = (url) => {
+    if (!url) return '/marketplace_images/wheat.jpg';
+    if (url.startsWith('/marketplace_images') || url.startsWith('/landing_images') || url.startsWith('/')) return url;
+    const clean = url.replace('/api/upload', '/upload');
+    if (clean.startsWith('http')) return clean;
+    const base = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000').replace(/\/api$/, '');
+    return `${base}${clean.startsWith('/') ? '' : '/'}${clean}`;
+};
 
 const ProductDetail = () => {
     const { id } = useParams();
@@ -159,7 +168,16 @@ const ProductDetail = () => {
                             });
                         }}>
                             {product.images.map((img, idx) => (
-                                <img key={idx} src={img} alt="" className="w-full h-full object-cover flex-shrink-0 snap-center" />
+                                <img
+                                    key={idx}
+                                    src={toAssetUrl(img)}
+                                    alt=""
+                                    onError={(e) => {
+                                        e.currentTarget.onerror = null;
+                                        e.currentTarget.src = '/marketplace_images/wheat.jpg';
+                                    }}
+                                    className="w-full h-full object-cover flex-shrink-0 snap-center"
+                                />
                             ))}
                         </div>
                         {product.images.length > 1 && (
@@ -179,7 +197,15 @@ const ProductDetail = () => {
                         )}
                     </div>
                 ) : product.imageUrl ? (
-                    <img src={product.imageUrl} alt="" className="w-full h-full object-cover" />
+                    <img
+                        src={toAssetUrl(product.imageUrl)}
+                        alt=""
+                        onError={(e) => {
+                            e.currentTarget.onerror = null;
+                            e.currentTarget.src = '/marketplace_images/wheat.jpg';
+                        }}
+                        className="w-full h-full object-cover"
+                    />
                 ) : (
                     <div className="w-full h-full flex items-center justify-center text-slate-100 bg-slate-200"><FiPackage className="w-24 h-24" /></div>
                 )}

@@ -8,8 +8,8 @@ import { toastManager } from '../../../../../utils/toastManager';
 import { themeColors } from '../../../../../theme';
 
 const toAssetUrl = (url) => {
-    if (!url) return '/landing_images/fertilizer_seeds.jpg';
-    if (url.startsWith('/landing_images')) return url;
+    if (!url) return '/marketplace_images/wheat.jpg';
+    if (url.startsWith('/marketplace_images') || url.startsWith('/landing_images') || url.startsWith('/')) return url;
     const clean = url.replace('/api/upload', '/upload');
     if (clean.startsWith('http')) return clean;
     const base = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000').replace(/\/api$/, '');
@@ -108,7 +108,7 @@ const AgriMarketplaceSection = () => {
                                     alt={product.title}
                                     onError={(e) => {
                                         e.currentTarget.onerror = null;
-                                        e.currentTarget.src = '/landing_images/fertilizer_seeds.jpg';
+                                        e.currentTarget.src = '/marketplace_images/wheat.jpg';
                                     }}
                                     className="w-full h-full object-cover rounded-[16px] group-hover:scale-106 transition-transform duration-500"
                                 />

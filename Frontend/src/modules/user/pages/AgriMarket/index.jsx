@@ -16,8 +16,8 @@ import { toastManager } from '../../../../utils/toastManager';
 import { motion } from 'framer-motion';
 
 const toAssetUrl = (url) => {
-    if (!url) return '/landing_images/fertilizer_seeds.jpg';
-    if (url.startsWith('/landing_images/')) return url;
+    if (!url) return '/marketplace_images/wheat.jpg';
+    if (url.startsWith('/marketplace_images') || url.startsWith('/landing_images') || url.startsWith('/')) return url;
     if (url.startsWith('http://') || url.startsWith('https://')) return url;
     const base = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace(/\/api\/?$/, '');
     return `${base}${url.startsWith('/') ? '' : '/'}${url}`;
@@ -203,7 +203,7 @@ const AgriMarket = () => {
                                         alt={product.title} 
                                         onError={(e) => {
                                             e.currentTarget.onerror = null;
-                                            e.currentTarget.src = '/landing_images/fertilizer_seeds.jpg';
+                                            e.currentTarget.src = '/marketplace_images/wheat.jpg';
                                         }}
                                         className="w-full h-full object-cover rounded-[16px] group-hover:scale-105 transition-transform duration-500" 
                                     />

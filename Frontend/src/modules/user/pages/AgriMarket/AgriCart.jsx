@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
     FiChevronLeft, 
     FiShoppingCart, 
@@ -17,6 +17,15 @@ import ecommerceService from '../../../../services/ecommerceService';
 import { toastManager } from '../../../../utils/toastManager';
 import { motion, AnimatePresence } from 'framer-motion';
 import LocationPicker from '../Checkout/components/LocationPicker';
+
+const toAssetUrl = (url) => {
+    if (!url) return '/marketplace_images/wheat.jpg';
+    if (url.startsWith('/marketplace_images') || url.startsWith('/landing_images') || url.startsWith('/')) return url;
+    const clean = url.replace('/api/upload', '/upload');
+    if (clean.startsWith('http')) return clean;
+    const base = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000').replace(/\/api$/, '');
+    return `${base}${clean.startsWith('/') ? '' : '/'}${clean}`;
+};
 
 const AgriCart = () => {
     const navigate = useNavigate();
@@ -206,7 +215,15 @@ const AgriCart = () => {
                                             <div key={item._id} className="flex gap-4 pt-3 first:pt-0">
                                                 <div className="w-16 h-16 bg-slate-50 rounded-xl overflow-hidden flex-shrink-0 border border-slate-100">
                                                     {product.imageUrl ? (
-                                                        <img src={product.imageUrl} alt="" className="w-full h-full object-cover" />
+                                                        <img
+                                                            src={toAssetUrl(product.imageUrl)}
+                                                            alt=""
+                                                            onError={(e) => {
+                                                                e.currentTarget.onerror = null;
+                                                                e.currentTarget.src = '/marketplace_images/wheat.jpg';
+                                                            }}
+                                                            className="w-full h-full object-cover"
+                                                        />
                                                     ) : (
                                                         <div className="w-full h-full flex items-center justify-center text-slate-200"><FiPackage /></div>
                                                     )}
