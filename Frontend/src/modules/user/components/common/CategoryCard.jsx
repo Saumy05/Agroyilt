@@ -1,4 +1,4 @@
-﻿import React, { useRef, memo, useEffect } from 'react';
+import React, { useRef, memo, useEffect } from 'react';
 import { gsap } from 'gsap';
 import { themeColors } from '../../../../theme';
 
@@ -22,48 +22,43 @@ const CategoryCard = memo(({ icon, title, onClick, hasSaleBadge = false, index =
     if (cardRef.current) {
       gsap.fromTo(
         cardRef.current,
-        { y: 15, opacity: 0 },
+        { y: 12, opacity: 0 },
         {
           y: 0,
           opacity: 1,
-          duration: 0.4,
-          delay: index * 0.05,
+          duration: 0.35,
+          delay: index * 0.04,
           ease: 'power2.out',
         }
       );
     }
   }, [index]);
 
-  const bgColor = bgColors[index % bgColors.length];
-
   return (
     <div
       ref={cardRef}
-      className="flex flex-col items-center cursor-pointer relative group transition-all duration-300 ease-out hover:-translate-y-1.5 active:scale-95 w-[85px] h-[105px] rounded-[20px] overflow-hidden shadow-sm hover:shadow-md"
+      className="flex flex-col items-center cursor-pointer group transition-all duration-300 ease-out hover:-translate-y-1 active:scale-95 w-full max-w-[84px]"
       onClick={onClick}
-      style={{
-        opacity: 0,
-        backgroundColor: bgColor,
-      }}
+      style={{ opacity: 0 }}
     >
-      {/* Image Container - Maximized */}
-      <div className="w-full h-[75%] relative overflow-hidden bg-white/10 group-hover:bg-white/20 transition-colors">
+      {/* Top Image Container - Squircle Card */}
+      <div className="w-[68px] h-[68px] sm:w-[76px] sm:h-[76px] rounded-2xl overflow-hidden bg-white border border-slate-100 shadow-[0_2px_8px_rgba(0,0,0,0.05)] group-hover:shadow-[0_8px_18px_rgba(0,0,0,0.09)] group-hover:border-emerald-300/60 transition-all duration-300 relative flex items-center justify-center">
         {icon ? (
           <div className="w-full h-full flex items-center justify-center overflow-hidden">
             {React.isValidElement(icon) && icon.type === 'img' ? (
-               React.cloneElement(icon, { 
-                 className: `w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 ${icon.props.className || ''}` 
-               })
+              React.cloneElement(icon, { 
+                className: `w-full h-full object-cover transition-transform duration-500 group-hover:scale-108 ${icon.props.className || ''}` 
+              })
             ) : (
-              <div className="w-full h-full flex items-center justify-center p-2 transform transition-transform duration-500 group-hover:scale-110">
+              <div className="w-full h-full flex items-center justify-center p-2 transform transition-transform duration-300 group-hover:scale-108">
                 {icon}
               </div>
             )}
           </div>
         ) : (
-          <div className="w-full h-full flex items-center justify-center">
+          <div className="w-full h-full flex items-center justify-center bg-slate-50">
             <svg
-              className="w-10 h-10 text-white/40"
+              className="w-8 h-8 text-slate-300"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -80,7 +75,7 @@ const CategoryCard = memo(({ icon, title, onClick, hasSaleBadge = false, index =
 
         {hasSaleBadge && (
           <div
-            className="absolute top-1.5 right-1.5 text-white text-[8px] font-black px-2 py-0.5 rounded-full shadow-lg z-10 border border-white/30 backdrop-blur-sm"
+            className="absolute top-1.5 right-1.5 text-white text-[7.5px] font-black px-1.5 py-0.5 rounded-full shadow-sm z-10"
             style={{
               background: themeColors.gradient,
             }}
@@ -90,14 +85,13 @@ const CategoryCard = memo(({ icon, title, onClick, hasSaleBadge = false, index =
         )}
       </div>
 
-      {/* Title Container */}
-      <div className="w-full h-[25%] flex items-center justify-center px-1.5 bg-black/5">
-        <span
-          className="text-[9.5px] leading-[1.1] text-center font-bold tracking-tight text-[#2c3e21] line-clamp-2"
-        >
-          {title}
-        </span>
-      </div>
+      {/* Bottom Separated Title Container */}
+      <span
+        className="mt-2 text-[11px] sm:text-xs leading-[1.25] text-center font-bold tracking-tight text-slate-700 group-hover:text-emerald-700 line-clamp-2 max-w-[78px] transition-colors"
+        title={title}
+      >
+        {title}
+      </span>
     </div>
   );
 });
