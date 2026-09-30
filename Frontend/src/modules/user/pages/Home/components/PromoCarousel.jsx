@@ -2,70 +2,70 @@ import React, { useState, useEffect, useRef, memo } from 'react';
 import { gsap } from 'gsap';
 import PromoCard from '../../../components/common/PromoCard';
 import { themeColors } from '../../../../../theme';
-import promo1 from '../../../../../assets/images/pages/Home/promo-carousel/1764052270908-bae94c.jpg';
-import promo2 from '../../../../../assets/images/pages/Home/promo-carousel/1678450687690-81f922.jpg';
-import promo3 from '../../../../../assets/images/pages/Home/promo-carousel/1745822547742-760034.jpg';
-import promo4 from '../../../../../assets/images/pages/Home/promo-carousel/1711428209166-2d42c0.jpg';
-import promo5 from '../../../../../assets/images/pages/Home/promo-carousel/1762785595543-540198.jpg';
-import promo6 from '../../../../../assets/images/pages/Home/promo-carousel/1678454437383-aa4984.jpg';
 
 const PromoCarousel = memo(({ promos, onPromoClick }) => {
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const originals = promos || [];
+  // Double the array → [A, B, C, A*, B*, C*] for seamless loop
+  const looped = originals.length > 1 ? [...originals, ...originals] : originals;
+
+  const [activeDot, setActiveDot] = useState(0);
+  const currentIndexRef = useRef(0);       // source of truth for scroll position
   const scrollContainerRef = useRef(null);
-  const intervalRef = useRef(null);
   const carouselRef = useRef(null);
-  const [isHovered, setIsHovered] = useState(false);
+  const isHoveredRef = useRef(false);
+  const isSilentReset = useRef(false);
 
+  // ─── Core scroll-to helper ─────────────────────────────────────────────────
+  const scrollToIndex = (index, behavior = 'smooth') => {
+    if (!scrollContainerRef.current) return;
+    const cardWidth = scrollContainerRef.current.offsetWidth;
+    scrollContainerRef.current.scrollTo({ left: index * cardWidth, behavior });
+  };
 
-
-  const promotionalCards = promos || [];
-
-  // Simple auto-scroll functionality
+  // ─── Auto-advance (stable interval — never depends on currentIndex) ────────
   useEffect(() => {
-    if (isHovered || promotionalCards.length <= 1) return;
+    if (originals.length <= 1) return;
 
     const interval = setInterval(() => {
-      if (!scrollContainerRef.current) return;
+      if (isHoveredRef.current || isSilentReset.current) return;
 
-      const container = scrollContainerRef.current;
-      const cardWidth = container.offsetWidth; // Scroll by one screen/card width
+      const next = currentIndexRef.current + 1;
 
-      // Calculate next scroll position
-      let nextScrollLeft = container.scrollLeft + cardWidth;
+      if (next >= originals.length) {
+        // Smoothly scroll to the first CLONE (A*) — looks like continuing forward
+        scrollToIndex(next, 'smooth');
+        currentIndexRef.current = next;
 
-      // If we reached the end, loop back (smoothly if possible, or instant)
-      if (nextScrollLeft >= container.scrollWidth - 10) { // Tolerance
-        nextScrollLeft = 0;
+        // After smooth animation completes, silently snap back to real first card
+        setTimeout(() => {
+          isSilentReset.current = true;
+          scrollToIndex(0, 'instant');
+          currentIndexRef.current = 0;
+          setActiveDot(0);
+          requestAnimationFrame(() => { isSilentReset.current = false; });
+        }, 450);
+      } else {
+        scrollToIndex(next, 'smooth');
+        currentIndexRef.current = next;
+        setActiveDot(next % originals.length);
       }
-
-      container.scrollTo({
-        left: nextScrollLeft,
-        behavior: 'smooth'
-      });
-
-    }, 5000); // 5 seconds interval
+    }, 5000);
 
     return () => clearInterval(interval);
-  }, [isHovered, promotionalCards.length]);
+  }, [originals.length]); // ← stable: never re-creates on index change
 
-  // Trigger index update on scroll
+  // ─── Manual swipe → sync dot + ref ───────────────────────────────────────
   const handleScroll = () => {
-    if (scrollContainerRef.current) {
-      const container = scrollContainerRef.current;
-      const scrollLeft = container.scrollLeft;
-      // Use card width if available, otherwise container width (assuming full width cards or snap points)
-      // For accurate dot highlighting, we prefer container width as the snap logic usually aligns near that.
-      const width = container.offsetWidth;
-
-      const index = Math.round(scrollLeft / width);
-
-      if (index !== currentIndex && index >= 0 && index < promotionalCards.length) {
-        setCurrentIndex(index);
-      }
+    if (!scrollContainerRef.current || isSilentReset.current) return;
+    const container = scrollContainerRef.current;
+    const index = Math.round(container.scrollLeft / container.offsetWidth);
+    if (index !== currentIndexRef.current && index >= 0 && index < looped.length) {
+      currentIndexRef.current = index;
+      setActiveDot(index % originals.length);
     }
   };
 
-  // Entrance animation — store tween ref and kill on unmount to prevent removeChild crash
+  // ─── Entrance animation ───────────────────────────────────────────────────
   useEffect(() => {
     if (!carouselRef.current) return;
     let tween;
@@ -76,25 +76,19 @@ const PromoCarousel = memo(({ promos, onPromoClick }) => {
         { opacity: 1, y: 0, duration: 0.8, ease: 'power2.out' }
       );
     } catch (e) {
-      // Fallback: show immediately if GSAP fails
       if (carouselRef.current) carouselRef.current.style.opacity = '1';
     }
-    return () => {
-      try { tween?.kill(); } catch (_) {}
-    };
+    return () => { try { tween?.kill(); } catch (_) {} };
   }, []);
 
-  if (!promos || promos.length === 0) {
-    return null;
-  }
+  if (!originals || originals.length === 0) return null;
 
   return (
     <div
       ref={carouselRef}
-      className=""
       style={{ opacity: 1 }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseEnter={() => { isHoveredRef.current = true; }}
+      onMouseLeave={() => { isHoveredRef.current = false; }}
     >
       <div
         ref={scrollContainerRef}
@@ -102,8 +96,12 @@ const PromoCarousel = memo(({ promos, onPromoClick }) => {
         className="flex gap-2 overflow-x-auto px-4 pb-2 scrollbar-hide snap-x snap-mandatory"
         style={{ scrollBehavior: 'smooth' }}
       >
-        {promotionalCards.map((promo) => (
-          <div key={promo.id} data-promo-card className="flex-shrink-0 snap-center">
+        {looped.map((promo, idx) => (
+          <div
+            key={`${promo.id}-${idx}`}
+            data-promo-card
+            className="flex-shrink-0 snap-center"
+          >
             <PromoCard
               title={promo.title}
               subtitle={promo.subtitle}
@@ -115,15 +113,20 @@ const PromoCarousel = memo(({ promos, onPromoClick }) => {
           </div>
         ))}
       </div>
-      {/* Carousel indicator dots */}
+
+      {/* Dots — always originals.length, activeDot via modulo */}
       <div className="flex justify-center gap-1.5 mt-2 mb-2">
-        {promotionalCards.map((_, index) => (
+        {originals.map((_, index) => (
           <div
             key={index}
-            className={`rounded-full transition-all ${index === currentIndex ? 'w-6 h-1.5' : 'w-1.5 h-1.5'}`}
+            className={`rounded-full transition-all duration-300 ${index === activeDot ? 'w-6 h-1.5' : 'w-1.5 h-1.5'}`}
             style={{
-              backgroundColor: index === currentIndex ? themeColors.brand.yellow : `${themeColors.brand.yellow}66`,
-              boxShadow: index === currentIndex ? `0 2px 6px ${themeColors.brand.yellow}80` : '0 1px 2px rgba(0, 0, 0, 0.2)'
+              backgroundColor: index === activeDot
+                ? themeColors.brand.yellow
+                : `${themeColors.brand.yellow}66`,
+              boxShadow: index === activeDot
+                ? `0 2px 6px ${themeColors.brand.yellow}80`
+                : '0 1px 2px rgba(0, 0, 0, 0.2)'
             }}
           />
         ))}
@@ -135,4 +138,3 @@ const PromoCarousel = memo(({ promos, onPromoClick }) => {
 PromoCarousel.displayName = 'PromoCarousel';
 
 export default PromoCarousel;
-
