@@ -240,8 +240,8 @@ const MarketplacePage = () => {
                                 animate={{ opacity: 1, scale: 1 }}
                                 className="flex flex-col group cursor-pointer"
                             >
-                                {/* Standalone Elevated Image Frame */}
-                                <div className="w-full aspect-square rounded-[24px] bg-white border border-slate-100/90 shadow-[0_3px_12px_rgba(0,0,0,0.05)] group-hover:shadow-[0_8px_20px_rgba(0,0,0,0.09)] group-hover:border-emerald-300/70 transition-all duration-300 relative overflow-hidden flex items-center justify-center p-2">
+                                {/* Frameless Modern Image Frame */}
+                                <div className="relative w-full aspect-square rounded-[22px] overflow-hidden shadow-[0_4px_16px_rgba(0,0,0,0.06)] group-hover:shadow-[0_8px_24px_rgba(0,0,0,0.12)] transition-all duration-300 bg-slate-50">
                                     <img
                                         src={toAssetUrl(product.imageUrl)}
                                         alt={product.title}
@@ -249,18 +249,31 @@ const MarketplacePage = () => {
                                             e.currentTarget.onerror = null;
                                             e.currentTarget.src = '/marketplace_images/wheat.jpg';
                                         }}
-                                        className="w-full h-full object-cover rounded-[18px] group-hover:scale-105 transition-transform duration-500"
+                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                                     />
                                     {product.discountPrice && (
                                         <div className="absolute top-2.5 left-2.5 bg-rose-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest shadow-sm">
                                             {Math.round((1 - product.discountPrice / product.price) * 100)}% Off
                                         </div>
                                     )}
+
+                                    {/* Floating Add to Cart Button */}
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleAddToCart(product);
+                                        }}
+                                        className="absolute bottom-2.5 right-2.5 w-8 h-8 rounded-full bg-white/95 text-emerald-700 hover:bg-emerald-600 hover:text-white shadow-[0_3px_10px_rgba(0,0,0,0.18)] flex items-center justify-center transition-all duration-200 active:scale-90 border border-slate-100"
+                                        title="Add to Cart"
+                                    >
+                                        <FiPlus className="w-4 h-4 stroke-[2.5]" />
+                                    </button>
                                 </div>
 
-                                {/* Separated Product Info Underneath */}
-                                <div className="pt-2 px-1 flex flex-col flex-1">
-                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5 truncate">
+                                {/* Clean Product Info Underneath */}
+                                <div className="pt-2 px-0.5 flex flex-col flex-1">
+                                    <p className="text-[9.5px] font-black text-emerald-800/80 uppercase tracking-wider mb-0.5 truncate">
                                         {product.brandName || 'Quality Assured'}
                                     </p>
                                     <h3 className="text-xs font-black text-slate-800 line-clamp-2 leading-tight mb-2 group-hover:text-emerald-700 transition-colors min-h-[30px]">
@@ -268,7 +281,7 @@ const MarketplacePage = () => {
                                     </h3>
 
                                     {/* Tech Specs Tags */}
-                                    <div className="flex flex-wrap gap-1 mb-2.5">
+                                    <div className="flex flex-wrap gap-1 mb-2">
                                         {product.distance !== undefined && (
                                             <span className="text-[7px] font-black uppercase tracking-widest bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-md border border-blue-100 flex items-center gap-0.5">
                                                 📍 {product.distance.toFixed(1)} km
@@ -286,27 +299,12 @@ const MarketplacePage = () => {
                                         ))}
                                     </div>
 
-                                    <div className="mt-auto flex items-end justify-between">
-                                        <div>
-                                            {product.discountPrice && (
-                                                <p className="text-[9px] font-bold text-slate-300 line-through mb-0.5">₹{product.price}</p>
-                                            )}
-                                            <div className="flex items-baseline gap-1">
-                                                <p className="text-base font-black text-emerald-600 leading-none">₹{product.discountPrice || product.price}</p>
-                                                <p className="text-[9px] font-bold text-slate-400">/{product.unit}</p>
-                                            </div>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleAddToCart(product);
-                                            }}
-                                            className="w-9 h-9 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-md active:scale-90 transition-all hover:bg-emerald-600"
-                                            title="Add to Cart"
-                                        >
-                                            <FiPlus className="w-4 h-4" />
-                                        </button>
+                                    <div className="mt-auto flex items-baseline gap-1">
+                                        <p className="text-base font-black text-slate-900 leading-none">₹{product.discountPrice || product.price}</p>
+                                        {product.discountPrice && (
+                                            <p className="text-[10px] font-bold text-slate-400 line-through">₹{product.price}</p>
+                                        )}
+                                        <p className="text-[9px] font-bold text-slate-400">/{product.unit}</p>
                                     </div>
                                 </div>
                             </motion.div>

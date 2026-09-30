@@ -86,11 +86,11 @@ const AgriMarketplaceSection = () => {
             <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
                 {loading ? (
                     [1, 2, 3].map(i => (
-                        <div key={i} className="min-w-[160px] flex flex-col gap-2">
-                            <div className="w-full aspect-square bg-white rounded-[22px] animate-pulse border border-slate-100" />
+                        <div key={i} className="min-w-[155px] max-w-[165px] flex flex-col gap-2">
+                            <div className="w-full aspect-square bg-slate-100 rounded-[20px] animate-pulse" />
                             <div className="h-3 w-16 bg-slate-200 rounded animate-pulse" />
                             <div className="h-4 w-28 bg-slate-200 rounded animate-pulse" />
-                            <div className="h-6 w-full bg-slate-100 rounded animate-pulse mt-1" />
+                            <div className="h-4 w-16 bg-slate-100 rounded animate-pulse mt-0.5" />
                         </div>
                     ))
                 ) : (
@@ -101,8 +101,8 @@ const AgriMarketplaceSection = () => {
                             onClick={() => navigate(`/user/agri-marketplace/${product._id}`)}
                             className="min-w-[155px] max-w-[165px] flex flex-col cursor-pointer group"
                         >
-                            {/* Standalone Elevated Image Frame */}
-                            <div className="w-full aspect-square rounded-[22px] bg-white border border-slate-100/90 shadow-[0_3px_12px_rgba(0,0,0,0.05)] group-hover:shadow-[0_8px_20px_rgba(0,0,0,0.09)] group-hover:border-emerald-300/70 transition-all duration-300 relative overflow-hidden flex items-center justify-center p-1.5">
+                            {/* Frameless Modern Image Container */}
+                            <div className="relative w-full aspect-square rounded-[20px] overflow-hidden shadow-[0_4px_16px_rgba(0,0,0,0.07)] group-hover:shadow-[0_8px_24px_rgba(0,0,0,0.12)] transition-all duration-300 bg-slate-50">
                                 <img
                                     src={toAssetUrl(product.imageUrl)}
                                     alt={product.title}
@@ -110,42 +110,51 @@ const AgriMarketplaceSection = () => {
                                         e.currentTarget.onerror = null;
                                         e.currentTarget.src = '/marketplace_images/wheat.jpg';
                                     }}
-                                    className="w-full h-full object-cover rounded-[16px] group-hover:scale-106 transition-transform duration-500"
+                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                                 />
+
+                                {/* Offer Badge */}
                                 {product.discountPrice && (
-                                    <div className="absolute top-2.5 left-2.5 bg-amber-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
-                                        Offer
+                                    <div className="absolute top-2 left-2 bg-emerald-600/95 backdrop-blur-xs text-white text-[8.5px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
+                                        SAVE ₹{product.price - product.discountPrice}
                                     </div>
                                 )}
+
+                                {/* Floating Add to Cart Pill Button on Image Corner */}
+                                <button
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleAddToCart(product);
+                                    }}
+                                    className="absolute bottom-2.5 right-2.5 w-8 h-8 rounded-full bg-white/95 text-emerald-700 hover:bg-emerald-600 hover:text-white shadow-[0_3px_10px_rgba(0,0,0,0.18)] flex items-center justify-center transition-all duration-200 active:scale-90 border border-slate-100"
+                                    title="Add to Cart"
+                                >
+                                    <FiPlus className="w-4 h-4 stroke-[2.5]" />
+                                </button>
                             </div>
 
-                            {/* Separated Product Details Underneath */}
-                            <div className="pt-2 px-1 flex flex-col flex-1">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5 truncate">
+                            {/* Clean Product Details Underneath */}
+                            <div className="pt-2 px-0.5 flex flex-col flex-1">
+                                <p className="text-[10px] font-black text-emerald-800/80 uppercase tracking-wider mb-0.5 truncate">
                                     {product.brandName || 'Top Brand'}
                                 </p>
                                 <h3 className="text-xs font-black text-slate-800 group-hover:text-emerald-700 line-clamp-2 leading-[1.25] transition-colors min-h-[30px]" title={product.title}>
                                     {product.title}
                                 </h3>
 
-                                <div className="mt-1.5 flex items-center justify-between">
-                                    <div>
-                                        <p className="text-sm font-black text-emerald-600 leading-none">
-                                            ₹{product.discountPrice || product.price}
-                                        </p>
-                                        <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tight mt-0.5">per {product.unit}</p>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleAddToCart(product);
-                                        }}
-                                        className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-md hover:bg-emerald-600 active:scale-90 transition-all"
-                                        title="Add to Cart"
-                                    >
-                                        <FiPlus className="w-4 h-4" />
-                                    </button>
+                                <div className="mt-1 flex items-baseline gap-1">
+                                    <span className="text-sm font-black text-slate-900 leading-none">
+                                        ₹{product.discountPrice || product.price}
+                                    </span>
+                                    {product.discountPrice && (
+                                        <span className="text-[10px] font-bold text-slate-400 line-through">
+                                            ₹{product.price}
+                                        </span>
+                                    )}
+                                    <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-tight">
+                                        / {product.unit}
+                                    </span>
                                 </div>
                             </div>
                         </motion.div>
