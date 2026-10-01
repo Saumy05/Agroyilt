@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   FiArrowLeft, FiStar, FiMapPin, FiTruck, 
   FiClock, FiCalendar, FiCheckCircle, FiChevronRight,
   FiEdit2, FiAlertCircle, FiRefreshCw, FiShield,
-  FiZap, FiCheck, FiSliders
+  FiZap, FiCheck, FiSliders, FiX
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Helmet } from 'react-helmet-async';
@@ -37,6 +38,32 @@ const AvailableVendors = () => {
   const [vendors, setVendors] = useState([]);
   const [sortBy, setSortBy] = useState('nearest'); // 'nearest' | 'price_low' | 'rating'
   const [error, setError] = useState(null);
+  const [selectedVendorGroup, setSelectedVendorGroup] = useState(null);
+
+  // Lock background scroll when machine selection modal is open
+  useEffect(() => {
+    if (!selectedVendorGroup) return;
+
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setSelectedVendorGroup(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalHtmlOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectedVendorGroup]);
 
   useEffect(() => {
     if (!category?._id && !category?.id) {
@@ -155,22 +182,62 @@ const AvailableVendors = () => {
     });
   };
 
-  // Sort logic
-  const sortedVendors = [...vendors].sort((a, b) => {
-    // Available vendors always come first
-    if (a.isAvailable !== b.isAvailable) return a.isAvailable ? -1 : 1;
+  // Group machinery results by unique Vendor to provide an authentic rental marketplace experience
+  const vendorGroups = useMemo(() => {
+    const map = new Map();
 
-    if (sortBy === 'price_low') {
-      return (a.pricing?.totalAmount || 0) - (b.pricing?.totalAmount || 0);
-    }
-    if (sortBy === 'rating') {
-      return (b.vendor?.rating || 0) - (a.vendor?.rating || 0);
-    }
-    // Default: nearest
-    return (a.vendor?.distance || 0) - (b.vendor?.distance || 0);
-  });
+    vendors.forEach((item) => {
+      const vId = (item.vendor?._id || item.vendor?.id || '').toString();
+      if (!vId) return;
 
-  const availableCount = vendors.filter(v => v.isAvailable).length;
+      if (!map.has(vId)) {
+        map.set(vId, {
+          vendor: item.vendor,
+          equipments: [],
+          isAvailable: false,
+          minPrice: Infinity,
+          maxPrice: 0,
+          minBasePrice: Infinity,
+          minTax: 0,
+        });
+      }
+
+      const group = map.get(vId);
+      group.equipments.push(item);
+      if (item.isAvailable) {
+        group.isAvailable = true;
+      }
+
+      const total = item.pricing?.totalAmount || 0;
+      if (total < group.minPrice) {
+        group.minPrice = total;
+        group.minBasePrice = item.pricing?.basePrice || 0;
+        group.minTax = item.pricing?.tax || 0;
+      }
+      if (total > group.maxPrice) {
+        group.maxPrice = total;
+      }
+    });
+
+    const groups = Array.from(map.values());
+
+    return groups.sort((a, b) => {
+      // Available vendors always come first
+      if (a.isAvailable !== b.isAvailable) return a.isAvailable ? -1 : 1;
+
+      if (sortBy === 'price_low') {
+        return a.minPrice - b.minPrice;
+      }
+      if (sortBy === 'rating') {
+        return (b.vendor?.rating || 0) - (a.vendor?.rating || 0);
+      }
+      // Default: nearest
+      return (a.vendor?.distance || 0) - (b.vendor?.distance || 0);
+    });
+  }, [vendors, sortBy]);
+
+  const availableVendorsCount = vendorGroups.filter(v => v.isAvailable).length;
+  const totalMachinesCount = vendors.filter(v => v.isAvailable).length;
 
   const formatDateDisplay = (dateStr) => {
     if (!dateStr) return '';
@@ -201,11 +268,11 @@ const AvailableVendors = () => {
             </button>
             <div className="min-w-0 flex-1">
               <h1 className="text-sm font-black text-slate-900 tracking-tight leading-tight truncate">
-                Qualified Vendors
+                Verified Vendors ({vendorGroups.length})
               </h1>
               <p className="text-[10px] font-bold text-emerald-700 flex items-center gap-1 mt-0.5 truncate">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                <span>{availableCount} verified operators in cluster</span>
+                <span>{availableVendorsCount} vendor{availableVendorsCount !== 1 ? 's' : ''} • {totalMachinesCount} machine{totalMachinesCount !== 1 ? 's' : ''} in cluster</span>
               </p>
             </div>
           </div>
@@ -334,7 +401,7 @@ const AvailableVendors = () => {
               Try Again
             </button>
           </div>
-        ) : sortedVendors.length === 0 ? (
+        ) : vendorGroups.length === 0 ? (
           <div className="bg-white rounded-2xl border border-slate-200/80 p-6 text-center space-y-3 shadow-xs mt-2">
             <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto border border-emerald-100">
               <FiTruck size={24} />
@@ -356,14 +423,14 @@ const AvailableVendors = () => {
           </div>
         ) : (
           <div className="space-y-2.5">
-            {sortedVendors.map((item, idx) => (
+            {vendorGroups.map((group, idx) => (
               <motion.div
-                key={item.equipment._id + '-' + item.vendor._id}
+                key={group.vendor._id || group.vendor.id || idx}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.2, delay: idx * 0.04 }}
                 className={`bg-white rounded-2xl p-3.5 border transition-all ${
-                  item.isAvailable 
+                  group.isAvailable 
                     ? 'border-slate-200/90 shadow-xs hover:border-emerald-400 hover:shadow-md' 
                     : 'border-slate-200 bg-slate-50/70 opacity-70'
                 }`}
@@ -372,16 +439,16 @@ const AvailableVendors = () => {
                 <div className="flex items-start justify-between gap-2 mb-2.5">
                   <div className="flex items-center gap-2.5 min-w-0 flex-1">
                     <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-800 font-black text-sm flex items-center justify-center shrink-0 border border-emerald-100/80 overflow-hidden shadow-2xs">
-                      {item.vendor.avatar ? (
-                        <img src={item.vendor.avatar} alt={item.vendor.name} className="w-full h-full object-cover" />
+                      {group.vendor.avatar ? (
+                        <img src={group.vendor.avatar} alt={group.vendor.name} className="w-full h-full object-cover" />
                       ) : (
-                        item.vendor.name?.charAt(0) || 'V'
+                        group.vendor.name?.charAt(0) || 'V'
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
                         <h3 className="font-black text-xs text-slate-900 leading-tight truncate">
-                          {item.vendor.businessName || item.vendor.name}
+                          {group.vendor.businessName || group.vendor.name}
                         </h3>
                         <span className="w-3.5 h-3.5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[8px] shrink-0" title="Verified Partner">
                           ✓
@@ -390,18 +457,18 @@ const AvailableVendors = () => {
                       <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-500 font-semibold whitespace-nowrap">
                         <span className="flex items-center gap-0.5 text-amber-600 font-black shrink-0">
                           <FiStar size={10} className="fill-amber-400 text-amber-400" />
-                          {item.vendor.rating ? item.vendor.rating.toFixed(1) : '4.8'}
+                          {group.vendor.rating ? group.vendor.rating.toFixed(1) : '4.8'}
                         </span>
                         <span className="text-slate-300">•</span>
                         <span className="flex items-center gap-1 text-slate-500 truncate">
                           <FiMapPin size={10} className="text-emerald-600 shrink-0" />
-                          <span>{item.vendor.distance ? `${item.vendor.distance} km away` : 'Nearby'}</span>
+                          <span>{group.vendor.distance ? `${group.vendor.distance} km away` : 'Nearby'}</span>
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  {item.isAvailable ? (
+                  {group.isAvailable ? (
                     <span className="px-2 py-0.5 bg-emerald-50 text-emerald-800 rounded-full text-[9px] font-black uppercase tracking-wider flex items-center gap-1 border border-emerald-200/80 shrink-0 whitespace-nowrap">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                       Free Slot
@@ -413,86 +480,339 @@ const AvailableVendors = () => {
                   )}
                 </div>
 
-                {/* Equipment Snapshot Card */}
-                <div className="bg-slate-50/80 rounded-xl p-2.5 border border-slate-100 flex gap-2.5 mb-2.5">
-                  <div className="w-14 h-14 rounded-lg bg-slate-200 overflow-hidden shrink-0 flex items-center justify-center border border-slate-200/60">
-                    {item.equipment.images?.[0] ? (
-                      <img 
-                        src={item.equipment.images[0]} 
-                        alt={item.equipment.name} 
-                        className="w-full h-full object-cover" 
-                      />
-                    ) : (
-                      <FiTruck className="text-slate-400" size={20} />
-                    )}
-                  </div>
+                {/* Case 1: Exactly 1 Machine in Vendor's Fleet */}
+                {group.equipments.length === 1 && (() => {
+                  const singleItem = group.equipments[0];
+                  return (
+                    <div className="bg-slate-50/80 rounded-xl p-2.5 border border-slate-100 flex gap-2.5 mb-2.5">
+                      <div className="w-14 h-14 rounded-lg bg-slate-200 overflow-hidden shrink-0 flex items-center justify-center border border-slate-200/60">
+                        {singleItem.equipment.images?.[0] ? (
+                          <img 
+                            src={singleItem.equipment.images[0]} 
+                            alt={singleItem.equipment.name} 
+                            className="w-full h-full object-cover" 
+                          />
+                        ) : (
+                          <FiTruck className="text-slate-400" size={20} />
+                        )}
+                      </div>
 
-                  <div className="space-y-1 min-w-0 flex-1">
-                    <p className="font-black text-xs text-slate-900 truncate">
-                      {item.equipment.name}
-                    </p>
-                    <div className="flex items-center gap-1 flex-wrap">
-                      {item.equipment.horsepower > 0 && (
-                        <span className="text-[8.5px] font-black bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">
-                          {item.equipment.horsepower} HP
-                        </span>
-                      )}
-                      {item.equipment.modelNumber && (
-                        <span className="text-[8.5px] font-bold text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200/70">
-                          {item.equipment.modelNumber}
-                        </span>
-                      )}
-                      {item.equipment.includesDriver && (
-                        <span className="text-[8.5px] font-bold text-emerald-800 bg-white px-1.5 py-0.5 rounded border border-emerald-200/70">
-                          Driver Incl.
-                        </span>
-                      )}
-                      <span className="text-[8.5px] font-bold text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200/70 flex items-center gap-0.5">
-                        <FiShield size={9} className="text-emerald-600" /> Verified
+                      <div className="space-y-1 min-w-0 flex-1">
+                        <p className="font-black text-xs text-slate-900 truncate">
+                          {singleItem.equipment.name}
+                        </p>
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {singleItem.equipment.horsepower > 0 && (
+                            <span className="text-[8.5px] font-black bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">
+                              {singleItem.equipment.horsepower} HP
+                            </span>
+                          )}
+                          {singleItem.equipment.modelNumber && (
+                            <span className="text-[8.5px] font-bold text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200/70">
+                              {singleItem.equipment.modelNumber}
+                            </span>
+                          )}
+                          {singleItem.equipment.includesDriver && (
+                            <span className="text-[8.5px] font-bold text-emerald-800 bg-white px-1.5 py-0.5 rounded border border-emerald-200/70">
+                              Driver Incl.
+                            </span>
+                          )}
+                          <span className="text-[8.5px] font-bold text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200/70 flex items-center gap-0.5">
+                            <FiShield size={9} className="text-emerald-600" /> Verified
+                          </span>
+                        </div>
+
+                        {singleItem.matchedImplement && (
+                          <p className="text-[9.5px] font-bold text-emerald-800 flex items-center gap-1 pt-0.5">
+                            <FiCheckCircle size={11} className="text-emerald-600 shrink-0" />
+                            <span className="truncate">{singleItem.matchedImplement.title} attached</span>
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Case 2: Multiple Machines in Vendor Fleet (Actual Rental Platform Fleet Carousel) */}
+                {group.equipments.length > 1 && (
+                  <div className="bg-slate-50/90 rounded-xl p-2.5 border border-slate-200/70 mb-2.5 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-black text-slate-700 flex items-center gap-1.5 text-[11px]">
+                        <FiTruck className="text-emerald-600" size={13} />
+                        <span>Fleet Options ({group.equipments.length} Machines)</span>
                       </span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedVendorGroup(group)}
+                        className="text-[10px] font-black text-emerald-800 bg-emerald-100 hover:bg-emerald-200 px-2 py-0.5 rounded-full border border-emerald-200 transition-colors cursor-pointer"
+                      >
+                        View & Compare Models →
+                      </button>
                     </div>
 
-                    {item.matchedImplement && (
-                      <p className="text-[9.5px] font-bold text-emerald-800 flex items-center gap-1 pt-0.5">
-                        <FiCheckCircle size={11} className="text-emerald-600 shrink-0" />
-                        <span className="truncate">{item.matchedImplement.title} attached</span>
+                    <div className="grid grid-cols-2 gap-2 pt-0.5">
+                      {group.equipments.slice(0, 2).map((eqItem) => (
+                        <div
+                          key={eqItem.equipment._id}
+                          onClick={() => setSelectedVendorGroup(group)}
+                          className="flex items-center gap-2 bg-white rounded-lg p-1.5 border border-slate-200/80 hover:border-emerald-400 shrink-0 cursor-pointer shadow-2xs transition-all hover:bg-emerald-50/30"
+                        >
+                          <div className="w-9 h-9 rounded-md bg-slate-100 overflow-hidden shrink-0 flex items-center justify-center border border-slate-100">
+                            {eqItem.equipment.images?.[0] ? (
+                              <img src={eqItem.equipment.images[0]} alt={eqItem.equipment.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <FiTruck size={14} className="text-slate-400" />
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[10px] font-black text-slate-800 truncate leading-tight">
+                              {eqItem.equipment.name}
+                            </p>
+                            <div className="flex items-center justify-between mt-0.5">
+                              {eqItem.equipment.horsepower > 0 ? (
+                                <span className="text-[8px] font-black text-emerald-800 bg-emerald-50 px-1 py-0.2 rounded">
+                                  {eqItem.equipment.horsepower} HP
+                                </span>
+                              ) : (
+                                <span className="text-[8px] font-bold text-slate-400">Ready</span>
+                              )}
+                              <span className="text-[9.5px] font-black text-slate-900">
+                                ₹{eqItem.pricing?.totalAmount?.toLocaleString('en-IN')}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {group.equipments.length > 2 && (
+                      <p 
+                        onClick={() => setSelectedVendorGroup(group)}
+                        className="text-[9.5px] font-bold text-slate-500 text-center hover:text-emerald-700 cursor-pointer transition-colors"
+                      >
+                        + {group.equipments.length - 2} more machine option{group.equipments.length - 2 > 1 ? 's' : ''} available in fleet
                       </p>
                     )}
                   </div>
-                </div>
+                )}
 
                 {/* Price Breakdown & CTA */}
                 <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2.5">
                   <div className="min-w-0 flex-1">
                     <p className="text-[8.5px] font-black text-slate-400 uppercase tracking-widest leading-none mb-0.5">
-                      Total Payable
+                      {group.equipments.length > 1 ? 'Starting From' : 'Total Payable'}
                     </p>
                     <p className="text-lg font-black text-slate-900 leading-tight">
-                      ₹{item.pricing?.totalAmount?.toLocaleString('en-IN')}
+                      ₹{group.minPrice.toLocaleString('en-IN')}
+                      {group.equipments.length > 1 && (
+                        <span className="text-[10px] font-bold text-slate-400 ml-1">onwards</span>
+                      )}
                     </p>
                     <p className="text-[9.5px] text-slate-400 font-semibold leading-tight">
-                      Base ₹{item.pricing?.basePrice} + GST ₹{item.pricing?.tax} (Visiting Free)
+                      {group.equipments.length === 1 
+                        ? `Base ₹${group.minBasePrice} + GST ₹${group.minTax} (Visiting Free)`
+                        : `${group.equipments.length} models available in cluster`
+                      }
                     </p>
                   </div>
 
-                  <button
-                    disabled={!item.isAvailable}
-                    onClick={() => handleSelectVendor(item)}
-                    className={`px-3.5 py-2 rounded-xl font-black text-xs uppercase tracking-wider flex items-center gap-1 shadow-xs transition-all cursor-pointer whitespace-nowrap shrink-0 ${
-                      item.isAvailable
-                        ? 'bg-gradient-to-r from-emerald-600 via-emerald-700 to-green-800 hover:from-emerald-700 hover:to-green-900 text-white shadow-emerald-700/20 active:scale-95'
-                        : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                    }`}
-                  >
-                    <span>Book Vendor</span>
-                    <FiChevronRight size={14} className="shrink-0" />
-                  </button>
+                  {group.equipments.length === 1 ? (
+                    <button
+                      disabled={!group.isAvailable}
+                      onClick={() => handleSelectVendor(group.equipments[0])}
+                      className={`px-3.5 py-2 rounded-xl font-black text-xs uppercase tracking-wider flex items-center gap-1 shadow-xs transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                        group.isAvailable
+                          ? 'bg-gradient-to-r from-emerald-600 via-emerald-700 to-green-800 hover:from-emerald-700 hover:to-green-900 text-white shadow-emerald-700/20 active:scale-95'
+                          : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                      }`}
+                    >
+                      <span>Book Vendor</span>
+                      <FiChevronRight size={14} className="shrink-0" />
+                    </button>
+                  ) : (
+                    <button
+                      disabled={!group.isAvailable}
+                      onClick={() => setSelectedVendorGroup(group)}
+                      className={`px-3.5 py-2 rounded-xl font-black text-xs uppercase tracking-wider flex items-center gap-1 shadow-xs transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                        group.isAvailable
+                          ? 'bg-gradient-to-r from-emerald-600 via-emerald-700 to-green-800 hover:from-emerald-700 hover:to-green-900 text-white shadow-emerald-700/20 active:scale-95'
+                          : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                      }`}
+                    >
+                      <span>Choose Machine ({group.equipments.length})</span>
+                      <FiChevronRight size={14} className="shrink-0" />
+                    </button>
+                  )}
                 </div>
               </motion.div>
             ))}
           </div>
         )}
       </div>
+
+      {/* Machine Selection Bottom Sheet / Drawer */}
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {selectedVendorGroup && (
+            <div
+              className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm overscroll-contain"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) setSelectedVendorGroup(null);
+              }}
+            >
+              <motion.div
+                onClick={(e) => e.stopPropagation()}
+                initial={{ opacity: 0, y: 100 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 100 }}
+                transition={{ type: 'spring', damping: 26, stiffness: 280 }}
+                className="bg-white rounded-t-[32px] sm:rounded-[32px] max-w-xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden border border-slate-100 font-sans"
+              >
+                {/* Modal Header */}
+                <div className="p-4 sm:p-5 border-b border-slate-100 bg-gradient-to-r from-emerald-50/80 via-white to-teal-50/40 flex items-center justify-between">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-11 h-11 rounded-2xl bg-emerald-100 text-emerald-800 font-black text-base flex items-center justify-center border border-emerald-200 shadow-2xs overflow-hidden shrink-0">
+                      {selectedVendorGroup.vendor.avatar ? (
+                        <img src={selectedVendorGroup.vendor.avatar} alt={selectedVendorGroup.vendor.name} className="w-full h-full object-cover" />
+                      ) : (
+                        selectedVendorGroup.vendor.name?.charAt(0) || 'V'
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <h2 className="text-sm sm:text-base font-black text-slate-900 tracking-tight truncate">
+                          {selectedVendorGroup.vendor.businessName || selectedVendorGroup.vendor.name}
+                        </h2>
+                        <span className="w-3.5 h-3.5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[8px] font-black shrink-0">
+                          ✓
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 font-semibold mt-0.5 flex items-center gap-1.5 flex-wrap">
+                        <span className="text-amber-600 font-black flex items-center gap-0.5">
+                          <FiStar size={10} className="fill-amber-400 text-amber-400" />
+                          {selectedVendorGroup.vendor.rating ? selectedVendorGroup.vendor.rating.toFixed(1) : '4.8'}
+                        </span>
+                        <span>•</span>
+                        <span>{selectedVendorGroup.equipments.length} models available for your slot</span>
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => setSelectedVendorGroup(null)}
+                    className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-colors cursor-pointer shrink-0 ml-2"
+                  >
+                    <FiX size={18} />
+                  </button>
+                </div>
+
+                {/* Sub-header instruction */}
+                <div className="bg-slate-50 border-b border-slate-100 px-4 py-2 text-[11px] font-bold text-slate-600 flex items-center justify-between">
+                  <span>Choose the horsepower & model for your field:</span>
+                  <span className="text-emerald-700 font-black uppercase text-[10px]">Instant Booking</span>
+                </div>
+
+                {/* List of Machines */}
+                <div className="p-3.5 sm:p-4 overflow-y-auto flex-1 space-y-3 bg-slate-50/50 overscroll-contain">
+                  {selectedVendorGroup.equipments.map((item) => (
+                    <div
+                      key={item.equipment._id}
+                      className="bg-white rounded-2xl p-3.5 border border-slate-200/90 shadow-2xs hover:border-emerald-500 hover:shadow-md transition-all flex flex-col gap-3"
+                    >
+                      <div className="flex gap-3">
+                        <div className="w-16 h-16 rounded-xl bg-slate-100 overflow-hidden shrink-0 border border-slate-200/70 flex items-center justify-center shadow-2xs">
+                          {item.equipment.images?.[0] ? (
+                            <img src={item.equipment.images[0]} alt={item.equipment.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <FiTruck className="text-slate-400" size={24} />
+                          )}
+                        </div>
+
+                        <div className="flex-1 min-w-0 space-y-1">
+                          <div className="flex items-start justify-between gap-1.5">
+                            <h4 className="font-black text-xs sm:text-sm text-slate-900 truncate">
+                              {item.equipment.name}
+                            </h4>
+                            {item.isAvailable ? (
+                              <span className="px-2 py-0.5 bg-emerald-50 text-emerald-800 rounded-full text-[8.5px] font-black uppercase tracking-wider border border-emerald-200/60 shrink-0">
+                                Ready
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 bg-rose-50 text-rose-600 rounded-full text-[8.5px] font-black uppercase tracking-wider border border-rose-100 shrink-0">
+                                Busy
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {item.equipment.horsepower > 0 && (
+                              <span className="text-[9px] font-black bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md">
+                                {item.equipment.horsepower} HP
+                              </span>
+                            )}
+                            {item.equipment.modelNumber && (
+                              <span className="text-[9px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200/60">
+                                {item.equipment.modelNumber}
+                              </span>
+                            )}
+                            {item.equipment.includesDriver && (
+                              <span className="text-[9px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200/60">
+                                Driver Included
+                              </span>
+                            )}
+                            <span className="text-[9px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200/60 flex items-center gap-0.5">
+                              <FiShield size={8} className="text-emerald-600" /> Verified
+                            </span>
+                          </div>
+
+                          {item.matchedImplement && (
+                            <p className="text-[10px] font-bold text-emerald-800 flex items-center gap-1 pt-0.5">
+                              <FiCheckCircle size={11} className="text-emerald-600 shrink-0" />
+                              <span className="truncate">{item.matchedImplement.title} attached & tested</span>
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Price and Action */}
+                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                        <div>
+                          <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none mb-0.5">
+                            Total Payable
+                          </p>
+                          <p className="text-base font-black text-slate-900 leading-tight">
+                            ₹{item.pricing?.totalAmount?.toLocaleString('en-IN')}
+                          </p>
+                          <p className="text-[9px] text-slate-400 font-semibold leading-none">
+                            Base ₹{item.pricing?.basePrice} + GST ₹{item.pricing?.tax} (Visiting Free)
+                          </p>
+                        </div>
+
+                        <button
+                          disabled={!item.isAvailable}
+                          onClick={() => {
+                            setSelectedVendorGroup(null);
+                            handleSelectVendor(item);
+                          }}
+                          className={`px-4 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-xs transition-all cursor-pointer ${
+                            item.isAvailable
+                              ? 'bg-gradient-to-r from-emerald-600 via-emerald-700 to-green-800 hover:from-emerald-700 hover:to-green-900 text-white shadow-emerald-700/20 active:scale-95'
+                              : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                          }`}
+                        >
+                          <span>Select Machine</span>
+                          <FiChevronRight size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </div>
   );
 };

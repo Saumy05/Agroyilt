@@ -5,7 +5,8 @@ import {
   FiChevronRight, FiArrowLeft, FiCalendar, 
   FiCheckCircle, FiZap, FiPlus, FiMinus, 
   FiInfo, FiShield, FiSliders, FiSun, 
-  FiSunrise, FiSunset, FiMoon, FiCheck, FiTool
+  FiSunrise, FiSunset, FiMoon, FiCheck, FiTool,
+  FiArrowRight, FiEdit2, FiLock
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Helmet } from 'react-helmet-async';
@@ -42,15 +43,87 @@ const MachineryExplorer = () => {
   const tomorrowStr = new Date(Date.now() + 86400000).toISOString().split('T')[0];
   const dayAfterStr = new Date(Date.now() + 172800000).toISOString().split('T')[0];
 
+  const START_SLOTS = [
+    { label: 'Early Morning', time: '07:00', icon: FiSunrise, tag: 'Cool Hours' },
+    { label: 'Morning', time: '09:00', icon: FiSun, tag: 'Popular' },
+    { label: 'Afternoon', time: '13:00', icon: FiSun, tag: 'Dry Field' },
+    { label: 'Late Afternoon', time: '16:00', icon: FiSunset, tag: 'Tillage' }
+  ];
+
+  const calculateEndTime = (startStr, durationHours) => {
+    if (!startStr) return '11:00';
+    try {
+      const [h, m] = startStr.split(':').map(Number);
+      const duration = parseFloat(durationHours) || 1;
+      const totalMinutes = h * 60 + m + Math.round(duration * 60);
+      const endH = Math.floor(totalMinutes / 60) % 24;
+      const endM = totalMinutes % 60;
+      return `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+    } catch {
+      return '11:00';
+    }
+  };
+
+  const getAvailableSlotsForDate = (dateStr) => {
+    if (!dateStr || dateStr !== todayStr) return START_SLOTS;
+
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const LEAD_TIME_MINUTES = 45; // 45-minute dispatch lead time buffer
+
+    return START_SLOTS.filter(slot => {
+      const [startH, startM] = slot.time.split(':').map(Number);
+      const slotStartMinutes = startH * 60 + startM;
+      return slotStartMinutes >= currentMinutes + LEAD_TIME_MINUTES;
+    });
+  };
+
+  const isTodayClosed = getAvailableSlotsForDate(todayStr).length === 0;
+
   const [selectedCat, setSelectedCat] = useState(location.state?.category || null);
   const [selectedImplement, setSelectedImplement] = useState(location.state?.preSelectedImplement || null);
   const [hpRange, setHpRange] = useState(location.state?.hpRange || 'all'); // 'all', '20-35', '35-50', '50-75', '75+'
   const [rentalType, setRentalType] = useState(location.state?.rentalType || 'hourly'); // 'hourly' | 'land_based' | 'daily'
   const [quantity, setQuantity] = useState(location.state?.quantity || 1);
-  const [bookingDate, setBookingDate] = useState(location.state?.bookingDate || todayStr);
-  const [startTime, setStartTime] = useState(location.state?.startTime || '09:00');
-  const [endTime, setEndTime] = useState(location.state?.endTime || '11:00');
-  const [activeSlotPreset, setActiveSlotPreset] = useState('09:00 - 11:00');
+  const [bookingDate, setBookingDate] = useState(() => {
+    if (location.state?.bookingDate) return location.state.bookingDate;
+    return isTodayClosed ? tomorrowStr : todayStr;
+  });
+
+  const availableSlots = getAvailableSlotsForDate(bookingDate);
+
+  const [startTime, setStartTime] = useState(() => {
+    if (location.state?.startTime) return location.state.startTime;
+    return availableSlots[0]?.time || '09:00';
+  });
+
+  const [endTime, setEndTime] = useState(() => {
+    if (location.state?.endTime) return location.state.endTime;
+    return calculateEndTime(location.state?.startTime || availableSlots[0]?.time || '09:00', location.state?.quantity || 1);
+  });
+
+  const [activeSlotPreset, setActiveSlotPreset] = useState(() => {
+    return availableSlots[0]?.label || 'Morning';
+  });
+  const [currentStep, setCurrentStep] = useState(location.state?.step || 1);
+
+  // Automatically sync endTime whenever startTime, quantity, or rentalType changes
+  useEffect(() => {
+    const hours = rentalType === 'hourly' ? quantity : (rentalType === 'daily' ? 8 * quantity : 4);
+    setEndTime(calculateEndTime(startTime, hours));
+  }, [startTime, quantity, rentalType]);
+
+  // Automatically update start time when date changes if previous selection is in the past for today
+  useEffect(() => {
+    const validSlots = getAvailableSlotsForDate(bookingDate);
+    if (validSlots.length > 0) {
+      const isCurrentSlotValid = validSlots.some(s => s.time === startTime);
+      if (!isCurrentSlotValid) {
+        setStartTime(validSlots[0].time);
+        setActiveSlotPreset(validSlots[0].label);
+      }
+    }
+  }, [bookingDate]);
 
   // Handle category change -> reset implement unless returning with preSelectedImplement
   useEffect(() => {
@@ -122,6 +195,183 @@ const MachineryExplorer = () => {
     setActiveSlotPreset(`${start} - ${end}`);
   };
 
+  const hasImplements = equipmentImplements && equipmentImplements.length > 0;
+
+  useEffect(() => {
+    if (!loading && !hasImplements && currentStep === 2) {
+      setCurrentStep(3);
+    }
+  }, [hasImplements, currentStep, loading]);
+
+  const handleStep1Next = () => {
+    if (!selectedCat) {
+      toastManager.error('Please select a machinery category');
+      return;
+    }
+    setCurrentStep(hasImplements ? 2 : 3);
+  };
+
+  const handleStep2Next = () => {
+    setCurrentStep(3);
+  };
+
+  const handleStep3Next = () => {
+    if (!quantity || quantity <= 0) {
+      toastManager.error('Please specify a valid work duration or land size');
+      return;
+    }
+    setCurrentStep(4);
+  };
+
+  const handleStepBack = (toStep) => {
+    setCurrentStep(toStep);
+  };
+
+  const handleJumpToStep = (targetStep) => {
+    if (targetStep === 1) {
+      setCurrentStep(1);
+      return;
+    }
+    if (!selectedCat) {
+      toastManager.info('Please select a machinery category first');
+      setCurrentStep(1);
+      return;
+    }
+    if (targetStep === 2) {
+      if (hasImplements) setCurrentStep(2);
+      else setCurrentStep(3);
+      return;
+    }
+    if (targetStep === 3) {
+      setCurrentStep(3);
+      return;
+    }
+    if (targetStep === 4) {
+      if (!quantity || quantity <= 0) {
+        toastManager.info('Please set duration or land size first');
+        setCurrentStep(3);
+        return;
+      }
+      setCurrentStep(4);
+    }
+  };
+
+  const handleBottomAction = () => {
+    if (currentStep === 1) {
+      handleStep1Next();
+    } else if (currentStep === 2) {
+      handleStep2Next();
+    } else if (currentStep === 3) {
+      handleStep3Next();
+    } else if (currentStep === 4) {
+      handleProceedToVendors();
+    }
+  };
+
+  const formatTime12Hour = (timeStr) => {
+    if (!timeStr) return '';
+    try {
+      const [h, m] = timeStr.split(':').map(Number);
+      const period = h >= 12 ? 'PM' : 'AM';
+      const displayH = h % 12 === 0 ? 12 : h % 12;
+      return `${displayH}:${String(m).padStart(2, '0')} ${period}`;
+    } catch {
+      return timeStr;
+    }
+  };
+
+  const formatScopeDisplay = (qty, type) => {
+    if (type === 'hourly') {
+      return `${qty} ${qty === 1 ? 'Hour' : 'Hours'} • Hourly Metered`;
+    }
+    if (type === 'land_based') {
+      return `${qty} ${qty === 1 ? 'Acre' : 'Acres'} • Land Acreage`;
+    }
+    return `${qty} ${qty === 1 ? 'Day' : 'Days'} • Daily Rental`;
+  };
+
+  const formatScopeShort = (qty, type) => {
+    if (type === 'hourly') {
+      return `${qty} ${qty === 1 ? 'Hr' : 'Hrs'}`;
+    }
+    if (type === 'land_based') {
+      return `${qty} ${qty === 1 ? 'Acre' : 'Acres'}`;
+    }
+    return `${qty} ${qty === 1 ? 'Day' : 'Days'}`;
+  };
+
+  const getBottomButtonContent = () => {
+    if (currentStep === 1) {
+      return {
+        title: hasImplements ? 'Next: Tool Attachment' : 'Next: Work Scope',
+        icon: FiArrowRight
+      };
+    }
+    if (currentStep === 2) {
+      return {
+        title: 'Next: Work Scope',
+        icon: FiArrowRight
+      };
+    }
+    if (currentStep === 3) {
+      return {
+        title: 'Next: Date & Time',
+        icon: FiArrowRight
+      };
+    }
+    return {
+      title: 'Find Available Vendors',
+      icon: FiChevronRight
+    };
+  };
+
+  const getBottomSummaryText = () => {
+    if (currentStep === 1) {
+      return {
+        label: 'Step 1 • Machine Category',
+        main: selectedCat?.title || 'Choose Machine',
+        sub: hasImplements ? `${equipmentImplements.length} attachments available` : 'Direct field deployment'
+      };
+    }
+    if (currentStep === 2) {
+      return {
+        label: 'Step 2 • Tool Attachment',
+        main: `${selectedCat?.title || 'Machine'} + ${selectedImplement ? selectedImplement.title : 'Bare Machine'}`,
+        sub: selectedImplement ? 'Implement connected' : 'Bare machine (no implement)'
+      };
+    }
+    if (currentStep === 3) {
+      return {
+        label: 'Step 3 • Work Scope',
+        main: formatScopeDisplay(quantity, rentalType),
+        sub: rentalType === 'hourly' ? 'Metered work duration' : rentalType === 'land_based' ? 'Land area measurement' : 'Multi-day rental period'
+      };
+    }
+    return {
+      label: 'Step 4 • Date & Start Time',
+      main: `${selectedCat?.title || 'Machinery'} ${selectedImplement ? `+ ${selectedImplement.title}` : ''}`,
+      sub: `${formatScopeShort(quantity, rentalType)} • ${formatToDDMMYYYY(bookingDate)} • Starts ${formatTime12Hour(startTime)}`
+    };
+  };
+
+  const formatToDDMMYYYY = (dateStr) => {
+    if (!dateStr) return '';
+    try {
+      const parts = dateStr.split('-');
+      if (parts.length === 3) {
+        const [year, month, day] = parts;
+        return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
+      }
+      const d = new Date(dateStr);
+      const dd = String(d.getDate()).padStart(2, '0');
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const yyyy = d.getFullYear();
+      return `${dd}/${mm}/${yyyy}`;
+    } catch {
+      return dateStr;
+    }
+  };
+
   const handleProceedToVendors = () => {
     if (!selectedCat) {
       toastManager.error('Please select a machinery category');
@@ -138,6 +388,16 @@ const MachineryExplorer = () => {
     if (startTime >= endTime) {
       toastManager.error('End time must be after start time');
       return;
+    }
+
+    if (bookingDate === todayStr) {
+      const now = new Date();
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+      const [sH, sM] = startTime.split(':').map(Number);
+      if (sH * 60 + sM < currentMinutes + 45) {
+        toastManager.error('Start time must be at least 45 minutes from now for same-day machinery dispatch');
+        return;
+      }
     }
 
     // Navigate to Step 2: Available Vendors Comparison
@@ -280,8 +540,8 @@ const MachineryExplorer = () => {
 
       {/* Main Body */}
       {viewMode === 'book' ? (
-        /* STEP 1: JOB SETUP & SPECIFICATIONS FORM */
-        <div className="max-w-xl mx-auto px-3.5 py-3 space-y-2.5">
+        /* PROGRESSIVE 4-STEP SPECIFICATIONS ACCORDION */
+        <div className="max-w-xl mx-auto px-3.5 py-3 space-y-3">
           {loading ? (
             <div className="py-24 text-center">
               <LogoLoader />
@@ -291,446 +551,591 @@ const MachineryExplorer = () => {
             </div>
           ) : (
             <>
-              {/* SECTION 1: Select Machinery Category */}
-              <div className="bg-white rounded-2xl p-3.5 border border-slate-200/80 shadow-xs space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center font-black text-[11px] border border-emerald-200/60">
-                      1
-                    </span>
-                    <div>
-                      <h2 className="text-xs font-black text-slate-900 uppercase tracking-wider">
-                        Machinery Category
-                      </h2>
-                      <p className="text-[10px] font-semibold text-slate-400">
-                        Select the primary machine needed for your field
-                      </p>
-                    </div>
-                  </div>
-                  <button 
-                    onClick={() => navigate('/user/machinery-categories')}
-                    className="text-[11px] font-black text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100/70 px-2 py-0.5 rounded-lg transition-colors cursor-pointer"
+
+
+              {/* STEP 1: Machinery Category */}
+              <div className="transition-all duration-300">
+                {currentStep === 1 ? (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-white rounded-2xl p-3.5 border-2 border-emerald-500/40 shadow-xs space-y-3 ring-4 ring-emerald-500/5"
                   >
-                    View All
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 pt-0.5">
-                  {categories.map((cat) => {
-                    const isSelected = (selectedCat?.id || selectedCat?._id) === (cat.id || cat._id);
-                    return (
-                      <button
-                        key={cat.id || cat._id}
-                        type="button"
-                        onClick={() => setSelectedCat(cat)}
-                        className={`p-2 rounded-xl border text-center transition-all flex flex-col items-center justify-center gap-1.5 relative cursor-pointer ${
-                          isSelected
-                            ? 'bg-emerald-50/70 border-emerald-500 ring-2 ring-emerald-500/20 shadow-xs'
-                            : 'bg-slate-50/60 border-slate-200/80 hover:border-slate-300 hover:bg-slate-100/60'
-                        }`}
-                      >
-                        {isSelected && (
-                          <span className="absolute top-1 right-1 w-3.5 h-3.5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[8px]">
-                            <FiCheck size={9} />
-                          </span>
-                        )}
-                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition-transform ${
-                          isSelected 
-                            ? 'bg-gradient-to-br from-emerald-600 to-green-700 text-white shadow-xs' 
-                            : 'bg-white text-slate-600 shadow-2xs border border-slate-100'
-                        }`}>
-                          <FiTruck size={17} />
-                        </div>
-                        <span className={`text-[11px] font-black truncate max-w-full ${
-                          isSelected ? 'text-emerald-900' : 'text-slate-800'
-                        }`}>
-                          {cat.title}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* SECTION 2: Select Attachment / Implement (Tractor Hitch) */}
-              {equipmentImplements.length > 0 && (
-                <div className="bg-white rounded-2xl p-3.5 border border-slate-200/80 shadow-xs space-y-2.5">
-                  <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center font-black text-[11px] border border-emerald-200/60">
-                        2
+                      <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-black text-[11px] shadow-xs">
+                        1
                       </span>
                       <div>
                         <h2 className="text-xs font-black text-slate-900 uppercase tracking-wider">
-                          Tool Attachment / Implement
+                          Select Machinery Category
                         </h2>
                         <p className="text-[10px] font-semibold text-slate-400">
-                          Hook a rotary, cultivator, or plough to the machine
+                          Select the primary machine needed for your field
                         </p>
                       </div>
                     </div>
-                    {selectedCat && (
-                      <button 
-                        onClick={() => navigate('/user/machinery-implements', { state: { category: selectedCat } })}
-                        className="text-[11px] font-black text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100/70 px-2 py-0.5 rounded-lg transition-colors cursor-pointer"
-                      >
-                        All Tools
-                      </button>
-                    )}
-                  </div>
 
-                  <div className="flex flex-wrap gap-1.5 pt-0.5">
+                    <div className="grid grid-cols-3 gap-2 pt-0.5">
+                      {categories.map((cat) => {
+                        const isSelected = (selectedCat?.id || selectedCat?._id) === (cat.id || cat._id);
+                        return (
+                          <button
+                            key={cat.id || cat._id}
+                            type="button"
+                            onClick={() => setSelectedCat(cat)}
+                            className={`p-2 rounded-xl border text-center transition-all flex flex-col items-center justify-center gap-1.5 relative cursor-pointer ${
+                              isSelected
+                                ? 'bg-emerald-50/70 border-emerald-500 ring-2 ring-emerald-500/20 shadow-xs'
+                                : 'bg-slate-50/60 border-slate-200/80 hover:border-slate-300 hover:bg-slate-100/60'
+                            }`}
+                          >
+                            {isSelected && (
+                              <span className="absolute top-1 right-1 w-3.5 h-3.5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[8px]">
+                                <FiCheck size={9} />
+                              </span>
+                            )}
+                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition-transform ${
+                              isSelected 
+                                ? 'bg-gradient-to-br from-emerald-600 to-green-700 text-white shadow-xs' 
+                                : 'bg-white text-slate-600 shadow-2xs border border-slate-100'
+                            }`}>
+                              <FiTruck size={17} />
+                            </div>
+                            <span className={`text-[11px] font-black truncate max-w-full ${
+                              isSelected ? 'text-emerald-900' : 'text-slate-800'
+                            }`}>
+                              {cat.title}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+
+                  </motion.div>
+                ) : (
+                  /* Step 1 Collapsed Summary */
+                  <div 
+                    onClick={() => setCurrentStep(1)}
+                    className="bg-emerald-50/60 hover:bg-emerald-50 border border-emerald-200/80 hover:border-emerald-300 rounded-2xl p-3 flex items-center justify-between cursor-pointer transition-all group shadow-2xs"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs shrink-0 shadow-xs">
+                        <FiCheck size={13} />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-black text-emerald-800/80 uppercase tracking-wider">
+                          Step 1 • Machine Category
+                        </p>
+                        <p className="text-xs font-black text-slate-900 truncate">
+                          {selectedCat?.title || 'Machine Selected'}
+                        </p>
+                      </div>
+                    </div>
                     <button
                       type="button"
-                      onClick={() => setSelectedImplement(null)}
-                      className={`px-2.5 py-1.5 rounded-lg text-[11px] font-black transition-all flex items-center gap-1 cursor-pointer ${
-                        !selectedImplement
-                          ? 'bg-gradient-to-r from-emerald-600 to-green-700 text-white shadow-xs'
-                          : 'bg-slate-50 text-slate-700 border border-slate-200/80 hover:bg-slate-100'
-                      }`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCurrentStep(1);
+                      }}
+                      className="text-[11px] font-black text-emerald-700 bg-white hover:bg-emerald-100/70 border border-emerald-200/60 px-2.5 py-1 rounded-lg flex items-center gap-1 shrink-0 transition-colors shadow-2xs cursor-pointer"
                     >
-                      <span>✓ Bare Machine</span>
+                      <FiEdit2 size={10} />
+                      <span>Change</span>
                     </button>
+                  </div>
+                )}
+              </div>
 
-                    {equipmentImplements.map((imp) => {
-                      const isSelected = (selectedImplement?.id || selectedImplement?._id) === (imp.id || imp._id);
-                      return (
+              {/* STEP 2: Tool Attachment / Implement (Shown if hasImplements) */}
+              {hasImplements && (
+                <div className="transition-all duration-300">
+                  {currentStep === 2 ? (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-white rounded-2xl p-3.5 border-2 border-emerald-500/40 shadow-xs space-y-3 ring-4 ring-emerald-500/5"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-black text-[11px] shadow-xs">
+                          2
+                        </span>
+                        <div>
+                          <h2 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                            Tool Attachment / Implement
+                          </h2>
+                          <p className="text-[10px] font-semibold text-slate-400">
+                            Hook a rotary, cultivator, or plough to the {selectedCat?.title || 'machine'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2 pt-0.5">
                         <button
-                          key={imp.id || imp._id}
                           type="button"
-                          onClick={() => setSelectedImplement(imp)}
-                          className={`px-2.5 py-1.5 rounded-lg text-[11px] font-black transition-all flex items-center gap-1.5 cursor-pointer ${
-                            isSelected
+                          onClick={() => setSelectedImplement(null)}
+                          className={`px-3 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+                            !selectedImplement
                               ? 'bg-gradient-to-r from-emerald-600 to-green-700 text-white shadow-xs ring-2 ring-emerald-500/20'
                               : 'bg-slate-50 text-slate-700 border border-slate-200/80 hover:bg-slate-100'
                           }`}
                         >
-                          <FiTool size={11} className={isSelected ? 'text-amber-300' : 'text-slate-400'} />
-                          <span>{imp.title}</span>
-                          {isSelected && <FiCheckCircle size={12} className="text-white" />}
+                          {!selectedImplement && <FiCheckCircle size={13} className="text-white" />}
+                          <span>Bare Machine (No Attachment)</span>
                         </button>
-                      );
-                    })}
-                  </div>
+
+                        {equipmentImplements.map((imp) => {
+                          const isSelected = (selectedImplement?.id || selectedImplement?._id) === (imp.id || imp._id);
+                          return (
+                            <button
+                              key={imp.id || imp._id}
+                              type="button"
+                              onClick={() => setSelectedImplement(imp)}
+                              className={`px-3 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+                                isSelected
+                                  ? 'bg-gradient-to-r from-emerald-600 to-green-700 text-white shadow-xs ring-2 ring-emerald-500/20'
+                                  : 'bg-slate-50 text-slate-700 border border-slate-200/80 hover:bg-slate-100'
+                              }`}
+                            >
+                              <FiTool size={12} className={isSelected ? 'text-amber-300' : 'text-slate-400'} />
+                              <span>{imp.title}</span>
+                              {isSelected && <FiCheckCircle size={13} className="text-white" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+
+                    </motion.div>
+                  ) : currentStep > 2 ? (
+                    /* Step 2 Collapsed Summary */
+                    <div 
+                      onClick={() => setCurrentStep(2)}
+                      className="bg-emerald-50/60 hover:bg-emerald-50 border border-emerald-200/80 hover:border-emerald-300 rounded-2xl p-3 flex items-center justify-between cursor-pointer transition-all group shadow-2xs"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs shrink-0 shadow-xs">
+                          <FiCheck size={13} />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-black text-emerald-800/80 uppercase tracking-wider">
+                            Step 2 • Tool Attachment
+                          </p>
+                          <p className="text-xs font-black text-slate-900 truncate">
+                            {selectedImplement ? selectedImplement.title : 'Bare Machine (No Attachment)'}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCurrentStep(2);
+                        }}
+                        className="text-[11px] font-black text-emerald-700 bg-white hover:bg-emerald-100/70 border border-emerald-200/60 px-2.5 py-1 rounded-lg flex items-center gap-1 shrink-0 transition-colors shadow-2xs cursor-pointer"
+                      >
+                        <FiEdit2 size={10} />
+                        <span>Change</span>
+                      </button>
+                    </div>
+                  ) : (
+                    /* Step 2 Locked Preview */
+                    <div 
+                      onClick={() => handleJumpToStep(2)}
+                      className="bg-slate-50/70 hover:bg-slate-100/60 border border-slate-200/60 rounded-2xl p-3 flex items-center justify-between opacity-70 cursor-pointer transition-all"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="w-6 h-6 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-[10px] font-bold shrink-0">
+                          2
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-xs font-black text-slate-700 truncate">
+                            Tool Attachment / Implement
+                          </p>
+                          <p className="text-[10px] font-semibold text-slate-400 truncate">
+                            Select machinery first to customize attachment
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md flex items-center gap-1">
+                        <FiLock size={10} />
+                        <span>Upcoming</span>
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* SECTION 3: Horsepower Range */}
-              <div className="bg-white rounded-2xl p-3.5 border border-slate-200/80 shadow-xs space-y-2.5">
-                <div className="flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center font-black text-[11px] border border-amber-200/60">
-                    3
-                  </span>
-                  <div>
-                    <h2 className="text-xs font-black text-slate-900 uppercase tracking-wider">
-                      Engine Horsepower (HP)
-                    </h2>
-                    <p className="text-[10px] font-semibold text-slate-400">
-                      Match horsepower to soil compactness and implement size
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-0.5">
-                  {[
-                    { label: 'All HP', value: 'all', desc: 'Any verified machine', tag: 'Fastest' },
-                    { label: '20 - 35 HP', value: '20-35', desc: 'Mini / Orchard', tag: 'Light Soil' },
-                    { label: '35 - 50 HP', value: '35-50', desc: 'Standard Rotavator', tag: 'Popular' },
-                    { label: '50 - 75 HP', value: '50-75', desc: 'Heavy Deep Plough', tag: 'Hard Soil' },
-                    { label: '75+ HP', value: '75+', desc: 'Commercial Harvester', tag: 'Large Fields' }
-                  ].map((h) => {
-                    const isSelected = hpRange === h.value;
-                    return (
-                      <button
-                        key={h.value}
-                        type="button"
-                        onClick={() => setHpRange(h.value)}
-                        className={`p-2.5 rounded-xl border text-left transition-all relative cursor-pointer ${
-                          isSelected
-                            ? 'bg-slate-900 text-white border-slate-900 shadow-xs ring-2 ring-emerald-500/30'
-                            : 'bg-slate-50/60 border-slate-200/80 hover:border-slate-300 text-slate-800'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <p className={`text-xs font-black ${isSelected ? 'text-white' : 'text-slate-900'}`}>
-                            {h.label}
-                          </p>
-                          <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full ${
-                            isSelected ? 'bg-emerald-500 text-white' : 'bg-slate-200/70 text-slate-600'
-                          }`}>
-                            {h.tag}
-                          </span>
-                        </div>
-                        <p className={`text-[9.5px] font-medium mt-0.5 leading-tight ${
-                          isSelected ? 'text-slate-300' : 'text-slate-400'
-                        }`}>
-                          {h.desc}
-                        </p>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* SECTION 4: Rental Type & Scope */}
-              <div className="bg-white rounded-2xl p-3.5 border border-slate-200/80 shadow-xs space-y-2.5">
-                <div className="flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center font-black text-[11px] border border-emerald-200/60">
-                    4
-                  </span>
-                  <div>
-                    <h2 className="text-xs font-black text-slate-900 uppercase tracking-wider">
-                      Rental Type & Work Scope
-                    </h2>
-                    <p className="text-[10px] font-semibold text-slate-400">
-                      Choose how billing will be measured
-                    </p>
-                  </div>
-                </div>
-
-                {/* Rental Type Segmented Tabs */}
-                <div className="grid grid-cols-3 gap-1 bg-slate-100/90 p-1 rounded-xl border border-slate-200/60">
-                  {[
-                    { label: '⏱️ Hourly', value: 'hourly' },
-                    { label: '🌾 Land Size', value: 'land_based' },
-                    { label: '📅 Daily', value: 'daily' }
-                  ].map((t) => (
-                    <button
-                      key={t.value}
-                      type="button"
-                      onClick={() => setRentalType(t.value)}
-                      className={`py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
-                        rentalType === t.value
-                          ? 'bg-white text-emerald-800 shadow-xs border border-slate-200/50'
-                          : 'text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Stepper & Counter */}
-                <div className="space-y-2 pt-0.5">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <label className="text-xs font-black text-slate-800 uppercase tracking-wider block">
-                        {rentalType === 'land_based' 
-                          ? 'Total Land Size (Acres)' 
-                          : rentalType === 'hourly' 
-                          ? 'Work Duration (Hours)' 
-                          : 'Number of Days'}
-                      </label>
-                      <span className="text-[9.5px] font-semibold text-slate-400">
-                        {rentalType === 'land_based' ? 'Standard 1 Acre = 43,560 sq ft' : 'Metered by tractor hour meter'}
+              {/* STEP 3: Rental Type & Scope */}
+              <div className="transition-all duration-300">
+                {currentStep === 3 ? (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-white rounded-2xl p-3.5 border-2 border-emerald-500/40 shadow-xs space-y-3 ring-4 ring-emerald-500/5"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-black text-[11px] shadow-xs">
+                        3
                       </span>
+                      <div>
+                        <h2 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                          Rental Type & Work Scope
+                        </h2>
+                        <p className="text-[10px] font-semibold text-slate-400">
+                          Choose how billing will be measured
+                        </p>
+                      </div>
                     </div>
 
-                    {/* Stepper Controls */}
-                    <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/80 rounded-xl p-0.5 shadow-inner">
-                      <button
-                        type="button"
-                        onClick={() => setQuantity(prev => Math.max(0.5, prev - (rentalType === 'daily' ? 1 : 0.5)))}
-                        className="w-8 h-8 rounded-lg bg-white border border-slate-200/70 flex items-center justify-center font-black text-slate-800 shadow-2xs hover:bg-slate-100 active:scale-95 transition-all cursor-pointer"
-                        aria-label="Decrease"
-                      >
-                        <FiMinus size={13} />
-                      </button>
-                      <input
-                        type="number"
-                        step={rentalType === 'daily' ? '1' : '0.5'}
-                        min="0.5"
-                        value={quantity}
-                        onChange={(e) => setQuantity(Math.max(0.5, parseFloat(e.target.value) || 0.5))}
-                        className="w-14 text-center text-xs font-black text-slate-900 bg-transparent focus:outline-none"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setQuantity(prev => prev + (rentalType === 'daily' ? 1 : 0.5))}
-                        className="w-8 h-8 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center font-black shadow-2xs active:scale-95 transition-all cursor-pointer"
-                        aria-label="Increase"
-                      >
-                        <FiPlus size={13} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Preset Pills */}
-                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-0.5">
-                    {(rentalType === 'hourly' 
-                      ? [1, 2, 3, 4, 6, 8] 
-                      : rentalType === 'land_based' 
-                      ? [1, 2, 3, 5, 8, 10] 
-                      : [1, 2, 3, 5, 7]
-                    ).map((preset) => (
-                      <button
-                        key={preset}
-                        type="button"
-                        onClick={() => setQuantity(preset)}
-                        className={`px-2.5 py-1 rounded-lg text-[11px] font-black shrink-0 transition-all cursor-pointer ${
-                          quantity === preset
-                            ? 'bg-emerald-700 text-white shadow-2xs'
-                            : 'bg-slate-50 text-slate-600 border border-slate-200/80 hover:bg-slate-100'
-                        }`}
-                      >
-                        {preset} {rentalType === 'hourly' ? 'Hrs' : rentalType === 'land_based' ? 'Acres' : 'Days'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* SECTION 5: Date & Time Window */}
-              <div className="bg-white rounded-2xl p-3.5 border border-slate-200/80 shadow-xs space-y-2.5">
-                <div className="flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center font-black text-[11px] border border-emerald-200/60">
-                    5
-                  </span>
-                  <div>
-                    <h2 className="text-xs font-black text-slate-900 uppercase tracking-wider">
-                      Work Date & Time Window
-                    </h2>
-                    <p className="text-[10px] font-semibold text-slate-400">
-                      Reserve the vendor's machine calendar slot
-                    </p>
-                  </div>
-                </div>
-
-                {/* Quick Date Chips */}
-                <div className="space-y-2">
-                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-                    <button
-                      type="button"
-                      onClick={() => setBookingDate(todayStr)}
-                      className={`px-3 py-1.5 rounded-xl text-[11px] font-black shrink-0 transition-all cursor-pointer ${
-                        bookingDate === todayStr
-                          ? 'bg-slate-900 text-white shadow-xs'
-                          : 'bg-slate-50 text-slate-700 border border-slate-200/80 hover:bg-slate-100'
-                      }`}
-                    >
-                      Today ({formatDateDisplay(todayStr)})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setBookingDate(tomorrowStr)}
-                      className={`px-3 py-1.5 rounded-xl text-[11px] font-black shrink-0 transition-all cursor-pointer ${
-                        bookingDate === tomorrowStr
-                          ? 'bg-slate-900 text-white shadow-xs'
-                          : 'bg-slate-50 text-slate-700 border border-slate-200/80 hover:bg-slate-100'
-                      }`}
-                    >
-                      Tomorrow ({formatDateDisplay(tomorrowStr)})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setBookingDate(dayAfterStr)}
-                      className={`px-3 py-1.5 rounded-xl text-[11px] font-black shrink-0 transition-all cursor-pointer ${
-                        bookingDate === dayAfterStr
-                          ? 'bg-slate-900 text-white shadow-xs'
-                          : 'bg-slate-50 text-slate-700 border border-slate-200/80 hover:bg-slate-100'
-                      }`}
-                    >
-                      Day After ({formatDateDisplay(dayAfterStr)})
-                    </button>
-                  </div>
-
-                  {/* Native Date Picker */}
-                  <div className="relative">
-                    <input
-                      type="date"
-                      min={todayStr}
-                      value={bookingDate}
-                      onChange={(e) => setBookingDate(e.target.value)}
-                      className="w-full text-xs font-bold p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 focus:outline-none focus:border-emerald-500 focus:bg-white text-slate-900 transition-colors"
-                    />
-                  </div>
-                </div>
-
-                {/* Ambient Time Slots */}
-                <div className="space-y-2 pt-1.5 border-t border-slate-100">
-                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider">
-                    Select Operating Shift:
-                  </p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { label: 'Morning Shift', start: '08:00', end: '11:00', icon: FiSunrise, tag: 'Sowing' },
-                      { label: 'Midday Shift', start: '11:00', end: '14:00', icon: FiSun, tag: 'Dry Land' },
-                      { label: 'Afternoon Shift', start: '14:00', end: '17:00', icon: FiSunset, tag: 'Tillage' },
-                      { label: 'Evening Shift', start: '17:00', end: '20:00', icon: FiMoon, tag: 'Cool Temp' }
-                    ].map((slot) => {
-                      const isSelected = startTime === slot.start && endTime === slot.end;
-                      const IconComp = slot.icon;
-                      return (
+                    {/* Rental Type Segmented Tabs */}
+                    <div className="grid grid-cols-3 gap-1 bg-slate-100/90 p-1 rounded-xl border border-slate-200/60">
+                      {[
+                        { label: '⏱️ Hourly', value: 'hourly' },
+                        { label: '🌾 Land Size', value: 'land_based' },
+                        { label: '📅 Daily', value: 'daily' }
+                      ].map((t) => (
                         <button
-                          key={slot.label}
+                          key={t.value}
                           type="button"
-                          onClick={() => handleSelectSlotPreset(slot.start, slot.end)}
-                          className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                            isSelected
-                              ? 'bg-emerald-50/80 border-emerald-500 ring-2 ring-emerald-500/20 shadow-xs'
-                              : 'bg-slate-50/60 border-slate-200/80 hover:border-slate-300'
+                          onClick={() => setRentalType(t.value)}
+                          className={`py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                            rentalType === t.value
+                              ? 'bg-white text-emerald-800 shadow-xs border border-slate-200/50'
+                              : 'text-slate-600 hover:text-slate-900'
                           }`}
                         >
-                          <div className="flex items-center justify-between">
-                            <span className="flex items-center gap-1.5 text-xs font-black text-slate-900">
-                              <IconComp size={13} className={isSelected ? 'text-emerald-700' : 'text-slate-400'} />
-                              <span>{slot.label}</span>
-                            </span>
-                            <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full ${
-                              isSelected ? 'bg-emerald-600 text-white' : 'bg-slate-200/60 text-slate-500'
-                            }`}>
-                              {slot.tag}
-                            </span>
-                          </div>
-                          <p className="text-[10px] font-bold text-slate-500 mt-0.5">
-                            {slot.start} - {slot.end}
-                          </p>
+                          {t.label}
                         </button>
-                      );
-                    })}
-                  </div>
+                      ))}
+                    </div>
 
-                  {/* Custom Slot Adjustment */}
-                  <div className="pt-1.5 flex items-center gap-2">
-                    <div className="flex-1">
-                      <span className="text-[9.5px] font-bold text-slate-400 block mb-0.5">Custom Start</span>
-                      <input
-                        type="time"
-                        value={startTime}
-                        onChange={(e) => {
-                          setStartTime(e.target.value);
-                          setActiveSlotPreset('');
-                        }}
-                        className="w-full text-xs font-black p-2 rounded-lg bg-slate-50 border border-slate-200/80 focus:outline-none focus:border-emerald-500"
-                      />
+                    {/* Stepper & Counter */}
+                    <div className="space-y-2 pt-0.5">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <label className="text-xs font-black text-slate-800 uppercase tracking-wider block">
+                            {rentalType === 'land_based' 
+                              ? 'Total Land Size (Acres)' 
+                              : rentalType === 'hourly' 
+                              ? 'Work Duration (Hours)' 
+                              : 'Number of Days'}
+                          </label>
+                        </div>
+
+                        {/* Stepper Controls */}
+                        <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/80 rounded-xl p-0.5 shadow-inner">
+                          <button
+                            type="button"
+                            onClick={() => setQuantity(prev => Math.max(0.5, prev - (rentalType === 'daily' ? 1 : 0.5)))}
+                            className="w-8 h-8 rounded-lg bg-white border border-slate-200/70 flex items-center justify-center font-black text-slate-800 shadow-2xs hover:bg-slate-100 active:scale-95 transition-all cursor-pointer"
+                            aria-label="Decrease"
+                          >
+                            <FiMinus size={13} />
+                          </button>
+                          <input
+                            type="number"
+                            step={rentalType === 'daily' ? '1' : '0.5'}
+                            min="0.5"
+                            value={quantity}
+                            onChange={(e) => setQuantity(Math.max(0.5, parseFloat(e.target.value) || 0.5))}
+                            className="w-14 text-center text-xs font-black text-slate-900 bg-transparent focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setQuantity(prev => prev + (rentalType === 'daily' ? 1 : 0.5))}
+                            className="w-8 h-8 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center font-black shadow-2xs active:scale-95 transition-all cursor-pointer"
+                            aria-label="Increase"
+                          >
+                            <FiPlus size={13} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Preset Pills */}
+                      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-0.5">
+                        {(rentalType === 'hourly' 
+                          ? [1, 2, 3, 4, 6, 8] 
+                          : rentalType === 'land_based' 
+                          ? [1, 2, 3, 5, 8, 10] 
+                          : [1, 2, 3, 5, 7]
+                        ).map((preset) => (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => setQuantity(preset)}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-black shrink-0 transition-all cursor-pointer ${
+                              quantity === preset
+                                ? 'bg-emerald-700 text-white shadow-2xs'
+                                : 'bg-slate-50 text-slate-600 border border-slate-200/80 hover:bg-slate-100'
+                            }`}
+                          >
+                            {formatScopeShort(preset, rentalType)}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <span className="text-slate-400 pt-4 font-bold">-</span>
-                    <div className="flex-1">
-                      <span className="text-[9.5px] font-bold text-slate-400 block mb-0.5">Custom End</span>
-                      <input
-                        type="time"
-                        value={endTime}
-                        onChange={(e) => {
-                          setEndTime(e.target.value);
-                          setActiveSlotPreset('');
-                        }}
-                        className="w-full text-xs font-black p-2 rounded-lg bg-slate-50 border border-slate-200/80 focus:outline-none focus:border-emerald-500"
-                      />
+                  </motion.div>
+                ) : currentStep > 3 ? (
+                  /* Step 3 Collapsed Summary */
+                  <div 
+                    onClick={() => setCurrentStep(3)}
+                    className="bg-emerald-50/60 hover:bg-emerald-50 border border-emerald-200/80 hover:border-emerald-300 rounded-2xl p-3 flex items-center justify-between cursor-pointer transition-all group shadow-2xs"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs shrink-0 shadow-xs">
+                        <FiCheck size={13} />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-black text-emerald-800/80 uppercase tracking-wider">
+                          Step 3 • Work Scope
+                        </p>
+                        <p className="text-xs font-black text-slate-900 truncate">
+                          {formatScopeDisplay(quantity, rentalType)}
+                        </p>
+                      </div>
                     </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCurrentStep(3);
+                      }}
+                      className="text-[11px] font-black text-emerald-700 bg-white hover:bg-emerald-100/70 border border-emerald-200/60 px-2.5 py-1 rounded-lg flex items-center gap-1 shrink-0 transition-colors shadow-2xs cursor-pointer"
+                    >
+                      <FiEdit2 size={10} />
+                      <span>Change</span>
+                    </button>
                   </div>
-                </div>
+                ) : (
+                  /* Step 3 Locked Preview */
+                  <div 
+                    onClick={() => handleJumpToStep(3)}
+                    className="bg-slate-50/70 hover:bg-slate-100/60 border border-slate-200/60 rounded-2xl p-3 flex items-center justify-between opacity-70 cursor-pointer transition-all"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="w-6 h-6 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-[10px] font-bold shrink-0">
+                        3
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-black text-slate-700 truncate">
+                          Rental Type & Work Scope
+                        </p>
+                        <p className="text-[10px] font-semibold text-slate-400 truncate">
+                          Define hourly or acreage duration
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md flex items-center gap-1">
+                      <FiLock size={10} />
+                      <span>Upcoming</span>
+                    </span>
+                  </div>
+                )}
               </div>
 
-              {/* Guarantees Ribbon */}
-              <div className="bg-gradient-to-r from-emerald-50 to-teal-50/60 rounded-xl p-3 border border-emerald-200/60 flex items-start gap-2.5">
-                <FiShield className="text-emerald-700 shrink-0 mt-0.5" size={17} />
-                <div className="space-y-0.5">
-                  <p className="text-xs font-black text-emerald-950">Agroyilt Dispatch Guarantee</p>
-                  <p className="text-[10px] font-semibold text-emerald-800/80 leading-relaxed">
-                    Only verified machinery owners with matching horsepower, tested attachments, and 100% active calendar availability in your 60km cluster will be shown.
-                  </p>
-                </div>
+              {/* STEP 4: Date & Start Time */}
+              <div className="transition-all duration-300">
+                {currentStep === 4 ? (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-white rounded-2xl p-3.5 border-2 border-emerald-500/40 shadow-xs space-y-3 ring-4 ring-emerald-500/5"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-black text-[11px] shadow-xs">
+                        4
+                      </span>
+                      <div>
+                        <h2 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                          Work Date & Start Time
+                        </h2>
+                        <p className="text-[10px] font-semibold text-slate-400">
+                          Specify when the machine should arrive and begin work
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Date Picker Card */}
+                    <div className="relative group">
+                      <div className="w-full flex items-center justify-between p-3 rounded-xl bg-slate-50/80 border border-slate-200/80 group-hover:border-emerald-500 group-hover:bg-emerald-50/20 transition-all shadow-2xs cursor-pointer">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-8 h-8 rounded-lg bg-emerald-100/90 text-emerald-800 flex items-center justify-center shrink-0">
+                            <FiCalendar size={15} />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-black text-slate-900 tracking-wider">
+                              {formatToDDMMYYYY(bookingDate)}
+                            </p>
+                            <p className="text-[10px] font-bold text-slate-400 truncate">
+                              {formatDateDisplay(bookingDate)}
+                            </p>
+                          </div>
+                        </div>
+                        <span className="text-[10.5px] font-black text-emerald-700 bg-white border border-emerald-200/70 px-2.5 py-1 rounded-lg shadow-2xs shrink-0 flex items-center gap-1">
+                          <FiEdit2 size={10} />
+                          <span>Change Date</span>
+                        </span>
+                      </div>
+                      <input
+                        type="date"
+                        min={isTodayClosed ? tomorrowStr : todayStr}
+                        value={bookingDate}
+                        onChange={(e) => setBookingDate(e.target.value)}
+                        className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
+                      />
+                    </div>
+
+                    {/* Preferred Arrival / Start Time Slots */}
+                    <div className="space-y-2 pt-2 border-t border-slate-100">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                          Select Preferred Start Time:
+                        </p>
+                        {bookingDate === todayStr && (
+                          <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60 shrink-0">
+                            45m lead time
+                          </span>
+                        )}
+                      </div>
+
+                      {availableSlots.length === 0 ? (
+                        <div className="bg-amber-50/90 border border-amber-200/90 rounded-xl p-3 text-center space-y-1.5 shadow-2xs">
+                          <p className="text-xs font-black text-amber-950">
+                            Today's operating shifts have concluded
+                          </p>
+                          <p className="text-[10.5px] font-semibold text-amber-800 leading-relaxed">
+                            Machinery dispatch buffer has ended for today. Book for tomorrow to access all morning and daytime slots.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setBookingDate(tomorrowStr)}
+                            className="mt-1 px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-black transition-all cursor-pointer shadow-xs"
+                          >
+                            Switch to Tomorrow ({formatToDDMMYYYY(tomorrowStr)})
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-2">
+                          {availableSlots.map((slot) => {
+                            const isSelected = startTime === slot.time;
+                            const IconComp = slot.icon;
+                            return (
+                              <button
+                                key={slot.label}
+                                type="button"
+                                onClick={() => {
+                                  setStartTime(slot.time);
+                                  setActiveSlotPreset(slot.label);
+                                }}
+                                className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between min-h-[70px] ${
+                                  isSelected
+                                    ? 'bg-emerald-50/90 border-emerald-500 ring-2 ring-emerald-500/20 shadow-xs'
+                                    : 'bg-slate-50/70 border-slate-200/80 hover:border-slate-300 hover:bg-slate-100/60'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between gap-1 w-full">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <span className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 ${
+                                      isSelected ? 'bg-emerald-600 text-white shadow-2xs' : 'bg-slate-200/70 text-slate-600'
+                                    }`}>
+                                      <IconComp size={11} />
+                                    </span>
+                                    <span className="text-[11px] font-black text-slate-900 truncate">
+                                      {slot.label}
+                                    </span>
+                                  </div>
+                                  {slot.tag && (
+                                    <span className={`text-[7.5px] font-black uppercase px-1.5 py-0.5 rounded shrink-0 tracking-wider ${
+                                      isSelected ? 'bg-emerald-600 text-white' : 'bg-slate-200/80 text-slate-600'
+                                    }`}>
+                                      {slot.tag}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-baseline justify-between mt-2 pt-1 border-t border-slate-200/50">
+                                  <p className="text-xs font-black text-emerald-800 tracking-tight">
+                                    {formatTime12Hour(slot.time)}
+                                  </p>
+                                  {isSelected && (
+                                    <span className="text-[9px] font-black text-emerald-700 flex items-center gap-0.5">
+                                      <FiCheck size={11} />
+                                    </span>
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Custom Start Time Input */}
+                      <div className="pt-1.5">
+                        <label className="text-[9.5px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                          Or Set Custom Start Time:
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="time"
+                            value={startTime}
+                            onChange={(e) => {
+                              setStartTime(e.target.value);
+                              setActiveSlotPreset('');
+                            }}
+                            className="w-full text-xs font-black p-2.5 rounded-xl bg-slate-50/80 border border-slate-200/80 focus:outline-none focus:border-emerald-500 focus:bg-white text-slate-900 transition-all"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Smart Job Schedule Preview Banner (Matches chosen scope exactly) */}
+                      <div className="pt-1">
+                        <div className="bg-emerald-50/90 border border-emerald-200/80 rounded-xl p-2.5 flex items-center gap-2.5 shadow-2xs">
+                          <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
+                            <FiClock size={14} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[9.5px] font-black text-emerald-900 uppercase tracking-wider">
+                              {rentalType === 'hourly' ? 'Expected Work Window' : rentalType === 'land_based' ? 'Field Work Schedule' : 'Rental Duration'}
+                            </p>
+                            <p className="text-xs font-black text-slate-900 truncate">
+                              {rentalType === 'hourly' 
+                                ? `${formatTime12Hour(startTime)} – ${formatTime12Hour(endTime)} (${quantity} ${quantity === 1 ? 'Hour' : 'Hours'})`
+                                : rentalType === 'land_based'
+                                ? `Starts at ${formatTime12Hour(startTime)} • ${quantity} ${quantity === 1 ? 'Acre' : 'Acres'} Workload`
+                                : `${quantity} ${quantity === 1 ? 'Day' : 'Days'} • Starts at ${formatTime12Hour(startTime)}`}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                ) : (
+                  /* Step 4 Locked Preview */
+                  <div 
+                    onClick={() => handleJumpToStep(4)}
+                    className="bg-slate-50/70 hover:bg-slate-100/60 border border-slate-200/60 rounded-2xl p-3 flex items-center justify-between opacity-70 cursor-pointer transition-all"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="w-6 h-6 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-[10px] font-bold shrink-0">
+                        4
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-black text-slate-700 truncate">
+                          Work Date & Start Time
+                        </p>
+                        <p className="text-[10px] font-semibold text-slate-400 truncate">
+                          {formatToDDMMYYYY(bookingDate)} • Starts {formatTime12Hour(startTime)}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md flex items-center gap-1">
+                      <FiLock size={10} />
+                      <span>Upcoming</span>
+                    </span>
+                  </div>
+                )}
               </div>
+
             </>
           )}
         </div>
@@ -820,28 +1225,37 @@ const MachineryExplorer = () => {
 
       {/* FLOATING GLASS ISLAND BOTTOM BAR (Step 1 -> Step 2 CTA) */}
       {viewMode === 'book' && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/90 backdrop-blur-xl border-t border-slate-200/80 px-3.5 py-2.5 shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-xl border-t border-slate-200/80 px-3.5 py-2.5 shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
           <div className="max-w-xl mx-auto flex items-center justify-between gap-2.5">
-            <div className="min-w-0 flex-1">
-              <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">
-                Ready to find vendors:
-              </p>
-              <p className="text-xs font-black text-slate-900 truncate">
-                {selectedCat?.title || 'Machinery'} {selectedImplement ? `+ ${selectedImplement.title}` : ''}
-              </p>
-              <p className="text-[9.5px] font-bold text-emerald-700 truncate">
-                {hpRange !== 'all' ? `${hpRange} HP • ` : ''}
-                {quantity} {rentalType === 'hourly' ? 'Hrs' : rentalType === 'land_based' ? 'Acres' : 'Days'} • {formatDateDisplay(bookingDate)} • {startTime} - {endTime}
-              </p>
-            </div>
+            {(() => {
+              const summary = getBottomSummaryText();
+              const btn = getBottomButtonContent();
+              const BtnIcon = btn.icon;
 
-            <button
-              onClick={handleProceedToVendors}
-              className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 via-emerald-700 to-green-800 hover:from-emerald-700 hover:to-green-900 active:scale-95 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-md shadow-emerald-700/25 flex items-center gap-1.5 shrink-0 transition-all cursor-pointer"
-            >
-              <span>Find Vendors</span>
-              <FiChevronRight size={15} />
-            </button>
+              return (
+                <>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider truncate">
+                      {summary.label}
+                    </p>
+                    <p className="text-xs font-black text-slate-900 truncate">
+                      {summary.main}
+                    </p>
+                    <p className="text-[9.5px] font-bold text-emerald-700 truncate">
+                      {summary.sub}
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={handleBottomAction}
+                    className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 via-emerald-700 to-green-800 hover:from-emerald-700 hover:to-green-900 active:scale-95 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-md shadow-emerald-700/25 flex items-center gap-1.5 shrink-0 transition-all cursor-pointer"
+                  >
+                    <span>{btn.title}</span>
+                    <BtnIcon size={14} />
+                  </button>
+                </>
+              );
+            })()}
           </div>
         </div>
       )}
