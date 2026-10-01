@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
-  FiSearch, FiFilter, FiMapPin, FiTruck, 
-  FiClock, FiStar, FiChevronRight, FiArrowLeft,
-  FiCalendar, FiCheckCircle, FiAlertCircle, FiSliders, 
-  FiUsers, FiLayers, FiZap, FiPlus, FiMinus, FiInfo
+  FiSearch, FiMapPin, FiTruck, FiClock, 
+  FiChevronRight, FiArrowLeft, FiCalendar, 
+  FiCheckCircle, FiZap, FiPlus, FiMinus, 
+  FiInfo, FiShield, FiSliders, FiSun, 
+  FiSunrise, FiSunset, FiMoon, FiCheck, FiTool
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Helmet } from 'react-helmet-async';
@@ -12,6 +13,7 @@ import { publicEquipmentService } from '../../../../services/publicEquipmentServ
 import { useGeo } from '../../../../context/GeoContext';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import { toastManager } from '../../../../utils/toastManager';
+import { themeColors } from '../../../../theme';
 
 const MachineryExplorer = () => {
   const navigate = useNavigate();
@@ -157,7 +159,7 @@ const MachineryExplorer = () => {
 
   const locationDisplayName = selectedSubDistrict?.name 
     ? `${selectedSubDistrict.name}, ${selectedDistrict?.name || ''}`
-    : (selectedDistrict?.name || selectedState?.name || currentCity?.name || 'Globally Available');
+    : (selectedDistrict?.name || selectedState?.name || currentCity?.name || 'All India Coverage');
 
   const filteredEquipment = equipment.filter(e => {
     if (!search) return true;
@@ -173,84 +175,103 @@ const MachineryExplorer = () => {
     if (!dateStr) return '';
     try {
       const d = new Date(dateStr);
-      return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+      return d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
     } catch {
       return dateStr;
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-36">
+    <div className="min-h-screen bg-gradient-to-b from-emerald-50/40 via-slate-50 to-slate-50 pb-36 font-sans">
       <Helmet>
-        <title>Rent Agriculture Machinery | {locationDisplayName !== 'Globally Available' ? `In ${locationDisplayName}` : 'Agroyilt'}</title>
+        <title>Rent Agriculture Machinery | {locationDisplayName !== 'All India Coverage' ? `In ${locationDisplayName}` : 'Agroyilt'}</title>
         <meta name="description" content={`Select equipment specifications, attachments, and slots to find verified machinery vendors in ${locationDisplayName}.`} />
       </Helmet>
 
-      {/* Top Header */}
-      <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-100 shadow-xs">
+      {/* Top Sticky Header */}
+      <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-xl border-b border-emerald-900/10 shadow-[0_2px_12px_rgba(0,0,0,0.04)]">
         <div className="max-w-xl mx-auto px-4 py-3 space-y-2.5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+          <div className="flex items-center justify-between gap-2.5">
+            {/* Left: Back button + Title & Location */}
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
               <button 
                 onClick={() => navigate(-1)}
-                className="w-10 h-10 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-700 active:scale-95 transition-all flex-shrink-0"
+                className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 flex items-center justify-center text-slate-700 active:scale-95 transition-all flex-shrink-0 border border-slate-200/60 cursor-pointer"
                 aria-label="Back"
               >
-                <FiArrowLeft size={18} />
+                <FiArrowLeft size={17} />
               </button>
-              <div>
-                <h1 className="text-base font-black text-slate-900 leading-tight">
-                  Rent Farm Machinery
+              <div className="min-w-0 flex-1">
+                <h1 className="text-base font-black text-slate-900 tracking-tight leading-tight truncate">
+                  Machinery Rental
                 </h1>
-                <p className="text-[11px] font-bold text-slate-400 flex items-center gap-1">
-                  <FiMapPin className="text-orange-500" size={11} /> {locationDisplayName}
+                <p className="text-[11px] font-bold text-slate-400 flex items-center gap-1 mt-0.5 truncate">
+                  <FiMapPin className="text-emerald-600 shrink-0" size={11} />
+                  <span className="truncate">{locationDisplayName}</span>
                 </p>
               </div>
             </div>
 
-            {/* Toggle: Book Work vs Browse Catalog */}
-            <div className="flex items-center bg-slate-100 p-1 rounded-2xl border border-slate-200">
+            {/* Right: Segmented Toggle (Book Work vs Browse Catalog) */}
+            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 shrink-0">
               <button
+                type="button"
                 onClick={() => setViewMode('book')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1 cursor-pointer ${
                   viewMode === 'book'
-                    ? 'bg-blue-600 text-white shadow-sm'
+                    ? 'bg-emerald-700 text-white shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                <FiZap size={13} />
-                <span>Book Work</span>
+                <FiZap size={12} className={viewMode === 'book' ? 'text-amber-300' : ''} />
+                <span>Book</span>
               </button>
               <button
+                type="button"
                 onClick={() => setViewMode('catalog')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1 cursor-pointer ${
                   viewMode === 'catalog'
-                    ? 'bg-blue-600 text-white shadow-sm'
+                    ? 'bg-emerald-700 text-white shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                <FiTruck size={13} />
+                <FiTruck size={12} />
                 <span>Catalog</span>
               </button>
             </div>
           </div>
 
-          {/* Multi-Step Flow Indicator (Only on Book Work view) */}
+          {/* Polished 3-Step Flow Indicator */}
           {viewMode === 'book' && (
-            <div className="flex items-center justify-between pt-1">
-              <div className="flex items-center gap-1.5 text-xs font-black text-blue-600">
-                <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px]">1</span>
-                <span>Requirements</span>
-              </div>
-              <div className="h-[2px] flex-1 mx-2.5 bg-slate-200"></div>
-              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400">
-                <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-[10px]">2</span>
-                <span>Select Vendor</span>
-              </div>
-              <div className="h-[2px] flex-1 mx-2.5 bg-slate-200"></div>
-              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400">
-                <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-[10px]">3</span>
-                <span>Checkout</span>
+            <div className="pt-1 pb-0.5">
+              <div className="flex items-center justify-between">
+                {/* Step 1: Active */}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] font-black ring-4 ring-emerald-500/20 shadow-xs">
+                    1
+                  </span>
+                  <span className="text-xs font-black text-emerald-800">Specs</span>
+                </div>
+
+                <div className="h-[2px] flex-1 mx-3 bg-gradient-to-r from-emerald-500 to-slate-200 rounded-full" />
+
+                {/* Step 2 */}
+                <div className="flex items-center gap-1.5 text-slate-400 shrink-0">
+                  <span className="w-5 h-5 rounded-full bg-slate-100 border border-slate-200 text-slate-500 flex items-center justify-center text-[10px] font-bold">
+                    2
+                  </span>
+                  <span className="text-xs font-bold">Vendors</span>
+                </div>
+
+                <div className="h-[2px] flex-1 mx-3 bg-slate-200 rounded-full" />
+
+                {/* Step 3 */}
+                <div className="flex items-center gap-1.5 text-slate-400 shrink-0">
+                  <span className="w-5 h-5 rounded-full bg-slate-100 border border-slate-200 text-slate-500 flex items-center justify-center text-[10px] font-bold">
+                    3
+                  </span>
+                  <span className="text-xs font-bold">Checkout</span>
+                </div>
               </div>
             </div>
           )}
@@ -260,28 +281,35 @@ const MachineryExplorer = () => {
       {/* Main Body */}
       {viewMode === 'book' ? (
         /* STEP 1: JOB SETUP & SPECIFICATIONS FORM */
-        <div className="max-w-xl mx-auto px-4 py-5 space-y-5">
+        <div className="max-w-xl mx-auto px-4 py-5 space-y-4">
           {loading ? (
-            <div className="py-20 text-center">
+            <div className="py-24 text-center">
               <LogoLoader />
-              <p className="text-xs font-bold text-slate-400 mt-4 animate-pulse">Loading machinery specifications...</p>
+              <p className="text-xs font-black text-emerald-800 mt-4 tracking-wide animate-pulse">
+                Configuring machinery specifications...
+              </p>
             </div>
           ) : (
             <>
-              {/* SECTION 1: Select Category */}
-              <div className="bg-white rounded-3xl p-5 border border-slate-200/90 shadow-sm space-y-3">
+              {/* SECTION 1: Select Machinery Category */}
+              <div className="bg-white rounded-[26px] p-5 border border-slate-200/80 shadow-[0_4px_20px_rgba(0,0,0,0.03)] space-y-3.5">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-6 h-6 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-black text-xs">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-7 h-7 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-black text-xs border border-emerald-200/60">
                       1
                     </span>
-                    <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">
-                      Machinery Category
-                    </h2>
+                    <div>
+                      <h2 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                        Machinery Category
+                      </h2>
+                      <p className="text-[11px] font-semibold text-slate-400">
+                        Select the primary machine needed for your field
+                      </p>
+                    </div>
                   </div>
                   <button 
                     onClick={() => navigate('/user/machinery-categories')}
-                    className="text-[11px] font-bold text-blue-600 hover:text-blue-700"
+                    className="text-xs font-black text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100/70 px-2.5 py-1 rounded-xl transition-colors"
                   >
                     View All
                   </button>
@@ -295,16 +323,27 @@ const MachineryExplorer = () => {
                         key={cat.id || cat._id}
                         type="button"
                         onClick={() => setSelectedCat(cat)}
-                        className={`p-3 rounded-2xl border text-center transition-all flex flex-col items-center justify-center gap-1.5 ${
+                        className={`p-3 rounded-2xl border text-center transition-all flex flex-col items-center justify-center gap-2 relative ${
                           isSelected
-                            ? 'bg-blue-50 border-blue-600 ring-2 ring-blue-500/20 shadow-sm'
-                            : 'bg-slate-50/70 border-slate-200 hover:border-slate-300'
+                            ? 'bg-emerald-50/70 border-emerald-500 ring-2 ring-emerald-500/20 shadow-md shadow-emerald-500/10'
+                            : 'bg-slate-50/60 border-slate-200/80 hover:border-slate-300 hover:bg-slate-100/60'
                         }`}
                       >
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isSelected ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 shadow-xs'}`}>
-                          <FiTruck size={18} />
+                        {isSelected && (
+                          <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[9px]">
+                            <FiCheck size={10} />
+                          </span>
+                        )}
+                        <div className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-transform ${
+                          isSelected 
+                            ? 'bg-gradient-to-br from-emerald-600 to-green-700 text-white shadow-sm' 
+                            : 'bg-white text-slate-600 shadow-xs border border-slate-100'
+                        }`}>
+                          <FiTruck size={20} />
                         </div>
-                        <span className={`text-xs font-black truncate max-w-full ${isSelected ? 'text-blue-700' : 'text-slate-800'}`}>
+                        <span className={`text-xs font-black truncate max-w-full ${
+                          isSelected ? 'text-emerald-900' : 'text-slate-800'
+                        }`}>
                           {cat.title}
                         </span>
                       </button>
@@ -313,43 +352,44 @@ const MachineryExplorer = () => {
                 </div>
               </div>
 
-              {/* SECTION 2: Select Attachment / Implement (if category has implements) */}
+              {/* SECTION 2: Select Attachment / Implement (Tractor Hitch) */}
               {equipmentImplements.length > 0 && (
-                <div className="bg-white rounded-3xl p-5 border border-slate-200/90 shadow-sm space-y-3">
+                <div className="bg-white rounded-[26px] p-5 border border-slate-200/80 shadow-[0_4px_20px_rgba(0,0,0,0.03)] space-y-3.5">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-black text-xs">
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-7 h-7 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-black text-xs border border-emerald-200/60">
                         2
                       </span>
-                      <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">
-                        Attach Implement / Tool
-                      </h2>
+                      <div>
+                        <h2 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                          Tool Attachment / Implement
+                        </h2>
+                        <p className="text-[11px] font-semibold text-slate-400">
+                          Hook a rotary, cultivator, or plough to the machine
+                        </p>
+                      </div>
                     </div>
                     {selectedCat && (
                       <button 
                         onClick={() => navigate('/user/machinery-implements', { state: { category: selectedCat } })}
-                        className="text-[11px] font-bold text-blue-600 hover:text-blue-700"
+                        className="text-xs font-black text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100/70 px-2.5 py-1 rounded-xl transition-colors"
                       >
-                        Browse All
+                        All Tools
                       </button>
                     )}
                   </div>
-
-                  <p className="text-[11px] font-semibold text-slate-400">
-                    Select a tool for this machinery or choose machine-only:
-                  </p>
 
                   <div className="flex flex-wrap gap-2 pt-1">
                     <button
                       type="button"
                       onClick={() => setSelectedImplement(null)}
-                      className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all ${
+                      className={`px-3.5 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
                         !selectedImplement
-                          ? 'bg-emerald-600 text-white shadow-sm'
-                          : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
+                          ? 'bg-gradient-to-r from-emerald-600 to-green-700 text-white shadow-md shadow-emerald-600/20'
+                          : 'bg-slate-50 text-slate-700 border border-slate-200/80 hover:bg-slate-100'
                       }`}
                     >
-                      ✓ No Implement (Machine Only)
+                      <span>✓ Bare Machine (No Tool)</span>
                     </button>
 
                     {equipmentImplements.map((imp) => {
@@ -359,14 +399,15 @@ const MachineryExplorer = () => {
                           key={imp.id || imp._id}
                           type="button"
                           onClick={() => setSelectedImplement(imp)}
-                          className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
+                          className={`px-3.5 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
                             isSelected
-                              ? 'bg-emerald-600 text-white shadow-sm'
-                              : 'bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100'
+                              ? 'bg-gradient-to-r from-emerald-600 to-green-700 text-white shadow-md shadow-emerald-600/20 ring-2 ring-emerald-500/20'
+                              : 'bg-slate-50 text-slate-700 border border-slate-200/80 hover:bg-slate-100'
                           }`}
                         >
+                          <FiTool size={13} className={isSelected ? 'text-amber-300' : 'text-slate-400'} />
                           <span>{imp.title}</span>
-                          {isSelected && <FiCheckCircle size={13} />}
+                          {isSelected && <FiCheckCircle size={14} className="text-white" />}
                         </button>
                       );
                     })}
@@ -375,23 +416,28 @@ const MachineryExplorer = () => {
               )}
 
               {/* SECTION 3: Horsepower Range */}
-              <div className="bg-white rounded-3xl p-5 border border-slate-200/90 shadow-sm space-y-3">
-                <div className="flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center font-black text-xs">
+              <div className="bg-white rounded-[26px] p-5 border border-slate-200/80 shadow-[0_4px_20px_rgba(0,0,0,0.03)] space-y-3.5">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-7 h-7 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-black text-xs border border-amber-200/60">
                     3
                   </span>
-                  <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">
-                    Horsepower Requirement (HP)
-                  </h2>
+                  <div>
+                    <h2 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                      Engine Horsepower (HP)
+                    </h2>
+                    <p className="text-[11px] font-semibold text-slate-400">
+                      Match horsepower to soil compactness and implement size
+                    </p>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1">
                   {[
-                    { label: 'All HP', value: 'all', desc: 'Any available machine' },
-                    { label: '20 - 35 HP', value: '20-35', desc: 'Light / Orchard' },
-                    { label: '35 - 50 HP', value: '35-50', desc: 'Standard Tilling' },
-                    { label: '50 - 75 HP', value: '50-75', desc: 'Heavy Soil / Plouging' },
-                    { label: '75+ HP', value: '75+', desc: 'Large Commercial' }
+                    { label: 'All HP', value: 'all', desc: 'Any verified machine', tag: 'Fastest Match' },
+                    { label: '20 - 35 HP', value: '20-35', desc: 'Mini / Orchard Tillage', tag: 'Light Soil' },
+                    { label: '35 - 50 HP', value: '35-50', desc: 'Standard Farm Rotavator', tag: 'Most Popular' },
+                    { label: '50 - 75 HP', value: '50-75', desc: 'Heavy Deep Ploughing', tag: 'Hard Soil' },
+                    { label: '75+ HP', value: '75+', desc: 'Commercial Harvester/Laser', tag: 'Large Fields' }
                   ].map((h) => {
                     const isSelected = hpRange === h.value;
                     return (
@@ -399,16 +445,25 @@ const MachineryExplorer = () => {
                         key={h.value}
                         type="button"
                         onClick={() => setHpRange(h.value)}
-                        className={`p-3 rounded-2xl border text-left transition-all ${
+                        className={`p-3 rounded-2xl border text-left transition-all relative ${
                           isSelected
-                            ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
-                            : 'bg-slate-50/70 border-slate-200 hover:border-slate-300 text-slate-800'
+                            ? 'bg-slate-900 text-white border-slate-900 shadow-md ring-2 ring-emerald-500/30'
+                            : 'bg-slate-50/60 border-slate-200/80 hover:border-slate-300 text-slate-800'
                         }`}
                       >
-                        <p className={`text-xs font-black ${isSelected ? 'text-white' : 'text-slate-900'}`}>
-                          {h.label}
-                        </p>
-                        <p className={`text-[10px] font-medium mt-0.5 ${isSelected ? 'text-slate-300' : 'text-slate-400'}`}>
+                        <div className="flex items-center justify-between">
+                          <p className={`text-xs font-black ${isSelected ? 'text-white' : 'text-slate-900'}`}>
+                            {h.label}
+                          </p>
+                          <span className={`text-[8.5px] font-black uppercase px-1.5 py-0.5 rounded-full ${
+                            isSelected ? 'bg-emerald-500 text-white' : 'bg-slate-200/70 text-slate-600'
+                          }`}>
+                            {h.tag}
+                          </span>
+                        </div>
+                        <p className={`text-[10px] font-medium mt-1 leading-snug ${
+                          isSelected ? 'text-slate-300' : 'text-slate-400'
+                        }`}>
                           {h.desc}
                         </p>
                       </button>
@@ -418,21 +473,26 @@ const MachineryExplorer = () => {
               </div>
 
               {/* SECTION 4: Rental Type & Scope */}
-              <div className="bg-white rounded-3xl p-5 border border-slate-200/90 shadow-sm space-y-4">
-                <div className="flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-black text-xs">
+              <div className="bg-white rounded-[26px] p-5 border border-slate-200/80 shadow-[0_4px_20px_rgba(0,0,0,0.03)] space-y-4">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-7 h-7 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-black text-xs border border-emerald-200/60">
                     4
                   </span>
-                  <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">
-                    Rental Type & Work Scope
-                  </h2>
+                  <div>
+                    <h2 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                      Rental Type & Work Scope
+                    </h2>
+                    <p className="text-[11px] font-semibold text-slate-400">
+                      Choose how billing will be measured
+                    </p>
+                  </div>
                 </div>
 
-                {/* Rental Type Tabs */}
-                <div className="grid grid-cols-3 gap-2 bg-slate-100 p-1.5 rounded-2xl">
+                {/* Rental Type Segmented Tabs */}
+                <div className="grid grid-cols-3 gap-1.5 bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/60">
                   {[
                     { label: '⏱️ Hourly', value: 'hourly' },
-                    { label: '🌾 Land-Based', value: 'land_based' },
+                    { label: '🌾 Land Size', value: 'land_based' },
                     { label: '📅 Daily', value: 'daily' }
                   ].map((t) => (
                     <button
@@ -441,8 +501,8 @@ const MachineryExplorer = () => {
                       onClick={() => setRentalType(t.value)}
                       className={`py-2 rounded-xl text-xs font-black transition-all ${
                         rentalType === t.value
-                          ? 'bg-white text-slate-900 shadow-sm'
-                          : 'text-slate-500 hover:text-slate-900'
+                          ? 'bg-white text-emerald-800 shadow-sm border border-slate-200/50'
+                          : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
                       {t.label}
@@ -450,25 +510,31 @@ const MachineryExplorer = () => {
                   ))}
                 </div>
 
-                {/* Counter & Quick Presets */}
-                <div className="space-y-2.5">
+                {/* Stepper & Counter */}
+                <div className="space-y-3 pt-1">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-black text-slate-700 uppercase tracking-wider">
-                      {rentalType === 'land_based' 
-                        ? 'Total Land Size (Acres)' 
-                        : rentalType === 'hourly' 
-                        ? 'Work Duration (Hours)' 
-                        : 'Number of Days'}
-                    </label>
+                    <div>
+                      <label className="text-xs font-black text-slate-800 uppercase tracking-wider block">
+                        {rentalType === 'land_based' 
+                          ? 'Total Land Size (Acres)' 
+                          : rentalType === 'hourly' 
+                          ? 'Work Duration (Hours)' 
+                          : 'Number of Days'}
+                      </label>
+                      <span className="text-[10px] font-semibold text-slate-400">
+                        {rentalType === 'land_based' ? 'Standard 1 Acre = 43,560 sq ft' : 'Metered by tractor hour meter'}
+                      </span>
+                    </div>
 
-                    {/* Stepper */}
-                    <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-2xl p-1">
+                    {/* Stepper Controls */}
+                    <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/80 rounded-2xl p-1 shadow-inner">
                       <button
                         type="button"
                         onClick={() => setQuantity(prev => Math.max(0.5, prev - (rentalType === 'daily' ? 1 : 0.5)))}
-                        className="w-8 h-8 rounded-xl bg-white border border-slate-200 flex items-center justify-center font-black text-slate-700 shadow-xs active:scale-95"
+                        className="w-9 h-9 rounded-xl bg-white border border-slate-200/70 flex items-center justify-center font-black text-slate-800 shadow-xs hover:bg-slate-100 active:scale-95 transition-all"
+                        aria-label="Decrease"
                       >
-                        <FiMinus size={14} />
+                        <FiMinus size={15} />
                       </button>
                       <input
                         type="number"
@@ -476,24 +542,25 @@ const MachineryExplorer = () => {
                         min="0.5"
                         value={quantity}
                         onChange={(e) => setQuantity(Math.max(0.5, parseFloat(e.target.value) || 0.5))}
-                        className="w-16 text-center text-sm font-black bg-transparent focus:outline-none"
+                        className="w-16 text-center text-sm font-black text-slate-900 bg-transparent focus:outline-none"
                       />
                       <button
                         type="button"
                         onClick={() => setQuantity(prev => prev + (rentalType === 'daily' ? 1 : 0.5))}
-                        className="w-8 h-8 rounded-xl bg-white border border-slate-200 flex items-center justify-center font-black text-slate-700 shadow-xs active:scale-95"
+                        className="w-9 h-9 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center font-black shadow-xs active:scale-95 transition-all"
+                        aria-label="Increase"
                       >
-                        <FiPlus size={14} />
+                        <FiPlus size={15} />
                       </button>
                     </div>
                   </div>
 
-                  {/* Quick Preset Chips */}
+                  {/* Preset Pills */}
                   <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pt-1">
                     {(rentalType === 'hourly' 
                       ? [1, 2, 3, 4, 6, 8] 
                       : rentalType === 'land_based' 
-                      ? [1, 2, 3, 5, 10] 
+                      ? [1, 2, 3, 5, 8, 10] 
                       : [1, 2, 3, 5, 7]
                     ).map((preset) => (
                       <button
@@ -502,8 +569,8 @@ const MachineryExplorer = () => {
                         onClick={() => setQuantity(preset)}
                         className={`px-3 py-1.5 rounded-xl text-xs font-black shrink-0 transition-all ${
                           quantity === preset
-                            ? 'bg-blue-600 text-white shadow-xs'
-                            : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
+                            ? 'bg-emerald-700 text-white shadow-xs'
+                            : 'bg-slate-50 text-slate-600 border border-slate-200/80 hover:bg-slate-100'
                         }`}
                       >
                         {preset} {rentalType === 'hourly' ? 'Hrs' : rentalType === 'land_based' ? 'Acres' : 'Days'}
@@ -513,30 +580,32 @@ const MachineryExplorer = () => {
                 </div>
               </div>
 
-              {/* SECTION 5: Date & Time Slot */}
-              <div className="bg-white rounded-3xl p-5 border border-slate-200/90 shadow-sm space-y-4">
-                <div className="flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center font-black text-xs">
+              {/* SECTION 5: Date & Time Window */}
+              <div className="bg-white rounded-[26px] p-5 border border-slate-200/80 shadow-[0_4px_20px_rgba(0,0,0,0.03)] space-y-4">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-7 h-7 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-black text-xs border border-emerald-200/60">
                     5
                   </span>
-                  <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">
-                    Date & Time Slot
-                  </h2>
+                  <div>
+                    <h2 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                      Work Date & Time Window
+                    </h2>
+                    <p className="text-[11px] font-semibold text-slate-400">
+                      Reserve the vendor's machine calendar slot
+                    </p>
+                  </div>
                 </div>
 
                 {/* Quick Date Chips */}
-                <div className="space-y-2">
-                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                    Select Date:
-                  </p>
+                <div className="space-y-2.5">
                   <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
                     <button
                       type="button"
                       onClick={() => setBookingDate(todayStr)}
-                      className={`px-3.5 py-2 rounded-xl text-xs font-black shrink-0 transition-all ${
+                      className={`px-3.5 py-2.5 rounded-2xl text-xs font-black shrink-0 transition-all ${
                         bookingDate === todayStr
-                          ? 'bg-slate-900 text-white shadow-xs'
-                          : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
+                          ? 'bg-slate-900 text-white shadow-md shadow-slate-900/20'
+                          : 'bg-slate-50 text-slate-700 border border-slate-200/80 hover:bg-slate-100'
                       }`}
                     >
                       Today ({formatDateDisplay(todayStr)})
@@ -544,10 +613,10 @@ const MachineryExplorer = () => {
                     <button
                       type="button"
                       onClick={() => setBookingDate(tomorrowStr)}
-                      className={`px-3.5 py-2 rounded-xl text-xs font-black shrink-0 transition-all ${
+                      className={`px-3.5 py-2.5 rounded-2xl text-xs font-black shrink-0 transition-all ${
                         bookingDate === tomorrowStr
-                          ? 'bg-slate-900 text-white shadow-xs'
-                          : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
+                          ? 'bg-slate-900 text-white shadow-md shadow-slate-900/20'
+                          : 'bg-slate-50 text-slate-700 border border-slate-200/80 hover:bg-slate-100'
                       }`}
                     >
                       Tomorrow ({formatDateDisplay(tomorrowStr)})
@@ -555,10 +624,10 @@ const MachineryExplorer = () => {
                     <button
                       type="button"
                       onClick={() => setBookingDate(dayAfterStr)}
-                      className={`px-3.5 py-2 rounded-xl text-xs font-black shrink-0 transition-all ${
+                      className={`px-3.5 py-2.5 rounded-2xl text-xs font-black shrink-0 transition-all ${
                         bookingDate === dayAfterStr
-                          ? 'bg-slate-900 text-white shadow-xs'
-                          : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
+                          ? 'bg-slate-900 text-white shadow-md shadow-slate-900/20'
+                          : 'bg-slate-50 text-slate-700 border border-slate-200/80 hover:bg-slate-100'
                       }`}
                     >
                       Day After ({formatDateDisplay(dayAfterStr)})
@@ -566,43 +635,54 @@ const MachineryExplorer = () => {
                   </div>
 
                   {/* Native Date Picker */}
-                  <input
-                    type="date"
-                    min={todayStr}
-                    value={bookingDate}
-                    onChange={(e) => setBookingDate(e.target.value)}
-                    className="w-full text-xs font-black p-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-blue-500"
-                  />
+                  <div className="relative">
+                    <input
+                      type="date"
+                      min={todayStr}
+                      value={bookingDate}
+                      onChange={(e) => setBookingDate(e.target.value)}
+                      className="w-full text-xs font-black p-3 rounded-2xl bg-slate-50 border border-slate-200/80 focus:outline-none focus:border-emerald-500 focus:bg-white text-slate-900 transition-colors"
+                    />
+                  </div>
                 </div>
 
-                {/* Time Slot Presets */}
-                <div className="space-y-2 pt-2 border-t border-slate-100">
-                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                    Select Time Window:
+                {/* Ambient Time Slots */}
+                <div className="space-y-2.5 pt-2 border-t border-slate-100">
+                  <p className="text-[11px] font-black text-slate-500 uppercase tracking-wider">
+                    Select Operating Shift:
                   </p>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 gap-2.5">
                     {[
-                      { label: 'Morning', start: '08:00', end: '11:00' },
-                      { label: 'Midday', start: '11:00', end: '14:00' },
-                      { label: 'Afternoon', start: '14:00', end: '17:00' },
-                      { label: 'Evening', start: '17:00', end: '20:00' }
+                      { label: 'Morning Shift', start: '08:00', end: '11:00', icon: FiSunrise, tag: 'Best for Sowing' },
+                      { label: 'Midday Shift', start: '11:00', end: '14:00', icon: FiSun, tag: 'Dry Land' },
+                      { label: 'Afternoon Shift', start: '14:00', end: '17:00', icon: FiSunset, tag: 'Tillage' },
+                      { label: 'Evening Shift', start: '17:00', end: '20:00', icon: FiMoon, tag: 'Cooler Temp' }
                     ].map((slot) => {
                       const isSelected = startTime === slot.start && endTime === slot.end;
+                      const IconComp = slot.icon;
                       return (
                         <button
                           key={slot.label}
                           type="button"
                           onClick={() => handleSelectSlotPreset(slot.start, slot.end)}
-                          className={`p-2.5 rounded-xl border text-left transition-all ${
+                          className={`p-3 rounded-2xl border text-left transition-all ${
                             isSelected
-                              ? 'bg-blue-50 border-blue-600 ring-2 ring-blue-500/20'
-                              : 'bg-slate-50/70 border-slate-200 hover:border-slate-300'
+                              ? 'bg-emerald-50/80 border-emerald-500 ring-2 ring-emerald-500/20 shadow-sm'
+                              : 'bg-slate-50/60 border-slate-200/80 hover:border-slate-300'
                           }`}
                         >
-                          <p className={`text-xs font-black ${isSelected ? 'text-blue-700' : 'text-slate-800'}`}>
-                            {slot.label}
-                          </p>
-                          <p className="text-[10px] font-bold text-slate-400 mt-0.5">
+                          <div className="flex items-center justify-between">
+                            <span className="flex items-center gap-1.5 text-xs font-black text-slate-900">
+                              <IconComp size={14} className={isSelected ? 'text-emerald-700' : 'text-slate-400'} />
+                              <span>{slot.label}</span>
+                            </span>
+                            <span className={`text-[8.5px] font-black uppercase px-1.5 py-0.5 rounded-full ${
+                              isSelected ? 'bg-emerald-600 text-white' : 'bg-slate-200/60 text-slate-500'
+                            }`}>
+                              {slot.tag}
+                            </span>
+                          </div>
+                          <p className="text-[11px] font-bold text-slate-500 mt-1">
                             {slot.start} - {slot.end}
                           </p>
                         </button>
@@ -610,10 +690,10 @@ const MachineryExplorer = () => {
                     })}
                   </div>
 
-                  {/* Custom Slot Inputs */}
-                  <div className="pt-1 flex items-center gap-2">
+                  {/* Custom Slot Adjustment */}
+                  <div className="pt-2 flex items-center gap-2.5">
                     <div className="flex-1">
-                      <span className="text-[10px] font-bold text-slate-400 block mb-1">Start Time</span>
+                      <span className="text-[10px] font-bold text-slate-400 block mb-1">Custom Start</span>
                       <input
                         type="time"
                         value={startTime}
@@ -621,12 +701,12 @@ const MachineryExplorer = () => {
                           setStartTime(e.target.value);
                           setActiveSlotPreset('');
                         }}
-                        className="w-full text-xs font-black p-2 rounded-xl bg-slate-50 border border-slate-200"
+                        className="w-full text-xs font-black p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 focus:outline-none focus:border-emerald-500"
                       />
                     </div>
-                    <span className="text-slate-400 pt-5">-</span>
+                    <span className="text-slate-400 pt-5 font-bold">-</span>
                     <div className="flex-1">
-                      <span className="text-[10px] font-bold text-slate-400 block mb-1">End Time</span>
+                      <span className="text-[10px] font-bold text-slate-400 block mb-1">Custom End</span>
                       <input
                         type="time"
                         value={endTime}
@@ -634,7 +714,7 @@ const MachineryExplorer = () => {
                           setEndTime(e.target.value);
                           setActiveSlotPreset('');
                         }}
-                        className="w-full text-xs font-black p-2 rounded-xl bg-slate-50 border border-slate-200"
+                        className="w-full text-xs font-black p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 focus:outline-none focus:border-emerald-500"
                       />
                     </div>
                   </div>
@@ -642,11 +722,14 @@ const MachineryExplorer = () => {
               </div>
 
               {/* Guarantees Ribbon */}
-              <div className="bg-blue-50/70 rounded-2xl p-3.5 border border-blue-100 flex items-center gap-3">
-                <FiInfo className="text-blue-600 shrink-0" size={18} />
-                <p className="text-[11px] font-semibold text-blue-900 leading-snug">
-                  Only vendors with matching machinery, verified implements, and clear calendar slots within 60 km will be shown.
-                </p>
+              <div className="bg-gradient-to-r from-emerald-50 to-teal-50/60 rounded-[22px] p-4 border border-emerald-200/60 flex items-start gap-3">
+                <FiShield className="text-emerald-700 shrink-0 mt-0.5" size={20} />
+                <div className="space-y-0.5">
+                  <p className="text-xs font-black text-emerald-950">Agroyilt Dispatch Guarantee</p>
+                  <p className="text-[11px] font-semibold text-emerald-800/80 leading-relaxed">
+                    Only verified machinery owners with matching horsepower, tested attachments, and 100% active calendar availability in your 60km cluster will be shown.
+                  </p>
+                </div>
               </div>
             </>
           )}
@@ -655,27 +738,27 @@ const MachineryExplorer = () => {
         /* CATALOG VIEW: BROWSE ALL INVENTORY */
         <div className="max-w-xl mx-auto px-4 py-5 space-y-4">
           <div className="relative">
-            <FiSearch className="absolute left-3.5 top-3.5 text-slate-400" size={16} />
+            <FiSearch className="absolute left-4 top-3.5 text-slate-400" size={17} />
             <input
               type="text"
-              placeholder="Search tractors, harvesters, brands..."
+              placeholder="Search tractors, rotavators, brands..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 rounded-2xl bg-white border border-slate-200 text-xs font-bold focus:outline-none focus:border-blue-500 shadow-xs"
+              className="w-full pl-11 pr-4 py-3 rounded-2xl bg-white border border-slate-200/80 text-xs font-bold focus:outline-none focus:border-emerald-600 shadow-sm"
             />
           </div>
 
           {loading ? (
-            <div className="py-20 text-center">
+            <div className="py-24 text-center">
               <LogoLoader />
             </div>
           ) : filteredEquipment.length === 0 ? (
-            <div className="bg-white rounded-3xl p-8 border border-slate-200 text-center space-y-3">
+            <div className="bg-white rounded-3xl p-8 border border-slate-200/80 text-center space-y-3 shadow-sm">
               <FiTruck size={36} className="text-slate-300 mx-auto" />
-              <p className="text-sm font-bold text-slate-700">No machinery matched your search.</p>
+              <p className="text-sm font-black text-slate-800">No machinery matched your search.</p>
               <button
                 onClick={() => setSearch('')}
-                className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold shadow-xs"
+                className="px-5 py-2.5 bg-emerald-700 text-white rounded-xl text-xs font-black shadow-sm"
               >
                 Clear Search
               </button>
@@ -686,19 +769,23 @@ const MachineryExplorer = () => {
                 <div
                   key={item._id}
                   onClick={() => navigate(`/user/machinery/${item._id}`)}
-                  className="bg-white rounded-3xl border border-slate-200/90 shadow-sm overflow-hidden hover:border-blue-300 transition-all cursor-pointer flex flex-col justify-between"
+                  className="bg-white rounded-[26px] border border-slate-200/80 shadow-sm overflow-hidden hover:border-emerald-400 hover:shadow-lg transition-all cursor-pointer flex flex-col justify-between group"
                 >
                   <div className="h-44 bg-slate-100 relative overflow-hidden flex items-center justify-center">
                     {item.images?.[0] ? (
-                      <img src={item.images[0]} alt={item.name} className="w-full h-full object-cover" />
+                      <img 
+                        src={item.images[0]} 
+                        alt={item.name} 
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                      />
                     ) : (
                       <FiTruck size={36} className="text-slate-300" />
                     )}
-                    <span className="absolute top-3 left-3 px-2.5 py-1 bg-white/95 backdrop-blur-md rounded-full text-[9px] font-black uppercase text-blue-600 shadow-xs">
-                      {item.categoryId?.title}
+                    <span className="absolute top-3 left-3 px-2.5 py-1 bg-white/95 backdrop-blur-md rounded-full text-[9px] font-black uppercase text-emerald-800 shadow-sm">
+                      {item.categoryId?.title || 'Machinery'}
                     </span>
                     {item.horsepower && (
-                      <span className="absolute top-3 right-3 px-2 py-1 bg-slate-900/80 backdrop-blur-md rounded-full text-[9px] font-black text-white">
+                      <span className="absolute top-3 right-3 px-2.5 py-1 bg-slate-900/80 backdrop-blur-md rounded-full text-[9px] font-black text-white">
                         {item.horsepower} HP
                       </span>
                     )}
@@ -713,13 +800,13 @@ const MachineryExplorer = () => {
                     <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
                       <div>
                         <p className="text-[9px] font-bold text-slate-400 uppercase">Rate</p>
-                        <p className="text-sm font-black text-emerald-600">
+                        <p className="text-sm font-black text-emerald-700">
                           {item.pricing?.hourly?.price ? `₹${item.pricing.hourly.price}/Hr` :
                            item.pricing?.land_based?.price ? `₹${item.pricing.land_based.price}/Acre` :
                            item.pricing?.daily?.price ? `₹${item.pricing.daily.price}/Day` : 'Rate On Request'}
                         </p>
                       </div>
-                      <span className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                      <span className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-colors">
                         <FiChevronRight size={16} />
                       </span>
                     </div>
@@ -731,18 +818,18 @@ const MachineryExplorer = () => {
         </div>
       )}
 
-      {/* FIXED STICKY BOTTOM BAR (Step 1 -> Step 2 CTA) */}
+      {/* FLOATING GLASS ISLAND BOTTOM BAR (Step 1 -> Step 2 CTA) */}
       {viewMode === 'book' && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-4 py-3 shadow-lg">
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/90 backdrop-blur-xl border-t border-slate-200/80 px-4 py-3 shadow-[0_-8px_25px_rgba(0,0,0,0.06)]">
           <div className="max-w-xl mx-auto flex items-center justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
                 Ready to find vendors:
               </p>
               <p className="text-xs font-black text-slate-900 truncate">
                 {selectedCat?.title || 'Machinery'} {selectedImplement ? `+ ${selectedImplement.title}` : ''}
               </p>
-              <p className="text-[10px] font-bold text-blue-600 truncate">
+              <p className="text-[10px] font-bold text-emerald-700 truncate">
                 {hpRange !== 'all' ? `${hpRange} HP • ` : ''}
                 {quantity} {rentalType === 'hourly' ? 'Hrs' : rentalType === 'land_based' ? 'Acres' : 'Days'} • {formatDateDisplay(bookingDate)} • {startTime} - {endTime}
               </p>
@@ -750,7 +837,7 @@ const MachineryExplorer = () => {
 
             <button
               onClick={handleProceedToVendors}
-              className="px-6 py-3.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-2xl text-xs font-black uppercase tracking-wider shadow-lg shadow-blue-500/25 flex items-center gap-2 shrink-0 transition-all"
+              className="px-6 py-3.5 bg-gradient-to-r from-emerald-600 via-emerald-700 to-green-800 hover:from-emerald-700 hover:to-green-900 active:scale-95 text-white rounded-2xl text-xs font-black uppercase tracking-wider shadow-lg shadow-emerald-700/25 flex items-center gap-2 shrink-0 transition-all cursor-pointer"
             >
               <span>Find Vendors</span>
               <FiChevronRight size={16} />

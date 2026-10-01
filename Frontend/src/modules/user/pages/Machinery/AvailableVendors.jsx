@@ -3,7 +3,8 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   FiArrowLeft, FiStar, FiMapPin, FiTruck, 
   FiClock, FiCalendar, FiCheckCircle, FiChevronRight,
-  FiFilter, FiSliders, FiEdit2, FiAlertCircle, FiRefreshCw
+  FiEdit2, FiAlertCircle, FiRefreshCw, FiShield,
+  FiZap, FiCheck, FiSliders
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Helmet } from 'react-helmet-async';
@@ -175,35 +176,36 @@ const AvailableVendors = () => {
     if (!dateStr) return '';
     try {
       const d = new Date(dateStr);
-      return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+      return d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
     } catch {
       return dateStr;
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-28">
+    <div className="min-h-screen bg-gradient-to-b from-emerald-50/40 via-slate-50 to-slate-50 pb-28 font-sans">
       <Helmet>
         <title>Available {category?.title || 'Machinery'} Vendors | Agroyilt</title>
       </Helmet>
 
       {/* Top Header */}
-      <div className="bg-white border-b border-slate-100 sticky top-0 z-30 shadow-xs">
-        <div className="max-w-xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+      <div className="bg-white/95 backdrop-blur-xl border-b border-emerald-900/10 sticky top-0 z-30 shadow-[0_2px_12px_rgba(0,0,0,0.04)]">
+        <div className="max-w-xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
             <button 
               onClick={handleEditRequirements} 
-              className="p-2 -ml-1 text-slate-700 hover:bg-slate-100 rounded-xl transition-colors active:scale-95"
+              className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 flex items-center justify-center text-slate-700 active:scale-95 transition-all flex-shrink-0 border border-slate-200/60 cursor-pointer"
               aria-label="Back to Requirements"
             >
-              <FiArrowLeft size={20} />
+              <FiArrowLeft size={17} />
             </button>
-            <div>
-              <h1 className="text-base font-black text-slate-900 leading-tight">
-                Available Vendors
+            <div className="min-w-0 flex-1">
+              <h1 className="text-base font-black text-slate-900 tracking-tight leading-tight truncate">
+                Qualified Vendors
               </h1>
-              <p className="text-[11px] font-semibold text-slate-400">
-                {availableCount} {availableCount === 1 ? 'vendor' : 'vendors'} ready for your slot
+              <p className="text-[11px] font-bold text-emerald-700 flex items-center gap-1.5 mt-0.5 truncate">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                <span>{availableCount} verified operators in cluster</span>
               </p>
             </div>
           </div>
@@ -211,46 +213,54 @@ const AvailableVendors = () => {
           <button
             onClick={fetchVendors}
             disabled={loading}
-            className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+            className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 flex items-center justify-center transition-all border border-slate-200/60 shrink-0 cursor-pointer"
             title="Refresh availability"
           >
-            <FiRefreshCw size={17} className={loading ? 'animate-spin text-blue-600' : ''} />
+            <FiRefreshCw size={15} className={loading ? 'animate-spin text-emerald-700' : ''} />
           </button>
         </div>
 
-        {/* Multi-Step Flow Indicator (Step 2 Active) */}
+        {/* Polished 3-Step Flow Indicator (Step 2 Active) */}
         <div className="max-w-xl mx-auto px-4 pb-2.5 flex items-center justify-between">
           <button 
             onClick={handleEditRequirements}
-            className="flex items-center gap-1.5 text-xs font-black text-emerald-600 hover:opacity-80 transition-opacity"
+            className="flex items-center gap-1.5 text-xs font-black text-emerald-700 hover:opacity-80 transition-opacity cursor-pointer shrink-0"
           >
-            <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px]">✓</span>
-            <span>Requirements</span>
+            <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-[10px] font-black">✓</span>
+            <span>Specs</span>
           </button>
-          <div className="h-[2px] flex-1 mx-2.5 bg-blue-500"></div>
-          <div className="flex items-center gap-1.5 text-xs font-black text-blue-600">
-            <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px]">2</span>
-            <span>Select Vendor</span>
+
+          <div className="h-[2px] flex-1 mx-3 bg-emerald-600 rounded-full" />
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] font-black ring-4 ring-emerald-500/20 shadow-xs">
+              2
+            </span>
+            <span className="text-xs font-black text-emerald-800">Vendors</span>
           </div>
-          <div className="h-[2px] flex-1 mx-2.5 bg-slate-200"></div>
-          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400">
-            <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-[10px]">3</span>
-            <span>Checkout</span>
+
+          <div className="h-[2px] flex-1 mx-3 bg-slate-200 rounded-full" />
+
+          <div className="flex items-center gap-1.5 text-slate-400 shrink-0">
+            <span className="w-5 h-5 rounded-full bg-slate-100 border border-slate-200 text-slate-500 flex items-center justify-center text-[10px] font-bold">
+              3
+            </span>
+            <span className="text-xs font-bold">Checkout</span>
           </div>
         </div>
 
         {/* Requirements Summary Pill Banner */}
-        <div className="bg-slate-50 border-t border-slate-100 px-4 py-2.5">
+        <div className="bg-gradient-to-r from-emerald-50/70 to-teal-50/50 border-t border-emerald-900/5 px-4 py-2.5">
           <div className="max-w-xl mx-auto flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
-                <FiTruck size={14} />
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="w-8 h-8 rounded-xl bg-white text-emerald-700 shadow-xs border border-emerald-100 flex items-center justify-center shrink-0">
+                <FiTruck size={15} />
               </span>
               <div className="truncate">
-                <p className="text-xs font-black text-slate-800 truncate">
+                <p className="text-xs font-black text-slate-900 truncate">
                   {category?.title} {implement ? `+ ${implement.title}` : ''}
                 </p>
-                <p className="text-[10px] font-bold text-slate-400">
+                <p className="text-[10px] font-bold text-slate-500">
                   {quantity} {rentalType === 'hourly' ? 'Hrs' : rentalType === 'land_based' ? 'Acres' : 'Days'} • {formatDateDisplay(bookingDate)} • {startTime} - {endTime}
                 </p>
               </div>
@@ -258,31 +268,31 @@ const AvailableVendors = () => {
 
             <button
               onClick={handleEditRequirements}
-              className="px-3 py-1.5 bg-white border border-slate-200 hover:border-blue-400 text-blue-600 rounded-lg text-xs font-black flex items-center gap-1 shrink-0 shadow-xs transition-all active:scale-95"
+              className="px-3 py-1.5 bg-white border border-slate-200/90 hover:border-emerald-500 text-emerald-800 rounded-xl text-xs font-black flex items-center gap-1 shrink-0 shadow-xs transition-all active:scale-95 cursor-pointer"
             >
               <FiEdit2 size={11} />
-              <span>Edit</span>
+              <span>Modify</span>
             </button>
           </div>
         </div>
 
         {/* Quick Sort Bar */}
-        <div className="px-4 py-2 bg-white border-t border-slate-100 overflow-x-auto no-scrollbar">
+        <div className="px-4 py-2 bg-white/95 border-t border-slate-100 overflow-x-auto no-scrollbar">
           <div className="max-w-xl mx-auto flex items-center gap-2 text-xs font-black">
             <span className="text-[10px] text-slate-400 uppercase tracking-wider shrink-0 mr-1">Sort:</span>
             <button
               onClick={() => setSortBy('nearest')}
-              className={`px-3 py-1.5 rounded-full transition-all shrink-0 ${
+              className={`px-3 py-1.5 rounded-full transition-all shrink-0 cursor-pointer ${
                 sortBy === 'nearest'
                   ? 'bg-slate-900 text-white shadow-xs'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              📍 Nearest
+              📍 Nearest First
             </button>
             <button
               onClick={() => setSortBy('price_low')}
-              className={`px-3 py-1.5 rounded-full transition-all shrink-0 ${
+              className={`px-3 py-1.5 rounded-full transition-all shrink-0 cursor-pointer ${
                 sortBy === 'price_low'
                   ? 'bg-slate-900 text-white shadow-xs'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -292,7 +302,7 @@ const AvailableVendors = () => {
             </button>
             <button
               onClick={() => setSortBy('rating')}
-              className={`px-3 py-1.5 rounded-full transition-all shrink-0 ${
+              className={`px-3 py-1.5 rounded-full transition-all shrink-0 cursor-pointer ${
                 sortBy === 'rating'
                   ? 'bg-slate-900 text-white shadow-xs'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -309,36 +319,36 @@ const AvailableVendors = () => {
         {loading ? (
           <div className="py-24 text-center">
             <LogoLoader />
-            <p className="text-xs font-bold text-slate-400 mt-4 animate-pulse">
-              Finding qualified available vendors near you...
+            <p className="text-xs font-black text-emerald-800 mt-4 tracking-wide animate-pulse">
+              Finding qualified available vendors in your cluster...
             </p>
           </div>
         ) : error ? (
-          <div className="bg-red-50 border border-red-200 rounded-3xl p-6 text-center space-y-3 mt-4">
+          <div className="bg-red-50 border border-red-200 rounded-[28px] p-6 text-center space-y-3 mt-4">
             <FiAlertCircle size={32} className="text-red-500 mx-auto" />
             <p className="text-sm font-black text-red-800">{error}</p>
             <button
               onClick={fetchVendors}
-              className="px-5 py-2 bg-red-600 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-sm active:scale-95"
+              className="px-5 py-2.5 bg-red-600 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-sm active:scale-95"
             >
               Try Again
             </button>
           </div>
         ) : sortedVendors.length === 0 ? (
-          <div className="bg-white rounded-3xl border border-slate-200 p-8 text-center space-y-4 shadow-sm mt-4">
-            <div className="w-16 h-16 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto">
+          <div className="bg-white rounded-[28px] border border-slate-200/80 p-8 text-center space-y-4 shadow-sm mt-4">
+            <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-3xl flex items-center justify-center mx-auto border border-emerald-100">
               <FiTruck size={30} />
             </div>
             <div className="space-y-1">
-              <h3 className="text-base font-black text-slate-800">No Vendors Free for This Slot</h3>
-              <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                All qualified equipment in your radius is either booked or not operating during {startTime} - {endTime} on {formatDateDisplay(bookingDate)}.
+              <h3 className="text-base font-black text-slate-900">No Machinery Free for This Window</h3>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
+                All qualified equipment in your 60 km cluster is currently booked or off-duty during {startTime} - {endTime} on {formatDateDisplay(bookingDate)}.
               </p>
             </div>
             <div className="pt-2 flex flex-col sm:flex-row gap-2.5 justify-center">
               <button
                 onClick={handleEditRequirements}
-                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-sm transition-all active:scale-95"
+                className="px-6 py-3.5 bg-gradient-to-r from-emerald-600 to-green-700 hover:from-emerald-700 hover:to-green-800 text-white rounded-2xl text-xs font-black uppercase tracking-wider shadow-md shadow-emerald-600/20 transition-all active:scale-95 cursor-pointer"
               >
                 Change Time or Date
               </button>
@@ -352,16 +362,16 @@ const AvailableVendors = () => {
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.25, delay: idx * 0.05 }}
-                className={`bg-white rounded-3xl p-5 border transition-all ${
+                className={`bg-white rounded-[28px] p-5 border transition-all ${
                   item.isAvailable 
-                    ? 'border-slate-200/90 shadow-sm hover:border-blue-300 hover:shadow-md' 
+                    ? 'border-slate-200/90 shadow-[0_4px_20px_rgba(0,0,0,0.03)] hover:border-emerald-400 hover:shadow-lg' 
                     : 'border-slate-200 bg-slate-50/70 opacity-70'
                 }`}
               >
                 {/* Vendor Header */}
                 <div className="flex items-start justify-between gap-3 mb-3.5">
                   <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-2xl bg-blue-50 text-blue-700 font-black text-sm flex items-center justify-center shrink-0 border border-blue-100 overflow-hidden">
+                    <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-800 font-black text-base flex items-center justify-center shrink-0 border border-emerald-100 overflow-hidden shadow-xs">
                       {item.vendor.avatar ? (
                         <img src={item.vendor.avatar} alt={item.vendor.name} className="w-full h-full object-cover" />
                       ) : (
@@ -369,27 +379,32 @@ const AvailableVendors = () => {
                       )}
                     </div>
                     <div>
-                      <h3 className="font-black text-sm text-slate-900 leading-tight">
-                        {item.vendor.businessName || item.vendor.name}
-                      </h3>
-                      <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500 font-semibold">
+                      <div className="flex items-center gap-1.5">
+                        <h3 className="font-black text-sm text-slate-900 leading-tight">
+                          {item.vendor.businessName || item.vendor.name}
+                        </h3>
+                        <span className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[9px]" title="Verified Partner">
+                          ✓
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-500 font-semibold">
                         <span className="flex items-center gap-0.5 text-amber-600 font-black">
                           <FiStar size={12} className="fill-amber-400 text-amber-400" />
                           {item.vendor.rating ? item.vendor.rating.toFixed(1) : '4.8'}
                         </span>
                         <span>•</span>
-                        <span className="flex items-center gap-0.5 text-slate-500">
-                          <FiMapPin size={11} className="text-slate-400" />
-                          {item.vendor.distance ? `${item.vendor.distance} km` : 'Nearby'}
+                        <span className="flex items-center gap-1 text-slate-500">
+                          <FiMapPin size={11} className="text-emerald-600" />
+                          {item.vendor.distance ? `${item.vendor.distance} km away` : 'Nearby'}
                         </span>
                       </div>
                     </div>
                   </div>
 
                   {item.isAvailable ? (
-                    <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1 border border-emerald-100">
+                    <span className="px-2.5 py-1 bg-emerald-50 text-emerald-800 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 border border-emerald-200/80">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      Free
+                      Free Slot
                     </span>
                   ) : (
                     <span className="px-2.5 py-1 bg-rose-50 text-rose-600 rounded-full text-[10px] font-black uppercase tracking-wider border border-rose-100">
@@ -399,8 +414,8 @@ const AvailableVendors = () => {
                 </div>
 
                 {/* Equipment Snapshot Card */}
-                <div className="bg-slate-50 rounded-2xl p-3.5 border border-slate-100 flex gap-3.5 mb-4">
-                  <div className="w-18 h-18 rounded-xl bg-slate-200 overflow-hidden shrink-0 flex items-center justify-center">
+                <div className="bg-slate-50/80 rounded-2xl p-3.5 border border-slate-100 flex gap-3.5 mb-4">
+                  <div className="w-20 h-20 rounded-xl bg-slate-200 overflow-hidden shrink-0 flex items-center justify-center border border-slate-200/60">
                     {item.equipment.images?.[0] ? (
                       <img 
                         src={item.equipment.images[0]} 
@@ -412,13 +427,13 @@ const AvailableVendors = () => {
                     )}
                   </div>
 
-                  <div className="space-y-1 min-w-0 flex-1">
+                  <div className="space-y-1.5 min-w-0 flex-1">
                     <p className="font-black text-xs text-slate-900 truncate">
                       {item.equipment.name}
                     </p>
                     <div className="flex items-center gap-1.5 flex-wrap">
                       {item.equipment.horsepower > 0 && (
-                        <span className="text-[9px] font-black bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
+                        <span className="text-[9px] font-black bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md">
                           {item.equipment.horsepower} HP
                         </span>
                       )}
@@ -428,15 +443,15 @@ const AvailableVendors = () => {
                         </span>
                       )}
                       {item.equipment.includesDriver && (
-                        <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                        <span className="text-[9px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
                           Driver Included
                         </span>
                       )}
                     </div>
 
                     {item.matchedImplement && (
-                      <p className="text-[10px] font-bold text-emerald-700 flex items-center gap-1 pt-0.5">
-                        <FiCheckCircle size={11} className="shrink-0" />
+                      <p className="text-[10px] font-bold text-emerald-800 flex items-center gap-1 pt-0.5">
+                        <FiCheckCircle size={12} className="text-emerald-600 shrink-0" />
                         <span className="truncate">{item.matchedImplement.title} attached</span>
                       </p>
                     )}
@@ -453,21 +468,21 @@ const AvailableVendors = () => {
                       ₹{item.pricing?.totalAmount?.toLocaleString('en-IN')}
                     </p>
                     <p className="text-[10px] text-slate-400 font-medium">
-                      Base ₹{item.pricing?.basePrice} + GST ₹{item.pricing?.tax} + Fee ₹{item.pricing?.visitingCharges}
+                      Base ₹{item.pricing?.basePrice} + GST ₹{item.pricing?.tax} (Visiting Free)
                     </p>
                   </div>
 
                   <button
                     disabled={!item.isAvailable}
                     onClick={() => handleSelectVendor(item)}
-                    className={`px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-all ${
+                    className={`px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-all cursor-pointer ${
                       item.isAvailable
-                        ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/25 active:scale-95'
+                        ? 'bg-gradient-to-r from-emerald-600 via-emerald-700 to-green-800 hover:from-emerald-700 hover:to-green-900 text-white shadow-md shadow-emerald-700/20 active:scale-95'
                         : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                     }`}
                   >
                     <span>Book Vendor</span>
-                    <FiChevronRight size={14} />
+                    <FiChevronRight size={15} />
                   </button>
                 </div>
               </motion.div>

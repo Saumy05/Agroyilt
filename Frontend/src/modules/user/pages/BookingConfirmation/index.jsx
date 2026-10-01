@@ -394,7 +394,7 @@ const BookingConfirmation = () => {
                     <div className="flex flex-col gap-2.5 w-full max-w-xs">
                       <button
                         onClick={() => setShowReselectModal(true)}
-                        className="w-full px-6 py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-xs uppercase tracking-wider shadow-lg shadow-blue-500/25 active:scale-95 transition-all flex items-center justify-center gap-2"
+                        className="w-full px-6 py-3.5 bg-gradient-to-r from-emerald-600 via-emerald-700 to-green-800 hover:from-emerald-700 hover:to-green-900 text-white rounded-2xl font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-700/25 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
                       >
                         <FiRefreshCw size={14} />
                         <span>Select Another Vendor</span>

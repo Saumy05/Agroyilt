@@ -898,7 +898,7 @@ const BookingDetails = () => {
               </p>
               <button
                 onClick={() => setShowReselectModal(true)}
-                className="w-full sm:w-auto px-5 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm transition-all"
+                className="w-full sm:w-auto px-5 py-3 bg-gradient-to-r from-emerald-600 via-emerald-700 to-green-800 hover:from-emerald-700 hover:to-green-900 active:scale-95 text-white rounded-2xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-md shadow-emerald-700/25 transition-all cursor-pointer"
               >
                 <FiRefreshCw size={13} />
                 <span>Select Another Available Vendor</span>

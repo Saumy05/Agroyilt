@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   FiTruck, FiMapPin, FiStar, FiShield, 
@@ -200,7 +200,7 @@ const EquipmentDetail = () => {
 
            <div className="absolute bottom-8 left-6 right-6 pointer-events-none">
               <div className="flex items-center gap-2 mb-3">
-                 <span className="px-3 py-1 bg-blue-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest">
+                 <span className="px-3 py-1 bg-emerald-700 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-xs">
                    {equipment.categoryId?.title}
                  </span>
                  <span className="px-3 py-1 bg-white/20 backdrop-blur-md text-white border border-white/20 rounded-full text-[9px] font-black uppercase tracking-widest">
@@ -236,11 +236,11 @@ const EquipmentDetail = () => {
                     <button 
                       onClick={() => setSelectedRateType('hourly')}
                       className={`p-4 rounded-3xl border-2 transition-all flex flex-col items-center gap-2
-                        ${selectedRateType === 'hourly' ? 'border-blue-600 bg-blue-50/50' : 'border-slate-100 hover:border-slate-200'}`}
+                        ${selectedRateType === 'hourly' ? 'border-emerald-600 bg-emerald-50/60 ring-2 ring-emerald-500/10' : 'border-slate-100 hover:border-slate-200'}`}
                     >
-                       <FiClock className={selectedRateType === 'hourly' ? 'text-blue-600' : 'text-slate-400'} size={20} />
+                       <FiClock className={selectedRateType === 'hourly' ? 'text-emerald-700' : 'text-slate-400'} size={20} />
                        <div className="text-center">
-                          <p className={`text-[10px] font-black uppercase tracking-widest ${selectedRateType === 'hourly' ? 'text-blue-600' : 'text-slate-400'}`}>Hourly Rate</p>
+                          <p className={`text-[10px] font-black uppercase tracking-widest ${selectedRateType === 'hourly' ? 'text-emerald-700' : 'text-slate-400'}`}>Hourly Rate</p>
                           <p className="text-lg font-black text-slate-800">₹{equipment.pricing.hourly.price}<span className="text-[10px] text-slate-400 ml-0.5">/hr</span></p>
                        </div>
                     </button>
@@ -249,11 +249,11 @@ const EquipmentDetail = () => {
                     <button 
                       onClick={() => setSelectedRateType('land_based')}
                       className={`p-4 rounded-3xl border-2 transition-all flex flex-col items-center gap-2
-                        ${selectedRateType === 'land_based' ? 'border-blue-600 bg-blue-50/50' : 'border-slate-100 hover:border-slate-200'}`}
+                        ${selectedRateType === 'land_based' ? 'border-emerald-600 bg-emerald-50/60 ring-2 ring-emerald-500/10' : 'border-slate-100 hover:border-slate-200'}`}
                     >
-                       <FiMapPin className={selectedRateType === 'land_based' ? 'text-blue-600' : 'text-slate-400'} size={20} />
+                       <FiMapPin className={selectedRateType === 'land_based' ? 'text-emerald-700' : 'text-slate-400'} size={20} />
                        <div className="text-center">
-                          <p className={`text-[10px] font-black uppercase tracking-widest ${selectedRateType === 'land_based' ? 'text-blue-600' : 'text-slate-400'}`}>Acre Rate</p>
+                          <p className={`text-[10px] font-black uppercase tracking-widest ${selectedRateType === 'land_based' ? 'text-emerald-700' : 'text-slate-400'}`}>Acre Rate</p>
                           <p className="text-lg font-black text-slate-800">₹{equipment.pricing.land_based.price}<span className="text-[10px] text-slate-400 ml-0.5">/acre</span></p>
                        </div>
                     </button>
@@ -262,11 +262,11 @@ const EquipmentDetail = () => {
                     <button 
                       onClick={() => setSelectedRateType('daily')}
                       className={`p-4 rounded-3xl border-2 transition-all flex flex-col items-center gap-2
-                        ${selectedRateType === 'daily' ? 'border-blue-600 bg-blue-50/50' : 'border-slate-100 hover:border-slate-200'}`}
+                        ${selectedRateType === 'daily' ? 'border-emerald-600 bg-emerald-50/60 ring-2 ring-emerald-500/10' : 'border-slate-100 hover:border-slate-200'}`}
                     >
-                       <FiCalendar className={selectedRateType === 'daily' ? 'text-blue-600' : 'text-slate-400'} size={20} />
+                       <FiCalendar className={selectedRateType === 'daily' ? 'text-emerald-700' : 'text-slate-400'} size={20} />
                        <div className="text-center">
-                          <p className={`text-[10px] font-black uppercase tracking-widest ${selectedRateType === 'daily' ? 'text-blue-600' : 'text-slate-400'}`}>Daily Rate</p>
+                          <p className={`text-[10px] font-black uppercase tracking-widest ${selectedRateType === 'daily' ? 'text-emerald-700' : 'text-slate-400'}`}>Daily Rate</p>
                           <p className="text-lg font-black text-slate-800">₹{equipment.pricing.daily.price}<span className="text-[10px] text-slate-400 ml-0.5">/day</span></p>
                        </div>
                     </button>
@@ -408,8 +408,8 @@ const EquipmentDetail = () => {
               </div>
 
               {equipment.includesDriver && (
-                <div className="bg-blue-50/50 border border-blue-100 rounded-3xl p-4 flex items-center gap-4">
-                   <div className="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center text-white flex-shrink-0">
+                <div className="bg-emerald-50/50 border border-emerald-100 rounded-3xl p-4 flex items-center gap-4">
+                   <div className="w-12 h-12 rounded-2xl bg-emerald-700 flex items-center justify-center text-white flex-shrink-0">
                       <FiUser size={24} />
                    </div>
                    <div className="flex-1">
@@ -418,7 +418,7 @@ const EquipmentDetail = () => {
                    </div>
                    {(equipment.driver?.additionalCharge > 0) && (
                      <div className="text-right">
-                        <p className="text-[10px] font-black text-blue-600 uppercase">Extra Charge</p>
+                        <p className="text-[10px] font-black text-emerald-700 uppercase">Extra Charge</p>
                         <p className="text-sm font-black text-slate-800">+₹{equipment.driver?.additionalCharge}</p>
                      </div>
                    )}
@@ -437,7 +437,7 @@ const EquipmentDetail = () => {
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1 mb-2 block">Booking Date</label>
                     <input 
                       type="date" 
-                      className="w-full bg-slate-50 border-slate-100 rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-blue-500/20"
+                      className="w-full bg-slate-50 border-slate-100 rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-emerald-500/20"
                       value={selectedDate}
                       min={new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0]}
                       onChange={e => setSelectedDate(e.target.value)}
@@ -450,7 +450,7 @@ const EquipmentDetail = () => {
                           <label className="text-[10px] font-bold text-slate-500 mb-1 block">Start Time</label>
                           <input 
                             type="time" 
-                            className="w-full bg-slate-50 border-slate-100 rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-blue-500/20"
+                            className="w-full bg-slate-50 border-slate-100 rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-emerald-500/20"
                             value={startTime}
                             onChange={e => setStartTime(e.target.value)}
                           />
@@ -459,7 +459,7 @@ const EquipmentDetail = () => {
                           <label className="text-[10px] font-bold text-slate-500 mb-1 block">End Time</label>
                           <input 
                             type="time" 
-                            className="w-full bg-slate-50 border-slate-100 rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-blue-500/20"
+                            className="w-full bg-slate-50 border-slate-100 rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-emerald-500/20"
                             value={endTime}
                             onChange={e => setEndTime(e.target.value)}
                           />
