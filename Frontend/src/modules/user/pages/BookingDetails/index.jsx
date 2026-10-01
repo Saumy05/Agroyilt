@@ -43,6 +43,7 @@ import ReviewCard from '../../components/booking/ReviewCard';
 import NotificationBell from '../../components/common/NotificationBell';
 import ReselectVendorModal from '../../components/booking/ReselectVendorModal';
 import api from '../../../../services/api';
+import LiveServiceTimer from '../../../../components/common/LiveServiceTimer';
 
 const toAssetUrl = (url) => {
   if (!url) return '';
@@ -188,6 +189,11 @@ const BookingDetails = () => {
 
   const isBookingCompleted = ['completed', 'work_done'].includes(booking?.status?.toLowerCase());
   const showCompletionExit = Boolean(isBookingCompleted && !isFromHistory && !stayOnPage);
+
+  const isAgri = ['agriculture', 'agri', 'equipment', 'machinery', 'tractor'].includes(booking?.serviceCategory?.toLowerCase()) ||
+    ['agriculture', 'agri', 'equipment', 'machinery', 'tractor'].includes(booking?.categoryTitle?.toLowerCase()) ||
+    booking?.providerType === 'MACHINERY' ||
+    Boolean(booking?.equipmentId);
 
   // Auto-redirect timer when work is completed in active live flow
   useEffect(() => {
@@ -878,7 +884,18 @@ const BookingDetails = () => {
             </div>
           )}
 
-          <RentalTimer booking={booking} />
+          {/* Industry-Grade Agriculture Service Live Play/Pause Timer */}
+          {(booking.serviceTimer || booking.equipmentId || booking.rental_type || ['in_progress', 'visited', 'completed'].includes(booking.status?.toLowerCase())) ? (
+            <div className="mb-4">
+              <LiveServiceTimer
+                booking={booking}
+                role="farmer"
+                onStatusChange={loadBooking}
+              />
+            </div>
+          ) : (
+            <RentalTimer booking={booking} />
+          )}
 
 
           {/* Visual Progress Stepper */}
@@ -928,7 +945,9 @@ const BookingDetails = () => {
                     2
                   </div>
                   <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide text-center">
-                    {(booking.requiresDriver === false || booking.categoryId?.requiresDriver === false) ? 'Handover' : 'Assigned'}
+                    {(booking.serviceCategory?.toLowerCase() === 'machinery' || booking.categoryTitle?.toLowerCase() === 'machinery' || booking.providerType === 'MACHINERY')
+                      ? 'Dispatched'
+                      : ((booking.requiresDriver === false || booking.categoryId?.requiresDriver === false) ? 'Handover' : 'Assigned')}
                   </p>
                 </div>
 
@@ -939,7 +958,11 @@ const BookingDetails = () => {
                     }`}>
                     3
                   </div>
-                  <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide text-center">Started</p>
+                  <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide text-center">
+                    {(booking.serviceCategory?.toLowerCase() === 'machinery' || booking.categoryTitle?.toLowerCase() === 'machinery' || booking.providerType === 'MACHINERY')
+                      ? 'Field Work'
+                      : 'Started'}
+                  </p>
                 </div>
 
                 {/* Step 4: Done */}
@@ -949,7 +972,7 @@ const BookingDetails = () => {
                     }`}>
                     4
                   </div>
-                  <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide text-center">Done</p>
+                  <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide text-center">Completed</p>
                 </div>
               </div>
               {/* Connect lines */}
@@ -1106,8 +1129,8 @@ const BookingDetails = () => {
                     otpDesc = 'Share when professional arrives';
                   } else if (booking.driver_start_otp && ['visited', 'confirmed', 'accepted', 'assigned'].includes(booking.status?.toLowerCase())) {
                     otpValue = booking.driver_start_otp;
-                    otpTitle = (booking.requiresDriver === false || booking.categoryId?.requiresDriver === false) ? 'Handover OTP' : (isAgri ? 'Start Trip OTP' : 'Verification OTP');
-                    otpDesc = (booking.requiresDriver === false || booking.categoryId?.requiresDriver === false) ? 'Share for equipment handover' : (isAgri ? 'Share to start engine' : 'Share to start work');
+                    otpTitle = isAgri ? 'Start Service OTP' : ((booking.requiresDriver === false || booking.categoryId?.requiresDriver === false) ? 'Handover OTP' : 'Verification OTP');
+                    otpDesc = isAgri ? 'Share with operator to start field work & live timer' : ((booking.requiresDriver === false || booking.categoryId?.requiresDriver === false) ? 'Share for equipment handover' : 'Share to start work');
                   } else {
                     otpValue = booking.arrivalOTP || booking.visitOtp || booking.driver_start_otp;
                     otpTitle = 'Verification OTP';
@@ -1154,9 +1177,11 @@ const BookingDetails = () => {
                         <div className="flex items-center justify-center gap-2 text-white text-sm">
                           <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(74,222₹28,0.5)]"></span>
                           <p className="font-medium">
-                            {(booking.requiresDriver === false || booking.categoryId?.requiresDriver === false) 
-                              ? 'Ready for equipment handover' 
-                              : (isAgri ? 'Waiting for equipment to reach your farm' : 'Waiting for professional to reach your location')}
+                            {isAgri 
+                              ? 'Tractor and operator en route to your field' 
+                              : ((booking.requiresDriver === false || booking.categoryId?.requiresDriver === false) 
+                                ? 'Ready for equipment handover' 
+                                : 'Waiting for professional to reach your location')}
                           </p>
                         </div>
                       </div>
@@ -1407,10 +1432,12 @@ const BookingDetails = () => {
                   </div>
                   <div>
                     <h3 className="text-white font-bold">
-                      {(booking.requiresDriver === false || booking.categoryId?.requiresDriver === false) ? 'Return Verification' : 'Completion Verification'}
+                      {isAgri 
+                        ? 'Field Service Completion OTP' 
+                        : ((booking.requiresDriver === false || booking.categoryId?.requiresDriver === false) ? 'Return Verification' : 'Completion Verification')}
                     </h3>
                     <p className="text-teal-50 text-[10px] font-medium opacity-80 uppercase tracking-widest">
-                      {(booking.requiresDriver === false || booking.categoryId?.requiresDriver === false) ? 'Return OTP' : 'Agriculture OTP'}
+                      {isAgri ? 'Service End OTP' : ((booking.requiresDriver === false || booking.categoryId?.requiresDriver === false) ? 'Return OTP' : 'Verification OTP')}
                     </p>
                   </div>
                 </div>
@@ -1424,9 +1451,11 @@ const BookingDetails = () => {
                 </div>
 
                 <p className="text-center text-[10px] text-teal-100 font-medium bg-black/10 rounded-lg py-2 px-3 border border-white/5">
-                  {(booking.requiresDriver === false || booking.categoryId?.requiresDriver === false)
-                    ? "Share this OTP with the professional ONLY after the equipment is returned and you have verified its condition."
-                    : "Share this OTP with the driver ONLY after equipment has finished and you have verified the end KM."
+                  {isAgri
+                    ? "Share this OTP with the tractor operator ONLY after field work has finished to stop the live timer and finalize your active-minutes bill."
+                    : ((booking.requiresDriver === false || booking.categoryId?.requiresDriver === false)
+                        ? "Share this OTP with the professional ONLY after the equipment is returned and you have verified its condition."
+                        : "Share this OTP with the driver ONLY after equipment has finished and you have verified the work.")
                   }
                 </p>
               </div>

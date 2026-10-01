@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { FiCheck, FiClock, FiUser, FiUsers, FiMapPin, FiTool, FiDollarSign, FiFileText, FiCheckCircle, FiX, FiNavigation, FiPackage } from 'react-icons/fi';
 import { vendorTheme as themeColors } from '../../../../theme';
@@ -17,6 +17,7 @@ import {
 import { uploadToCloudinary } from '../../../../utils/cloudinaryUpload';
 import { CashCollectionModal, ConfirmDialog } from '../../components/common';
 import TripFlowModal from '../../components/common/TripFlowModal';
+import LiveServiceTimer from '../../../../components/common/LiveServiceTimer';
 import { WorkCompletionModal } from '../../../worker/components/common';
 import vendorWalletService from '../../../../services/vendorWalletService';
 import { toastManager } from '../../../../utils/toastManager';
@@ -476,22 +477,24 @@ const BookingTimeline = () => {
     },
     {
       id: 4,
-      title: 'Journey Started',
+      title: isAgriBooking ? 'Tractor Dispatched' : 'Journey Started',
       icon: FiMapPin,
       action: (currentStage === 3) ? handleStartSelfJob : null,
-      description: booking?.isSelfJob ? 'You started journey' : (booking?.assignedTo ? 'Operator started journey' : 'Waiting for journey start'),
+      description: isAgriBooking 
+        ? (booking?.isSelfJob ? 'You are en route with tractor' : (booking?.assignedTo ? 'Operator dispatched with tractor' : 'Waiting to dispatch tractor'))
+        : (booking?.isSelfJob ? 'You started journey' : (booking?.assignedTo ? 'Operator started journey' : 'Waiting for journey start')),
     },
     {
       id: 5,
-      title: 'Visited Site',
+      title: isAgriBooking ? 'Arrived at Field' : 'Visited Site',
       icon: FiMapPin,
       action: (currentStage === 4) ? () => setIsVisitModalOpen(true) : null,
-      description: 'Arrived at location',
+      description: isAgriBooking ? 'Tractor reached farmer field' : 'Arrived at location',
     },
     {
       id: 6,
       title: isAgriBooking 
-        ? (requiresDriver === false ? 'Handover to Farmer' : 'Start Engine') 
+        ? 'Start Field Service & Timer' 
         : 'Work Done',
       icon: FiTool,
       action: (() => {
@@ -511,13 +514,13 @@ const BookingTimeline = () => {
           return null;
       })(),
       description: isAgriBooking 
-        ? (requiresDriver === false ? 'Confirm delivery of equipment to farmer' : 'Verify OTP and start engine') 
+        ? 'Verify Start OTP with farmer & start live minute-tracking timer' 
         : 'Service work in progress',
     },
     {
       id: 6.5,
       title: isAgriBooking 
-        ? (requiresDriver === false ? 'Collect Equipment' : 'End Trip') 
+        ? 'Complete Service & Bill' 
         : 'Work Completion',
       icon: FiPackage,
       action: (() => {
@@ -527,7 +530,7 @@ const BookingTimeline = () => {
           return null;
       })(),
       description: isAgriBooking 
-        ? (requiresDriver === false ? 'Confirm return/collection of equipment from farmer' : 'Submit ending KM and verify OTP') 
+        ? 'Verify End OTP to finish work & generate active-minute bill' 
         : 'Complete the service work',
     },
     {
@@ -636,7 +639,17 @@ const BookingTimeline = () => {
       <Header title="Booking Timeline" />
 
       <main className="px-4 py-6">
-        <RentalTimer booking={booking} />
+        {(booking?.serviceTimer || booking?.equipmentId || booking?.rental_type || ['visited', 'in_progress', 'completed'].includes(booking?.status) || isAgriBooking) ? (
+          <div className="mb-6">
+            <LiveServiceTimer
+              booking={booking}
+              role="vendor"
+              onStatusChange={() => {
+                window.location.reload();
+              }}
+            />
+          </div>
+        ) : null}
         <div
           className="bg-white rounded-[2rem] p-8 shadow-lg border border-slate-100"
           style={{
@@ -713,10 +726,10 @@ const BookingTimeline = () => {
                           }}
                         >
                           {stage.id === 3 ? 'Assign Operator' :
-                            stage.id === 4 ? 'Start Journey' :
-                              stage.id === 5 ? 'Mark Arrived' :
-                                stage.id === 6 ? (isAgriBooking ? (requiresDriver === false ? 'Handover Equipment' : 'Start Engine') : 'Mark Workdone') :
-                                  stage.id === 6.5 ? (isAgriBooking ? (requiresDriver === false ? 'Collect Equipment' : 'End Trip / Collection') : 'Mark Workdone') :
+                            stage.id === 4 ? (isAgriBooking ? 'Dispatch Tractor' : 'Start Journey') :
+                              stage.id === 5 ? (isAgriBooking ? 'Mark Reached Field' : 'Mark Arrived') :
+                                stage.id === 6 ? (isAgriBooking ? 'Start Field Service' : 'Mark Workdone') :
+                                  stage.id === 6.5 ? (isAgriBooking ? 'Complete Service & Bill' : 'Mark Workdone') :
                                     stage.id === 7 ? (
                                       (booking?.paymentStatus === 'SUCCESS' || booking?.paymentStatus === 'paid')
                                         ? 'Online Payment Done'

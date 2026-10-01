@@ -31,6 +31,7 @@ import { toastManager } from '../../../../utils/toastManager';
 import { useAppNotifications } from '../../../../hooks/useAppNotifications';
 import { useLocationTracking } from '../../../../hooks/useLocationTracking';
 import TripFlowModal from '../../components/common/TripFlowModal';
+import LiveServiceTimer from '../../../../components/common/LiveServiceTimer';
 import DisputeModal from '../../../../components/common/DisputeModal'; // NEW
 import disputeService from '../../../../services/disputeService'; // NEW
 import LogoLoader from '../../../../components/common/LogoLoader'; // NEW
@@ -257,6 +258,18 @@ export default function BookingDetails() {
       window.removeEventListener('vendorJobsUpdated', loadBooking);
     };
   }, [id]);
+
+  const refreshBooking = async () => {
+    try {
+      const res = await getBookingById(id);
+      const apiData = res.data || res;
+      if (apiData) {
+        setBooking(prev => ({ ...prev, ...apiData }));
+      }
+    } catch (e) {
+      console.warn('Failed to refresh booking:', e);
+    }
+  };
 
 
   // ADDED: Socket for Live Location Tracking in Details Page
@@ -1739,6 +1752,17 @@ export default function BookingDetails() {
             </div>
           )}
         </div>
+
+        {/* ══════ LIVE AGRICULTURAL SERVICE TIMER (PLAY / PAUSE / BREAKDOWN) ══════ */}
+        {(booking?.serviceTimer || booking?.equipmentId || booking?.rental_type || ['visited', 'in_progress', 'completed'].includes(booking?.status)) && (
+          <div className="mb-4">
+            <LiveServiceTimer
+              booking={booking}
+              role="vendor"
+              onStatusChange={refreshBooking}
+            />
+          </div>
+        )}
 
         {/* ══════ EQUIPMENT TRIP FLOW (New - agriculture feature) ══════ */}
         {/* Note: Equipment trip start/end actions are handled inside the Booking Timeline page */}

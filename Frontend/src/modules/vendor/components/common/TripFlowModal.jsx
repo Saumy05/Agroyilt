@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { FiCamera, FiX, FiCheck, FiUpload, FiLoader, FiRefreshCw, FiArrowRight } from 'react-icons/fi';
@@ -67,10 +67,12 @@ const TripFlowModal = ({ isOpen, onClose, mode = 'start', onSubmit, rentalType, 
     const skipOtpStep = isStart ? !booking?.driver_start_otp : !booking?.driver_end_otp;
     const isMeterBased = trackingType === 'odometer';
 
-    const title = isStart ? (requiresDriver ? '🚜 Start Trip' : '📦 Handover Equipment') : (requiresDriver ? '🏁 End Trip' : '✅ Collect Equipment');
+    const title = isStart 
+        ? (isMachinery ? '🚜 Start Field Service & Live Timer' : (requiresDriver ? '🚜 Start Trip' : '📦 Handover Equipment'))
+        : (isMachinery ? '🏁 Complete Field Service & Bill' : (requiresDriver ? '🏁 End Trip' : '✅ Collect Equipment'));
     const photoLabel = isStart 
-        ? (isMeterBased ? 'Starting Kilometer Photo' : 'Equipment Condition Photo (Optional)')
-        : (isMeterBased ? 'Ending Kilometer Photo' : 'Rental Condition Photo (Optional)');
+        ? (isMachinery ? 'Field & Machinery Setup Photo (Optional)' : (isMeterBased ? 'Starting Kilometer Photo' : 'Equipment Condition Photo (Optional)'))
+        : (isMachinery ? 'Completed Field Work Photo (Optional)' : (isMeterBased ? 'Ending Kilometer Photo' : 'Rental Condition Photo (Optional)'));
     const themeColor = isStart ? '#16a34a' : '#dc2626'; // green for start, red for end
 
     // Reset state when modal closes / reopens or changes mode
@@ -318,7 +320,7 @@ const TripFlowModal = ({ isOpen, onClose, mode = 'start', onSubmit, rentalType, 
                                         style={{ background: themeColor }}>
                                         {uploading
                                             ? <><FiLoader className="w-4 h-4 animate-spin" /> {photoFile ? 'Uploading...' : 'Processing...'}</>
-                                            : <><FiUpload className="w-4 h-4" /> {skipOtpStep && isStart ? (requiresDriver ? 'Confirm & Start Engine' : 'Confirm Handover') : (!photoPreview ? 'Skip Photo & Continue' : 'Next: Verify OTP')}</>}
+                                            : <><FiUpload className="w-4 h-4" /> {skipOtpStep && isStart ? (isMachinery ? 'Confirm & Start Field Service' : (requiresDriver ? 'Confirm & Start Engine' : 'Confirm Handover')) : (!photoPreview ? 'Skip Photo & Continue' : 'Next: Verify OTP')}</>}
                                     </button>
                                     {/* Safety spacer for mobile BottomNav */}
                                     <div className="h-20 sm:hidden" />
@@ -453,7 +455,7 @@ const TripFlowModal = ({ isOpen, onClose, mode = 'start', onSubmit, rentalType, 
                                             style={{ background: themeColor }}>
                                             {submitting
                                                 ? <><FiLoader className="w-4 h-4 animate-spin" /> Submitting...</>
-                                                : <><FiCheck className="w-4 h-4" /> {isStart ? (requiresDriver ? 'Confirm Start Trip' : 'Confirm Handover') : (requiresDriver ? 'Confirm End Trip' : 'Confirm Collection')}</>}
+                                                : <><FiCheck className="w-4 h-4" /> {isStart ? (isMachinery ? 'Confirm & Start Live Timer' : (requiresDriver ? 'Confirm Start Trip' : 'Confirm Handover')) : (isMachinery ? 'Confirm & Generate Bill' : (requiresDriver ? 'Confirm End Trip' : 'Confirm Collection'))}</>}
                                         </button>
                                     </div>
                                     <div className="h-20 sm:hidden" />
