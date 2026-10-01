@@ -21,6 +21,7 @@ const categorySchema = z.object({
   parentCategories: z.array(z.string()).optional(),
   isAlwaysMain: z.boolean().default(false),
   requiresDriver: z.boolean().default(false),
+  adminBaseCharge: z.coerce.number().default(0),
   sectionType: z.string().default('General'),
   trackingType: z.string().default('none'),
   bookingType: z.enum(['VENDOR', 'WORKER']).default('VENDOR'),
@@ -115,6 +116,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
     isAlwaysMain: false,
     trackingType: "none",
     requiresDriver: false,
+    adminBaseCharge: 0,
     sectionType: "General",
     bookingType: "VENDOR",
     scope: "GLOBAL_INDIA",
@@ -384,6 +386,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
           isAlwaysMain: !!cat.isAlwaysMain,
           trackingType: cat.trackingType || 'none',
           requiresDriver: cat.requiresDriver || false,
+          adminBaseCharge: cat.adminBaseCharge || 0,
           sectionType: cat.sectionType || 'General',
           bookingType: cat.bookingType || 'VENDOR',
           scope: (!cat.scope || cat.scope === 'GLOBAL') ? 'GLOBAL_INDIA' : cat.scope,
@@ -434,6 +437,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
           hasSaleBadge: false, showOnHome: true, parentCategory: "",
           parentCategories: [], isAlwaysMain: false,
           trackingType: "none", requiresDriver: false,
+          adminBaseCharge: 0,
           sectionType: "General", bookingType: "VENDOR",
           scope: "GLOBAL_INDIA", stateId: "", districtId: "", subDistrictId: ""
         });
@@ -461,6 +465,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
         isAlwaysMain: !!editing.isAlwaysMain,
         trackingType: editing.trackingType || "none",
         requiresDriver: Boolean(editing.requiresDriver),
+        adminBaseCharge: editing.adminBaseCharge || 0,
         sectionType: editing.sectionType || "General",
         bookingType: editing.bookingType || "VENDOR",
         scope: editScope,
@@ -490,6 +495,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
       hasSaleBadge: false, showOnHome: true, parentCategory: "",
       parentCategories: [], isAlwaysMain: false,
       trackingType: "none", requiresDriver: false,
+      adminBaseCharge: 0,
       sectionType: "General", bookingType: "VENDOR",
       scope: "GLOBAL_INDIA", stateId: "", districtId: "", subDistrictId: ""
     });
@@ -944,6 +950,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
                           {c.trackingType?.toUpperCase() || 'NONE'}
                         </span>
                         {c.requiresDriver && <span className="text-[9px] text-rose-600 font-black uppercase">● Driver Required</span>}
+                        {c.adminBaseCharge > 0 && <span className="text-[9px] text-emerald-700 font-black bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">Base: ₹{c.adminBaseCharge}</span>}
                       </div>
                     </td>
                     <td className="py-4 px-4">
@@ -1395,6 +1402,17 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
                   <option value="timestamp">Timestamp (Static Tool - Pump/Sprayer)</option>
                 </select>
               </div>
+              <div className="flex-1 w-full">
+                <label className="block text-xs font-bold text-orange-700 mb-1 uppercase tracking-tighter">Base Mobilization / Callout Charge (₹)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={form.adminBaseCharge || ''}
+                  onChange={e => setForm({ ...form, adminBaseCharge: parseFloat(e.target.value) || 0 })}
+                  placeholder="e.g. 200 (Admin minimum fee)"
+                  className="w-full text-sm font-bold p-3 rounded-xl border border-orange-200 bg-white focus:outline-none focus:ring-2 focus:ring-orange-300"
+                />
+              </div>
               <div className="flex items-center gap-3 pt-5">
                 <input
                   id="reqDriver"
@@ -1403,7 +1421,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
                   onChange={e => setForm({ ...form, requiresDriver: e.target.checked })}
                   className="h-5 w-5 accent-orange-500"
                 />
-                <label htmlFor="reqDriver" className="text-sm font-bold text-orange-800 uppercase cursor-pointer">Requires registered Driver/Operator</label>
+                <label htmlFor="reqDriver" className="text-sm font-bold text-orange-800 uppercase cursor-pointer">Requires Driver</label>
               </div>
             </div>
           </div>

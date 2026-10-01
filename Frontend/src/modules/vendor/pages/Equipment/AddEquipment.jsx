@@ -510,16 +510,23 @@ const AddEquipment = () => {
                       </span>
                     </div>
                     {isEnabled ? (
-                      <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 w-36 transition-all">
-                        <span className="text-slate-500 font-bold text-sm">₹</span>
-                        <input 
-                          className="w-full bg-transparent border-none p-0 text-sm font-black text-slate-800 outline-none text-right placeholder:text-slate-400"
-                          type="number"
-                          placeholder="0"
-                          onFocus={(e) => e.target.select()}
-                          value={form.pricing[key].price === 0 ? "" : form.pricing[key].price}
-                          onChange={e => setForm(p => ({ ...p, pricing: { ...p.pricing, [key]: { ...p.pricing[key], price: parseFloat(e.target.value) || 0 } } }))}
-                        />
+                      <div className="flex flex-col items-end">
+                        <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 w-36 transition-all">
+                          <span className="text-slate-500 font-bold text-sm">₹</span>
+                          <input 
+                            className="w-full bg-transparent border-none p-0 text-sm font-black text-slate-800 outline-none text-right placeholder:text-slate-400"
+                            type="number"
+                            placeholder="0"
+                            onFocus={(e) => e.target.select()}
+                            value={form.pricing[key].price === 0 ? "" : form.pricing[key].price}
+                            onChange={e => setForm(p => ({ ...p, pricing: { ...p.pricing, [key]: { ...p.pricing[key], price: parseFloat(e.target.value) || 0 } } }))}
+                          />
+                        </div>
+                        {key === 'hourly' && form.pricing.hourly.price > 0 && (
+                          <span className="text-[10px] font-bold text-emerald-600 mt-1">
+                            ≈ ₹{(form.pricing.hourly.price / 60).toFixed(2)} / min
+                          </span>
+                        )}
                       </div>
                     ) : (
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Disabled</span>
