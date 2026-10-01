@@ -239,14 +239,33 @@ const AvailableVendors = () => {
   const availableVendorsCount = vendorGroups.filter(v => v.isAvailable).length;
   const totalMachinesCount = vendors.filter(v => v.isAvailable).length;
 
-  const formatDateDisplay = (dateStr) => {
+  const formatToDDMMYYYY = (dateStr) => {
     if (!dateStr) return '';
     try {
-      const d = new Date(dateStr);
-      return d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+      const [y, m, d] = dateStr.split('-');
+      if (y && m && d) return `${d}/${m}/${y}`;
+      return dateStr;
     } catch {
       return dateStr;
     }
+  };
+
+  const formatTime12Hour = (time24) => {
+    if (!time24) return '';
+    try {
+      const [h, m] = time24.split(':').map(Number);
+      const period = h >= 12 ? 'PM' : 'AM';
+      const h12 = h % 12 || 12;
+      return `${h12}:${String(m).padStart(2, '0')} ${period}`;
+    } catch {
+      return time24;
+    }
+  };
+
+  const formatScopeText = (qty, type) => {
+    if (type === 'hourly') return `${qty} ${qty === 1 ? 'Hr' : 'Hrs'}`;
+    if (type === 'land_based') return `${qty} ${qty === 1 ? 'Acre' : 'Acres'}`;
+    return `${qty} ${qty === 1 ? 'Day' : 'Days'}`;
   };
 
   return (
@@ -327,8 +346,8 @@ const AvailableVendors = () => {
                 <p className="text-[11px] font-black text-slate-900 truncate">
                   {category?.title} {implement ? `+ ${implement.title}` : ''}
                 </p>
-                <p className="text-[9.5px] font-bold text-slate-500">
-                  {quantity} {rentalType === 'hourly' ? 'Hrs' : rentalType === 'land_based' ? 'Acres' : 'Days'} • {formatDateDisplay(bookingDate)} • {startTime} - {endTime}
+                <p className="text-[9.5px] font-bold text-slate-500 truncate">
+                  {formatScopeText(quantity, rentalType)} • {formatToDDMMYYYY(bookingDate)} • {formatTime12Hour(startTime)} – {formatTime12Hour(endTime)}
                 </p>
               </div>
             </div>
@@ -501,14 +520,14 @@ const AvailableVendors = () => {
                         <p className="font-black text-xs text-slate-900 truncate">
                           {singleItem.equipment.name}
                         </p>
-                        <div className="flex items-center gap-1 flex-wrap">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           {singleItem.equipment.horsepower > 0 && (
                             <span className="text-[8.5px] font-black bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">
                               {singleItem.equipment.horsepower} HP
                             </span>
                           )}
                           {singleItem.equipment.modelNumber && (
-                            <span className="text-[8.5px] font-bold text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200/70">
+                            <span className="text-[8.5px] font-bold text-slate-600 bg-white px-1.5 py-0.5 rounded border border-slate-200/70">
                               {singleItem.equipment.modelNumber}
                             </span>
                           )}
@@ -517,9 +536,6 @@ const AvailableVendors = () => {
                               Driver Incl.
                             </span>
                           )}
-                          <span className="text-[8.5px] font-bold text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200/70 flex items-center gap-0.5">
-                            <FiShield size={9} className="text-emerald-600" /> Verified
-                          </span>
                         </div>
 
                         {singleItem.matchedImplement && (
@@ -533,21 +549,14 @@ const AvailableVendors = () => {
                   );
                 })()}
 
-                {/* Case 2: Multiple Machines in Vendor Fleet (Actual Rental Platform Fleet Carousel) */}
+                {/* Case 2: Multiple Machines in Vendor Fleet */}
                 {group.equipments.length > 1 && (
-                  <div className="bg-slate-50/90 rounded-xl p-2.5 border border-slate-200/70 mb-2.5 space-y-2">
+                  <div className="bg-slate-50/90 rounded-xl p-2.5 border border-slate-200/70 mb-2.5 space-y-1.5">
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-black text-slate-700 flex items-center gap-1.5 text-[11px]">
                         <FiTruck className="text-emerald-600" size={13} />
-                        <span>Fleet Options ({group.equipments.length} Machines)</span>
+                        <span>Fleet Available ({group.equipments.length} Models)</span>
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedVendorGroup(group)}
-                        className="text-[10px] font-black text-emerald-800 bg-emerald-100 hover:bg-emerald-200 px-2 py-0.5 rounded-full border border-emerald-200 transition-colors cursor-pointer"
-                      >
-                        View & Compare Models →
-                      </button>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 pt-0.5">
@@ -574,7 +583,7 @@ const AvailableVendors = () => {
                                   {eqItem.equipment.horsepower} HP
                                 </span>
                               ) : (
-                                <span className="text-[8px] font-bold text-slate-400">Ready</span>
+                                <span className="text-[8px] font-semibold text-slate-400">Available</span>
                               )}
                               <span className="text-[9.5px] font-black text-slate-900">
                                 ₹{eqItem.pricing?.totalAmount?.toLocaleString('en-IN')}
@@ -584,34 +593,27 @@ const AvailableVendors = () => {
                         </div>
                       ))}
                     </div>
-
-                    {group.equipments.length > 2 && (
-                      <p 
-                        onClick={() => setSelectedVendorGroup(group)}
-                        className="text-[9.5px] font-bold text-slate-500 text-center hover:text-emerald-700 cursor-pointer transition-colors"
-                      >
-                        + {group.equipments.length - 2} more machine option{group.equipments.length - 2 > 1 ? 's' : ''} available in fleet
-                      </p>
-                    )}
                   </div>
                 )}
 
                 {/* Price Breakdown & CTA */}
-                <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2.5">
+                <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between gap-2">
                   <div className="min-w-0 flex-1">
-                    <p className="text-[8.5px] font-black text-slate-400 uppercase tracking-widest leading-none mb-0.5">
+                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-wider leading-none mb-0.5">
                       {group.equipments.length > 1 ? 'Starting From' : 'Total Payable'}
                     </p>
-                    <p className="text-lg font-black text-slate-900 leading-tight">
-                      ₹{group.minPrice.toLocaleString('en-IN')}
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-base font-black text-slate-900 leading-none">
+                        ₹{group.minPrice.toLocaleString('en-IN')}
+                      </span>
                       {group.equipments.length > 1 && (
-                        <span className="text-[10px] font-bold text-slate-400 ml-1">onwards</span>
+                        <span className="text-[10px] font-bold text-slate-400">onwards</span>
                       )}
-                    </p>
-                    <p className="text-[9.5px] text-slate-400 font-semibold leading-tight">
+                    </div>
+                    <p className="text-[9px] text-slate-400 font-semibold truncate leading-tight mt-0.5">
                       {group.equipments.length === 1 
-                        ? `Base ₹${group.minBasePrice} + GST ₹${group.minTax} (Visiting Free)`
-                        : `${group.equipments.length} models available in cluster`
+                        ? `Base ₹${group.minBasePrice} + GST ₹${group.minTax}`
+                        : 'All taxes incl. • Free visit'
                       }
                     </p>
                   </div>
@@ -639,7 +641,7 @@ const AvailableVendors = () => {
                           : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                       }`}
                     >
-                      <span>Choose Machine ({group.equipments.length})</span>
+                      <span>Choose Model ({group.equipments.length})</span>
                       <FiChevronRight size={14} className="shrink-0" />
                     </button>
                   )}
@@ -784,7 +786,7 @@ const AvailableVendors = () => {
                             ₹{item.pricing?.totalAmount?.toLocaleString('en-IN')}
                           </p>
                           <p className="text-[9px] text-slate-400 font-semibold leading-none">
-                            Base ₹{item.pricing?.basePrice} + GST ₹{item.pricing?.tax} (Visiting Free)
+                            Base ₹{item.pricing?.basePrice} + GST ₹{item.pricing?.tax} • Free Visiting
                           </p>
                         </div>
 

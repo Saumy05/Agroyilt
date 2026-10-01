@@ -57,14 +57,38 @@ const MachineryCheckout = () => {
         gstPercentage
     } = bookingData;
 
-    const formatDateDisplay = (dateStr) => {
+    const formatToDDMMYYYY = (dateStr) => {
         if (!dateStr) return '';
         try {
-            const d = new Date(dateStr);
-            return d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+            const [y, m, d] = dateStr.split('-');
+            if (y && m && d) return `${d}/${m}/${y}`;
+            return dateStr;
         } catch {
             return dateStr;
         }
+    };
+
+    const formatTime12Hour = (time24) => {
+        if (!time24) return '';
+        try {
+            const [h, m] = time24.split(':').map(Number);
+            const period = h >= 12 ? 'PM' : 'AM';
+            const h12 = h % 12 || 12;
+            return `${h12}:${String(m).padStart(2, '0')} ${period}`;
+        } catch {
+            return time24;
+        }
+    };
+
+    const formatTimeSlotDisplay = (slotStr, start, end) => {
+        if (start && end) {
+            return `${formatTime12Hour(start)} – ${formatTime12Hour(end)}`;
+        }
+        if (slotStr && slotStr.includes('-')) {
+            const [s, e] = slotStr.split('-').map(t => t.trim());
+            return `${formatTime12Hour(s)} – ${formatTime12Hour(e)}`;
+        }
+        return formatTime12Hour(slotStr || start);
     };
 
     const finalTractorTotal = (typeof tractorTotal === 'number') 
@@ -81,7 +105,7 @@ const MachineryCheckout = () => {
             if (minutes > 0) parts.push(`${minutes} Mins`);
             return parts.join(' ');
         }
-        return `${qty} ${type === 'land_based' ? 'Acres' : type === 'daily' ? 'Days' : type}`;
+        return `${qty} ${type === 'land_based' ? (qty === 1 ? 'Acre' : 'Acres') : type === 'daily' ? (qty === 1 ? 'Day' : 'Days') : type}`;
     };
 
     const handleConfirmBooking = async () => {
@@ -275,12 +299,14 @@ const MachineryCheckout = () => {
                            )}
                         </div>
                         <div className="min-w-0 flex-1">
-                             <div className="flex items-center gap-1 flex-wrap">
+                             <div className="flex items-center gap-1.5 flex-wrap">
                                 <span className="px-1.5 py-0.5 rounded text-[8.5px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800">
                                    {equipment.categoryId?.title || 'Machinery'}
                                 </span>
                                 {equipment.modelNumber && (
-                                   <span className="text-[9.5px] font-bold text-slate-400 truncate">{equipment.modelNumber}</span>
+                                   <span className="text-[8.5px] font-bold text-slate-600 bg-white px-1.5 py-0.5 rounded border border-slate-200/70">
+                                     {equipment.modelNumber}
+                                   </span>
                                 )}
                              </div>
                              <h4 className="text-xs font-black text-slate-900 truncate leading-snug mt-0.5">{equipment.name}</h4>
@@ -294,11 +320,11 @@ const MachineryCheckout = () => {
                     <div className="grid grid-cols-3 gap-1.5 p-2 bg-slate-50/80 rounded-xl border border-slate-100 text-center mb-2.5">
                         <div className="p-1">
                            <span className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Date</span>
-                           <span className="text-xs font-black text-slate-800 block truncate">{formatDateDisplay(date)}</span>
+                           <span className="text-xs font-black text-slate-800 block truncate">{formatToDDMMYYYY(date)}</span>
                         </div>
                         <div className="p-1 border-x border-slate-200/70">
                            <span className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Time Slot</span>
-                           <span className="text-xs font-black text-slate-800 block truncate">{slot}</span>
+                           <span className="text-[10px] font-black text-slate-800 block truncate">{formatTimeSlotDisplay(slot, startTime, endTime)}</span>
                         </div>
                         <div className="p-1">
                            <span className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Scope</span>
@@ -320,7 +346,7 @@ const MachineryCheckout = () => {
                         {/* Machine Base Line Item */}
                         <div className="flex justify-between items-start text-xs pt-0.5">
                           <div className="space-y-0.5 max-w-[65%]">
-                            <p className="font-bold text-slate-800 leading-snug">{equipment.name} (Tractor)</p>
+                            <p className="font-bold text-slate-800 leading-snug">{equipment.name}</p>
                             <span className="text-[9.5px] font-semibold text-slate-400 block">{formatDuration(quantity, rateType)} rental unit</span>
                           </div>
                           <span className="font-black text-slate-900 shrink-0 text-xs">₹{finalTractorTotal}</span>
