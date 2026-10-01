@@ -20,6 +20,22 @@ const WorkerJobAlertModal = ({ isOpen, jobId, onClose, onJobAccepted }) => {
     return () => stopAlertRing();
   }, [isOpen, jobId]);
 
+  // Lock background scroll when modal is open
+  useEffect(() => {
+    if (!isOpen || !jobId) return;
+
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalHtmlOverflow;
+    };
+  }, [isOpen, jobId]);
+
   const loadJobDetails = async () => {
     try {
       setLoading(true);

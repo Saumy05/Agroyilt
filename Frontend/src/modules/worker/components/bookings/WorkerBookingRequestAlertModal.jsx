@@ -178,6 +178,23 @@ const WorkerBookingRequestAlertModal = ({ isOpen, requestData, onClose, onReques
     return () => stopAlertRing();
   }, [isOpen, requestData, neededMembersCount, isTeamInvite, isExpired]);
 
+  // Lock background scroll when modal is open
+  const isAlertActive = isOpen && !!requestData;
+  useEffect(() => {
+    if (!isAlertActive) return;
+
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalHtmlOverflow;
+    };
+  }, [isAlertActive]);
+
   const targetRequestId = requestData?.requestId || requestData?._id || requestData?.id;
 
   useEffect(() => {

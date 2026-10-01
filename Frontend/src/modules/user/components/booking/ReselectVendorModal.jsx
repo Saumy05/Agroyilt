@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   FiX, FiTruck, FiMapPin, FiStar, FiClock, 
   FiCheckCircle, FiAlertCircle, FiRefreshCw, FiArrowRight,
@@ -20,6 +21,31 @@ const ReselectVendorModal = ({ isOpen, onClose, booking, onVendorSelected }) => 
       fetchAlternativeVendors();
     }
   }, [isOpen, booking]);
+
+  // Lock background scroll when modal is open
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && !submitting) {
+        onClose?.();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalHtmlOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, submitting, onClose]);
 
   const fetchAlternativeVendors = async () => {
     try {
@@ -105,10 +131,18 @@ const ReselectVendorModal = ({ isOpen, onClose, booking, onVendorSelected }) => 
 
   if (!isOpen) return null;
 
-  return (
+  const modalContent = (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm">
+      <div 
+        className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm overscroll-contain"
+        onClick={(e) => {
+          if (e.target === e.currentTarget && !submitting) {
+            onClose?.();
+          }
+        }}
+      >
         <motion.div
+          onClick={(e) => e.stopPropagation()}
           initial={{ opacity: 0, y: 100 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 100 }}
@@ -155,7 +189,7 @@ const ReselectVendorModal = ({ isOpen, onClose, booking, onVendorSelected }) => 
           )}
 
           {/* Vendors List Body */}
-          <div className="p-3.5 sm:p-4 overflow-y-auto flex-1 space-y-2.5 no-scrollbar bg-slate-50/50">
+          <div className="p-3.5 sm:p-4 overflow-y-auto flex-1 space-y-2.5 no-scrollbar bg-slate-50/50 overscroll-contain">
             {loading ? (
               <div className="py-16 text-center space-y-2.5">
                 <div className="w-10 h-10 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto" />
@@ -291,6 +325,8 @@ const ReselectVendorModal = ({ isOpen, onClose, booking, onVendorSelected }) => 
       </div>
     </AnimatePresence>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 };
 
 export default ReselectVendorModal;

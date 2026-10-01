@@ -40,7 +40,10 @@ const createOrUpdateBill = async (req, res) => {
     const commissionPct = settings?.bookingCommissionPercentage ?? (100 - (settings?.servicePayoutPercentage ?? 90));
     const serviceSplitPct = 100 - commissionPct;
     const partsSplitPct = settings?.partsPayoutPercentage ?? 10;
-    const serviceGstPct = settings?.serviceGstPercentage ?? 18;
+    
+    // Check if equipment/agri service (5% rental GST standard)
+    const isAgriService = !!(booking.rental_type || booking.equipmentId || (booking.bookedItems && booking.bookedItems.length > 0));
+    const serviceGstPct = isAgriService ? (settings?.rentalGstPercentage ?? 5) : (settings?.serviceGstPercentage ?? 18);
     const partsGstPct = settings?.partsGstPercentage ?? 18;
 
     // ═══════════════════════════════════════
@@ -49,7 +52,11 @@ const createOrUpdateBill = async (req, res) => {
     const isPlanBooking = booking.paymentMethod === 'plan_benefit';
     const originalServiceBaseForBill = isPlanBooking ? 0 : (booking.basePrice || 0);
     const originalServiceBaseForEarnings = booking.basePrice || 0;
-    const originalGST = isPlanBooking ? 0 : parseFloat(((originalServiceBaseForBill * serviceGstPct) / 100).toFixed(2));
+    const originalGST = isPlanBooking 
+      ? 0 
+      : (booking.tax !== undefined && booking.tax !== null && Number(booking.tax) > 0 
+          ? Number(booking.tax) 
+          : parseFloat(((originalServiceBaseForBill * serviceGstPct) / 100).toFixed(2)));
     const visitingCharges = Number(booking.visitingCharges) || 0;
 
     // ═══════════════════════════════════════
@@ -174,7 +181,7 @@ const createOrUpdateBill = async (req, res) => {
       {
         name: booking.serviceName || 'Original Service',
         price: originalServiceBaseForBill,
-        gstPercentage: serviceGstPct,
+        gstPercentage: (booking.tax && originalServiceBaseForBill > 0) ? Math.round((Number(booking.tax) / originalServiceBaseForBill) * 100) : serviceGstPct,
         quantity: 1,
         gstAmount: originalGST,
         total: parseFloat((originalServiceBaseForBill + originalGST).toFixed(2)),
