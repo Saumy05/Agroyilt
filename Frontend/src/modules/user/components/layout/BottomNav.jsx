@@ -12,6 +12,7 @@ const navItemColors = {
   home: {
     defaultIcon: themeColors.brand.teal,     // #2E7D32
     activeIcon: '#1B5E20',
+    primary: '#1B5E20',
     gradient: themeColors.gradient,
     bg: '#E3F2E1',
     shadow: 'rgba(46, 125, 50, 0.45)'
@@ -19,14 +20,15 @@ const navItemColors = {
   bookings: {
     defaultIcon: themeColors.brand.teal,
     activeIcon: '#1B5E20',
+    primary: '#1B5E20',
     gradient: themeColors.gradient,
     bg: '#E3F2E1',
     shadow: 'rgba(46, 125, 50, 0.45)'
   },
-
   cart: {
     defaultIcon: themeColors.brand.teal,
     activeIcon: '#1B5E20',
+    primary: '#1B5E20',
     gradient: themeColors.gradient,
     bg: '#E3F2E1',
     shadow: 'rgba(46, 125, 50, 0.45)'
@@ -34,6 +36,7 @@ const navItemColors = {
   account: {
     defaultIcon: themeColors.brand.teal,
     activeIcon: '#1B5E20',
+    primary: '#1B5E20',
     gradient: themeColors.gradient,
     bg: '#E3F2E1',
     shadow: 'rgba(46, 125, 50, 0.45)'
@@ -52,7 +55,7 @@ const BottomNav = React.memo(() => {
     { id: 'home', label: 'Home', icon: FiHome, filledIcon: HiHome, path: '/user' },
     { id: 'bookings', label: 'Bookings', icon: FiCalendar, filledIcon: HiCalendar, path: '/user/my-bookings' },
     { id: 'cart', label: 'Cart', icon: FiShoppingCart, filledIcon: HiShoppingCart, path: '/user/cart', isCart: true },
-    { id: 'account', label: 'Account', icon: FiUser, filledIcon: HiUser, path: '/user/account' },
+    { id: 'account', label: 'Profile', icon: FiUser, filledIcon: HiUser, path: '/user/account' },
   ], []);
 
   const getActiveTab = () => {

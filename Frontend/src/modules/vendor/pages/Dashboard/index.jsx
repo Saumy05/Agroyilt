@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, memo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiBriefcase, FiUsers, FiBell, FiArrowRight, FiUser, FiClock, FiMapPin, FiCheckCircle, FiTrendingUp, FiChevronRight, FiAlertTriangle, FiCalendar, FiBarChart2, FiActivity, FiShoppingBag } from 'react-icons/fi';
+import { FiBriefcase, FiUsers, FiBell, FiArrowRight, FiUser, FiClock, FiMapPin, FiCheckCircle, FiTrendingUp, FiChevronRight, FiAlertTriangle, FiCalendar, FiBarChart2, FiActivity, FiShoppingBag, FiTruck } from 'react-icons/fi';
 import { FaWallet } from 'react-icons/fa';
 import { vendorTheme as themeColors } from '../../../../theme';
 import Header from '../../components/layout/Header';
@@ -105,66 +105,87 @@ const Dashboard = memo(() => {
   // Memoize quickActions to prevent recreation on every render
   const quickActions = useMemo(() => [
     {
+      title: 'Machinery Fleet',
+      icon: FiTruck,
+      color: '#0284C7', // Sky blue
+      bgLight: '#E0F2FE',
+      path: '/vendor/equipment',
+      subtitle: 'Manage fleet',
+    },
+    {
       title: 'Field Operations',
       icon: FiBriefcase,
-      color: '#00a6a6',
+      color: '#0D9488', // Teal
+      bgLight: '#CCFBF1',
       path: '/vendor/jobs',
-      count: stats.activeJobs,
       subtitle: `${stats.activeJobs} on field`,
     },
-
     {
-      title: 'Wallet',
-      icon: FaWallet,
-      color: '#F59E0B',
-      path: '/vendor/wallet',
-      subtitle: `₹${stats.totalEarnings.toLocaleString()} total`,
-    },
-    {
-      title: 'Maintenance',
+      title: 'Equipment Care',
       icon: FiCalendar,
-      color: '#10B981',
+      color: '#10B981', // Emerald
+      bgLight: '#D1FAE5',
       path: '/vendor/maintenance',
-      subtitle: stats.machinesInMaintenance > 0 ? `${stats.machinesInMaintenance} Machines in Care` : 'Equipment Care',
-    },
-    {
-      title: 'Analytics',
-      icon: FiBarChart2,
-      color: '#0F766E',
-      path: '/vendor/analytics',
-      subtitle: 'Equipment ROI',
+      subtitle: stats.machinesInMaintenance > 0 ? `${stats.machinesInMaintenance} in care` : 'Maintenance',
     },
     {
       title: 'Soil Testing',
       icon: FiActivity,
-      color: '#347989',
+      color: '#0891B2', // Cyan
+      bgLight: '#CFFAFE',
       path: '/vendor/soil-tests',
-      subtitle: 'Manage Tests',
+      subtitle: 'Manage tests',
     },
     {
       title: 'Agri Market',
       icon: FiShoppingBag,
-      color: '#E11D48',
+      color: '#E11D48', // Rose
+      bgLight: '#FFE4E6',
       path: '/vendor/store/orders',
-      subtitle: `₹${(stats.ecommerceEarnings || 0).toLocaleString()} Earnings`,
+      subtitle: `₹${(stats.ecommerceEarnings || 0).toLocaleString()} store`,
     },
-  ], [stats.activeJobs, stats.totalEarnings, stats.machinesInMaintenance, stats.ecommerceEarnings]);
+    {
+      title: 'Analytics',
+      icon: FiBarChart2,
+      color: '#7C3AED', // Violet
+      bgLight: '#EDE9FE',
+      path: '/vendor/analytics',
+      subtitle: 'Equipment ROI',
+    },
+  ], [stats.activeJobs, stats.machinesInMaintenance, stats.ecommerceEarnings]);
 
-  const getStatusColor = (status) => {
+  const getStatusStyle = (status) => {
     const s = String(status).toLowerCase();
-    const statusColors = {
-      'accepted': '#3B82F6',
-      'confirmed': '#10B981',
-      'assigned': '#8B5CF6',
-      'journey_started': '#F59E0B',
-      'visited': '#F59E0B',
-      'in_progress': '#F59E0B',
-      'work_done': '#10B981',
-      'completed': '#10B981',
-      'worker_paid': '#06B6D4',
-      'settlement_pending': '#F97316',
+    if (s.includes('confirm') || s.includes('accept') || s.includes('done') || s.includes('complete')) {
+      return {
+        bg: 'bg-emerald-50',
+        text: 'text-emerald-700',
+        border: 'border-emerald-200',
+        dot: 'bg-emerald-500'
+      };
+    }
+    if (s.includes('progress') || s.includes('journey') || s.includes('visit') || s.includes('assign')) {
+      return {
+        bg: 'bg-amber-50',
+        text: 'text-amber-700',
+        border: 'border-amber-200',
+        dot: 'bg-amber-500'
+      };
+    }
+    if (s.includes('reject') || s.includes('cancel')) {
+      return {
+        bg: 'bg-rose-50',
+        text: 'text-rose-700',
+        border: 'border-rose-200',
+        dot: 'bg-rose-500'
+      };
+    }
+    return {
+      bg: 'bg-blue-50',
+      text: 'text-blue-700',
+      border: 'border-blue-200',
+      dot: 'bg-blue-500'
     };
-    return statusColors[s] || '#6B7280';
   };
 
   const getStatusLabel = (status) => {
@@ -188,7 +209,19 @@ const Dashboard = memo(() => {
     return labels[s] || status;
   };
 
+  const [isOnline, setIsOnline] = useState(() => localStorage.getItem('vendorOnlineStatus') !== 'false');
 
+  const handleToggleOnline = (e) => {
+    e?.stopPropagation();
+    const nextStatus = !isOnline;
+    setIsOnline(nextStatus);
+    localStorage.setItem('vendorOnlineStatus', String(nextStatus));
+    if (nextStatus) {
+      toastManager.success('You are Online • Ready to receive new booking alerts');
+    } else {
+      toastManager.info('You are Offline • New booking alerts paused');
+    }
+  };
 
   // Show error state
   if (error) {
@@ -210,36 +243,35 @@ const Dashboard = memo(() => {
   }
 
   return (
-    <div className="min-h-screen pb-20" style={{ background: themeColors.backgroundGradient }}>
+    <div className="min-h-screen pb-32" style={{ background: themeColors.backgroundGradient }}>
       <Header title="Dashboard" showBack={false} notificationCount={stats.pendingAlerts} />
 
-      <main className="pt-0">
-        {/* Profile Card Section */}
-        <div className="px-4 pt-3 pb-1">
+      <main className="pt-1">
+        {/* Profile Card Section with Online/Offline Availability Toggle */}
+        <div className="px-4 pt-2 pb-1">
           <div
-            className="rounded-xl p-3 cursor-pointer active:scale-[0.99] transition-all duration-200 relative overflow-hidden shadow-sm"
+            className="rounded-2xl p-3.5 cursor-pointer active:scale-[0.99] transition-all duration-200 relative overflow-hidden shadow-xs hover:shadow-sm"
             onClick={() => navigate('/vendor/profile')}
             style={{
-              background: themeColors.button,
-              border: `1px solid rgba(255, 255, 255, 0.25)`,
+              background: 'linear-gradient(135deg, #1b5e20 0%, #2e7d32 50%, #388e3c 100%)',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
             }}
           >
-            {/* Decorative Pattern */}
+            {/* Subtle light glow overlay */}
             <div
-              className="absolute top-0 right-0 w-20 h-20 rounded-full opacity-10 pointer-events-none"
+              className="absolute -top-10 -right-10 w-28 h-28 rounded-full opacity-20 pointer-events-none"
               style={{
-                background: `radial-gradient(circle, #FFFFFF 0%, transparent 70%)`,
-                transform: 'translate(15px, -15px)',
+                background: 'radial-gradient(circle, #ffffff 0%, transparent 70%)',
               }}
             />
 
-            <div className="relative z-10 flex items-center gap-2.5">
+            <div className="relative z-10 flex items-center gap-3">
               {/* Profile Photo */}
               <div
-                className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden"
+                className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden relative shadow-sm"
                 style={{
-                  background: `linear-gradient(135deg, ${themeColors.button} 0%, ${themeColors.button}dd 100%)`,
-                  border: `2px solid #FFFFFF`,
+                  background: 'rgba(255, 255, 255, 0.15)',
+                  border: '2px solid rgba(255, 255, 255, 0.85)',
                 }}
               >
                 {vendorProfile.photo ? (
@@ -249,32 +281,60 @@ const Dashboard = memo(() => {
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <FiUser className="w-5 h-5 text-white" />
+                  <FiUser className="w-6 h-6 text-white" />
                 )}
+                {/* Online status indicator dot */}
+                <span
+                  className={`absolute bottom-0 right-0 w-3.5 h-3.5 border-2 border-white rounded-full transition-colors ${
+                    isOnline ? 'bg-emerald-400' : 'bg-gray-400'
+                  }`}
+                />
               </div>
 
               {/* Profile Info */}
               <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-extrabold uppercase tracking-widest text-white/80 mb-0.5" style={{
-                  letterSpacing: '0.1em',
-                }}>
-                  WELCOME !
-                </p>
-                <h2 className="text-sm font-bold text-white truncate leading-tight">{vendorProfile.name}</h2>
-                <p className="text-[11px] text-white/90 truncate font-medium mt-0.5">{vendorProfile.businessName}</p>
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-200/90">
+                    Welcome back
+                  </span>
+                  <span className="inline-block w-1 h-1 rounded-full bg-emerald-300"></span>
+                  <span className="text-[10px] font-semibold text-emerald-100/90">
+                    ★ {stats.rating > 0 ? stats.rating.toFixed(1) : '5.0'}
+                  </span>
+                </div>
+                <h2 className="text-base font-bold text-white truncate leading-tight">{vendorProfile.name}</h2>
+                <p className="text-xs text-white/85 truncate font-medium mt-0.5">{vendorProfile.businessName}</p>
               </div>
 
-              {/* Arrow Icon */}
-              <div
-                className="p-1.5 rounded-lg flex-shrink-0"
-                style={{
-                  background: 'rgba(255, 255, 255, 0.25)',
-                  backdropFilter: 'blur(8px)',
-                  boxShadow: '0 2px 6px rgba(0, 0, 0, 0.1)',
-                  border: '1px solid rgba(255, 255, 255, 0.3)',
-                }}
-              >
-                <FiChevronRight className="w-4 h-4 text-white" />
+              {/* Interactive Online/Offline Switch & Chevron */}
+              <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                <button
+                  onClick={handleToggleOnline}
+                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 transition-all border shadow-xs ${
+                    isOnline
+                      ? 'bg-emerald-400/25 text-emerald-100 border-emerald-300/40 hover:bg-emerald-400/35'
+                      : 'bg-black/30 text-gray-300 border-white/20 hover:bg-black/40'
+                  }`}
+                  title={isOnline ? 'Tap to go offline' : 'Tap to go online'}
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-gray-400'
+                    }`}
+                  />
+                  <span>{isOnline ? 'Online' : 'Offline'}</span>
+                </button>
+
+                <div
+                  className="w-7 h-7 rounded-xl flex items-center justify-center"
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.18)',
+                    backdropFilter: 'blur(8px)',
+                    border: '1px solid rgba(255, 255, 255, 0.25)',
+                  }}
+                >
+                  <FiChevronRight className="w-3.5 h-3.5 text-white" />
+                </div>
               </div>
             </div>
           </div>
@@ -282,258 +342,184 @@ const Dashboard = memo(() => {
 
         {/* Incomplete Profile Prompt */}
         {(!vendorProfile.service || vendorProfile.service.length === 0) && (
-          <div className="px-4 pt-2 -mb-2">
+          <div className="px-4 pt-2">
             <div
               onClick={() => navigate('/vendor/profile')}
-              className="bg-orange-50 border-l-4 border-orange-500 p-4 rounded-r shadow-sm cursor-pointer hover:bg-orange-100 transition-colors"
+              className="bg-amber-50/90 border border-amber-200 p-3 rounded-xl shadow-xs cursor-pointer hover:bg-amber-100/70 transition-colors"
             >
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <FiClock className="h-5 w-5 text-orange-500" />
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
+                  <FiClock className="h-4 w-4 text-amber-600" />
                 </div>
-                <div className="ml-3">
-                  <p className="text-sm font-bold text-orange-700">Inventory Incomplete</p>
-                  <p className="text-sm text-orange-600">
-                    Add equipment or products to your profile to start receiving bookings.
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-amber-800">Inventory Incomplete</p>
+                  <p className="text-[11px] text-amber-700 truncate">
+                    Add equipment to start receiving rental bookings.
                   </p>
                 </div>
-                <div className="ml-auto">
-                  <FiArrowRight className="h-4 w-4 text-orange-500" />
-                </div>
+                <FiArrowRight className="h-4 w-4 text-amber-600 flex-shrink-0" />
               </div>
             </div>
           </div>
         )}
+
         {/* Compliance Alerts Section */}
         {stats.complianceAlerts && stats.complianceAlerts.length > 0 && (
-          <div className="px-4 pt-2 -mb-2">
+          <div className="px-4 pt-2">
             <div
               onClick={() => navigate('/vendor/compliance')}
-              className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r shadow-sm cursor-pointer hover:bg-red-100 transition-colors"
+              className="bg-rose-50/90 border border-rose-200 p-3 rounded-xl shadow-xs cursor-pointer hover:bg-rose-100/70 transition-colors"
             >
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <FiAlertTriangle className="h-5 w-5 text-red-500" />
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-rose-100 flex items-center justify-center flex-shrink-0">
+                  <FiAlertTriangle className="h-4 w-4 text-rose-600" />
                 </div>
-                <div className="ml-3">
-                  <p className="text-sm font-bold text-red-700">Compliance Alert</p>
-                  <p className="text-sm text-red-600">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-rose-800">Compliance Alert</p>
+                  <p className="text-[11px] text-rose-700 truncate">
                     {stats.complianceAlerts[0].message}
                     {stats.complianceAlerts.length > 1 && ` (+${stats.complianceAlerts.length - 1} more)`}
                   </p>
                 </div>
-                <div className="ml-auto">
-                  <FiArrowRight className="h-4 w-4 text-red-500" />
-                </div>
+                <FiArrowRight className="h-4 w-4 text-rose-600 flex-shrink-0" />
               </div>
             </div>
           </div>
         )}
 
-        {/* Quick Actions Grid */}
-        <div className="px-4 py-2.5 grid grid-cols-2 gap-2.5">
-          {quickActions.map((action, index) => (
-            <div
-              key={index}
-              onClick={() => navigate(action.path)}
-              className="bg-white/95 backdrop-blur-sm p-2.5 rounded-xl shadow-xs border border-gray-100 active:scale-95 transition-all cursor-pointer flex items-center gap-2.5"
-            >
-              <div
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-white shadow-xs flex-shrink-0"
-                style={{ backgroundColor: action.color }}
-              >
-                <action.icon className="w-4 h-4" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs font-bold text-gray-800 truncate">{action.title}</p>
-                <p className="text-[10px] text-gray-500 font-medium truncate mt-0.5">{action.subtitle}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Stats Cards - Optimized Component */}
+        {/* Stats & Operations Overview */}
         <StatsCards stats={stats} />
 
-        {/* Content Section (below gradient) */}
-        <div className="px-4 py-2 space-y-3">
-          {/* Pending Booking Alerts - Removed as per user request, shown in Recent Bookings instead */}
-
-          {/* Performance Metrics */}
-          <div>
-            <h2 className="text-sm font-bold text-gray-800 mb-2 flex items-center gap-1.5">
-              <FiTrendingUp className="w-4 h-4 text-emerald-600" /> Performance
+        {/* Services & Quick Actions Grid (No text truncation) */}
+        <div className="px-4 py-1">
+          <div className="flex items-center justify-between mb-1.5">
+            <h2 className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
+              Services & Operations
             </h2>
-            <div className="grid grid-cols-2 gap-2.5">
-              {/* Completed Jobs Card */}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {quickActions.map((action, index) => (
               <div
-                className="rounded-xl shadow-xs relative overflow-hidden bg-white border border-emerald-500/20 p-2.5"
+                key={index}
+                onClick={() => navigate(action.path)}
+                className="bg-white p-2.5 rounded-xl shadow-xs border border-emerald-100/60 active:scale-[0.98] transition-all cursor-pointer flex items-center gap-2.5 hover:border-emerald-200 hover:shadow-sm"
               >
                 <div
-                  className="w-full py-1.5 px-2 rounded-lg text-white font-bold text-[11px] text-center flex items-center justify-center gap-1.5 mb-1.5"
-                  style={{
-                    background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
-                    boxShadow: '0 2px 6px rgba(16, 185, 129, 0.25)',
-                  }}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                  style={{ backgroundColor: action.bgLight }}
                 >
-                  <FiCheckCircle className="w-3.5 h-3.5" />
-                  <span>Orders Done</span>
+                  <action.icon className="w-4 h-4" style={{ color: action.color }} />
                 </div>
-                <div className="text-center py-1">
-                  <p className="text-2xl font-black mb-0.5" style={{ color: '#10B981' }}>
-                    {stats.completedJobs}
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-gray-800 leading-tight">
+                    {action.title}
                   </p>
-                  <p className="text-[10px] text-gray-500 font-semibold">Total Bookings</p>
+                  <p className="text-[10px] text-gray-400 font-medium mt-0.5 truncate">
+                    {action.subtitle}
+                  </p>
                 </div>
               </div>
+            ))}
+          </div>
+        </div>
 
-              {/* Rating Card */}
-              <div
-                className="rounded-xl shadow-xs relative overflow-hidden bg-white border border-amber-500/20 p-2.5"
-              >
-                <div
-                  className="w-full py-1.5 px-2 rounded-lg text-white font-bold text-[11px] text-center flex items-center justify-center gap-1.5 mb-1.5"
-                  style={{
-                    background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
-                    boxShadow: '0 2px 6px rgba(245, 158, 11, 0.25)',
-                  }}
-                >
-                  <FiTrendingUp className="w-3.5 h-3.5" />
-                  <span>Rating</span>
-                </div>
-                <div className="text-center py-1">
-                  <p className="text-2xl font-black mb-0.5" style={{ color: '#F59E0B' }}>
-                    {stats.rating > 0 ? stats.rating.toFixed(1) : 'N/A'}
-                  </p>
-                  <p className="text-[10px] text-gray-500 font-semibold">Average Rating</p>
-                </div>
-              </div>
+        {/* Recent Jobs - List View */}
+        <div className="px-4 pt-3 pb-4">
+          <div className="flex items-center justify-between mb-2.5">
+            <div>
+              <h2 className="text-sm font-bold text-gray-900">Recent Bookings</h2>
+              <p className="text-[11px] text-gray-400 font-medium">Latest incoming customer requests</p>
             </div>
+            {recentJobs.length > 0 && (
+              <button
+                onClick={() => navigate('/vendor/jobs')}
+                className="px-3 py-1.5 rounded-lg font-bold text-xs transition-all duration-200 active:scale-95 text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200"
+              >
+                View All
+              </button>
+            )}
           </div>
 
-          {/* Recent Jobs - List View */}
-          <div>
-            <div className="flex items-center justify-between mb-2.5">
-              <h2 className="text-sm font-bold text-gray-800">Recent Bookings</h2>
-              {recentJobs.length > 0 && (
-                <button
-                  onClick={() => navigate('/vendor/jobs')}
-                  className="px-2.5 py-1 rounded-md font-semibold text-xs transition-all duration-300 active:scale-95"
-                  style={{
-                    background: `linear-gradient(135deg, ${themeColors.button} 0%, ${themeColors.button}dd 100%)`,
-                    color: '#FFFFFF',
-                    boxShadow: `0 2px 6px ${hexToRgba(themeColors.button, 0.25)}`,
-                  }}
-                >
-                  View All
-                </button>
-              )}
-            </div>
-            {recentJobs.length > 0 ? (
-              <div className="space-y-2">
-                {recentJobs.map((job, index) => {
-                  const isDarkBlue = index % 2 === 0;
-                  const accentColor = isDarkBlue ? '#001947' : '#406788';
+          {recentJobs.length > 0 ? (
+            <div className="space-y-2.5">
+              {recentJobs.map((job) => {
+                const statusStyle = getStatusStyle(job.status);
+                const timeText = job.timeSlot?.time && job.timeSlot.time !== 'Time not set' ? job.timeSlot.time : (job.time || 'Scheduled');
+                const dateText = job.timeSlot?.date || '';
+                const payoutAmount = job.vendorEarnings || job.price;
 
-                  return (
-                    <div
-                      key={job.id}
-                      onClick={() => navigate(`/vendor/booking/${job.id}`)}
-                      className="bg-white rounded-xl shadow-xs cursor-pointer active:scale-[0.99] transition-all duration-200 relative overflow-hidden border border-gray-100"
-                    >
-                      <div
-                        className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl"
-                        style={{
-                          background: `linear-gradient(180deg, ${accentColor} 0%, ${accentColor}dd 100%)`,
-                        }}
-                      />
-                      <div className="px-2.5 py-2">
-                        <div className="flex items-center gap-2.5">
-                          <div
-                            className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden"
-                            style={{
-                              border: `1.5px solid ${accentColor}40`,
-                              boxShadow: `0 2px 6px ${hexToRgba(accentColor, 0.15)}`,
-                              background: `linear-gradient(135deg, ${accentColor}20 0%, ${accentColor}10 100%)`,
-                            }}
-                          >
-                            <FiUser className="w-4 h-4" style={{ color: accentColor }} />
+                return (
+                  <div
+                    key={job.id}
+                    onClick={() => navigate(`/vendor/booking/${job.id}`)}
+                    className="bg-white rounded-2xl shadow-xs cursor-pointer active:scale-[0.99] transition-all duration-200 relative overflow-hidden border border-emerald-100/70 p-3 hover:border-emerald-300 hover:shadow-[0_4px_16px_rgba(46,125,50,0.08)]"
+                  >
+                    <div className="flex items-start gap-3">
+                      {/* Avatar */}
+                      <div className="w-10 h-10 rounded-full bg-emerald-100/70 border-2 border-emerald-200 flex items-center justify-center flex-shrink-0 text-emerald-800 font-black text-sm shadow-2xs">
+                        {job.customerName ? job.customerName.charAt(0).toUpperCase() : <FiUser className="w-4 h-4" />}
+                      </div>
+
+                      {/* Main Info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-1 mb-1">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <p className="text-xs font-bold text-gray-900 truncate">{job.customerName || 'Customer'}</p>
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-900 flex-shrink-0 border border-emerald-200/60">
+                              {job.serviceType || 'Equipment'}
+                            </span>
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5 mb-1">
-                              <p className="text-xs font-bold text-gray-800 truncate">{job.customerName}</p>
-                              <span
-                                className="text-[10px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0"
-                                style={{
-                                  background: `linear-gradient(135deg, ${accentColor} 0%, ${accentColor}dd 100%)`,
-                                  color: '#FFFFFF',
-                                }}
-                              >
-                                {job.serviceType || 'Equipment'}
-                              </span>
+
+                          {payoutAmount && Number(payoutAmount) > 0 && (
+                            <span className="text-xs font-black text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 flex-shrink-0">
+                              ₹{Number(payoutAmount).toLocaleString()}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Location & Time Tags */}
+                        <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+                          {job.location && (
+                            <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-gray-50 border border-gray-100 max-w-[140px]">
+                              <FiMapPin className="w-2.5 h-2.5 text-gray-400 flex-shrink-0" />
+                              <span className="text-[10px] font-medium text-gray-600 truncate">{job.location}</span>
                             </div>
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <div
-                                className="flex items-center gap-1 px-1.5 py-0.5 rounded"
-                                style={{
-                                  background: 'rgba(0, 166, 166, 0.08)',
-                                  border: '1px solid rgba(0, 166, 166, 0.15)',
-                                }}
-                              >
-                                <FiMapPin className="w-2.5 h-2.5" style={{ color: themeColors.button }} />
-                                <span className="text-[10px] font-semibold text-gray-700 truncate max-w-[90px]">{job.location}</span>
-                              </div>
-                              <div
-                                className="flex items-center gap-1 px-1.5 py-0.5 rounded"
-                                style={{
-                                  background: 'rgba(245, 158, 11, 0.08)',
-                                  border: '1px solid rgba(245, 158, 11, 0.15)',
-                                }}
-                              >
-                                <FiClock className="w-2.5 h-2.5" style={{ color: '#F59E0B' }} />
-                                <span className="text-[10px] font-semibold text-gray-700">{job.time}</span>
-                              </div>
-                              <span
-                                className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
-                                style={{
-                                  background: `${accentColor}15`,
-                                  color: accentColor,
-                                  border: `1px solid ${accentColor}25`,
-                                }}
-                              >
-                                {getStatusLabel(job.status)}
-                              </span>
-                            </div>
+                          )}
+
+                          <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-gray-50 border border-gray-100">
+                            <FiClock className="w-2.5 h-2.5 text-amber-500 flex-shrink-0" />
+                            <span className="text-[10px] font-medium text-gray-600">
+                              {timeText} {dateText ? `• ${dateText}` : ''}
+                            </span>
                           </div>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate(`/vendor/booking/${job.id}`);
-                            }}
-                            className="p-1.5 rounded-lg flex-shrink-0 active:scale-90 transition-transform"
-                            style={{
-                              background: `linear-gradient(135deg, ${accentColor} 0%, ${accentColor}dd 100%)`,
-                              boxShadow: `0 2px 6px ${hexToRgba(accentColor, 0.25)}`,
-                            }}
-                          >
-                            <FiArrowRight className="w-3.5 h-3.5" style={{ color: '#FFFFFF' }} />
-                          </button>
+
+                          <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-bold ${statusStyle.bg} ${statusStyle.text} ${statusStyle.border}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${statusStyle.dot}`}></span>
+                            <span>{getStatusLabel(job.status)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Chevron Action */}
+                      <div className="self-center pl-1">
+                        <div className="w-7 h-7 rounded-lg bg-emerald-50/70 hover:bg-emerald-100 flex items-center justify-center text-emerald-700 border border-emerald-200/60 transition-colors">
+                          <FiArrowRight className="w-3.5 h-3.5" />
                         </div>
                       </div>
                     </div>
-                  );
-                })}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl p-6 shadow-xs text-center border border-gray-100">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-2.5">
+                <FiBriefcase className="w-6 h-6" />
               </div>
-            ) : (
-              <div
-                className="bg-white rounded-xl p-5 shadow-xs text-center border border-gray-100"
-              >
-                <FiBriefcase className="w-9 h-9 mx-auto mb-2 text-gray-300" />
-                <p className="text-xs text-gray-600 font-semibold mb-0.5">No field activities</p>
-                <p className="text-[11px] text-gray-400">Upcoming bookings will show here</p>
-              </div>
-            )}
-          </div>
+              <p className="text-xs text-gray-700 font-bold mb-0.5">No Active Bookings</p>
+              <p className="text-[11px] text-gray-400">New customer requests will show up here</p>
+            </div>
+          )}
         </div>
       </main>
 

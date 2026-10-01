@@ -38,9 +38,10 @@ const userTheme = {
 
 // Vendor Theme Colors
 const vendorTheme = {
-  backgroundGradient: 'linear-gradient(to bottom, rgba(46, 125, 50, 0.03) 0%, rgba(165, 214, 167, 0.04) 14%, #ffffff 26%)',
+  backgroundGradient: 'linear-gradient(180deg, #F1F8E9 0%, #FFFFFF 40%)',
   gradient: brand.gradient,
-  headerGradient: brand.teal,
+  headerGradient: 'linear-gradient(135deg, #F1F8E9 0%, #A5D6A7 100%)',
+  headerBg: '#F1F8E9',
   button: brand.teal,
   icon: brand.teal,
   brand: brand

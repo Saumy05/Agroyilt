@@ -143,7 +143,7 @@ const ActiveJobs = memo(() => {
 
   return (
     <div className="min-h-screen pb-20" style={{ background: themeColors.backgroundGradient }}>
-      <Header title="Field Operations" showSearch={true} />
+      <Header title="Bookings" showSearch={true} />
 
       <main className="px-4 py-6">
         {/* Search Bar */}
