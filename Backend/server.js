@@ -299,6 +299,8 @@ app.use('/api/vendors/shop', require('./routes/vendor-routes/shop.routes'));
 app.use('/api/vendors/soil-test', require('./routes/vendor-routes/soilTest.routes'));
 
 // Booking routes
+app.use('/api/bookings/service-timer', require('./routes/booking-routes/serviceTimer.routes'));
+app.use('/api/service-timer', require('./routes/booking-routes/serviceTimer.routes'));
 app.use('/api/bookings', require('./routes/booking-routes/userBooking.routes'));
 app.use('/api/bookings/cash', require('./routes/booking-routes/cashCollection.routes'));
 app.use('/api/tracking', require('./routes/booking-routes/tracking.routes'));

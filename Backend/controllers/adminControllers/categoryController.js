@@ -51,6 +51,7 @@ const formatCategory = (cat) => ({
   cityIds: cat.cityIds || [],
   trackingType: cat.trackingType || 'none',
   requiresDriver: cat.requiresDriver || false,
+  adminBaseCharge: cat.adminBaseCharge || 0,
   sectionType: cat.sectionType || 'General',
   bookingType: cat.bookingType || 'VENDOR',
   metaTitle: cat.metaTitle,
@@ -396,6 +397,7 @@ const createCategory = async (req, res) => {
       isAlwaysMain,
       trackingType,
       requiresDriver,
+      adminBaseCharge,
       sectionType,
       bookingType
     } = req.body;
@@ -462,6 +464,7 @@ const createCategory = async (req, res) => {
       subDistrictId: geoConfig.subDistrictId,
       trackingType: trackingType || 'none',
       requiresDriver: Boolean(requiresDriver),
+      adminBaseCharge: Number(adminBaseCharge) || 0,
       sectionType: sectionType || 'General',
       bookingType: bookingType || 'VENDOR',
       createdBy: req.user?._id || req.userId || null
@@ -552,6 +555,7 @@ const updateCategory = async (req, res) => {
       isAlwaysMain,
       trackingType,
       requiresDriver,
+      adminBaseCharge,
       sectionType,
       bookingType
     } = req.body;
@@ -684,6 +688,7 @@ const updateCategory = async (req, res) => {
     if (isAlwaysMain !== undefined) category.isAlwaysMain = Boolean(isAlwaysMain);
     if (trackingType !== undefined) category.trackingType = trackingType;
     if (requiresDriver !== undefined) category.requiresDriver = Boolean(requiresDriver);
+    if (adminBaseCharge !== undefined) category.adminBaseCharge = Number(adminBaseCharge) || 0;
     if (sectionType !== undefined) category.sectionType = sectionType;
     if (bookingType !== undefined) category.bookingType = bookingType;
 

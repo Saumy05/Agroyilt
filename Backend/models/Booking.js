@@ -491,7 +491,83 @@ const bookingSchema = new mongoose.Schema({
   // 14. NOTES
   // ==========================================
   vendorNotes: { type: String, default: null },
-  workerNotes: { type: String, default: null }
+  workerNotes: { type: String, default: null },
+
+  // ==========================================
+  // 15. LIVE AGRICULTURAL SERVICE TIMER (PLAY / PAUSE / BREAKDOWN)
+  // ==========================================
+  serviceTimer: {
+    status: {
+      type: String,
+      enum: ['NOT_STARTED', 'RUNNING', 'PAUSED', 'COMPLETED'],
+      default: 'NOT_STARTED',
+      index: true
+    },
+    ratePerMinute: { type: Number, default: 0 },
+    adminBaseCharge: { type: Number, default: 0 },
+
+    // Accumulated server-authoritative durations in seconds
+    accumulatedActiveSeconds: { type: Number, default: 0 },
+    accumulatedPausedSeconds: { type: Number, default: 0 },
+
+    // Current open intervals
+    currentSessionStartedAt: { type: Date, default: null },
+    currentPauseStartedAt: { type: Date, default: null },
+
+    // Most recent pause state
+    lastPausedBy: {
+      type: String,
+      enum: ['farmer', 'vendor', null],
+      default: null
+    },
+    lastPauseReason: {
+      type: String, // 'machine_issue', 'refueling', 'obstacle', 'break', 'other'
+      default: null
+    },
+    lastPauseNotes: { type: String, default: null },
+
+    // Audit logs for all actions
+    logs: [{
+      action: {
+        type: String,
+        enum: ['START', 'PAUSE', 'RESUME', 'END', 'PARTIAL_END'],
+        required: true
+      },
+      performedBy: {
+        type: String,
+        enum: ['farmer', 'vendor', 'system'],
+        required: true
+      },
+      performedById: {
+        type: mongoose.Schema.Types.ObjectId,
+        refPath: 'serviceTimer.logs.performedByRole'
+      },
+      performedByRole: {
+        type: String,
+        enum: ['User', 'Vendor'],
+        default: 'User'
+      },
+      reason: { type: String, default: null },
+      notes: { type: String, default: null },
+      timestamp: { type: Date, default: Date.now },
+      activeSecondsSnapshot: { type: Number, default: 0 },
+      pausedSecondsSnapshot: { type: Number, default: 0 }
+    }],
+
+    // Billing summary upon completion or partial end
+    billingSummary: {
+      totalActiveMinutes: { type: Number, default: 0 },
+      totalPausedMinutes: { type: Number, default: 0 },
+      adminBaseCharge: { type: Number, default: 0 },
+      timeCharge: { type: Number, default: 0 },
+      subtotal: { type: Number, default: 0 },
+      discount: { type: Number, default: 0 },
+      finalPayable: { type: Number, default: 0 },
+      isPartialEnd: { type: Boolean, default: false },
+      partialEndReason: { type: String, default: null },
+      calculatedAt: { type: Date, default: null }
+    }
+  }
 
 }, {
   timestamps: true
@@ -510,7 +586,6 @@ bookingSchema.pre('save', async function (next) {
 // Indexes
 bookingSchema.index({ createdAt: -1 });
 bookingSchema.index({ status: 1, createdAt: -1 });
-bookingSchema.index({ bookingNumber: 1 });
 bookingSchema.index({ userId: 1, createdAt: -1 });
 bookingSchema.index({ userId: 1, status: 1, createdAt: -1 });
 bookingSchema.index({ vendorId: 1, status: 1, createdAt: -1 });

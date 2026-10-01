@@ -1701,6 +1701,35 @@ const startTrip = async (req, res) => {
       booking.driver_end_otp = Math.floor(1000 + Math.random() * 9000).toString();
     }
 
+    // Initialize & Start Service Timer for tractor / operator-led service
+    if (requiresDriver) {
+      if (!booking.serviceTimer) {
+        booking.serviceTimer = { status: 'NOT_STARTED', logs: [] };
+      }
+      if (booking.serviceTimer.status !== 'RUNNING') {
+        try {
+          const { resolveRates, broadcastTimerUpdate } = require('./serviceTimerController');
+          const { ratePerMinute, adminBaseCharge } = await resolveRates(booking);
+          booking.serviceTimer.ratePerMinute = ratePerMinute;
+          booking.serviceTimer.adminBaseCharge = adminBaseCharge;
+          booking.serviceTimer.status = 'RUNNING';
+          booking.serviceTimer.currentSessionStartedAt = booking.startedAt;
+          booking.serviceTimer.logs.push({
+            action: 'START',
+            performedBy: 'vendor',
+            performedById: vendorId,
+            performedByRole: 'Vendor',
+            timestamp: booking.startedAt,
+            activeSecondsSnapshot: 0,
+            pausedSecondsSnapshot: 0
+          });
+          broadcastTimerUpdate(booking, 'START', { performedBy: 'vendor' });
+        } catch (timerErr) {
+          console.error('[StartTrip] Could not initialize service timer:', timerErr);
+        }
+      }
+    }
+
     await booking.save();
     res.status(200).json({ success: true, message: requiresDriver ? 'Engine started successfully' : 'Equipment handed over successfully', data: booking });
   } catch (error) {
@@ -1735,18 +1764,64 @@ const endTrip = async (req, res) => {
     let baseAmount = 0;
     const now = new Date();
     
-    // Safety: ensure duration is at least 1 hour if started
-    const durationMs = now - (booking.startedAt || now);
-    const durationHours = Math.max(1, Math.ceil(durationMs / (1000 * 60 * 60)));
+    // Check if live Service Timer was used (actual field active minutes, subtracting breakdown pauses)
+    const hasServiceTimer = booking.serviceTimer && (booking.serviceTimer.accumulatedActiveSeconds > 0 || booking.serviceTimer.status === 'RUNNING' || booking.serviceTimer.status === 'PAUSED');
 
-    if (booking.rental_type === 'hourly') {
-      baseAmount = (service?.hourly_price || booking.basePrice || 0) * durationHours;
-    } else if (booking.rental_type === 'land_based') {
-      baseAmount = (service?.land_price || booking.basePrice || 0) * (parseFloat(workUnits) || 1);
-    } else if (booking.rental_type === 'monthly') {
-      baseAmount = service?.monthly_price || booking.basePrice || 0;
+    if (hasServiceTimer) {
+      // Flush running or paused open intervals
+      if (booking.serviceTimer.status === 'RUNNING' && booking.serviceTimer.currentSessionStartedAt) {
+        const deltaSec = Math.max(0, Math.floor((now.getTime() - new Date(booking.serviceTimer.currentSessionStartedAt).getTime()) / 1000));
+        booking.serviceTimer.accumulatedActiveSeconds = (booking.serviceTimer.accumulatedActiveSeconds || 0) + deltaSec;
+        booking.serviceTimer.currentSessionStartedAt = null;
+      } else if (booking.serviceTimer.status === 'PAUSED' && booking.serviceTimer.currentPauseStartedAt) {
+        const deltaSec = Math.max(0, Math.floor((now.getTime() - new Date(booking.serviceTimer.currentPauseStartedAt).getTime()) / 1000));
+        booking.serviceTimer.accumulatedPausedSeconds = (booking.serviceTimer.accumulatedPausedSeconds || 0) + deltaSec;
+        booking.serviceTimer.currentPauseStartedAt = null;
+      }
+
+      booking.serviceTimer.status = 'COMPLETED';
+      const activeSeconds = booking.serviceTimer.accumulatedActiveSeconds || 0;
+      const pausedSeconds = booking.serviceTimer.accumulatedPausedSeconds || 0;
+      const totalActiveMinutes = Math.max(activeSeconds > 0 ? 1 : 0, Math.ceil(activeSeconds / 60));
+      const totalPausedMinutes = Math.floor(pausedSeconds / 60);
+
+      const ratePerMinute = booking.serviceTimer.ratePerMinute || 15;
+      const adminBase = booking.serviceTimer.adminBaseCharge || booking.visitingCharges || 0;
+      const timeCharge = totalActiveMinutes * ratePerMinute;
+      baseAmount = adminBase + timeCharge;
+
+      booking.serviceTimer.billingSummary = {
+        totalActiveMinutes,
+        totalPausedMinutes,
+        adminBaseCharge: adminBase,
+        timeCharge,
+        subtotal: baseAmount,
+        discount: booking.discount || 0,
+        finalPayable: Math.max(0, baseAmount - (booking.discount || 0)),
+        isPartialEnd: false,
+        calculatedAt: now
+      };
+
+      try {
+        const { broadcastTimerUpdate } = require('./serviceTimerController');
+        broadcastTimerUpdate(booking, 'END', { performedBy: 'vendor', billingSummary: booking.serviceTimer.billingSummary });
+      } catch (err) {
+        console.error('[EndTrip] broadcast error:', err);
+      }
     } else {
-      baseAmount = booking.basePrice || 0;
+      // Fallback: standard duration calculation
+      const durationMs = now - (booking.startedAt || now);
+      const durationHours = Math.max(1, Math.ceil(durationMs / (1000 * 60 * 60)));
+
+      if (booking.rental_type === 'hourly') {
+        baseAmount = (service?.hourly_price || booking.basePrice || 0) * durationHours;
+      } else if (booking.rental_type === 'land_based') {
+        baseAmount = (service?.land_price || booking.basePrice || 0) * (parseFloat(workUnits) || 1);
+      } else if (booking.rental_type === 'monthly') {
+        baseAmount = service?.monthly_price || booking.basePrice || 0;
+      } else {
+        baseAmount = booking.basePrice || 0;
+      }
     }
 
     // 2. FETCH SPLIT CONFIG
@@ -1763,7 +1838,9 @@ const endTrip = async (req, res) => {
       bookingId: booking._id,
       vendorId: vendorId,
       services: [{
-        name: `${service?.title || booking.serviceName || 'Equipment Rental'} (${booking.rental_type})`,
+        name: hasServiceTimer
+          ? `${service?.title || booking.serviceName || 'Tractor Service'} (${booking.serviceTimer?.billingSummary?.totalActiveMinutes || 1} Mins Work, ${booking.serviceTimer?.billingSummary?.totalPausedMinutes || 0} Mins Downtime Free)`
+          : `${service?.title || booking.serviceName || 'Equipment Rental'} (${booking.rental_type})`,
         price: baseAmount,
         gstPercentage: gstPct,
         quantity: 1,

@@ -192,8 +192,14 @@ const categorySchema = new mongoose.Schema({
   },
   pricingUnit: {
     type: String,
-    enum: ['per_acre', 'per_hour', 'per_day'],
+    enum: ['per_acre', 'per_hour', 'per_day', 'per_minute'],
     required: false
+  },
+  // Minimum base/mobilization charge set by Admin (e.g. ₹200 for dispatching machine)
+  adminBaseCharge: {
+    type: Number,
+    default: 0,
+    min: 0
   }
 }, {
   timestamps: true
