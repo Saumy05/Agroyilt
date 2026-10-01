@@ -118,7 +118,8 @@ const MachineryCheckout = () => {
         try {
             setSubmitting(true);
             const payload = {
-                serviceId: equipment._id,
+                equipmentId: equipment._id || equipment.id,
+                serviceId: equipment.serviceId?._id || equipment.serviceId || equipment._id,
                 vendorId: equipment.vendorId?._id || equipment.vendorId || undefined,
                 categoryId: equipment.categoryId?._id || equipment.categoryId,
                 bookingType: 'scheduled',
@@ -347,7 +348,7 @@ const MachineryCheckout = () => {
                         <div className="flex justify-between items-start text-xs pt-0.5">
                           <div className="space-y-0.5 max-w-[65%]">
                             <p className="font-bold text-slate-800 leading-snug">{equipment.name}</p>
-                            <span className="text-[9.5px] font-semibold text-slate-400 block">{formatDuration(quantity, rateType)} rental unit</span>
+                            <span className="text-[9.5px] font-semibold text-slate-400 block">{formatDuration(quantity, rateType)} estimated service scope</span>
                           </div>
                           <span className="font-black text-slate-900 shrink-0 text-xs">₹{finalTractorTotal}</span>
                         </div>
@@ -471,19 +472,26 @@ const MachineryCheckout = () => {
                 </div>
 
                 {/* Trust & Safety Seals */}
-                <div className="grid grid-cols-2 gap-2 pt-0.5">
-                  <div className="bg-white rounded-xl p-2.5 border border-slate-200/80 flex items-center gap-2 shadow-2xs">
-                    <FiShield className="text-emerald-600 shrink-0" size={16} />
+                <div className="grid grid-cols-3 gap-2 pt-0.5">
+                  <div className="bg-white rounded-xl p-2.5 border border-slate-200/80 flex items-center gap-1.5 shadow-2xs">
+                    <FiShield className="text-emerald-600 shrink-0" size={15} />
                     <div>
-                      <p className="text-[10px] font-black text-slate-900 leading-tight">Price Protection</p>
-                      <p className="text-[9px] text-slate-400 font-semibold leading-tight">Zero surprise charges</p>
+                      <p className="text-[9.5px] font-black text-slate-900 leading-tight">Price Protection</p>
+                      <p className="text-[8.5px] text-slate-400 font-semibold leading-tight">Zero hidden fees</p>
                     </div>
                   </div>
-                  <div className="bg-white rounded-xl p-2.5 border border-slate-200/80 flex items-center gap-2 shadow-2xs">
-                    <FiCheckCircle className="text-emerald-600 shrink-0" size={16} />
+                  <div className="bg-white rounded-xl p-2.5 border border-slate-200/80 flex items-center gap-1.5 shadow-2xs">
+                    <FiClock className="text-amber-600 shrink-0" size={15} />
                     <div>
-                      <p className="text-[10px] font-black text-slate-900 leading-tight">1-to-1 Dispatch</p>
-                      <p className="text-[9px] text-slate-400 font-semibold leading-tight">Chosen vendor targeted</p>
+                      <p className="text-[9.5px] font-black text-slate-900 leading-tight">Play & Pause</p>
+                      <p className="text-[8.5px] text-slate-400 font-semibold leading-tight">No breakdown fee</p>
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-xl p-2.5 border border-slate-200/80 flex items-center gap-1.5 shadow-2xs">
+                    <FiCheckCircle className="text-emerald-600 shrink-0" size={15} />
+                    <div>
+                      <p className="text-[9.5px] font-black text-slate-900 leading-tight">1-to-1 Dispatch</p>
+                      <p className="text-[8.5px] text-slate-400 font-semibold leading-tight">Verified vendor</p>
                     </div>
                   </div>
                 </div>

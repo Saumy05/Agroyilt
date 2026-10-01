@@ -463,7 +463,7 @@ const MachineryExplorer = () => {
               </button>
               <div className="min-w-0 flex-1">
                 <h1 className="text-sm font-black text-slate-900 tracking-tight leading-tight truncate">
-                  Machinery Rental
+                  Machinery & Tractor Services
                 </h1>
                 <p className="text-[10px] font-bold text-slate-400 flex items-center gap-1 mt-0.5 truncate">
                   <FiMapPin className="text-emerald-600 shrink-0" size={10} />
@@ -780,20 +780,19 @@ const MachineryExplorer = () => {
                       </span>
                       <div>
                         <h2 className="text-xs font-black text-slate-900 uppercase tracking-wider">
-                          Rental Type & Work Scope
+                          Service Scope & Work Estimate
                         </h2>
                         <p className="text-[10px] font-semibold text-slate-400">
-                          Choose how billing will be measured
+                          Estimate work duration • Final billing based on live active minutes
                         </p>
                       </div>
                     </div>
 
-                    {/* Rental Type Segmented Tabs */}
-                    <div className="grid grid-cols-3 gap-1 bg-slate-100/90 p-1 rounded-xl border border-slate-200/60">
+                    {/* Service Type Segmented Tabs (Hourly/Minutes vs Acreage) */}
+                    <div className="grid grid-cols-2 gap-1 bg-slate-100/90 p-1 rounded-xl border border-slate-200/60">
                       {[
-                        { label: '⏱️ Hourly', value: 'hourly' },
-                        { label: '🌾 Land Size', value: 'land_based' },
-                        { label: '📅 Daily', value: 'daily' }
+                        { label: '⏱️ Hourly / Minutes', value: 'hourly' },
+                        { label: '🌾 Land Area (Acres)', value: 'land_based' }
                       ].map((t) => (
                         <button
                           key={t.value}
@@ -817,10 +816,13 @@ const MachineryExplorer = () => {
                           <label className="text-xs font-black text-slate-800 uppercase tracking-wider block">
                             {rentalType === 'land_based' 
                               ? 'Total Land Size (Acres)' 
-                              : rentalType === 'hourly' 
-                              ? 'Work Duration (Hours)' 
-                              : 'Number of Days'}
+                              : 'Estimated Work Duration (Hours)'}
                           </label>
+                          <span className="text-[9.5px] text-emerald-600 font-bold block mt-0.5">
+                            {rentalType === 'hourly'
+                              ? '⏱️ Billed on actual running minutes via Play/Pause'
+                              : '🌾 Rate applied per acre completed'}
+                          </span>
                         </div>
 
                         {/* Stepper Controls */}
@@ -888,7 +890,7 @@ const MachineryExplorer = () => {
                       </span>
                       <div className="min-w-0">
                         <p className="text-[10px] font-black text-emerald-800/80 uppercase tracking-wider">
-                          Step 3 • Work Scope
+                          Step 3 • Estimated Scope
                         </p>
                         <p className="text-xs font-black text-slate-900 truncate">
                           {formatScopeDisplay(quantity, rentalType)}
@@ -919,10 +921,10 @@ const MachineryExplorer = () => {
                       </span>
                       <div className="min-w-0">
                         <p className="text-xs font-black text-slate-700 truncate">
-                          Rental Type & Work Scope
+                          Service Scope & Work Estimate
                         </p>
                         <p className="text-[10px] font-semibold text-slate-400 truncate">
-                          Define hourly or acreage duration
+                          Estimate hourly duration or land acreage
                         </p>
                       </div>
                     </div>

@@ -124,9 +124,7 @@ const EquipmentDetail = () => {
 
   const currentRate = selectedRateType === 'hourly' 
     ? equipment.pricing?.hourly?.price 
-    : selectedRateType === 'land_based'
-    ? equipment.pricing?.land_based?.price
-    : equipment.pricing?.daily?.price;
+    : equipment.pricing?.land_based?.price;
 
   const implementAddon = getImplementAddon();
   const baseTotal = (currentRate || 0) * quantity;
@@ -228,7 +226,7 @@ const EquipmentDetail = () => {
            <div className="bg-white rounded-[32px] p-6 shadow-sm border border-slate-100">
               <div className="flex items-center gap-2 mb-5">
                  <div className="w-8 h-8 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600"><FiTag size={16}/></div>
-                 <h3 className="text-base font-black text-slate-800">Select Rental Type</h3>
+                 <h3 className="text-base font-black text-slate-800">Select Service Rate Type</h3>
               </div>
               
               <div className="grid grid-cols-2 gap-3">
@@ -240,8 +238,9 @@ const EquipmentDetail = () => {
                     >
                        <FiClock className={selectedRateType === 'hourly' ? 'text-emerald-700' : 'text-slate-400'} size={20} />
                        <div className="text-center">
-                          <p className={`text-[10px] font-black uppercase tracking-widest ${selectedRateType === 'hourly' ? 'text-emerald-700' : 'text-slate-400'}`}>Hourly Rate</p>
+                          <p className={`text-[10px] font-black uppercase tracking-widest ${selectedRateType === 'hourly' ? 'text-emerald-700' : 'text-slate-400'}`}>Hourly Service</p>
                           <p className="text-lg font-black text-slate-800">₹{equipment.pricing.hourly.price}<span className="text-[10px] text-slate-400 ml-0.5">/hr</span></p>
+                          <span className="text-[9.5px] font-bold text-emerald-600 block mt-0.5">≈ ₹{(equipment.pricing.hourly.price / 60).toFixed(2)}/min live timer</span>
                        </div>
                     </button>
                  )}
@@ -255,19 +254,6 @@ const EquipmentDetail = () => {
                        <div className="text-center">
                           <p className={`text-[10px] font-black uppercase tracking-widest ${selectedRateType === 'land_based' ? 'text-emerald-700' : 'text-slate-400'}`}>Acre Rate</p>
                           <p className="text-lg font-black text-slate-800">₹{equipment.pricing.land_based.price}<span className="text-[10px] text-slate-400 ml-0.5">/acre</span></p>
-                       </div>
-                    </button>
-                 )}
-                 {equipment.pricing?.daily?.isEnabled && (
-                    <button 
-                      onClick={() => setSelectedRateType('daily')}
-                      className={`p-4 rounded-3xl border-2 transition-all flex flex-col items-center gap-2
-                        ${selectedRateType === 'daily' ? 'border-emerald-600 bg-emerald-50/60 ring-2 ring-emerald-500/10' : 'border-slate-100 hover:border-slate-200'}`}
-                    >
-                       <FiCalendar className={selectedRateType === 'daily' ? 'text-emerald-700' : 'text-slate-400'} size={20} />
-                       <div className="text-center">
-                          <p className={`text-[10px] font-black uppercase tracking-widest ${selectedRateType === 'daily' ? 'text-emerald-700' : 'text-slate-400'}`}>Daily Rate</p>
-                          <p className="text-lg font-black text-slate-800">₹{equipment.pricing.daily.price}<span className="text-[10px] text-slate-400 ml-0.5">/day</span></p>
                        </div>
                     </button>
                  )}
@@ -337,7 +323,7 @@ const EquipmentDetail = () => {
                              <p className={`text-sm font-black ${isSelected ? 'text-violet-700' : 'text-slate-600'}`}>
                                +₹{addonRate.price}
                                <span className="text-[9px] font-bold ml-0.5 opacity-70">
-                                 /{selectedRateType === 'hourly' ? 'hr' : selectedRateType === 'land_based' ? 'acre' : 'day'}
+                                 /{selectedRateType === 'hourly' ? 'hr' : 'acre'}
                                </span>
                              </p>
                            </div>
@@ -377,9 +363,16 @@ const EquipmentDetail = () => {
               <div className="flex justify-between items-center mb-6">
                  <div className="flex items-center gap-2">
                     <div className="w-8 h-8 rounded-xl bg-orange-50 flex items-center justify-center text-orange-600"><FiInfo size={16}/></div>
-                    <h3 className="text-base font-black text-slate-800">
-                      {selectedRateType === 'hourly' ? 'Total Hours' : selectedRateType === 'land_based' ? 'Total Acres' : 'Total Days'}
-                    </h3>
+                    <div>
+                      <h3 className="text-base font-black text-slate-800">
+                        {selectedRateType === 'hourly' ? 'Estimated Work Duration (Hours)' : 'Total Land Size (Acres)'}
+                      </h3>
+                      <p className="text-[10px] font-bold text-emerald-600">
+                        {selectedRateType === 'hourly' 
+                          ? '⏱️ Final billing on exact active minutes via Play/Pause (Breakdown = ₹0)' 
+                          : '🌾 Rate applied per acre completed'}
+                      </p>
+                    </div>
                  </div>
                  <div className="flex items-center gap-4 bg-slate-100 p-1 rounded-2xl">
                      <button 
