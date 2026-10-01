@@ -165,48 +165,48 @@ const MachineryCheckout = () => {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-b from-emerald-50/40 via-slate-50 to-slate-50 pb-44 font-sans">
+        <div className="min-h-screen bg-gradient-to-b from-emerald-50/40 via-slate-50 to-slate-50 pb-24 font-sans">
             {/* Header */}
-            <div className="bg-white/90 backdrop-blur-xl border-b border-emerald-900/10 p-4 sticky top-0 z-40 shadow-[0_2px_12px_rgba(0,0,0,0.04)]">
-                <div className="flex items-center gap-3.5 max-w-xl mx-auto mb-2.5">
+            <div className="bg-white/90 backdrop-blur-xl border-b border-emerald-900/10 px-3.5 py-2.5 sticky top-0 z-40 shadow-[0_2px_12px_rgba(0,0,0,0.04)]">
+                <div className="flex items-center gap-2.5 max-w-xl mx-auto mb-1.5">
                     <button 
                       onClick={() => navigate(-1)} 
-                      className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 flex items-center justify-center text-slate-700 active:scale-95 transition-all flex-shrink-0 border border-slate-200/60" 
+                      className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 flex items-center justify-center text-slate-700 active:scale-95 transition-all flex-shrink-0 border border-slate-200/60 cursor-pointer" 
                       aria-label="Back"
                     >
-                      <FiArrowLeft size={18}/>
+                      <FiArrowLeft size={16}/>
                     </button>
                     <div>
-                        <div className="flex items-center gap-2">
-                          <h1 className="text-base font-black text-slate-900 leading-tight">
+                        <div className="flex items-center gap-1.5">
+                          <h1 className="text-sm font-black text-slate-900 leading-tight">
                             Booking Receipt & Dispatch
                           </h1>
-                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          <span className="px-1.5 py-0.5 rounded-full text-[8.5px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
                             Final Step
                           </span>
                         </div>
-                        <p className="text-[11px] font-bold text-slate-400">Review specs, farm location & itemized bill</p>
+                        <p className="text-[10px] font-bold text-slate-400">Review specs, farm location & itemized bill</p>
                     </div>
                 </div>
 
                 {/* Polished 3-Step Flow Indicator (Step 3 Active) */}
-                <div className="max-w-xl mx-auto pt-1 flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 text-xs font-black text-emerald-700 shrink-0">
-                        <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-[10px] font-black">✓</span>
+                <div className="max-w-xl mx-auto pt-0.5 flex items-center justify-between">
+                    <div className="flex items-center gap-1 text-[11px] font-black text-emerald-700 shrink-0">
+                        <span className="w-4.5 h-4.5 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-[9px] font-black">✓</span>
                         <span>Specs</span>
                     </div>
 
-                    <div className="h-[2px] flex-1 mx-3 bg-emerald-600 rounded-full" />
+                    <div className="h-[2px] flex-1 mx-2.5 bg-emerald-600 rounded-full" />
 
-                    <div className="flex items-center gap-1.5 text-xs font-black text-emerald-700 shrink-0">
-                        <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-[10px] font-black">✓</span>
+                    <div className="flex items-center gap-1 text-[11px] font-black text-emerald-700 shrink-0">
+                        <span className="w-4.5 h-4.5 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-[9px] font-black">✓</span>
                         <span>Vendors</span>
                     </div>
 
-                    <div className="h-[2px] flex-1 mx-3 bg-emerald-600 rounded-full" />
+                    <div className="h-[2px] flex-1 mx-2.5 bg-emerald-600 rounded-full" />
 
-                    <div className="flex items-center gap-1.5 text-xs font-black text-emerald-800 shrink-0">
-                        <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] font-black ring-4 ring-emerald-500/20 shadow-xs">
+                    <div className="flex items-center gap-1 text-[11px] font-black text-emerald-800 shrink-0">
+                        <span className="w-4.5 h-4.5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[9px] font-black ring-2 ring-emerald-500/20 shadow-xs">
                           3
                         </span>
                         <span>Checkout</span>
@@ -214,16 +214,16 @@ const MachineryCheckout = () => {
                 </div>
             </div>
 
-            <div className="max-w-xl mx-auto p-4 space-y-4">
+            <div className="max-w-xl mx-auto px-3.5 py-2.5 space-y-2.5">
                 {/* Farm Location Card */}
                 <div 
                   onClick={() => setShowAddressModal(true)}
-                  className="bg-white rounded-[26px] p-5 shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-slate-200/80 cursor-pointer hover:border-emerald-400 transition-all group"
+                  className="bg-white rounded-2xl p-3.5 shadow-xs border border-slate-200/80 cursor-pointer hover:border-emerald-400 transition-all group"
                 >
-                    <div className="flex justify-between items-center mb-3">
-                        <div className="flex items-center gap-2.5">
-                            <span className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center border border-emerald-200/60">
-                                <FiMapPin size={16} />
+                    <div className="flex justify-between items-center mb-2">
+                        <div className="flex items-center gap-2">
+                            <span className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center border border-emerald-200/60 font-black text-xs">
+                                <FiMapPin size={13} />
                             </span>
                             <div>
                               <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">Farm Destination Address</h3>
@@ -233,31 +233,31 @@ const MachineryCheckout = () => {
                         <button 
                           type="button"
                           onClick={(e) => { e.stopPropagation(); setShowAddressModal(true); }}
-                          className="px-3 py-1.5 rounded-xl text-xs font-black text-emerald-700 bg-emerald-50 hover:bg-emerald-100/70 border border-emerald-200/60 transition-colors"
+                          className="px-2.5 py-1 rounded-lg text-[11px] font-black text-emerald-700 bg-emerald-50 hover:bg-emerald-100/70 border border-emerald-200/60 transition-colors cursor-pointer"
                         >
                           Change
                         </button>
                     </div>
                     {selectedAddress ? (
-                        <div className="bg-slate-50/80 rounded-2xl p-3.5 border border-slate-100 space-y-1">
+                        <div className="bg-slate-50/80 rounded-xl p-2.5 border border-slate-100 space-y-0.5">
                             <p className="font-bold text-slate-900 text-xs leading-relaxed">{selectedAddress.addressLine1}</p>
-                            <p className="text-[11px] text-slate-500 font-medium">
+                            <p className="text-[10px] text-slate-500 font-medium">
                                 {selectedAddress.city ? `${selectedAddress.city}, ` : ''}{selectedAddress.state} {selectedAddress.pincode ? `• PIN: ${selectedAddress.pincode}` : ''}
                             </p>
                         </div>
                     ) : (
-                        <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-3.5 flex items-center gap-2.5 text-amber-900 text-xs font-bold">
-                            <FiMapPin className="text-amber-600 shrink-0" size={16} />
-                            <span>Tap to specify your farm field or survey number location...</span>
+                        <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-2.5 flex items-center gap-2 text-amber-900 text-xs font-bold">
+                            <FiMapPin className="text-amber-600 shrink-0" size={14} />
+                            <span className="text-[11px]">Tap to specify your farm field or survey number location...</span>
                         </div>
                     )}
                 </div>
 
                 {/* Booking Summary Card */}
-                <div className="bg-white rounded-[26px] p-5 shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-slate-200/80">
-                    <div className="flex items-center gap-2.5 mb-3.5">
-                       <span className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center border border-emerald-200/60">
-                          <FiCheckCircle size={16} />
+                <div className="bg-white rounded-2xl p-3.5 shadow-xs border border-slate-200/80">
+                    <div className="flex items-center gap-2 mb-2.5">
+                       <span className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center border border-emerald-200/60 font-black text-xs">
+                          <FiCheckCircle size={13} />
                        </span>
                        <div>
                          <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">Machine & Slot Specs</h3>
@@ -266,83 +266,83 @@ const MachineryCheckout = () => {
                     </div>
 
                     {/* Equipment Snapshot */}
-                    <div className="flex items-center gap-3.5 mb-4 p-3.5 bg-slate-50/80 rounded-2xl border border-slate-100">
-                        <div className="w-16 h-16 bg-white rounded-2xl overflow-hidden shrink-0 border border-slate-200/80 flex items-center justify-center">
+                    <div className="flex items-center gap-2.5 mb-2.5 p-2.5 bg-slate-50/80 rounded-xl border border-slate-100">
+                        <div className="w-12 h-12 bg-white rounded-xl overflow-hidden shrink-0 border border-slate-200/80 flex items-center justify-center">
                            {equipment.images?.[0] ? (
                              <img src={equipment.images[0]} alt={equipment.name} className="w-full h-full object-cover" />
                            ) : (
-                             <FiTruck size={24} className="text-slate-400" />
+                             <FiTruck size={20} className="text-slate-400" />
                            )}
                         </div>
                         <div className="min-w-0 flex-1">
-                             <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800">
+                             <div className="flex items-center gap-1 flex-wrap">
+                                <span className="px-1.5 py-0.5 rounded text-[8.5px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800">
                                    {equipment.categoryId?.title || 'Machinery'}
                                 </span>
                                 {equipment.modelNumber && (
-                                   <span className="text-[10px] font-bold text-slate-400 truncate">{equipment.modelNumber}</span>
+                                   <span className="text-[9.5px] font-bold text-slate-400 truncate">{equipment.modelNumber}</span>
                                 )}
                              </div>
-                             <h4 className="text-sm font-black text-slate-900 truncate leading-snug mt-1">{equipment.name}</h4>
-                             <p className="text-[11px] font-semibold text-slate-500 mt-0.5">
+                             <h4 className="text-xs font-black text-slate-900 truncate leading-snug mt-0.5">{equipment.name}</h4>
+                             <p className="text-[10px] font-semibold text-slate-500 mt-0.5">
                                Vendor: <span className="text-slate-800 font-bold">{equipment.vendorId?.businessName || equipment.vendorId?.name || 'Verified Partner'}</span>
                              </p>
                         </div>
                     </div>
 
                     {/* Schedule Specs */}
-                    <div className="grid grid-cols-3 gap-2 p-3 bg-slate-50/80 rounded-2xl border border-slate-100 text-center mb-4">
-                        <div className="p-2">
-                           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Date</span>
+                    <div className="grid grid-cols-3 gap-1.5 p-2 bg-slate-50/80 rounded-xl border border-slate-100 text-center mb-2.5">
+                        <div className="p-1">
+                           <span className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Date</span>
                            <span className="text-xs font-black text-slate-800 block truncate">{formatDateDisplay(date)}</span>
                         </div>
-                        <div className="p-2 border-x border-slate-200/70">
-                           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Time Slot</span>
+                        <div className="p-1 border-x border-slate-200/70">
+                           <span className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Time Slot</span>
                            <span className="text-xs font-black text-slate-800 block truncate">{slot}</span>
                         </div>
-                        <div className="p-2">
-                           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Scope</span>
+                        <div className="p-1">
+                           <span className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Scope</span>
                            <span className="text-xs font-black text-emerald-800 block truncate">{formatDuration(quantity, rateType)}</span>
                         </div>
                     </div>
 
                     {/* Itemized Digital Invoice Receipt */}
-                    <div className="bg-gradient-to-b from-slate-50 to-emerald-50/30 p-4 rounded-2xl border border-slate-200/80 space-y-2.5">
-                        <div className="flex items-center justify-between pb-2 border-b border-dashed border-slate-200">
-                          <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                            <FiFileText size={12} className="text-emerald-700" /> Itemized Invoice Breakdown
+                    <div className="bg-gradient-to-b from-slate-50 to-emerald-50/30 p-3 rounded-xl border border-slate-200/80 space-y-1.5">
+                        <div className="flex items-center justify-between pb-1.5 border-b border-dashed border-slate-200">
+                          <span className="text-[9.5px] font-black text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                            <FiFileText size={11} className="text-emerald-700" /> Itemized Invoice Breakdown
                           </span>
-                          <span className="text-[10px] font-black text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded-full">
+                          <span className="text-[9px] font-black text-emerald-800 bg-emerald-100/70 px-1.5 py-0.5 rounded-full">
                             Rate Lock Guarantee
                           </span>
                         </div>
 
                         {/* Machine Base Line Item */}
-                        <div className="flex justify-between items-start text-xs pt-1">
+                        <div className="flex justify-between items-start text-xs pt-0.5">
                           <div className="space-y-0.5 max-w-[65%]">
                             <p className="font-bold text-slate-800 leading-snug">{equipment.name} (Tractor)</p>
-                            <span className="text-[10px] font-semibold text-slate-400 block">{formatDuration(quantity, rateType)} rental unit</span>
+                            <span className="text-[9.5px] font-semibold text-slate-400 block">{formatDuration(quantity, rateType)} rental unit</span>
                           </div>
-                          <span className="font-black text-slate-900 shrink-0 text-sm">₹{finalTractorTotal}</span>
+                          <span className="font-black text-slate-900 shrink-0 text-xs">₹{finalTractorTotal}</span>
                         </div>
 
                         {/* Implements Line Items */}
                         {selectedImplements.map((impl, idx) => {
                           const implCost = typeof impl.total === 'number' ? impl.total : (implementTotal || 0);
                           return (
-                            <div key={idx} className="flex justify-between items-start text-xs pt-1">
+                            <div key={idx} className="flex justify-between items-start text-xs pt-0.5">
                               <div className="space-y-0.5 max-w-[65%]">
                                 <p className="font-bold text-slate-800 leading-snug flex items-center gap-1">
-                                  <FiTool size={11} className="text-emerald-700" />
+                                  <FiTool size={10} className="text-emerald-700" />
                                   <span>{impl.title}</span>
                                 </p>
-                                <span className="text-[10px] font-semibold text-slate-400 block">Matched field attachment</span>
+                                <span className="text-[9.5px] font-semibold text-slate-400 block">Matched field attachment</span>
                               </div>
                               <div className="shrink-0 text-right">
                                 {implCost > 0 ? (
-                                  <span className="font-black text-slate-900 text-sm">+ ₹{implCost}</span>
+                                  <span className="font-black text-slate-900 text-xs">+ ₹{implCost}</span>
                                 ) : (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
                                     Included (₹0)
                                   </span>
                                 )}
@@ -352,41 +352,41 @@ const MachineryCheckout = () => {
                         })}
 
                         {/* Conveyance / Visiting Fee */}
-                        <div className="flex justify-between items-center text-xs pt-1">
-                          <span className="font-bold text-slate-500">Conveyance & Mobilization</span>
+                        <div className="flex justify-between items-center text-xs pt-0.5">
+                          <span className="font-bold text-slate-500 text-[11px]">Conveyance & Mobilization</span>
                           {visitingCharges > 0 ? (
-                            <span className="font-bold text-slate-700">+ ₹{visitingCharges}</span>
+                            <span className="font-bold text-slate-700 text-xs">+ ₹{visitingCharges}</span>
                           ) : (
-                            <span className="font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 text-[10px]">
+                            <span className="font-black text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded text-[9.5px]">
                               FREE
                             </span>
                           )}
                         </div>
 
                         {/* GST */}
-                        <div className="flex justify-between items-center text-xs pt-1">
-                          <span className="font-bold text-slate-500">
+                        <div className="flex justify-between items-center text-xs pt-0.5">
+                          <span className="font-bold text-slate-500 text-[11px]">
                             GST {gstPercentage ? `(${gstPercentage}%)` : '(5%)'}
                           </span>
-                          <span className="font-bold text-slate-700">+ ₹{tax || 0}</span>
+                          <span className="font-bold text-slate-700 text-xs">+ ₹{tax || 0}</span>
                         </div>
 
                         {/* Total Highlight */}
-                        <div className="flex justify-between items-center pt-3 border-t-2 border-slate-200">
+                        <div className="flex justify-between items-center pt-2 border-t border-slate-200">
                           <div>
-                            <span className="text-xs font-black text-slate-900 uppercase tracking-wider block">Total Payable</span>
-                            <span className="text-[10px] font-semibold text-slate-400">All taxes & operator expenses included</span>
+                            <span className="text-[11px] font-black text-slate-900 uppercase tracking-wider block">Total Payable</span>
+                            <span className="text-[9.5px] font-semibold text-slate-400">All taxes & operator expenses included</span>
                           </div>
-                          <span className="text-2xl font-black text-emerald-800">₹{total}</span>
+                          <span className="text-xl font-black text-emerald-800">₹{total}</span>
                         </div>
                     </div>
                 </div>
 
                 {/* Payment Selection Card */}
-                <div className="bg-white rounded-[26px] p-5 shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-slate-200/80 space-y-3">
-                    <div className="flex items-center gap-2.5">
-                       <span className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center border border-emerald-200/60">
-                          <FiDollarSign size={16} />
+                <div className="bg-white rounded-2xl p-3.5 shadow-xs border border-slate-200/80 space-y-2">
+                    <div className="flex items-center gap-2">
+                       <span className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center border border-emerald-200/60 font-black text-xs">
+                          <FiDollarSign size={13} />
                        </span>
                        <div>
                          <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">Payment Method</h3>
@@ -394,89 +394,89 @@ const MachineryCheckout = () => {
                        </div>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-2.5 pt-1">
+                    <div className="grid grid-cols-1 gap-2 pt-0.5">
                         {/* Cash / Field Pay */}
                         <button 
                           type="button"
                           onClick={() => setPaymentMethod('cash')}
-                          className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all text-left cursor-pointer
-                            ${paymentMethod === 'cash' ? 'border-emerald-600 bg-emerald-50/60 shadow-sm ring-2 ring-emerald-500/10' : 'border-slate-100 hover:border-slate-200 bg-white'}`}
+                          className={`p-2.5 rounded-xl border flex items-center justify-between transition-all text-left cursor-pointer
+                            ${paymentMethod === 'cash' ? 'border-emerald-600 bg-emerald-50/60 shadow-xs ring-2 ring-emerald-500/10' : 'border-slate-100 hover:border-slate-200 bg-white'}`}
                         >
-                            <div className="flex items-center gap-3">
-                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm ${paymentMethod === 'cash' ? 'bg-gradient-to-br from-emerald-600 to-green-700 text-white shadow-sm' : 'bg-slate-100 text-slate-400'}`}>
+                            <div className="flex items-center gap-2.5">
+                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs ${paymentMethod === 'cash' ? 'bg-gradient-to-br from-emerald-600 to-green-700 text-white shadow-2xs' : 'bg-slate-100 text-slate-400'}`}>
                                   ₹
                                 </div>
                                 <div>
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-1.5">
                                     <span className={`text-xs font-black ${paymentMethod === 'cash' ? 'text-emerald-950' : 'text-slate-700'}`}>
                                       Pay on Field (Cash / Direct UPI)
                                     </span>
-                                    <span className="text-[8.5px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-600 text-white">
+                                    <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full bg-emerald-600 text-white">
                                       Recommended
                                     </span>
                                   </div>
-                                  <p className="text-[10px] font-medium text-slate-400 mt-0.5">Pay vendor directly upon physical job completion</p>
+                                  <p className="text-[9.5px] font-medium text-slate-400 mt-0.5">Pay vendor directly upon physical job completion</p>
                                 </div>
                             </div>
-                            {paymentMethod === 'cash' && <FiCheckCircle className="text-emerald-600" size={18} />}
+                            {paymentMethod === 'cash' && <FiCheckCircle className="text-emerald-600 shrink-0" size={16} />}
                         </button>
 
                         {/* Online Payment */}
                         <button 
                           type="button"
                           onClick={() => setPaymentMethod('online')}
-                          className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all text-left cursor-pointer
-                            ${paymentMethod === 'online' ? 'border-emerald-600 bg-emerald-50/60 shadow-sm ring-2 ring-emerald-500/10' : 'border-slate-100 hover:border-slate-200 bg-white'}`}
+                          className={`p-2.5 rounded-xl border flex items-center justify-between transition-all text-left cursor-pointer
+                            ${paymentMethod === 'online' ? 'border-emerald-600 bg-emerald-50/60 shadow-xs ring-2 ring-emerald-500/10' : 'border-slate-100 hover:border-slate-200 bg-white'}`}
                         >
-                            <div className="flex items-center gap-3">
-                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${paymentMethod === 'online' ? 'bg-gradient-to-br from-emerald-600 to-green-700 text-white shadow-sm' : 'bg-slate-100 text-slate-400'}`}>
-                                    <FiCreditCard className="w-5 h-5" />
+                            <div className="flex items-center gap-2.5">
+                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${paymentMethod === 'online' ? 'bg-gradient-to-br from-emerald-600 to-green-700 text-white shadow-2xs' : 'bg-slate-100 text-slate-400'}`}>
+                                    <FiCreditCard className="w-4 h-4" />
                                 </div>
                                 <div>
                                   <span className={`text-xs font-black block ${paymentMethod === 'online' ? 'text-emerald-950' : 'text-slate-700'}`}>
                                     Pay Online (Advance Escrow)
                                   </span>
-                                  <p className="text-[10px] font-medium text-slate-400 mt-0.5">UPI · Credit/Debit Cards · Netbanking</p>
+                                  <p className="text-[9.5px] font-medium text-slate-400 mt-0.5">UPI · Credit/Debit Cards · Netbanking</p>
                                 </div>
                             </div>
-                            {paymentMethod === 'online' && <FiCheckCircle className="text-emerald-600" size={18} />}
+                            {paymentMethod === 'online' && <FiCheckCircle className="text-emerald-600 shrink-0" size={16} />}
                         </button>
                     </div>
                 </div>
 
                 {/* Trust & Safety Seals */}
-                <div className="grid grid-cols-2 gap-3 pt-1">
-                  <div className="bg-white rounded-2xl p-3 border border-slate-200/80 flex items-center gap-2.5 shadow-2xs">
-                    <FiShield className="text-emerald-600 shrink-0" size={18} />
+                <div className="grid grid-cols-2 gap-2 pt-0.5">
+                  <div className="bg-white rounded-xl p-2.5 border border-slate-200/80 flex items-center gap-2 shadow-2xs">
+                    <FiShield className="text-emerald-600 shrink-0" size={16} />
                     <div>
-                      <p className="text-[11px] font-black text-slate-900 leading-tight">Price Protection</p>
-                      <p className="text-[9.5px] text-slate-400 font-semibold leading-tight">Zero surprise charges</p>
+                      <p className="text-[10px] font-black text-slate-900 leading-tight">Price Protection</p>
+                      <p className="text-[9px] text-slate-400 font-semibold leading-tight">Zero surprise charges</p>
                     </div>
                   </div>
-                  <div className="bg-white rounded-2xl p-3 border border-slate-200/80 flex items-center gap-2.5 shadow-2xs">
-                    <FiCheckCircle className="text-emerald-600 shrink-0" size={18} />
+                  <div className="bg-white rounded-xl p-2.5 border border-slate-200/80 flex items-center gap-2 shadow-2xs">
+                    <FiCheckCircle className="text-emerald-600 shrink-0" size={16} />
                     <div>
-                      <p className="text-[11px] font-black text-slate-900 leading-tight">1-to-1 Dispatch</p>
-                      <p className="text-[9.5px] text-slate-400 font-semibold leading-tight">Chosen vendor targeted</p>
+                      <p className="text-[10px] font-black text-slate-900 leading-tight">1-to-1 Dispatch</p>
+                      <p className="text-[9px] text-slate-400 font-semibold leading-tight">Chosen vendor targeted</p>
                     </div>
                   </div>
                 </div>
             </div>
 
             {/* Floating Island Action Bar */}
-            <div className="fixed bottom-0 inset-x-0 z-40 bg-white/90 backdrop-blur-xl px-5 py-3.5 shadow-[0_-8px_25px_rgba(0,0,0,0.06)] border-t border-slate-200/80">
-                <div className="max-w-xl mx-auto flex items-center justify-between gap-4">
+            <div className="fixed bottom-0 inset-x-0 z-40 bg-white/90 backdrop-blur-xl px-3.5 py-2.5 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] border-t border-slate-200/80">
+                <div className="max-w-xl mx-auto flex items-center justify-between gap-3">
                     <div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider leading-none mb-1">Total Payable</p>
-                        <h4 className="text-2xl font-black text-slate-900 leading-none">₹{total}</h4>
-                        <span className="text-[10px] font-bold text-emerald-700 mt-1 block">
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider leading-none mb-0.5">Total Payable</p>
+                        <h4 className="text-xl font-black text-slate-900 leading-none">₹{total}</h4>
+                        <span className="text-[9.5px] font-bold text-emerald-700 mt-0.5 block">
                           {paymentMethod === 'cash' ? 'Pay on field after work' : 'Online payment'}
                         </span>
                     </div>
                     <button
                         onClick={() => setShowPaymentConfirmModal(true)}
                         disabled={submitting}
-                        className={`px-8 py-3.5 rounded-2xl font-black text-xs uppercase tracking-wider shadow-lg transition-all cursor-pointer
+                        className={`px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider shadow-md transition-all cursor-pointer
                           ${submitting ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-gradient-to-r from-emerald-600 via-emerald-700 to-green-800 hover:from-emerald-700 hover:to-green-900 text-white shadow-emerald-700/25 active:scale-95'}`}
                     >
                         {submitting ? 'Dispatching...' : 'Dispatch Request ➔'}
