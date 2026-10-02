@@ -2257,9 +2257,9 @@ exports.workerRespondToFarmerRequest = async (req, res) => {
                 });
 
                 for (const tm of candidates) {
-                    // 1. Check online status
+                    // 1. Check online status (offline members are deployable by their leader)
                     const tmStatus = String(tm.status || '').toUpperCase();
-                    if (!ONLINE_STATUSES.includes(tmStatus)) {
+                    if (!tm.isOfflineMember && !ONLINE_STATUSES.includes(tmStatus)) {
                         console.log(`[TEAM DISPATCH] Member ${tm._id} (${tm.name}) is not online (${tmStatus}). Skipped.`);
                         continue;
                     }
@@ -2287,7 +2287,8 @@ exports.workerRespondToFarmerRequest = async (req, res) => {
                         leaderId: workerId,
                         offeredRate: offeredRate,
                         rateUnit: request.rateUnit || (request.bookingType === 'DAILY' ? 'daily' : 'hourly'),
-                        status: 'member_pending',
+                        status: tm.isOfflineMember ? 'member_accepted' : 'member_pending',
+                        respondedAt: tm.isOfflineMember ? new Date() : undefined,
                         invitedAt: new Date()
                     });
                 }
@@ -2337,6 +2338,10 @@ exports.workerRespondToFarmerRequest = async (req, res) => {
       const farmerPhoto = farmerDoc?.profilePicture || farmerDoc?.avatar || farmerDoc?.profilePhoto || '';
 
       for (const tm of eligibleMembers) {
+        if (tm.isOfflineMember) {
+          // Offline members have no app/phone; skip socket & push notifications
+          continue;
+        }
         const invitePayload = {
           requestId:    request._id.toString(),
           offerId:      `${request._id}_${tm._id}`,

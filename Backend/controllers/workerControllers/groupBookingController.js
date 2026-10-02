@@ -793,7 +793,7 @@ exports.dispatchToMembers = async (req, res) => {
       memberQuery._id = { $in: memberIds };
     }
 
-    const members = await Worker.find(memberQuery).select('_id name phone skills');
+    const members = await Worker.find(memberQuery).select('_id name phone skills isOfflineMember');
 
     if (members.length === 0) {
       return res.status(400).json({ success: false, message: 'No eligible team members found to dispatch.' });
@@ -801,16 +801,23 @@ exports.dispatchToMembers = async (req, res) => {
 
     // Filter out members with time conflicts
     const eligibleMembers = [];
+    const offlineMemberIds = new Set();
     for (const m of members) {
       const conflict = await hasTimeConflict(m._id, request.scheduledDate, request.startTime, request.endTime);
-      if (!conflict) eligibleMembers.push(m._id);
+      if (!conflict) {
+        eligibleMembers.push(m._id);
+        if (m.isOfflineMember) offlineMemberIds.add(m._id.toString());
+      }
     }
 
     if (eligibleMembers.length === 0) {
       return res.status(400).json({ success: false, message: 'All selected team members have conflicting bookings for this time.' });
     }
 
-    request.memberRequests = eligibleMembers.map(id => ({ workerId: id, status: 'member_pending' }));
+    request.memberRequests = eligibleMembers.map(id => ({
+      workerId: id,
+      status: offlineMemberIds.has(id.toString()) ? 'member_accepted' : 'member_pending'
+    }));
     request.status = 'collecting_members';
     await request.save();
 
@@ -825,6 +832,10 @@ exports.dispatchToMembers = async (req, res) => {
     const farmerPhoto = farmerDoc?.profilePicture || farmerDoc?.avatar || farmerDoc?.profilePhoto || '';
 
     for (const memberId of eligibleMembers) {
+      if (offlineMemberIds.has(memberId.toString())) {
+        // Offline members do not have smartphones or apps; skip socket & push notifications
+        continue;
+      }
       const invitePayload = {
         requestId:       request._id.toString(),
         offerId:         `${request._id}_${memberId}`,

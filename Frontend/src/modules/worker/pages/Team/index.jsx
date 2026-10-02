@@ -29,6 +29,69 @@ const WorkerTeam = () => {
   // Current user's profile
   const [profile, setProfile] = useState(null);
 
+  // Offline member registration modal (A6)
+  const [isOfflineModalOpen, setIsOfflineModalOpen] = useState(false);
+  const [submittingOffline, setSubmittingOffline] = useState(false);
+  const [offlineForm, setOfflineForm] = useState({
+    name: '',
+    phone: '',
+    skills: ['General Labor'],
+    dailyRate: '',
+    experienceYears: 1
+  });
+
+  const PRESET_SKILLS = [
+    'General Labor',
+    'Harvesting',
+    'Sowing & Planting',
+    'Plowing & Tillage',
+    'Weeding',
+    'Pesticide Spraying',
+    'Tractor Operation',
+    'Irrigation'
+  ];
+
+  const toggleSkill = (skill) => {
+    setOfflineForm(prev => {
+      const exists = prev.skills.includes(skill);
+      if (exists) {
+        if (prev.skills.length === 1) return prev; // keep at least 1
+        return { ...prev, skills: prev.skills.filter(s => s !== skill) };
+      } else {
+        return { ...prev, skills: [...prev.skills, skill] };
+      }
+    });
+  };
+
+  const handleAddOfflineMember = async (e) => {
+    e.preventDefault();
+    if (!offlineForm.name.trim()) {
+      toastManager.error('Please enter member name');
+      return;
+    }
+    try {
+      setSubmittingOffline(true);
+      const res = await api.post('/workers/team/offline-member', {
+        name: offlineForm.name.trim(),
+        phone: offlineForm.phone.trim() || undefined,
+        skills: offlineForm.skills,
+        dailyRate: offlineForm.dailyRate ? Number(offlineForm.dailyRate) : undefined,
+        experienceYears: offlineForm.experienceYears ? Number(offlineForm.experienceYears) : 1
+      });
+      if (res.data.success) {
+        toastManager.success(res.data.message || 'Offline member added successfully!');
+        setIsOfflineModalOpen(false);
+        setOfflineForm({ name: '', phone: '', skills: ['General Labor'], dailyRate: '', experienceYears: 1 });
+        setProfile(prev => ({ ...prev, workerType: 'TEAM_LEADER' }));
+        fetchData();
+      }
+    } catch (err) {
+      toastManager.error(err.response?.data?.message || 'Failed to add offline member');
+    } finally {
+      setSubmittingOffline(false);
+    }
+  };
+
   const socket = useSocket();
 
   useEffect(() => {
@@ -61,8 +124,8 @@ const WorkerTeam = () => {
         setOutgoingRequests(reqRes.data.outgoing || []);
       }
 
-      // If TEAM_LEADER, fetch default eligible workers & pending group requests
-      if (currentWorkerType === 'TEAM_LEADER') {
+      // If TEAM_LEADER or worker without a team, fetch default eligible workers
+      if (currentWorkerType === 'TEAM_LEADER' || !teamRes.data?.team) {
         try {
           const eligibleRes = await api.get('/workers/team/eligible-workers');
           if (eligibleRes.data.success) {
@@ -71,7 +134,9 @@ const WorkerTeam = () => {
         } catch (err) {
           console.error("Failed to fetch default eligible workers", err);
         }
+      }
 
+      if (currentWorkerType === 'TEAM_LEADER') {
         try {
           const gRes = await workerRequestService.getGroupRequests();
           if (gRes.success && Array.isArray(gRes.data)) {
@@ -114,6 +179,7 @@ const WorkerTeam = () => {
       const res = await api.post('/workers/team/requests', { receiverId, type });
       if (res.data.success) {
         toastManager.success('Request sent successfully');
+        setProfile(prev => ({ ...prev, workerType: 'TEAM_LEADER' }));
         fetchData();
         setSearchResults([]);
         setSearchQuery('');
@@ -301,14 +367,24 @@ const WorkerTeam = () => {
 
           {!isTeamLeader && !team && (
             <div className="mt-4 p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl border border-blue-100">
-              <h3 className="font-black text-blue-900 mb-1 text-sm">Want to lead farm teams?</h3>
-              <p className="text-xs text-blue-700 mb-3">Upgrade to a Team Leader to start recruiting workers, accepting bulk farm bookings, and earning group leadership bonuses.</p>
-              <button 
-                onClick={upgradeToLeader}
-                className="w-full py-2.5 bg-blue-600 text-white font-bold text-xs rounded-xl shadow-sm hover:bg-blue-700 transition-colors"
-              >
-                Become a Team Leader
-              </button>
+              <h3 className="font-black text-blue-900 mb-1 text-sm">Build Your Farm Labor Crew</h3>
+              <p className="text-xs text-blue-700 mb-3">
+                Add offline laborers without smartphones or invite workers directly. You are automatically promoted to Team Leader upon adding your first member.
+              </p>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => setIsOfflineModalOpen(true)}
+                  className="flex-1 py-2.5 bg-emerald-600 text-white font-bold text-xs rounded-xl shadow-sm hover:bg-emerald-700 transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <FiUserPlus size={14} /> Add Offline Member
+                </button>
+                <button 
+                  onClick={upgradeToLeader}
+                  className="px-4 py-2.5 bg-blue-600 text-white font-bold text-xs rounded-xl shadow-sm hover:bg-blue-700 transition-colors"
+                >
+                  Upgrade Directly
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -354,9 +430,17 @@ const WorkerTeam = () => {
                 <h3 className="font-black text-slate-800 text-base">Team Members ({members.length})</h3>
                 <p className="text-xs text-slate-400">View skills, active status, and ratings</p>
               </div>
-              <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full">
-                {onlineMembersCount} Online
-              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIsOfflineModalOpen(true)}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-xl shadow-sm flex items-center gap-1.5 transition-colors"
+                >
+                  <FiUserPlus size={13} /> + Offline Member
+                </button>
+                <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full">
+                  {onlineMembersCount} Online
+                </span>
+              </div>
             </div>
 
             <div className="divide-y divide-slate-100">
@@ -393,6 +477,11 @@ const WorkerTeam = () => {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <h4 className="font-black text-slate-800 text-sm truncate">{member.name}</h4>
+                            {member.isOfflineMember && (
+                              <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                📱 No Smartphone
+                              </span>
+                            )}
                             {member.rating ? (
                               <span className="flex items-center gap-0.5 text-[11px] font-black text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded">
                                 <FiStar size={10} className="fill-amber-400" /> {Number(member.rating).toFixed(1)}
@@ -401,9 +490,12 @@ const WorkerTeam = () => {
                           </div>
 
                           <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
-                            <span className="flex items-center gap-1 font-medium"><FiPhone size={11} className="text-slate-400" /> {member.phone}</span>
-                            <span className={`text-[10px] font-bold uppercase tracking-wider ${online ? 'text-emerald-600' : 'text-slate-400'}`}>
-                              {online ? '• Online' : '• Offline'}
+                            <span className="flex items-center gap-1 font-medium">
+                              <FiPhone size={11} className="text-slate-400" /> 
+                              {member.phone || (member.isOfflineMember ? 'No Phone (Leader Managed)' : 'No Phone')}
+                            </span>
+                            <span className={`text-[10px] font-bold uppercase tracking-wider ${member.isOfflineMember ? 'text-amber-600 font-bold' : (online ? 'text-emerald-600' : 'text-slate-400')}`}>
+                              {member.isOfflineMember ? '• Direct Dispatch' : (online ? '• Online' : '• Offline')}
                             </span>
                           </div>
 
@@ -447,8 +539,8 @@ const WorkerTeam = () => {
           </div>
         )}
 
-        {/* Search & Invite Eligible Workers (Team Leaders Only) */}
-        {isTeamLeader && (
+        {/* Search & Invite Eligible Workers */}
+        {(isTeamLeader || !team) && (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
             <div className="mb-4">
               <h3 className="font-black text-slate-800 text-base">Recruit Eligible Workers</h3>
@@ -593,6 +685,130 @@ const WorkerTeam = () => {
         )}
 
       </main>
+
+      {/* Add Offline Member Modal (A6) */}
+      {isOfflineModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                  <FiUserPlus size={20} />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-800 text-base">Add Offline Member</h3>
+                  <p className="text-xs text-slate-400">No smartphone or app required</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsOfflineModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center transition-colors"
+              >
+                <FiX size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddOfflineMember} className="space-y-4 mt-4">
+              <div>
+                <label className="block text-xs font-black uppercase tracking-wider text-slate-600 mb-1.5">
+                  Full Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Ramesh Kumar"
+                  value={offlineForm.name}
+                  onChange={e => setOfflineForm(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-black uppercase tracking-wider text-slate-600 mb-1.5">
+                  Phone Number <span className="text-slate-400 font-normal normal-case">(Optional - keypad phone)</span>
+                </label>
+                <input
+                  type="tel"
+                  placeholder="e.g. 9876543210"
+                  value={offlineForm.phone}
+                  onChange={e => setOfflineForm(prev => ({ ...prev, phone: e.target.value }))}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-black uppercase tracking-wider text-slate-600 mb-1.5">
+                    Daily Wage (₹)
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="e.g. 500"
+                    value={offlineForm.dailyRate}
+                    onChange={e => setOfflineForm(prev => ({ ...prev, dailyRate: e.target.value }))}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-black uppercase tracking-wider text-slate-600 mb-1.5">
+                    Experience (Yrs)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="40"
+                    value={offlineForm.experienceYears}
+                    onChange={e => setOfflineForm(prev => ({ ...prev, experienceYears: e.target.value }))}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white font-medium"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-black uppercase tracking-wider text-slate-600 mb-1.5">
+                  Skills & Specialties
+                </label>
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {PRESET_SKILLS.map(skill => {
+                    const selected = offlineForm.skills.includes(skill);
+                    return (
+                      <button
+                        type="button"
+                        key={skill}
+                        onClick={() => toggleSkill(skill)}
+                        className={`text-xs px-2.5 py-1 rounded-lg font-bold border transition-colors ${
+                          selected
+                            ? 'bg-emerald-600 text-white border-emerald-600'
+                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {selected ? '✓ ' : '+ '}{skill}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="pt-2 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsOfflineModalOpen(false)}
+                  className="flex-1 py-3 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingOffline}
+                  className="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-md hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                >
+                  {submittingOffline ? 'Adding...' : 'Add to Team'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

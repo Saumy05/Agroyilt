@@ -17,8 +17,9 @@ const workerSchema = new mongoose.Schema({
   },
   phone: {
     type: String,
-    required: [true, 'Please provide a phone number'],
+    required: false,  // Optional for offline members registered by a Team Leader
     unique: true,
+    sparse: true,     // Allow multiple nulls (offline members may have no phone)
     trim: true
   },
   role: {
@@ -35,6 +36,21 @@ const workerSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Team',
     default: null
+  },
+
+  // ── Offline / No-Smartphone Member (A6) ───────────────────────────────────
+  // When a Team Leader registers a laborer who has no phone/app.
+  // The leader acts as the digital gateway for this member.
+  isOfflineMember: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  managedByLeaderId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Worker',
+    default: null,
+    index: true
   },
   password: {
     type: String,
@@ -293,7 +309,8 @@ const workerSchema = new mongoose.Schema({
       'SYSTEM',
       'MIGRATION',
       'VENDOR_CREATED',
-      'LEGACY_OR_SELF'
+      'LEGACY_OR_SELF',
+      'OFFLINE_MEMBER_CREATED'  // Added by Team Leader for no-smartphone laborers
     ],
     default: 'SELF_REGISTERED',
     index: true,

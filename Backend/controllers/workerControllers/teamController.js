@@ -36,7 +36,7 @@ exports.getMyTeam = async (req, res) => {
       
       const team = worker.teamId;
       const members = await Worker.find({ teamId: team._id, _id: { $ne: req.userId } })
-        .select('name phone status workerType skills rating profilePhoto dailyRate hourlyRate experience experienceYears serviceCategory serviceCategories');
+        .select('name phone status workerType skills rating profilePhoto dailyRate hourlyRate experience experienceYears serviceCategory serviceCategories isOfflineMember managedByLeaderId');
       return res.status(200).json({ success: true, team, members });
     } else {
       // WORKER
@@ -76,10 +76,11 @@ exports.searchEligibleWorkers = async (req, res) => {
     }
 
     // Only get eligible workers: 
-    // 1. Regular workers without a team
+    // 1. Regular workers without a team (excluding offline members who have no app/phone)
     // 2. Team leaders (who can be merged)
     filter = {
       ...filter,
+      isOfflineMember: { $ne: true },
       $or: [
         { workerType: 'WORKER', teamId: null },
         { workerType: 'TEAM_LEADER' }
@@ -90,6 +91,7 @@ exports.searchEligibleWorkers = async (req, res) => {
     if (query && query.length >= 3) {
       filter = {
         _id: { $ne: req.userId },
+        isOfflineMember: { $ne: true },
         $and: [
           {
             $or: [
@@ -154,22 +156,53 @@ exports.sendRequest = async (req, res) => {
     }
 
     const sender = await Worker.findById(req.userId).session(session);
-    if (sender.workerType !== 'TEAM_LEADER') {
-      throw new Error('Only Team Leaders can send requests');
+    if (!sender) throw new Error('Worker not found');
+
+    // If sender is already in a team as a regular member (not leader), they cannot send invites
+    if (sender.teamId && sender.workerType !== 'TEAM_LEADER') {
+      const existingTeam = await Team.findById(sender.teamId).session(session);
+      if (existingTeam && existingTeam.leaderId.toString() !== sender._id.toString()) {
+        throw new Error('You are a member of another team. Leave your team first before inviting workers to your own team.');
+      }
     }
 
-    // Ensure sender has a team, create one if not
+    // A5: Auto-promote sender to TEAM_LEADER if they are still a plain WORKER
+    let senderUpdated = false;
+    if (sender.workerType !== 'TEAM_LEADER') {
+      sender.workerType = 'TEAM_LEADER';
+      senderUpdated = true;
+      console.log(`[A5 AUTO-PROMOTE] Worker ${sender._id} (${sender.name}) auto-promoted to TEAM_LEADER on sending invite.`);
+    }
+
+    // Ensure sender has an active team, create one if not
     let senderTeam = null;
     if (!sender.teamId) {
       const newTeam = await Team.create([{
         leaderId: sender._id,
-        name: `${sender.name}'s Team`
+        name: `${sender.name}'s Team`,
+        memberCount: 0,
+        status: 'ACTIVE'
       }], { session });
       senderTeam = newTeam[0];
       sender.teamId = senderTeam._id;
-      await sender.save({ session });
+      senderUpdated = true;
     } else {
       senderTeam = await Team.findById(sender.teamId).session(session);
+      if (!senderTeam) {
+        const newTeam = await Team.create([{
+          leaderId: sender._id,
+          name: `${sender.name}'s Team`,
+          memberCount: 0,
+          status: 'ACTIVE'
+        }], { session });
+        senderTeam = newTeam[0];
+        sender.teamId = senderTeam._id;
+        senderUpdated = true;
+      }
+    }
+
+    if (senderUpdated) {
+      await sender.save({ session });
     }
 
     const receiver = await Worker.findById(receiverId).session(session);
@@ -241,16 +274,30 @@ exports.acceptRequest = async (req, res) => {
 
     if (request.type === 'JOIN_WORKER') {
       if (receiver.teamId) throw new Error('You are already in a team');
-      
+
       receiver.teamId = targetTeam._id;
       await receiver.save({ session });
-      
+
       targetTeam.memberCount += 1;
       await targetTeam.save({ session });
-      
+
       request.status = 'ACCEPTED';
       await request.save({ session });
-      
+
+      // A5: Auto-promote the inviting leader's invitee if they were a plain WORKER with no team
+      // The sender (the existing leader) already sent the invite — but if the RECEIVER was a
+      // plain WORKER (no team), they are now in the leader's team as a member.
+      // NOTE: The SENDER is already a TEAM_LEADER (enforced in sendRequest). This is the correct flow.
+      // If we want to auto-promote the RECEIVER to TEAM_LEADER when they add their FIRST sub-member:
+      // This happens when receiver now adds someone under them later — handled in sendRequest.
+      // A5 auto-promote: if the receiver was a plain WORKER with no team, promote them now
+      // so that they can immediately start building their own sub-team if they want.
+      if (receiver.workerType === 'WORKER') {
+        // Don't auto-promote if they joined another team — they are a member now.
+        // A5 auto-promote only triggers when THEY send a JOIN_WORKER invite to someone else.
+        // (Handled in sendRequest below)
+      }
+
       await sendTeamNotification(request.senderId, 'Invite Accepted', `${receiver.name} joined your team.`, 'team', 'team_member_joined');
     } else if (request.type === 'MERGE_TEAM') {
       const sourceTeam = await Team.findById(receiver.teamId).session(session);
@@ -404,13 +451,19 @@ exports.removeMember = async (req, res) => {
     }
     
     const team = await Team.findById(leader.teamId).session(session);
-    team.memberCount = Math.max(0, team.memberCount - 1);
-    await team.save({ session });
+    if (team) {
+      team.memberCount = Math.max(0, team.memberCount - 1);
+      await team.save({ session });
+    }
     
-    member.teamId = null;
-    await member.save({ session });
-    
-    await sendTeamNotification(member._id, 'Removed from Team', `You have been removed from the team by the leader.`, 'team', 'team_member_removed');
+    if (member.isOfflineMember) {
+      // Offline members don't have logins/apps; completely remove the record to avoid orphans
+      await Worker.findByIdAndDelete(member._id).session(session);
+    } else {
+      member.teamId = null;
+      await member.save({ session });
+      await sendTeamNotification(member._id, 'Removed from Team', `You have been removed from the team by the leader.`, 'team', 'team_member_removed');
+    }
     
     await session.commitTransaction();
     res.status(200).json({ success: true, message: 'Member removed successfully' });
@@ -470,5 +523,140 @@ exports.upgradeToLeader = async (req, res) => {
     res.status(200).json({ success: true, message: 'Successfully upgraded to Team Leader!', team });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server Error' });
+  }
+};
+
+/**
+ * Add Offline Member (A6)
+ * Leader adds a laborer who does not have a smartphone/app.
+ * Auto-promotes sender to TEAM_LEADER if they were a WORKER with no team (A5).
+ */
+exports.addOfflineMember = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { name, phone, skills, dailyRate, hourlyRate, experienceYears, gender } = req.body;
+
+    if (!name || !name.trim()) {
+      throw new Error('Member name is required');
+    }
+
+    const leader = await Worker.findById(req.userId).session(session);
+    if (!leader) throw new Error('Worker not found');
+
+    // If sender is already in a team as a regular member (not the leader), they cannot add members
+    if (leader.teamId && leader.workerType !== 'TEAM_LEADER') {
+      const existingTeam = await Team.findById(leader.teamId).session(session);
+      if (existingTeam && existingTeam.leaderId.toString() !== leader._id.toString()) {
+        throw new Error('You are a member of another team. Leave your team first before adding members to your own team.');
+      }
+    }
+
+    // A5: Auto-promote to TEAM_LEADER if plain WORKER
+    let leaderUpdated = false;
+    if (leader.workerType !== 'TEAM_LEADER') {
+      leader.workerType = 'TEAM_LEADER';
+      leaderUpdated = true;
+      console.log(`[A5 AUTO-PROMOTE] Worker ${leader._id} (${leader.name}) auto-promoted to TEAM_LEADER upon adding offline member.`);
+    }
+
+    // Ensure leader has an active Team, create one if not
+    let team = null;
+    if (!leader.teamId) {
+      const newTeam = await Team.create([{
+        leaderId: leader._id,
+        name: `${leader.name}'s Team`,
+        memberCount: 0,
+        status: 'ACTIVE'
+      }], { session });
+      team = newTeam[0];
+      leader.teamId = team._id;
+      leaderUpdated = true;
+    } else {
+      team = await Team.findById(leader.teamId).session(session);
+      if (!team) {
+        const newTeam = await Team.create([{
+          leaderId: leader._id,
+          name: `${leader.name}'s Team`,
+          memberCount: 0,
+          status: 'ACTIVE'
+        }], { session });
+        team = newTeam[0];
+        leader.teamId = team._id;
+        leaderUpdated = true;
+      }
+    }
+
+    if (leaderUpdated) {
+      await leader.save({ session });
+    }
+
+    // Check team capacity
+    if (team.memberCount >= (team.maxCapacity || 50)) {
+      throw new Error(`Team has reached maximum capacity of ${team.maxCapacity || 50} members`);
+    }
+
+    // If phone is provided, check if it's already used
+    const cleanPhone = phone && phone.trim() ? phone.trim() : null;
+    if (cleanPhone) {
+      const existing = await Worker.findOne({ phone: cleanPhone }).session(session);
+      if (existing) {
+        throw new Error(`A worker with phone ${cleanPhone} already exists.`);
+      }
+    }
+
+    // Parse skills array
+    let skillsArray = ['General Labor'];
+    if (Array.isArray(skills) && skills.length > 0) {
+      skillsArray = skills.filter(Boolean);
+    } else if (typeof skills === 'string' && skills.trim()) {
+      skillsArray = skills.split(',').map(s => s.trim()).filter(Boolean);
+    } else if (leader.skills && leader.skills.length > 0) {
+      skillsArray = leader.skills;
+    }
+
+    // Create the offline member worker
+    const [offlineWorker] = await Worker.create([{
+      name: name.trim(),
+      phone: cleanPhone || undefined,
+      workerType: 'WORKER',
+      role: 'worker',
+      teamId: team._id,
+      isOfflineMember: true,
+      managedByLeaderId: leader._id,
+      creationSource: 'OFFLINE_MEMBER_CREATED',
+      skills: skillsArray,
+      status: 'active',
+      isActive: true,
+      approvalStatus: 'approved',
+      registrationFeeStatus: 'PAID',
+      isAvailable: true,
+      dailyRate: Number(dailyRate) || leader.dailyRate || 500,
+      hourlyRate: Number(hourlyRate) || leader.hourlyRate || 70,
+      experienceYears: Number(experienceYears) || 1,
+      gender: gender || 'male',
+      location: leader.location || undefined,
+      verified: true
+    }], { session });
+
+    // Update team member count
+    team.memberCount += 1;
+    await team.save({ session });
+
+    await session.commitTransaction();
+
+    res.status(201).json({
+      success: true,
+      message: `Offline member "${offlineWorker.name}" added to team successfully`,
+      member: offlineWorker,
+      team
+    });
+  } catch (error) {
+    await session.abortTransaction();
+    console.error('addOfflineMember error:', error);
+    res.status(400).json({ success: false, message: error.message });
+  } finally {
+    session.endSession();
   }
 };
