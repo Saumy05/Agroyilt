@@ -556,23 +556,72 @@ exports.getLeaderGroupRequests = async (req, res) => {
   try {
     const leaderId = req.user._id;
     const { status } = req.query;
-    const query = { teamLeaderId: leaderId };
-    if (status) query.status = status;
 
-    const requests = await WorkerGroupRequest.find(query)
+    // ── 1. Legacy WorkerGroupRequest (old direct-leader-quote flow) ──────────
+    const legacyQuery = { teamLeaderId: leaderId };
+    if (status) legacyQuery.status = status;
+
+    const legacyRequests = await WorkerGroupRequest.find(legacyQuery)
       .populate('farmerId', 'name phone profilePhoto')
       .populate('selectedWorkers', 'name profilePhoto skills rating phone status dailyRate experience')
       .populate('memberRequests.workerId', 'name profilePhoto skills rating phone status dailyRate experience')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
+    // ── 2. New WorkerBookingRequest dispatched to this leader (unified flow) ──
+    const unifiedQuery = {
+      bookingMode: 'TEAM_LEADER',
+      teamLeaderId: leaderId
+    };
+    if (status) unifiedQuery.status = status;
+
+    // Also include requests where leader is in dispatchedTo (not yet accepted/set as teamLeaderId)
+    const dispatchedQuery = {
+      bookingMode: 'TEAM_LEADER',
+      'dispatchedTo.workerId': leaderId,
+      teamLeaderId: null  // Not yet accepted by any leader
+    };
+    if (status) dispatchedQuery['dispatchedTo.status'] = status;
+
+    const [unifiedRequests, dispatchedRequests] = await Promise.all([
+      WorkerBookingRequest.find(unifiedQuery)
+        .populate('farmerId', 'name phone profilePhoto')
+        .sort({ createdAt: -1 })
+        .lean(),
+      WorkerBookingRequest.find(dispatchedQuery)
+        .populate('farmerId', 'name phone profilePhoto')
+        .sort({ createdAt: -1 })
+        .lean()
+    ]);
+
+    // Deduplicate by _id (unified may overlap with dispatched)
+    const seenIds = new Set();
+    const newRequests = [];
+    for (const r of [...unifiedRequests, ...dispatchedRequests]) {
+      const key = r._id.toString();
+      if (!seenIds.has(key)) {
+        seenIds.add(key);
+        // Mark the entry so frontend knows which source this came from
+        r._source = 'unified';
+        newRequests.push(r);
+      }
+    }
+
+    // ── 3. Merge & expiry-check ────────────────────────────────────────────
     const now = new Date();
     const validRequests = [];
-    for (const r of requests) {
+
+    for (const r of [...legacyRequests, ...newRequests]) {
       const evalRes = isBookingExpired(r, now);
       if (evalRes.isExpired) {
         if (r.status !== 'expired') {
           r.status = 'expired';
-          r.save().catch(() => {});
+          // Persist status update (don't block response)
+          if (r._source === 'unified') {
+            WorkerBookingRequest.findByIdAndUpdate(r._id, { status: 'expired' }).catch(() => {});
+          } else {
+            WorkerGroupRequest.findByIdAndUpdate(r._id, { status: 'expired' }).catch(() => {});
+          }
         }
         if (!status || status === 'expired') {
           validRequests.push(r);
@@ -582,11 +631,16 @@ exports.getLeaderGroupRequests = async (req, res) => {
       }
     }
 
+    // Sort merged results by createdAt desc
+    validRequests.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
     return res.json({ success: true, data: validRequests });
   } catch (err) {
+    console.error('[getLeaderGroupRequests]', err);
     return res.status(500).json({ success: false, message: 'Failed to load requests.' });
   }
 };
+
 
 /**
  * GET /worker/group-requests/member-invites

@@ -2419,10 +2419,13 @@ exports.workerRespondToFarmerRequest = async (req, res) => {
 
     // ── Check if we have enough acceptances ────────────────────────────────
     if (action === 'accept') {
-      // Final availability re-check for this worker
-      const conflict = await hasTimeConflict(
-        workerId, updated.scheduledDate, updated.startTime, updated.endTime, request._id
-      );
+      // Final availability re-check for this worker (branch by booking type)
+      let conflict = false;
+      if (updated.bookingType === 'DAILY') {
+        conflict = await hasDailyConflict(workerId, updated.startDate, updated.endDate, request._id);
+      } else {
+        conflict = await hasTimeConflict(workerId, updated.scheduledDate, updated.startTime, updated.endTime, request._id);
+      }
       if (conflict) {
         // Rollback this worker's acceptance
         await WorkerBookingRequest.updateOne(
@@ -2466,8 +2469,20 @@ exports.workerRespondToFarmerRequest = async (req, res) => {
           data: { requestId: updated._id, acceptedCount, requiredWorkers: updated.requiredWorkers }
         });
       } else {
-        // Still waiting for member responses or more dispatches
+        // Still waiting for more workers — save & emit live progress to farmer
         await updated.save();
+        try {
+          const io = getIO();
+          const farmerRoom = `user_${updated.farmerId}`;
+          io.to(farmerRoom).emit('worker_request_progress', {
+            requestId:       updated._id,
+            acceptedCount,
+            rejectedCount,
+            pendingCount,
+            requiredWorkers: updated.requiredWorkers,
+            status:          updated.status
+          });
+        } catch (_) { /* socket not critical */ }
       }
     } else {
       // Worker rejected

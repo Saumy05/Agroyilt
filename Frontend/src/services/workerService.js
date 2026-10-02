@@ -104,22 +104,22 @@ const workerService = {
 
   // ── Daily Booking Multi-day Lifecycle ──
   startDailyDay: async (assignmentId) => {
-    const response = await api.post(`/workers/assignments/daily/start-day`, { assignmentId });
+    const response = await api.post(`/workers/assignments/${assignmentId}/daily/start-day`);
     return response.data;
   },
 
   markDailyArrived: async (assignmentId) => {
-    const response = await api.post(`/workers/assignments/daily/arrived`, { assignmentId });
+    const response = await api.post(`/workers/assignments/${assignmentId}/daily/arrived`);
     return response.data;
   },
 
   verifyDailyVisitOtp: async (assignmentId, otp) => {
-    const response = await api.post(`/workers/assignments/daily/verify-visit-otp`, { assignmentId, otp });
+    const response = await api.post(`/workers/assignments/${assignmentId}/daily/verify-visit-otp`, { otp });
     return response.data;
   },
 
   verifyDailyCompletionOtp: async (assignmentId, otp) => {
-    const response = await api.post(`/workers/assignments/daily/verify-completion-otp`, { assignmentId, otp });
+    const response = await api.post(`/workers/assignments/${assignmentId}/daily/verify-completion-otp`, { otp });
     return response.data;
   },
 

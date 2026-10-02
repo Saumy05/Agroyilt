@@ -849,12 +849,50 @@ exports.workerCompleteJob = async (req, res) => {
     const { id } = req.params;
     const { workPhotos, notes, otp } = req.body;
 
+    // ── Step 1: Check if id is a direct IndWorkerAssignment (new unified flow) ──
+    let directAssignment = null;
+    try {
+      directAssignment = await IndWorkerAssignment.findOne({
+        _id: id,
+        workerId
+      }).select('+completionOtpHash');
+    } catch (_) { /* id may not be a valid ObjectId — fine, fall through */ }
+
+    if (directAssignment) {
+      const workerAssignmentController = require('../workerControllers/workerAssignmentController');
+      // Delegate entirely to the unified assignment controller
+      if (directAssignment.bookingType === 'DAILY') {
+        req.params.id = directAssignment._id.toString();
+        return workerAssignmentController.verifyDailyCompletionOtp(req, res);
+      }
+      req.params.id = directAssignment._id.toString();
+      return workerAssignmentController.verifyCompletionOtp(req, res);
+    }
+
+    // ── Step 2: Legacy Booking lookup ────────────────────────────────────────
     const booking = await Booking.findOne({
       _id: id,
       workerId: workerId
     });
 
     if (!booking) {
+      // Final attempt: look up assignment via legacyBookingId in case id is a BookingRequest or legacy Booking id
+      const assignmentByLegacy = await IndWorkerAssignment.findOne({
+        $or: [
+          { legacyBookingId: id },
+          { parentRequestId: id, workerId }
+        ]
+      }).select('+completionOtpHash');
+
+      if (assignmentByLegacy) {
+        const workerAssignmentController = require('../workerControllers/workerAssignmentController');
+        req.params.id = assignmentByLegacy._id.toString();
+        if (assignmentByLegacy.bookingType === 'DAILY') {
+          return workerAssignmentController.verifyDailyCompletionOtp(req, res);
+        }
+        return workerAssignmentController.verifyCompletionOtp(req, res);
+      }
+
       return res.status(404).json({ success: false, message: 'Job not found.' });
     }
 
@@ -862,7 +900,7 @@ exports.workerCompleteJob = async (req, res) => {
       return res.json({ success: true, message: 'Job already marked as completed.', data: booking });
     }
 
-    // Sync to IndWorkerAssignment and execute settlement atomically
+    // Sync to IndWorkerAssignment for legacy bookings and execute settlement atomically
     const assignment = await IndWorkerAssignment.findOne({
       $or: [{ legacyBookingId: booking._id }, { parentRequestId: booking.workerRequestId, workerId }]
     }).select('+completionOtpHash');
