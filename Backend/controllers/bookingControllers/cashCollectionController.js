@@ -83,7 +83,7 @@ exports.initiateCashCollection = async (req, res) => {
     await booking.save();
 
     // Emit socket event to user with full bill details and OTP
-    const io = req.app.get('io');
+    const io = req.app?.get ? req.app.get('io') : null;
     if (io) {
       io.to(`user_${booking.userId}`).emit('booking_updated', {
         bookingId: booking._id,
@@ -433,7 +433,7 @@ exports.confirmCashCollection = async (req, res) => {
     });
 
     // Emit socket event
-    const io = req.app.get('io');
+    const io = req.app?.get ? req.app.get('io') : null;
     if (io) {
       const updatePayload = {
         bookingId: booking._id,

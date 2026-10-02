@@ -200,6 +200,18 @@ const workerSchema = new mongoose.Schema({
       default: 0
     }
   },
+  outstandingDues: {
+    type: Number,
+    default: 0
+  },
+  isRestricted: {
+    type: Boolean,
+    default: false
+  },
+  restrictionReason: {
+    type: String,
+    default: null
+  },
   bankDetails: {
     accountHolderName: { type: String, trim: true, default: null },
     accountNumber: { type: String, trim: true, default: null },
