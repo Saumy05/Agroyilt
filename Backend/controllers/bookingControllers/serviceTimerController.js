@@ -25,31 +25,19 @@ const resolveRates = async (booking) => {
   let ratePerMinute = booking.serviceTimer?.ratePerMinute || 0;
   let adminBaseCharge = booking.serviceTimer?.adminBaseCharge || 0;
 
-  // 1. If ratePerMinute is not yet set, resolve it from implements or equipment or hourly rate
+  // 1. If ratePerMinute is not yet set, resolve it by combining Tractor + Attached Implements
   if (!ratePerMinute || ratePerMinute <= 0) {
-    // Check if an implement was selected and has pricing
-    if (booking.selectedImplements && booking.selectedImplements.length > 0) {
-      for (const impl of booking.selectedImplements) {
-        if (impl.pricing?.per_minute?.price > 0 && impl.pricing?.per_minute?.isEnabled !== false) {
-          ratePerMinute = impl.pricing.per_minute.price;
-          break;
-        }
-        if (impl.pricing?.hourly?.price > 0) {
-          ratePerMinute = Math.round((impl.pricing.hourly.price / 60) * 100) / 100;
-          break;
-        }
-      }
-    }
+    let combinedHourly = 0;
 
-    // Fallback: check equipment
-    if ((!ratePerMinute || ratePerMinute <= 0) && booking.equipmentId) {
+    // A. Tractor / Base Equipment Rate
+    if (booking.equipmentId) {
       try {
         const eq = await VendorEquipment.findById(booking.equipmentId);
         if (eq) {
-          if (eq.pricing?.per_minute?.price > 0 && eq.pricing?.per_minute?.isEnabled !== false) {
-            ratePerMinute = eq.pricing.per_minute.price;
-          } else if (eq.pricing?.hourly?.price > 0) {
-            ratePerMinute = Math.round((eq.pricing.hourly.price / 60) * 100) / 100;
+          if (eq.pricing?.hourly?.isEnabled && Number(eq.pricing?.hourly?.price) > 0) {
+            combinedHourly += Number(eq.pricing.hourly.price);
+          } else if (eq.pricing?.per_minute?.isEnabled && Number(eq.pricing?.per_minute?.price) > 0) {
+            combinedHourly += Number(eq.pricing.per_minute.price) * 60;
           }
         }
       } catch (err) {
@@ -57,16 +45,29 @@ const resolveRates = async (booking) => {
       }
     }
 
-    // Fallback: check agreedRate / basePrice
-    if (!ratePerMinute || ratePerMinute <= 0) {
-      if (booking.rateUnit === 'per_minute' && booking.agreedRate > 0) {
-        ratePerMinute = booking.agreedRate;
-      } else if (booking.basePrice > 0) {
-        ratePerMinute = Math.round((booking.basePrice / 60) * 100) / 100;
-      } else {
-        // Industry default for tractor field work (~₹900/hr = ₹15/min)
-        ratePerMinute = 15;
+    // B. Attached Implements (e.g. Rotavator, Cultivator, Straw Baler)
+    if (Array.isArray(booking.selectedImplements) && booking.selectedImplements.length > 0) {
+      for (const impl of booking.selectedImplements) {
+        const hourlyRate = Number(impl.pricing?.hourly?.price) || 0;
+        const perMinRate = Number(impl.pricing?.per_minute?.price) || 0;
+        if (hourlyRate > 0) {
+          combinedHourly += hourlyRate;
+        } else if (perMinRate > 0) {
+          combinedHourly += perMinRate * 60;
+        }
       }
+    }
+
+    // C. Calculate Per-Minute Rate
+    if (combinedHourly > 0) {
+      ratePerMinute = Math.round((combinedHourly / 60) * 100) / 100;
+    } else if (booking.rateUnit === 'per_minute' && booking.agreedRate > 0) {
+      ratePerMinute = booking.agreedRate;
+    } else if (booking.basePrice > 0) {
+      ratePerMinute = Math.round((booking.basePrice / 60) * 100) / 100;
+    } else {
+      // Industry default fallback (~₹900/hr = ₹15/min)
+      ratePerMinute = 15;
     }
   }
 
