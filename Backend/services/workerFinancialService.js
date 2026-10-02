@@ -664,7 +664,9 @@ exports.processDailyFarmerRefund = async (parentRequestId) => {
   }, 0);
 
   const maxWorkerTotal = snap.maximumWorkerAmount;
-  const refundAmount   = Math.max(0, toINR(toP(maxWorkerTotal) - toP(actualWorkerTotal)));
+  const rawRefundAmount = Math.max(0, toINR(toP(maxWorkerTotal) - toP(actualWorkerTotal)));
+  const alreadyRefunded = Number(request.refundAmount) || 0;
+  const refundAmount = Math.max(0, toINR(toP(rawRefundAmount) - toP(alreadyRefunded)));
 
   if (refundAmount <= 0) {
     request.refundAmount   = 0;

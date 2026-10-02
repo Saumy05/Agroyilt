@@ -771,6 +771,85 @@ exports.verifyCompletionOtp = async (req, res) => {
           assignment.settlementTransactionId = idempotencyKey;
           await assignment.save();
 
+          // If this worker was decreased early, immediately refund unused escrow to farmer (if paid online)
+          if (assignment.isDecreased && assignment.bookedDays > assignment.workedDays) {
+            try {
+              const parentReq = await WorkerBookingRequest.findById(assignment.parentRequestId);
+              const isPaidOnline = ['success', 'paid', 'PAID', 'SUCCESS'].includes(parentReq?.paymentStatus) && parentReq?.paymentMethod !== 'cash';
+
+              if (isPaidOnline) {
+                const unusedDays = assignment.bookedDays - assignment.workedDays;
+                const agreedDailyRate = Number(assignment.agreedRate || 0);
+                const partialRefundAmount = unusedDays * agreedDailyRate;
+
+                if (partialRefundAmount > 0) {
+                  const refundIdempotencyKey = `early_decrease_refund_${assignment._id}`;
+                  const existingRefund = await WalletTransaction.findOne({ idempotencyKey: refundIdempotencyKey });
+
+                  if (!existingRefund) {
+                    let farmerWallet = await Wallet.findOne({ userId: assignment.farmerId, userModel: 'User' });
+                    if (!farmerWallet) {
+                      farmerWallet = await Wallet.create({ userId: assignment.farmerId, userModel: 'User', balance: 0 });
+                    }
+                    farmerWallet.balance = (farmerWallet.balance || 0) + partialRefundAmount;
+                    await farmerWallet.save();
+                    await User.findByIdAndUpdate(assignment.farmerId, { 'wallet.balance': farmerWallet.balance });
+
+                    await WalletTransaction.create({
+                      walletId: farmerWallet._id,
+                      type: 'credit',
+                      amount: partialRefundAmount,
+                      reason: 'refund',
+                      referenceId: assignment.parentRequestId.toString(),
+                      idempotencyKey: refundIdempotencyKey,
+                      status: 'completed'
+                    });
+
+                    await Transaction.create({
+                      userId: assignment.farmerId,
+                      bookingId: assignment.legacyBookingId || null,
+                      type: 'refund',
+                      amount: partialRefundAmount,
+                      status: 'completed',
+                      paymentMethod: 'wallet',
+                      description: `Refund ₹${partialRefundAmount} for ${unusedDays} unused day(s) (Worker schedule concluded early)`,
+                      referenceId: refundIdempotencyKey,
+                      metadata: {
+                        type: 'early_decrease_refund',
+                        assignmentId: assignment._id.toString(),
+                        workerId: assignment.workerId.toString(),
+                        unusedDays,
+                        ratePerDay: agreedDailyRate
+                      }
+                    });
+
+                    // Update parent booking refund tracker
+                    parentReq.refundAmount = (parentReq.refundAmount || 0) + partialRefundAmount;
+                    await parentReq.save();
+
+                    emitSafe(`user_${assignment.farmerId}`, 'wallet_updated', {
+                      newBalance: farmerWallet.balance,
+                      refundAmount: partialRefundAmount,
+                      message: `₹${partialRefundAmount} refunded for ${unusedDays} unworked day(s).`
+                    });
+
+                    await notify({
+                      recipientType: 'user',
+                      recipientId: assignment.farmerId,
+                      type: 'worker_decrease_refund',
+                      title: 'Wallet Refund Credited',
+                      message: `₹${partialRefundAmount} has been refunded to your wallet for ${unusedDays} unused day(s) following schedule conclusion.`,
+                      relatedId: assignment.parentRequestId,
+                      relatedType: 'WorkerBookingRequest'
+                    });
+                  }
+                }
+              }
+            } catch (earlyRefErr) {
+              console.warn('[Early Decrease Refund Error - non-fatal]:', earlyRefErr.message);
+            }
+          }
+
         } catch (settleErr) {
           console.error('[DAILY SETTLEMENT ERROR]', settleErr);
           assignment.settlementStatus = 'FAILED';

@@ -18,6 +18,7 @@ import LogoLoader from '../../../../components/common/LogoLoader';
 import DailyTrackingView from './components/DailyTrackingView';
 import DecreaseWorkerModal from './components/DecreaseWorkerModal';
 import ExtensionModal from './components/ExtensionModal';
+import AddWorkersModal from './components/AddWorkersModal';
 import workerBookingService from '../../../../services/workerBookingService';
 
 // Fix Leaflet default marker icon path broken by Vite/webpack bundling
@@ -109,6 +110,7 @@ const BookingTrack = () => {
   const [currentTime, setCurrentTime] = useState(Date.now());
   const [selectedProofModal, setSelectedProofModal] = useState(null);
   const [isExtensionModalOpen, setIsExtensionModalOpen] = useState(false);
+  const [isAddWorkersModalOpen, setIsAddWorkersModalOpen] = useState(false);
   const [decreaseTargetWorker, setDecreaseTargetWorker] = useState(null);
   const [payingExtensionId, setPayingExtensionId] = useState(null);
   const [redirectCountdown, setRedirectCountdown] = useState(3);
@@ -1044,6 +1046,7 @@ const BookingTrack = () => {
             workers={workersList}
             onDecreaseClick={(worker) => setDecreaseTargetWorker(worker)}
             onRequestExtensionClick={() => setIsExtensionModalOpen(true)}
+            onAddWorkersClick={() => setIsAddWorkersModalOpen(true)}
             onGenerateCompletionOtp={handleGenerateCompletionOtp}
           />
         )}
@@ -1369,6 +1372,17 @@ const BookingTrack = () => {
         bookingType={trackingData?.bookingType || 'HOURLY'}
         workers={workersList}
         onExtensionCreated={() => fetchSnapshot(false)}
+      />
+
+      {/* ── Add Extra Workers Modal ── */}
+      <AddWorkersModal
+        isOpen={isAddWorkersModalOpen}
+        onClose={() => setIsAddWorkersModalOpen(false)}
+        requestId={trackingData?.requestId || id}
+        bookingType={trackingData?.bookingType || 'DAILY'}
+        defaultRate={trackingData?.maxDailyRate || trackingData?.minDailyRate || 500}
+        remainingDays={Math.max(1, (trackingData?.numberOfDays || 1) - (workersList[0]?.currentDayIndex || 1) + 1)}
+        onWorkersAdded={() => fetchSnapshot(false)}
       />
     </div>
   );

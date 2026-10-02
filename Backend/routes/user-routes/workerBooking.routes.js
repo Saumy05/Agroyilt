@@ -31,6 +31,7 @@ router.post('/farmer-worker-request/:id/cancel',             authenticate, fwr.c
 
 // ── DAILY BOOKING ROUTES ───────────────────────────────────────────────────
 router.post('/farmer-worker-request/:id/decrease-worker',                                  authenticate, fwr.decreaseWorker);
+router.post('/farmer-worker-request/:id/add-workers',                                      authenticate, fwr.addExtraWorkers);
 router.post('/farmer-worker-request/:id/assignment/:assignmentId/daily-visit-otp',         authenticate, fwr.getOrCreateDailyVisitOtp);
 router.post('/farmer-worker-request/:id/assignment/:assignmentId/daily-completion-otp',    authenticate, fwr.generateDailyCompletionOtp);
 

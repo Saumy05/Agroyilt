@@ -3907,6 +3907,258 @@ exports.decreaseWorker = async (req, res) => {
 };
 
 /**
+ * Farmer requests additional / extra workers on an active booking (today or tomorrow)
+ * POST /api/users/farmer-worker-request/:id/add-workers
+ * Body: { additionalWorkersCount, startDate, numberOfDays, paymentMethod, offeredRate, assignedWorkerIds, reason }
+ */
+exports.addExtraWorkers = async (req, res) => {
+  try {
+    const farmerId = req.user._id;
+    const { id } = req.params;
+    const {
+      additionalWorkersCount = 1,
+      startDate,
+      numberOfDays = 1,
+      paymentMethod,
+      offeredRate,
+      assignedWorkerIds = [],
+      reason
+    } = req.body;
+
+    const count = Math.max(1, Number(additionalWorkersCount) || 1);
+    const days = Math.max(1, Number(numberOfDays) || 1);
+
+    const request = await WorkerBookingRequest.findOne({ _id: id, farmerId });
+    if (!request) {
+      return res.status(404).json({ success: false, message: 'Worker booking request not found' });
+    }
+
+    if (!['confirmed', 'in_progress', 'scheduled'].includes(request.status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Additional workers can only be added to confirmed or in-progress bookings.'
+      });
+    }
+
+    const isDaily = request.bookingType === 'DAILY';
+    const rate = Number(offeredRate) || (isDaily ? (request.maxDailyRate || request.minDailyRate || 500) : (request.maxRate || request.minRate || 80));
+
+    const toP = (inr) => Math.round(Number(inr) * 100);
+    const toINR = (p) => p / 100;
+
+    const grossPaise = isDaily
+      ? toP(rate) * days * count
+      : Math.round(toP(rate) * ((Number(request.durationMinutes) || 60) / 60) * count);
+
+    const platformRate = request.financialSnapshot?.platformChargeRate || 10;
+    const platformChargePaise = Math.round((grossPaise * platformRate) / 100);
+    const totalPayablePaise = grossPaise + platformChargePaise;
+
+    const chosenPayment = (paymentMethod || request.paymentMethod || 'cash') === 'cash' ? 'cash' : 'online';
+    const start = startDate ? new Date(startDate) : new Date();
+
+    // ── Update parent request requiredWorkers count ──
+    request.requiredWorkers = (request.requiredWorkers || 0) + count;
+
+    // If specific worker IDs are provided, create assignments immediately
+    let createdAssigns = [];
+    if (Array.isArray(assignedWorkerIds) && assignedWorkerIds.length > 0) {
+      const otpExpiryDate = new Date(Date.now() + 60 * 60 * 1000);
+      const newAssignments = [];
+
+      for (const wId of assignedWorkerIds) {
+        const rawVisitOtp = Math.floor(1000 + Math.random() * 9000).toString();
+        const visitOtpHash = crypto.createHash('sha256').update(rawVisitOtp).digest('hex');
+
+        const grossPaiseSingle = isDaily
+          ? toP(rate) * days
+          : Math.round(toP(rate) * ((Number(request.durationMinutes) || 60) / 60));
+        const commRate = request.financialSnapshot?.commissionRate || 10;
+        const commPaise = Math.floor((grossPaiseSingle * commRate) / 100);
+        const netPaise = grossPaiseSingle - commPaise;
+
+        const assignDoc = {
+          parentRequestId: request._id,
+          bookingType: request.bookingType || 'HOURLY',
+          farmerId,
+          workerId: wId,
+          teamLeaderId: request.teamLeaderId || null,
+          workerType: request.bookingMode === 'TEAM_LEADER' ? 'TEAM_MEMBER' : 'INDEPENDENT',
+          agreedRate: rate,
+          rateUnit: isDaily ? 'daily' : 'hourly',
+          creationIdempotencyKey: `assign_addon_${request._id}_${wId}_${Date.now()}`,
+          assignmentStatus: 'CONFIRMED',
+          paymentMethod: chosenPayment,
+          isCashBooking: chosenPayment === 'cash',
+          journeyStatus: 'NOT_STARTED',
+          visitOtpStatus: 'PENDING',
+          workStatus: 'NOT_STARTED',
+          completionStatus: 'PENDING',
+          settlementStatus: 'PENDING',
+          locationStatus: 'UNAVAILABLE',
+          visitOtpCode: rawVisitOtp,
+          visitOtpHash,
+          visitOtpExpiresAt: otpExpiryDate,
+          grossAmount: toINR(grossPaiseSingle),
+          commissionRate: commRate,
+          commissionAmount: toINR(commPaise),
+          netEarning: toINR(netPaise)
+        };
+
+        if (isDaily) {
+          assignDoc.bookedDays = days;
+          assignDoc.workedDays = 0;
+          assignDoc.currentDayIndex = 1;
+          assignDoc.isDecreased = false;
+          assignDoc.dailyLogs = [{
+            dayNumber: 1,
+            date: start,
+            journeyStatus: 'NOT_STARTED',
+            visitOtpCode: rawVisitOtp,
+            visitOtpHash,
+            visitOtpStatus: 'PENDING',
+            visitOtpExpiresAt: otpExpiryDate,
+            workStatus: 'NOT_STARTED'
+          }];
+        }
+
+        newAssignments.push(assignDoc);
+      }
+
+      createdAssigns = await IndWorkerAssignment.insertMany(newAssignments);
+      if (!Array.isArray(request.assignmentIds)) request.assignmentIds = [];
+      request.assignmentIds.push(...createdAssigns.map(a => a._id));
+      if (!Array.isArray(request.selectedWorkerIds)) request.selectedWorkerIds = [];
+      request.selectedWorkerIds.push(...assignedWorkerIds);
+
+      for (const a of createdAssigns) {
+        await notify({
+          recipientType: 'worker',
+          recipientId: a.workerId,
+          type: 'worker_booking_confirmed',
+          title: '🎉 Added to Active Booking!',
+          message: `You have been added to "${request.workTitle}" starting ${start.toLocaleDateString()} for ${days} day(s).`,
+          relatedId: a._id,
+          relatedType: 'IndWorkerAssignment',
+          data: {
+            assignmentId: a._id,
+            requestId: request._id,
+            bookingType: request.bookingType,
+            paymentMethod: chosenPayment
+          }
+        });
+      }
+    } else {
+      // Broadcast / Notify mode
+      if (request.bookingMode === 'TEAM_LEADER' && request.teamLeaderId) {
+        await notify({
+          recipientType: 'worker',
+          recipientId: request.teamLeaderId,
+          type: 'team_extra_workers_requested',
+          title: '👥 Extra Workers Needed!',
+          message: `Farmer needs ${count} additional worker(s) starting ${start.toLocaleDateString()} for ${days} day(s) @ ₹${rate}/day. Please assign members.`,
+          relatedId: request._id,
+          relatedType: 'WorkerBookingRequest',
+          data: {
+            requestId: request._id,
+            additionalWorkersCount: count,
+            startDate: start,
+            numberOfDays: days,
+            rate
+          }
+        });
+
+        emitSafe(`worker_${request.teamLeaderId}`, 'team_extra_workers_requested', {
+          requestId: request._id,
+          additionalWorkersCount: count,
+          startDate: start,
+          numberOfDays: days,
+          rate
+        });
+      } else {
+        // Direct Dispatch to nearby available workers
+        try {
+          const { findNearbyAvailableWorkers } = require('../../utils/geoUtils');
+          const coords = request.location?.lat && request.location?.lng
+            ? [request.location.lng, request.location.lat]
+            : null;
+
+          if (coords) {
+            const nearbyWorkers = await findNearbyAvailableWorkers(coords, 20000, request.requiredSkills);
+            const existingAssigned = new Set((request.selectedWorkerIds || []).map(id => id.toString()));
+            const eligible = nearbyWorkers.filter(w => !existingAssigned.has(w._id.toString()));
+
+            for (const w of eligible.slice(0, 10)) {
+              await notify({
+                recipientType: 'worker',
+                recipientId: w._id,
+                type: 'extra_worker_dispatch',
+                title: '⚡ Urgent: Extra Worker Needed!',
+                message: `Farmer needs an extra worker for "${request.workTitle}" on ${start.toLocaleDateString()} (${days} days) @ ₹${rate}/day.`,
+                relatedId: request._id,
+                relatedType: 'WorkerBookingRequest',
+                data: {
+                  requestId: request._id,
+                  workTitle: request.workTitle,
+                  rate,
+                  startDate: start,
+                  numberOfDays: days,
+                  paymentMethod: chosenPayment
+                }
+              });
+
+              emitSafe(`worker_${w._id}`, 'new_farmer_request', {
+                requestId: request._id,
+                workTitle: request.workTitle,
+                rate,
+                startDate: start,
+                numberOfDays: days,
+                isExtraWorker: true
+              });
+            }
+          }
+        } catch (geoErr) {
+          console.warn('[addExtraWorkers geo dispatch]', geoErr.message);
+        }
+      }
+    }
+
+    await request.save();
+
+    emitSafe(`booking_req:${request._id}`, 'extra_workers_requested', {
+      requestId: request._id,
+      additionalWorkersCount: count,
+      startDate: start,
+      numberOfDays: days,
+      rate,
+      totalPayable: toINR(totalPayablePaise),
+      paymentMethod: chosenPayment,
+      createdAssignmentsCount: createdAssigns.length
+    });
+
+    return res.json({
+      success: true,
+      message: createdAssigns.length > 0
+        ? `Successfully added ${createdAssigns.length} extra worker(s) to booking!`
+        : `Request for ${count} additional worker(s) dispatched successfully!`,
+      data: {
+        requestId: request._id,
+        additionalWorkersCount: count,
+        startDate: start,
+        numberOfDays: days,
+        rate,
+        totalPayable: toINR(totalPayablePaise),
+        paymentMethod: chosenPayment,
+        createdAssignments: createdAssigns
+      }
+    });
+  } catch (err) {
+    console.error('[addExtraWorkers]', err);
+    return res.status(500).json({ success: false, message: 'Failed to add extra workers: ' + err.message });
+  }
+};
+
+/**
  * Farmer retrieves or creates fresh Visit/Reach OTP for a worker for a specific day (DAILY booking)
  * POST /api/user/farmer-worker-request/:id/assignment/:assignmentId/daily-visit-otp
  */

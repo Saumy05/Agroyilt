@@ -16,6 +16,7 @@ const DailyTrackingView = ({
   workers = [],
   onDecreaseClick,
   onRequestExtensionClick,
+  onAddWorkersClick,
   onGenerateCompletionOtp
 }) => {
   const totalDays = Number(trackingData?.numberOfDays) || 1;
@@ -36,15 +37,29 @@ const DailyTrackingView = ({
             </div>
           </div>
 
-          <button
-            type="button"
-            id="request-daily-extension-btn"
-            onClick={onRequestExtensionClick}
-            className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs rounded-2xl border border-emerald-200 flex items-center gap-1.5 active:scale-95 transition-all"
-          >
-            <FiPlus size={14} />
-            <span>Extend Days</span>
-          </button>
+          <div className="flex items-center gap-2">
+            {onAddWorkersClick && (
+              <button
+                type="button"
+                id="add-extra-workers-btn"
+                onClick={onAddWorkersClick}
+                className="px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-xs rounded-2xl border border-amber-200 flex items-center gap-1.5 active:scale-95 transition-all shadow-xs"
+              >
+                <FiUsers size={14} className="text-amber-700" />
+                <span>+ Add Workers</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              id="request-daily-extension-btn"
+              onClick={onRequestExtensionClick}
+              className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs rounded-2xl border border-emerald-200 flex items-center gap-1.5 active:scale-95 transition-all shadow-xs"
+            >
+              <FiPlus size={14} />
+              <span>Extend Days</span>
+            </button>
+          </div>
         </div>
 
         {/* Day timeline bubbles */}
