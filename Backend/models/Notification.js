@@ -55,6 +55,8 @@ const notificationSchema = new mongoose.Schema({
       'vendor_reached',
       'journey_started',
       'visit_verified',
+      'service_timer_paused',
+      'service_timer_resumed',
       'payment_received',
       'payment_success',
       'payment_failed',

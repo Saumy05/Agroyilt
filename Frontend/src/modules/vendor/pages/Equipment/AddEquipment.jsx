@@ -27,6 +27,7 @@ const AddEquipment = () => {
   const [vendorWorkers, setVendorWorkers] = useState([]);
   const [showWorkerLink, setShowWorkerLink] = useState(false);
   const [isRequestingCategory, setIsRequestingCategory] = useState(false);
+  const [isRequestingCity, setIsRequestingCity] = useState(false);
   const [implementSearch, setImplementSearch] = useState('');
 
   const [form, setForm] = useState({
@@ -66,24 +67,66 @@ const AddEquipment = () => {
 
   useEffect(() => {
     fetchInitialData();
-  }, []);
+  }, [id]);
 
   const fetchInitialData = async () => {
     try {
+      setLoading(true);
+
       // 1. Get Vendor Profile for City-based filtering
-      const profileRes = await vendorService.getProfile();
-      const vendorCityId = profileRes.data?.address?.cityId || profileRes.data?.cityId;
+      let vendorCityId = null;
+      try {
+        const profileRes = await vendorService.getProfile();
+        vendorCityId = profileRes.data?.address?.cityId || profileRes.data?.cityId;
+      } catch (e) {
+        console.warn('Profile city fetch skipped:', e);
+      }
 
-      const res = await vendorEquipmentService.getMachineTypes(vendorCityId);
-      if (res.success) setMachineTypes(res.data);
+      let allTypes = [];
+      try {
+        const res = await vendorEquipmentService.getMachineTypes(vendorCityId);
+        if (res.success && Array.isArray(res.data)) {
+          setMachineTypes(res.data);
+          allTypes = res.data;
+        }
+      } catch (e) {
+        console.warn('Machine types fetch skipped:', e);
+      }
 
-      const workerRes = await getWorkers();
-      if (workerRes.success) setVendorWorkers(workerRes.data);
+      try {
+        const workerRes = await getWorkers();
+        if (workerRes.success && Array.isArray(workerRes.data)) {
+          setVendorWorkers(workerRes.data);
+        }
+      } catch (e) {
+        console.warn('Worker fetch skipped:', e);
+      }
 
       let activeCategoryId = '';
       if (isEdit) {
-        const eqRes = await vendorEquipmentService.getMyEquipment();
-        const item = eqRes.data?.find(e => e._id === id);
+        let item = null;
+
+        // Try single equipment API first
+        try {
+          const singleRes = await vendorEquipmentService.getById(id);
+          if (singleRes.success && singleRes.data) {
+            item = singleRes.data;
+          }
+        } catch (e) {
+          console.warn('Direct getById fetch failed, trying inventory list:', e);
+        }
+
+        // Fallback: search within inventory list
+        if (!item) {
+          try {
+            const eqRes = await vendorEquipmentService.getMyEquipment();
+            const list = Array.isArray(eqRes.data) ? eqRes.data : (Array.isArray(eqRes) ? eqRes : []);
+            item = list.find(e => (e._id?.toString() || e.id?.toString()) === id.toString());
+          } catch (e) {
+            console.warn('getMyEquipment search failed:', e);
+          }
+        }
+
         if (item) {
           const catId = item.categoryId?._id || item.categoryId || '';
           activeCategoryId = catId;
@@ -112,6 +155,11 @@ const AddEquipment = () => {
           if (item.requestedCategoryName) {
             setIsRequestingCategory(true);
           }
+          if (item.requestedCityName) {
+            setIsRequestingCity(true);
+          }
+        } else {
+          toastManager.error('Equipment not found in your inventory');
         }
       } else {
         const savedDraft = localStorage.getItem('groo_add_machine_draft');
@@ -135,12 +183,17 @@ const AddEquipment = () => {
       }
 
       if (activeCategoryId) {
-        const implRes = await vendorEquipmentService.getImplements(activeCategoryId);
-        if (implRes.success) setMachineImplements(implRes.data);
+        try {
+          const implRes = await vendorEquipmentService.getImplements(activeCategoryId);
+          if (implRes.success && Array.isArray(implRes.data)) {
+            setMachineImplements(implRes.data);
+          }
+        } catch (e) {
+          console.warn('Could not fetch implements:', e);
+        }
 
         // Fetch category metadata to drive adaptive UI
-        const allTypes = res.success ? res.data : [];
-        const selected = allTypes.find(t => t.id === activeCategoryId);
+        const selected = allTypes.find(t => (t.id?.toString() || t._id?.toString()) === activeCategoryId.toString());
         if (selected) {
           setCategoryMeta({ 
             trackingType: selected.trackingType || 'none', 
@@ -149,6 +202,7 @@ const AddEquipment = () => {
         }
       }
     } catch (err) {
+      console.error('fetchInitialData fatal error:', err);
       toastManager.error('Failed to load form data');
     } finally {
       setLoading(false);

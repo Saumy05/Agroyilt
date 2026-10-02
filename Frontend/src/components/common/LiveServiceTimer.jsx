@@ -12,7 +12,9 @@ import {
   FiX,
   FiDollarSign,
   FiShield,
-  FiActivity
+  FiActivity,
+  FiKey,
+  FiLock
 } from 'react-icons/fi';
 import { FaRupeeSign } from 'react-icons/fa';
 import { toastManager } from '../../utils/toastManager';
@@ -71,6 +73,30 @@ export const LiveServiceTimer = ({
   const socket = useSocket();
   const bookingId = booking?._id;
 
+  // Dynamic domain label & emoji for agriculture & equipment categories
+  const serviceLabel = useMemo(() => {
+    const name = booking?.serviceName || booking?.equipmentId?.name || booking?.categoryId?.name || '';
+    if (/tractor/i.test(name)) return 'Tractor';
+    if (/harvester/i.test(name)) return 'Harvester';
+    if (/rotavator/i.test(name)) return 'Rotavator';
+    if (/tiller/i.test(name)) return 'Tiller';
+    if (/drone/i.test(name)) return 'Drone';
+    if (/labour|worker|team/i.test(name)) return 'Farm Worker';
+    if (/machinery|equipment/i.test(name) || booking?.rental_type) return 'Equipment';
+    return name || 'Equipment';
+  }, [booking]);
+
+  const serviceEmoji = useMemo(() => {
+    const l = serviceLabel.toLowerCase();
+    if (l.includes('tractor')) return '🚜';
+    if (l.includes('harvester')) return '🌾';
+    if (l.includes('rotavator')) return '🚜';
+    if (l.includes('tiller')) return '🌱';
+    if (l.includes('drone')) return '🛸';
+    if (l.includes('worker') || l.includes('labour')) return '🧑‍🌾';
+    return '⚙️';
+  }, [serviceLabel]);
+
   // Local synchronized timer state
   const [timerData, setTimerData] = useState({
     status: booking?.serviceTimer?.status || 'NOT_STARTED',
@@ -81,6 +107,7 @@ export const LiveServiceTimer = ({
     lastPausedBy: booking?.serviceTimer?.lastPausedBy || null,
     lastPauseReason: booking?.serviceTimer?.lastPauseReason || null,
     lastPauseNotes: booking?.serviceTimer?.lastPauseNotes || null,
+    resumeOtp: booking?.serviceTimer?.resumeOtp || booking?.resumeOtp || null,
     ratePerMinute: booking?.serviceTimer?.ratePerMinute || 15,
     adminBaseCharge: booking?.serviceTimer?.adminBaseCharge || booking?.visitingCharges || 0,
     billingSummary: booking?.serviceTimer?.billingSummary || null
@@ -89,6 +116,8 @@ export const LiveServiceTimer = ({
   const [loadingAction, setLoadingAction] = useState(false);
   const [showPauseModal, setShowPauseModal] = useState(false);
   const [showEndModal, setShowEndModal] = useState(false);
+  const [showResumeModal, setShowResumeModal] = useState(false);
+  const [resumeOtpInput, setResumeOtpInput] = useState('');
   const [selectedReason, setSelectedReason] = useState('machine_issue');
   const [pauseNotes, setPauseNotes] = useState('');
   const [endOtp, setEndOtp] = useState('');
@@ -144,6 +173,7 @@ export const LiveServiceTimer = ({
           lastPausedBy: payload.lastPausedBy,
           lastPauseReason: payload.lastPauseReason,
           lastPauseNotes: payload.lastPauseNotes,
+          resumeOtp: payload.status === 'RUNNING' ? null : (payload.resumeOtp !== undefined ? payload.resumeOtp : prev.resumeOtp),
           ratePerMinute: payload.ratePerMinute || prev.ratePerMinute,
           adminBaseCharge: payload.adminBaseCharge ?? prev.adminBaseCharge,
           billingSummary: payload.billingSummary || prev.billingSummary
@@ -153,13 +183,13 @@ export const LiveServiceTimer = ({
           toastManager.info(
             payload.performedBy === role
               ? 'You paused the service.'
-              : `Service was PAUSED by ${payload.performedBy === 'vendor' ? 'Tractor Driver' : 'Farmer'}`
+              : `Service was PAUSED by ${payload.performedBy === 'vendor' ? `${serviceLabel} Operator` : 'Farmer'}`
           );
         } else if (payload.action === 'RESUME') {
           toastManager.success(
             payload.performedBy === role
               ? 'You resumed the service.'
-              : `Service was RESUMED by ${payload.performedBy === 'vendor' ? 'Tractor Driver' : 'Farmer'}`
+              : `Service was RESUMED by ${payload.performedBy === 'vendor' ? `${serviceLabel} Operator` : 'Farmer'}`
           );
         } else if (payload.action === 'END' || payload.action === 'PARTIAL_END') {
           toastManager.success('Service work ended. Final bill generated.');
@@ -256,15 +286,33 @@ export const LiveServiceTimer = ({
     }
   };
 
-  const handleResumeTimer = async () => {
+  const handleResumeClick = () => {
+    if (role === 'vendor') {
+      setResumeOtpInput('');
+      setShowResumeModal(true);
+    } else {
+      handleConfirmResume();
+    }
+  };
+
+  const handleConfirmResume = async (otpOverride = null) => {
     try {
       setLoadingAction(true);
-      const res = await serviceTimerService.resume(bookingId);
+      const otpToSend = role === 'vendor' ? (otpOverride || resumeOtpInput) : null;
+      if (role === 'vendor' && !otpToSend) {
+        toastManager.error('Please enter the 4-digit Resume OTP from the farmer');
+        setLoadingAction(false);
+        return;
+      }
+
+      const res = await serviceTimerService.resume(bookingId, { otp: otpToSend });
       if (res?.success) {
-        toastManager.success('Service work resumed!');
+        setShowResumeModal(false);
+        setResumeOtpInput('');
+        toastManager.success('Service work resumed successfully!');
       }
     } catch (err) {
-      toastManager.error(err.response?.data?.message || 'Failed to resume service');
+      toastManager.error(err.response?.data?.message || 'Failed to resume service. Invalid OTP.');
     } finally {
       setLoadingAction(false);
     }
@@ -314,7 +362,7 @@ export const LiveServiceTimer = ({
             </div>
             <div>
               <h4 className="font-black text-gray-900 text-sm">
-                {summary.isPartialEnd ? '⚠️ Service Ended (Partial Bill)' : '🚜 Field Service Completed'}
+                {summary.isPartialEnd ? '⚠️ Service Ended (Partial Bill)' : `${serviceEmoji} ${serviceLabel} Service Completed`}
               </h4>
               <p className="text-[11px] text-emerald-700 font-medium">
                 Accurate minute-based billing • No idle charge
@@ -374,8 +422,8 @@ export const LiveServiceTimer = ({
 
           <span className="text-xs font-black uppercase tracking-wider">
             {timerData.status === 'RUNNING' && '🟢 Service Active • काम चालू है'}
-            {timerData.status === 'PAUSED' && `⏸️ Paused by ${timerData.lastPausedBy === 'vendor' ? 'Driver (ड्राइवर)' : 'Farmer (किसान)'}`}
-            {timerData.status === 'NOT_STARTED' && 'Tractor Ready for Service'}
+            {timerData.status === 'PAUSED' && `⏸️ Paused by ${timerData.lastPausedBy === 'vendor' ? `${serviceLabel} Operator` : 'Farmer (किसान)'}`}
+            {timerData.status === 'NOT_STARTED' && `${serviceEmoji} ${serviceLabel} Ready for Service`}
           </span>
         </div>
 
@@ -408,25 +456,68 @@ export const LiveServiceTimer = ({
 
         {/* Paused Banner Alert (If Paused) */}
         {timerData.status === 'PAUSED' && (
-          <div className="bg-amber-50/90 border border-amber-300/80 rounded-2xl p-4 space-y-2 text-amber-950">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0">
-                  <activeReasonObj.icon className="w-4 h-4" />
+          <div className="space-y-3">
+            <div className="bg-amber-50/90 border border-amber-300/80 rounded-2xl p-4 space-y-2 text-amber-950">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0">
+                    <activeReasonObj.icon className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h5 className="font-black text-xs">{activeReasonObj.titleEn}</h5>
+                    <p className="text-[11px] text-amber-700 font-medium">{activeReasonObj.titleHi}</p>
+                  </div>
                 </div>
-                <div>
-                  <h5 className="font-black text-xs">{activeReasonObj.titleEn}</h5>
-                  <p className="text-[11px] text-amber-700 font-medium">{activeReasonObj.titleHi}</p>
-                </div>
+                <span className="text-[11px] font-mono font-black bg-amber-200/80 px-2 py-0.5 rounded-lg text-amber-900">
+                  Paused: {formatTime(pausedSecs)}
+                </span>
               </div>
-              <span className="text-[11px] font-mono font-black bg-amber-200/80 px-2 py-0.5 rounded-lg text-amber-900">
-                Paused: {formatTime(pausedSecs)}
-              </span>
+              <div className="flex items-center gap-1.5 text-[11px] text-amber-800 bg-white/70 p-2 rounded-xl">
+                <FiShield className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span><strong>Trust Guarantee:</strong> The farmer is NOT charged for this downtime.</span>
+              </div>
             </div>
-            <div className="flex items-center gap-1.5 text-[11px] text-amber-800 bg-white/70 p-2 rounded-xl">
-              <FiShield className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              <span><strong>Trust Guarantee:</strong> The farmer is NOT charged for this downtime.</span>
-            </div>
+
+            {/* Farmer Work-Resume OTP Card (Shown securely to Farmer) */}
+            {role === 'farmer' && (
+              <div className="bg-gradient-to-br from-amber-500 via-amber-600 to-yellow-600 rounded-2xl p-4 text-white shadow-lg space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center">
+                      <FiKey className="w-4 h-4 text-white" />
+                    </div>
+                    <div>
+                      <h5 className="font-black text-xs uppercase tracking-wider">Farmer Work-Resume OTP</h5>
+                      <p className="text-[11px] text-amber-100">काम दोबारा शुरू करने का गुप्त कोड</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] bg-black/25 px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">
+                    Anti-Fraud
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-center gap-2 py-1">
+                  {timerData.resumeOtp ? (
+                    String(timerData.resumeOtp).split('').map((digit, i) => (
+                      <div
+                        key={i}
+                        className="w-12 h-14 bg-white/20 backdrop-blur-md border border-white/40 rounded-xl flex items-center justify-center text-3xl font-black font-mono shadow-inner"
+                      >
+                        {digit}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="px-4 py-2 bg-white/20 rounded-xl font-mono font-bold text-sm">
+                      Generating Secure OTP...
+                    </div>
+                  )}
+                </div>
+
+                <p className="text-[11px] text-center text-amber-100 font-medium bg-black/20 py-1.5 px-3 rounded-xl border border-white/10">
+                  🔒 Share this 4-digit OTP with the operator <strong>ONLY</strong> when you are ready to resume work. The timer will not resume billing without this code.
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -486,14 +577,25 @@ export const LiveServiceTimer = ({
 
           {timerData.status === 'PAUSED' && (
             <div className="space-y-2.5">
-              <button
-                onClick={handleResumeTimer}
-                disabled={loadingAction}
-                className="w-full py-4 rounded-2xl font-black text-white bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 shadow-lg shadow-emerald-200 active:scale-95 transition-all flex items-center justify-center gap-2 text-sm"
-              >
-                <FiPlay className="w-5 h-5 fill-current" />
-                Resume Work (काम दोबारा शुरू करें)
-              </button>
+              {role === 'vendor' ? (
+                <button
+                  onClick={handleResumeClick}
+                  disabled={loadingAction}
+                  className="w-full py-4 rounded-2xl font-black text-white bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 shadow-lg shadow-emerald-200 active:scale-95 transition-all flex items-center justify-center gap-2 text-sm"
+                >
+                  <FiKey className="w-5 h-5" />
+                  Enter Resume OTP to Continue (ओटीपी से काम चालू करें)
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleConfirmResume()}
+                  disabled={loadingAction}
+                  className="w-full py-4 rounded-2xl font-black text-white bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 shadow-lg shadow-emerald-200 active:scale-95 transition-all flex items-center justify-center gap-2 text-sm"
+                >
+                  <FiPlay className="w-5 h-5 fill-current" />
+                  Resume Work (काम दोबारा शुरू करें)
+                </button>
+              )}
 
               <button
                 onClick={() => {
@@ -504,7 +606,7 @@ export const LiveServiceTimer = ({
                 className="w-full py-2.5 rounded-xl font-bold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 active:scale-95 transition-all text-xs flex items-center justify-center gap-1.5"
               >
                 <FiAlertTriangle className="w-3.5 h-3.5" />
-                Tractor Cannot Continue? End with Partial Bill
+                {serviceLabel} Cannot Continue? End with Partial Bill
               </button>
             </div>
           )}
@@ -525,7 +627,7 @@ export const LiveServiceTimer = ({
               <div className="flex items-center justify-between border-b pb-3">
                 <div>
                   <h3 className="text-base font-black text-gray-900">Pause Work Session</h3>
-                  <p className="text-xs text-gray-500">Why is the tractor stopping? Timer will stop billing.</p>
+                  <p className="text-xs text-gray-500">Why is the {serviceLabel.toLowerCase()} stopping? Timer will stop billing.</p>
                 </div>
                 <button
                   onClick={() => setShowPauseModal(false)}
@@ -653,7 +755,7 @@ export const LiveServiceTimer = ({
                     type="text"
                     value={partialReasonText}
                     onChange={(e) => setPartialReasonText(e.target.value)}
-                    placeholder="e.g. Major tractor engine issue, cannot plough further"
+                    placeholder={`e.g. Major ${serviceLabel.toLowerCase()} breakdown, cannot operate further`}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-red-500 focus:outline-none"
                   />
                 </div>
@@ -689,6 +791,73 @@ export const LiveServiceTimer = ({
               >
                 <FiCheckCircle className="w-5 h-5" />
                 {isPartialEnd ? 'Confirm Partial Bill End (बिल समाप्त करें)' : 'Confirm & Complete (बिल बनाएं)'}
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ═══════ RESUME WORK OTP MODAL (Vendor input) ═══════ */}
+      <AnimatePresence>
+        {showResumeModal && (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ y: '100%', opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: '100%', opacity: 0 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl space-y-4"
+            >
+              <div className="flex items-center justify-between border-b pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-md shadow-amber-200">
+                    <FiKey className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-gray-900">Enter Customer Resume OTP</h3>
+                    <p className="text-xs text-gray-500">किसान का रिज़्यूम ओटीपी दर्ज करें</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowResumeModal(false)}
+                  className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200"
+                >
+                  <FiX className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <p className="text-xs text-gray-600 leading-relaxed">
+                  Work and billing cannot restart without the customer's consent. Please ask the farmer for the 4-digit Resume OTP shown on their screen.
+                </p>
+
+                <div>
+                  <label className="text-[11px] font-bold text-gray-700 block mb-1">
+                    4-Digit Farmer Resume OTP:
+                  </label>
+                  <input
+                    type="number"
+                    value={resumeOtpInput}
+                    onChange={(e) => setResumeOtpInput(e.target.value.slice(0, 4))}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && resumeOtpInput.length === 4) {
+                        handleConfirmResume();
+                      }
+                    }}
+                    placeholder="••••"
+                    autoFocus
+                    className="w-full px-4 py-3 rounded-2xl border-2 border-amber-300 text-center font-mono font-black text-2xl tracking-[0.5em] focus:border-amber-500 focus:ring-4 focus:ring-amber-200 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <button
+                onClick={() => handleConfirmResume()}
+                disabled={loadingAction || resumeOtpInput.length < 4}
+                className="w-full py-4 rounded-2xl font-black text-white bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-200 active:scale-95 transition-all flex items-center justify-center gap-2 text-sm"
+              >
+                <FiPlay className="w-4 h-4 fill-current" />
+                Verify & Resume Work (काम चालू करें)
               </button>
             </motion.div>
           </div>

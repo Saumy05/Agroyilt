@@ -5,6 +5,7 @@ const { authenticate } = require('../../middleware/authMiddleware');
 const { isVendor } = require('../../middleware/roleMiddleware');
 const {
   getMyEquipment,
+  getEquipmentById,
   addEquipment,
   updateEquipment,
   deleteEquipment,
@@ -30,6 +31,9 @@ router.use(authenticate, isVendor);
 
 // GET /api/vendor/equipment - List all machines
 router.get('/', getMyEquipment);
+
+// GET /api/vendor/equipment/:id - Get single machine
+router.get('/:id', getEquipmentById);
 
 // POST /api/vendor/equipment - Add new machinery
 router.post('/', addEquipmentValidation, addEquipment);

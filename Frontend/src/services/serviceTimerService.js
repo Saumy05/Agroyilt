@@ -16,8 +16,8 @@ export const serviceTimerService = {
     return res.data;
   },
 
-  resume: async (bookingId) => {
-    const res = await api.post(`/bookings/service-timer/${bookingId}/resume`);
+  resume: async (bookingId, { otp = null } = {}) => {
+    const res = await api.post(`/bookings/service-timer/${bookingId}/resume`, { otp });
     return res.data;
   },
 

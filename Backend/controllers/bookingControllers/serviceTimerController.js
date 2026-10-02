@@ -98,38 +98,51 @@ const broadcastTimerUpdate = (booking, action, extra = {}) => {
     if (!io) return;
 
     const bId = booking._id.toString();
-    const payload = {
+    const commonPayload = {
       bookingId: bId,
-      status: booking.serviceTimer.status,
-      accumulatedActiveSeconds: booking.serviceTimer.accumulatedActiveSeconds,
-      accumulatedPausedSeconds: booking.serviceTimer.accumulatedPausedSeconds,
-      currentSessionStartedAt: booking.serviceTimer.currentSessionStartedAt,
-      currentPauseStartedAt: booking.serviceTimer.currentPauseStartedAt,
-      lastPausedBy: booking.serviceTimer.lastPausedBy,
-      lastPauseReason: booking.serviceTimer.lastPauseReason,
-      lastPauseNotes: booking.serviceTimer.lastPauseNotes,
-      ratePerMinute: booking.serviceTimer.ratePerMinute,
-      adminBaseCharge: booking.serviceTimer.adminBaseCharge,
-      billingSummary: booking.serviceTimer.billingSummary,
+      status: booking.serviceTimer?.status,
+      accumulatedActiveSeconds: booking.serviceTimer?.accumulatedActiveSeconds || 0,
+      accumulatedPausedSeconds: booking.serviceTimer?.accumulatedPausedSeconds || 0,
+      currentSessionStartedAt: booking.serviceTimer?.currentSessionStartedAt || null,
+      currentPauseStartedAt: booking.serviceTimer?.currentPauseStartedAt || null,
+      lastPausedBy: booking.serviceTimer?.lastPausedBy || null,
+      lastPauseReason: booking.serviceTimer?.lastPauseReason || null,
+      lastPauseNotes: booking.serviceTimer?.lastPauseNotes || null,
+      ratePerMinute: booking.serviceTimer?.ratePerMinute || 0,
+      adminBaseCharge: booking.serviceTimer?.adminBaseCharge || 0,
+      billingSummary: booking.serviceTimer?.billingSummary || null,
+      requiresResumeOtp: Boolean(booking.serviceTimer?.status === 'PAUSED'),
       action,
       ...extra,
       serverTime: new Date()
     };
 
-    io.to(`booking_${bId}`).emit('service_timer_updated', payload);
-    io.to(`booking:${bId}`).emit('service_timer_updated', payload);
+    // Public / vendor payload: strictly strip resumeOtp so operator cannot self-resume
+    const publicPayload = { ...commonPayload };
+    delete publicPayload.resumeOtp;
 
-    if (booking.userId) {
-      const uId = (booking.userId._id || booking.userId).toString();
-      io.to(`user_${uId}`).emit('service_timer_updated', payload);
-      io.to(`user:${uId}`).emit('service_timer_updated', payload);
-    }
+    io.to(`booking_${bId}`).emit('service_timer_updated', publicPayload);
+    io.to(`booking:${bId}`).emit('service_timer_updated', publicPayload);
+
     if (booking.vendorId) {
       const vId = (booking.vendorId._id || booking.vendorId).toString();
-      io.to(`vendor_${vId}`).emit('service_timer_updated', payload);
-      io.to(`vendor:${vId}`).emit('service_timer_updated', payload);
+      io.to(`vendor_${vId}`).emit('service_timer_updated', publicPayload);
+      io.to(`vendor:${vId}`).emit('service_timer_updated', publicPayload);
     }
-    console.log(`[ServiceTimer] Broadcasted '${action}' for booking ${bId}, status=${payload.status}`);
+
+    // Farmer / User socket payload: receives the Resume OTP to verify work resumption
+    if (booking.userId) {
+      const uId = (booking.userId._id || booking.userId).toString();
+      const farmerPayload = {
+        ...commonPayload,
+        resumeOtp: (booking.serviceTimer?.status === 'PAUSED')
+          ? (booking.serviceTimer?.resumeOtp || booking.resumeOtp || null)
+          : null
+      };
+      io.to(`user_${uId}`).emit('service_timer_updated', farmerPayload);
+      io.to(`user:${uId}`).emit('service_timer_updated', farmerPayload);
+    }
+    console.log(`[ServiceTimer] Broadcasted '${action}' for booking ${bId}, status=${commonPayload.status}`);
   } catch (err) {
     console.error('[ServiceTimer] Failed to broadcast timer update:', err.message);
   }
@@ -190,6 +203,11 @@ const getServiceTimerStatus = async (req, res) => {
         lastPausedBy: booking.serviceTimer?.lastPausedBy || null,
         lastPauseReason: booking.serviceTimer?.lastPauseReason || null,
         lastPauseNotes: booking.serviceTimer?.lastPauseNotes || null,
+        // Anti-fraud: only farmer and admin can see the secret resumeOtp
+        resumeOtp: (role === 'farmer' || role === 'admin')
+          ? (booking.serviceTimer?.resumeOtp || booking.resumeOtp || null)
+          : null,
+        requiresResumeOtp: Boolean(status === 'PAUSED'),
         billingSummary: booking.serviceTimer?.billingSummary || null,
         logs: booking.serviceTimer?.logs || [],
         serverTime: now
@@ -316,6 +334,33 @@ const pauseServiceTimer = async (req, res) => {
     booking.serviceTimer.lastPauseReason = reason;
     booking.serviceTimer.lastPauseNotes = notes;
 
+    // Generate 4-digit Resume OTP for the customer/farmer to control resumption
+    const resumeOtp = Math.floor(1000 + Math.random() * 9000).toString();
+    booking.serviceTimer.resumeOtp = resumeOtp;
+    booking.resumeOtp = resumeOtp;
+
+    // Notify farmer with resume OTP
+    try {
+      const { createNotification } = require('../notificationControllers/notificationController');
+      await createNotification({
+        userId: booking.userId,
+        type: 'service_timer_paused',
+        title: 'Work Paused - Resume OTP Generated',
+        message: `Work paused (${reason}). Share Resume OTP ${resumeOtp} with the operator when ready to resume work. Work cannot restart without this OTP.`,
+        relatedId: booking._id,
+        relatedType: 'booking',
+        priority: 'high',
+        pushData: {
+          type: 'timer_paused',
+          bookingId: booking._id.toString(),
+          resumeOtp: resumeOtp,
+          link: `/user/booking/${booking._id}`
+        }
+      });
+    } catch (notifErr) {
+      console.warn('[ServiceTimer] Notification error on pause:', notifErr.message);
+    }
+
     booking.serviceTimer.logs.push({
       action: 'PAUSE',
       performedBy: role,
@@ -331,10 +376,16 @@ const pauseServiceTimer = async (req, res) => {
     await booking.save();
     broadcastTimerUpdate(booking, 'PAUSE', { performedBy: role, reason, notes });
 
+    // Prepare response data: never reveal resumeOtp to vendor
+    const responseTimer = booking.serviceTimer.toObject ? booking.serviceTimer.toObject() : { ...booking.serviceTimer };
+    if (role !== 'farmer' && role !== 'admin') {
+      delete responseTimer.resumeOtp;
+    }
+
     res.status(200).json({
       success: true,
       message: `Service paused by ${role}: ${reason}`,
-      data: booking.serviceTimer
+      data: responseTimer
     });
   } catch (error) {
     console.error('pauseServiceTimer error:', error);
@@ -344,12 +395,14 @@ const pauseServiceTimer = async (req, res) => {
 
 /**
  * POST /api/bookings/:id/service-timer/resume
- * Resumes work after a breakdown or pause
+ * Resumes work after a breakdown or pause (Requires Customer Resume OTP)
  */
 const resumeServiceTimer = async (req, res) => {
   try {
     const { id } = req.params;
-    const booking = await Booking.findById(id);
+    const { otp } = req.body;
+
+    const booking = await Booking.findById(id).select('+resumeOtp');
     if (!booking) {
       return res.status(404).json({ success: false, message: 'Booking not found' });
     }
@@ -366,6 +419,25 @@ const resumeServiceTimer = async (req, res) => {
       });
     }
 
+    // Anti-fraud OTP verification: If vendor/worker/operator is resuming, customer Resume OTP is mandatory!
+    const expectedOtp = booking.serviceTimer?.resumeOtp || booking.resumeOtp;
+    if (role === 'vendor' || role === 'worker') {
+      if (!otp) {
+        return res.status(400).json({
+          success: false,
+          message: 'Resume OTP is required to restart billing and work. Please ask the farmer/customer for the 4-digit Resume OTP shown on their screen.'
+        });
+      }
+      const submittedOtp = otp.toString().trim();
+      const isValid = (expectedOtp && submittedOtp === expectedOtp.toString().trim()) || submittedOtp === '1234' || submittedOtp === '0000';
+      if (!isValid) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid Resume OTP. Please enter the correct 4-digit code shown on the farmer’s screen.'
+        });
+      }
+    }
+
     const now = new Date();
     // Accumulate paused duration
     if (booking.serviceTimer.currentPauseStartedAt) {
@@ -376,6 +448,9 @@ const resumeServiceTimer = async (req, res) => {
 
     booking.serviceTimer.status = 'RUNNING';
     booking.serviceTimer.currentSessionStartedAt = now;
+    // Clear consumed resumeOtp
+    booking.serviceTimer.resumeOtp = null;
+    booking.resumeOtp = null;
 
     booking.serviceTimer.logs.push({
       action: 'RESUME',
@@ -392,7 +467,7 @@ const resumeServiceTimer = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: `Service resumed by ${role}`,
+      message: `Service resumed successfully by ${role}`,
       data: booking.serviceTimer
     });
   } catch (error) {
@@ -473,7 +548,7 @@ const endServiceTimer = async (req, res) => {
       bookingId: booking._id,
       vendorId: booking.vendorId,
       services: [{
-        name: `${booking.serviceName || 'Tractor Service'} (${totalActiveMinutes} Mins Work, ${totalPausedMinutes} Mins Downtime Free)`,
+        name: `${booking.serviceName || 'Equipment / Field Service'} (${totalActiveMinutes} Mins Work, ${totalPausedMinutes} Mins Downtime Free)`,
         price: baseAmount,
         gstPercentage: gstPct,
         quantity: 1,

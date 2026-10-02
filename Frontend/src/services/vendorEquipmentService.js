@@ -1,4 +1,4 @@
-﻿import api from './api';
+import api from './api';
 
 /**
  * Vendor Equipment Service
@@ -8,6 +8,12 @@ export const vendorEquipmentService = {
   // Get all machinery for the logged-in vendor
   getMyEquipment: async () => {
     const response = await api.get('/vendors/equipment');
+    return response.data;
+  },
+
+  // Get single machinery by ID
+  getById: async (id) => {
+    const response = await api.get(`/vendors/equipment/${id}`);
     return response.data;
   },
 

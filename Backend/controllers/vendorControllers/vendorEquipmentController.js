@@ -1,6 +1,7 @@
 const VendorEquipment = require('../../models/VendorEquipment');
 const Category = require('../../models/Category');
 const Vendor = require('../../models/Vendor');
+const Worker = require('../../models/Worker');
 const Service = require('../../models/Service');
 const { validationResult } = require('express-validator');
 
@@ -37,6 +38,39 @@ exports.getMyEquipment = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to fetch equipment inventory'
+    });
+  }
+};
+
+/**
+ * Get single equipment by ID for the logged-in vendor
+ */
+exports.getEquipmentById = async (req, res) => {
+  try {
+    const vendorId = req.user.id;
+    const { id } = req.params;
+    const equipment = await VendorEquipment.findOne({ _id: id, vendorId })
+      .populate('categoryId', 'title slug homeIconUrl trackingType requiresDriver')
+      .populate('subCategoryIds', 'title slug')
+      .populate('implements.subCategoryId', 'title slug')
+      .populate('workerId', 'name phone profilePhoto status');
+
+    if (!equipment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Equipment not found in your inventory'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: equipment
+    });
+  } catch (error) {
+    console.error('Get equipment by ID error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch equipment details'
     });
   }
 };

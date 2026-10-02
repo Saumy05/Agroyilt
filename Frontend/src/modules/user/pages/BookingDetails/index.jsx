@@ -196,6 +196,19 @@ const BookingDetails = () => {
     booking?.providerType === 'MACHINERY' ||
     Boolean(booking?.equipmentId);
 
+  const serviceLabel = useMemo(() => {
+    if (!booking) return 'Equipment';
+    const name = booking.serviceName || booking.equipmentId?.name || booking.categoryTitle || booking.categoryId?.name || '';
+    if (/tractor/i.test(name)) return 'Tractor';
+    if (/harvester/i.test(name)) return 'Harvester';
+    if (/rotavator/i.test(name)) return 'Rotavator';
+    if (/tiller/i.test(name)) return 'Tiller';
+    if (/drone/i.test(name)) return 'Drone';
+    if (/labour|worker|team/i.test(name)) return 'Farm Worker';
+    if (/machinery|equipment/i.test(name) || booking.rental_type) return 'Equipment';
+    return name || 'Equipment';
+  }, [booking]);
+
   // Auto-redirect timer when work is completed and paid in active live flow
   useEffect(() => {
     if (!showCompletionExit) return;
@@ -1180,7 +1193,7 @@ const BookingDetails = () => {
                           <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(74,222₹28,0.5)]"></span>
                           <p className="font-medium">
                             {isAgri 
-                              ? 'Tractor and operator en route to your field' 
+                              ? `${serviceLabel} and operator en route to your field` 
                               : ((booking.requiresDriver === false || booking.categoryId?.requiresDriver === false) 
                                 ? 'Ready for equipment handover' 
                                 : 'Waiting for professional to reach your location')}
@@ -1454,7 +1467,7 @@ const BookingDetails = () => {
 
                 <p className="text-center text-[10px] text-teal-100 font-medium bg-black/10 rounded-lg py-2 px-3 border border-white/5">
                   {isAgri
-                    ? "Share this OTP with the tractor operator ONLY after field work has finished to stop the live timer and finalize your active-minutes bill."
+                    ? `Share this OTP with the ${serviceLabel.toLowerCase()} operator ONLY after field work has finished to stop the live timer and finalize your active-minutes bill.`
                     : ((booking.requiresDriver === false || booking.categoryId?.requiresDriver === false)
                         ? "Share this OTP with the professional ONLY after the equipment is returned and you have verified its condition."
                         : "Share this OTP with the driver ONLY after equipment has finished and you have verified the work.")

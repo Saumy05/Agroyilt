@@ -204,4 +204,7 @@ const vendorEquipmentSchema = new mongoose.Schema({
 vendorEquipmentSchema.index({ categoryId: 1, status: 1 });
 vendorEquipmentSchema.index({ vendorId: 1, status: 1 });
 
+// Ensure referenced models are registered for population
+try { require('./Worker'); } catch (_) {}
+
 module.exports = mongoose.model('VendorEquipment', vendorEquipmentSchema);

@@ -420,6 +420,10 @@ const bookingSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  resumeOtp: {
+    type: String,
+    default: null
+  },
 
   // ==========================================
   // 9. WORK COMPLETION
@@ -525,6 +529,7 @@ const bookingSchema = new mongoose.Schema({
       default: null
     },
     lastPauseNotes: { type: String, default: null },
+    resumeOtp: { type: String, default: null },
 
     // Audit logs for all actions
     logs: [{

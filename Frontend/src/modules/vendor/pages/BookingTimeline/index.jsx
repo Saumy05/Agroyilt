@@ -173,7 +173,29 @@ const BookingTimeline = () => {
   const [isTripModalOpen, setIsTripModalOpen] = useState(false);
   const [tripModalMode, setTripModalMode] = useState('start');
 
-  const isAgriBooking = booking ? (!!booking.rental_type || booking.serviceCategory === 'Agriculture') : false;
+  const isAgriBooking = booking ? (
+    !!booking.rental_type ||
+    booking.serviceCategory === 'Agriculture' ||
+    booking.serviceCategory === 'Machinery' ||
+    booking.serviceCategory === 'Equipment' ||
+    booking.providerType === 'MACHINERY' ||
+    !!booking.equipmentId ||
+    /agri|tractor|machin|equip|harvester|rotavator/i.test(booking.categoryId?.name || '')
+  ) : false;
+
+  const serviceLabel = useMemo(() => {
+    if (!booking) return 'Equipment';
+    const name = booking.serviceName || booking.equipmentId?.name || booking.categoryId?.name || '';
+    if (/tractor/i.test(name)) return 'Tractor';
+    if (/harvester/i.test(name)) return 'Harvester';
+    if (/rotavator/i.test(name)) return 'Rotavator';
+    if (/tiller/i.test(name)) return 'Tiller';
+    if (/drone/i.test(name)) return 'Drone';
+    if (/labour|worker|team/i.test(name)) return 'Team';
+    if (/machinery|equipment/i.test(name) || booking.rental_type) return 'Equipment';
+    return name || 'Equipment';
+  }, [booking]);
+
   const requiresDriver = booking?.categoryId?.requiresDriver !== false; // Default true if category missing
 
   useLayoutEffect(() => {
@@ -477,11 +499,11 @@ const BookingTimeline = () => {
     },
     {
       id: 4,
-      title: isAgriBooking ? 'Tractor Dispatched' : 'Journey Started',
+      title: isAgriBooking ? `${serviceLabel} Dispatched` : 'Journey Started',
       icon: FiMapPin,
       action: (currentStage === 2 || currentStage === 3) ? handleStartSelfJob : null,
       description: isAgriBooking 
-        ? (booking?.isSelfJob ? 'You are en route with tractor' : (booking?.assignedTo ? 'Operator dispatched with tractor' : (currentStage === 2 ? 'Dispatch tractor yourself or assign operator' : 'Waiting to dispatch tractor')))
+        ? (booking?.isSelfJob ? `You are en route with ${serviceLabel.toLowerCase()}` : (booking?.assignedTo ? `Operator dispatched with ${serviceLabel.toLowerCase()}` : (currentStage === 2 ? `Dispatch ${serviceLabel.toLowerCase()} yourself or assign operator` : `Waiting to dispatch ${serviceLabel.toLowerCase()}`)))
         : (booking?.isSelfJob ? 'You started journey' : (booking?.assignedTo ? 'Operator started journey' : 'Waiting for journey start')),
     },
     {
@@ -489,7 +511,7 @@ const BookingTimeline = () => {
       title: isAgriBooking ? 'Arrived at Field' : 'Visited Site',
       icon: FiMapPin,
       action: (currentStage === 4) ? () => setIsVisitModalOpen(true) : null,
-      description: isAgriBooking ? 'Tractor reached farmer field' : 'Arrived at location',
+      description: isAgriBooking ? `${serviceLabel} reached farmer field` : 'Arrived at location',
     },
     {
       id: 6,
@@ -722,7 +744,7 @@ const BookingTimeline = () => {
                           }}
                         >
                           {stage.id === 3 ? 'Assign Operator' :
-                            stage.id === 4 ? (isAgriBooking ? (currentStage === 2 ? 'Dispatch Tractor Myself' : 'Dispatch Tractor') : 'Start Journey') :
+                            stage.id === 4 ? (isAgriBooking ? (currentStage === 2 ? `Dispatch ${serviceLabel} Myself` : `Dispatch ${serviceLabel}`) : 'Start Journey') :
                               stage.id === 5 ? (isAgriBooking ? 'Mark Reached Field' : 'Mark Arrived') :
                                 stage.id === 6 ? (isAgriBooking ? 'Start Field Service' : 'Mark Workdone') :
                                   stage.id === 6.5 ? (isAgriBooking ? 'Complete Service & Bill' : 'Mark Workdone') :
