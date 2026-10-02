@@ -103,17 +103,21 @@ const ActiveJobs = memo(() => {
   }, []);
 
   const getStatusColor = useCallback((status) => {
+    const s = (status || '').toUpperCase();
     const colors = {
       'ACCEPTED': '#F59E0B',
+      'CONFIRMED': '#F59E0B',
       'ASSIGNED': '#3B82F6',
       'JOURNEY_STARTED': '#F59E0B',
       'VISITED': '#8B5CF6',
+      'IN_PROGRESS': '#3B82F6',
       'WORK_DONE': '#10B981',
+      'AWAITING_PAYMENT': '#F97316',
       'WORKER_PAID': '#06B6D4',
       'SETTLEMENT_PENDING': '#F97316',
       'COMPLETED': '#059669',
     };
-    return colors[status] || '#6B7280';
+    return colors[s] || '#6B7280';
   }, []);
 
   // Memoize filtered jobs to prevent recalculation on every render

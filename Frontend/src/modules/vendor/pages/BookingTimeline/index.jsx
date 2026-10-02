@@ -479,9 +479,9 @@ const BookingTimeline = () => {
       id: 4,
       title: isAgriBooking ? 'Tractor Dispatched' : 'Journey Started',
       icon: FiMapPin,
-      action: (currentStage === 3) ? handleStartSelfJob : null,
+      action: (currentStage === 2 || currentStage === 3) ? handleStartSelfJob : null,
       description: isAgriBooking 
-        ? (booking?.isSelfJob ? 'You are en route with tractor' : (booking?.assignedTo ? 'Operator dispatched with tractor' : 'Waiting to dispatch tractor'))
+        ? (booking?.isSelfJob ? 'You are en route with tractor' : (booking?.assignedTo ? 'Operator dispatched with tractor' : (currentStage === 2 ? 'Dispatch tractor yourself or assign operator' : 'Waiting to dispatch tractor')))
         : (booking?.isSelfJob ? 'You started journey' : (booking?.assignedTo ? 'Operator started journey' : 'Waiting for journey start')),
     },
     {
@@ -538,23 +538,19 @@ const BookingTimeline = () => {
       title: 'Collect Payment',
       icon: FiCheckCircle,
       action: (() => {
-        if (booking?.status === 'completed' || booking?.status === 'COMPLETED' || booking?.paymentStatus === 'SUCCESS' || booking?.paymentStatus === 'paid') return null;
+        if (booking?.status === 'completed' || booking?.status === 'COMPLETED' || booking?.paymentStatus === 'SUCCESS' || booking?.paymentStatus === 'paid' || booking?.paymentStatus === 'collected_by_vendor') return null;
 
         // If online payment and bill is already generated, let them click to view the bill on the billing page
         if (booking?.vendorBillId && booking?.paymentMethod !== 'cash' && booking?.paymentMethod !== 'pay_at_home' && booking?.paymentMethod !== 'plan_benefit') {
           return () => navigate(`/vendor/booking/${id}/billing`);
         }
 
-        if ((booking?.isSelfJob || requiresDriver === false) && currentStage === 7) {
+        if (currentStage === 7) {
           return () => navigate(`/vendor/booking/${id}/billing`);
-        }
-
-        if (!booking?.isSelfJob && requiresDriver !== false && currentStage === 7) {
-          return handleApproveWork;
         }
         return null;
       })(),
-      description: (booking?.vendorBillId && booking?.paymentMethod !== 'cash' && booking?.paymentMethod !== 'pay_at_home' && booking?.paymentMethod !== 'plan_benefit') ? 'Waiting for customer to pay online' : 'Collect cash or wait for online payment',
+      description: (booking?.vendorBillId && booking?.paymentMethod !== 'cash' && booking?.paymentMethod !== 'pay_at_home' && booking?.paymentMethod !== 'plan_benefit') ? 'Waiting for customer to pay online' : 'Collect cash with customer OTP or view bill',
     },
     {
       id: 9,
@@ -726,24 +722,24 @@ const BookingTimeline = () => {
                           }}
                         >
                           {stage.id === 3 ? 'Assign Operator' :
-                            stage.id === 4 ? (isAgriBooking ? 'Dispatch Tractor' : 'Start Journey') :
+                            stage.id === 4 ? (isAgriBooking ? (currentStage === 2 ? 'Dispatch Tractor Myself' : 'Dispatch Tractor') : 'Start Journey') :
                               stage.id === 5 ? (isAgriBooking ? 'Mark Reached Field' : 'Mark Arrived') :
                                 stage.id === 6 ? (isAgriBooking ? 'Start Field Service' : 'Mark Workdone') :
                                   stage.id === 6.5 ? (isAgriBooking ? 'Complete Service & Bill' : 'Mark Workdone') :
                                     stage.id === 7 ? (
-                                      (booking?.paymentStatus === 'SUCCESS' || booking?.paymentStatus === 'paid')
-                                        ? 'Online Payment Done'
-                                        : (booking?.vendorBillId ? 'View Bill' : 'Collect Payment')
+                                      (booking?.paymentStatus === 'SUCCESS' || booking?.paymentStatus === 'paid' || booking?.paymentStatus === 'collected_by_vendor')
+                                        ? 'Payment Done'
+                                        : (booking?.vendorBillId ? 'Collect Cash / View Bill' : 'Collect Payment')
                                     ) :
                                       stage.id === 9 ? 'Final Settlement' : 'Continue'}
                         </button>
                       )}
 
-                      {/* Online Payment Status Badge for Stage 7 */}
-                      {stage.id === 7 && (booking?.paymentStatus === 'SUCCESS' || booking?.paymentStatus === 'paid') && !isCompleted && (
+                      {/* Payment Status Badge for Stage 7 */}
+                      {stage.id === 7 && (booking?.paymentStatus === 'SUCCESS' || booking?.paymentStatus === 'paid' || booking?.paymentStatus === 'collected_by_vendor') && (
                         <div className="mt-2 flex items-center gap-1.5 text-green-600 font-bold text-xs bg-green-50 px-3 py-1.5 rounded-lg border border-green-100">
                           <FiCheckCircle className="w-4 h-4" />
-                          ONLINE PAYMENT RECEIVED
+                          {booking?.paymentStatus === 'collected_by_vendor' ? 'CASH PAYMENT COLLECTED' : 'ONLINE PAYMENT RECEIVED'}
                         </div>
                       )}
 

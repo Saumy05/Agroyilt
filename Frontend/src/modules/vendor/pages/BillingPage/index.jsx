@@ -54,7 +54,12 @@ const BillingPage = () => {
     try {
       setLoading(true);
       const bookingRes = await getBookingById(id);
-      setBooking(bookingRes.data || bookingRes);
+      const bookingData = bookingRes.data || bookingRes;
+      setBooking(bookingData);
+
+      if (bookingData.customerConfirmationOTP || bookingData.paymentOtp || ['work_done', 'awaiting_payment'].includes(bookingData.status?.toLowerCase())) {
+        setIsOtpSent(true);
+      }
 
       // Load settings from backend bill
       const billRes = await vendorBillService.getBill(id);
@@ -423,14 +428,24 @@ const BillingPage = () => {
         <div className="max-w-xl mx-auto">
           {booking.vendorBillId || booking.paymentMethod === 'cash' || booking.paymentMethod === 'pay_at_home' || booking.paymentMethod === 'plan_benefit' ? (
             isOtpSent ? (
-              <button
-                onClick={() => setShowOtpModal(true)}
-                disabled={otpLoading}
-                className="w-full py-3 bg-gradient-to-r from-emerald-600 to-green-700 hover:from-emerald-700 hover:to-green-800 text-white font-black text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-70 disabled:scale-100 cursor-pointer"
-              >
-                <FiKey className="w-3.5 h-3.5" />
-                {otpLoading ? 'Verifying OTP...' : 'Enter Customer OTP to Confirm Cash'}
-              </button>
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => setShowOtpModal(true)}
+                  disabled={otpLoading}
+                  className="w-full py-3 bg-gradient-to-r from-emerald-600 to-green-700 hover:from-emerald-700 hover:to-green-800 text-white font-black text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-70 disabled:scale-100 cursor-pointer"
+                >
+                  <FiKey className="w-3.5 h-3.5" />
+                  {otpLoading ? 'Verifying OTP...' : 'Enter Customer OTP to Confirm Cash'}
+                </button>
+                <button
+                  onClick={handleSendOTP}
+                  disabled={otpLoading}
+                  type="button"
+                  className="w-full py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-[11px] rounded-lg transition-all text-center cursor-pointer"
+                >
+                  {otpLoading ? 'Resending...' : 'Resend / Regenerate OTP to Customer'}
+                </button>
+              </div>
             ) : (
               <button
                 onClick={handleSendOTP}

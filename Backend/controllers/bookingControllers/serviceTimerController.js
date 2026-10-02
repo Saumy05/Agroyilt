@@ -247,6 +247,9 @@ const startServiceTimer = async (req, res) => {
     if (!booking.startedAt) {
       booking.startedAt = now;
     }
+    if (!booking.driver_end_otp) {
+      booking.driver_end_otp = Math.floor(1000 + Math.random() * 9000).toString();
+    }
 
     // Log action
     booking.serviceTimer.logs.push({
@@ -450,28 +453,133 @@ const endServiceTimer = async (req, res) => {
     const adminBaseCharge = booking.serviceTimer.adminBaseCharge || booking.visitingCharges || 0;
 
     const timeCharge = Math.round(totalActiveMinutes * ratePerMinute);
-    const subtotal = adminBaseCharge + timeCharge;
-    const discount = booking.discount || 0;
-    const finalPayable = Math.max(0, subtotal - discount);
+    const baseAmount = adminBaseCharge + timeCharge;
+
+    // Fetch settings for split & GST
+    const Settings = require('../../models/Settings');
+    const settings = await Settings.findOne({ type: 'global' });
+    const serviceSplitPct = settings?.rentalPayoutPercentage ?? 90;
+    const gstPct = settings?.rentalGstPercentage ?? 5;
+
+    const gstAmount = parseFloat(((baseAmount * gstPct) / 100).toFixed(2));
+    const finalAmount = parseFloat((baseAmount + gstAmount).toFixed(2));
+    const vendorEarning = parseFloat(((baseAmount * serviceSplitPct) / 100).toFixed(2));
+
+    // Generate/upsert VendorBill (single source of truth for vendor earnings)
+    const VendorBill = require('../../models/VendorBill');
+    const { BILL_STATUS, PAYMENT_STATUS } = require('../../utils/constants');
+
+    const billData = {
+      bookingId: booking._id,
+      vendorId: booking.vendorId,
+      services: [{
+        name: `${booking.serviceName || 'Tractor Service'} (${totalActiveMinutes} Mins Work, ${totalPausedMinutes} Mins Downtime Free)`,
+        price: baseAmount,
+        gstPercentage: gstPct,
+        quantity: 1,
+        gstAmount: gstAmount,
+        total: finalAmount,
+        isOriginal: true
+      }],
+      originalServiceBase: baseAmount,
+      originalGST: gstAmount,
+      totalServiceBase: baseAmount,
+      totalGST: gstAmount,
+      grandTotal: finalAmount,
+      payoutConfig: {
+        serviceSplitPercentage: serviceSplitPct,
+        serviceGstPercentage: gstPct
+      },
+      vendorServiceEarning: vendorEarning,
+      vendorTotalEarning: vendorEarning,
+      companyRevenue: parseFloat((finalAmount - vendorEarning).toFixed(2)),
+      status: BILL_STATUS.GENERATED
+    };
+
+    let vendorBill = null;
+    if (booking.vendorId) {
+      vendorBill = await VendorBill.findOneAndUpdate(
+        { bookingId: booking._id },
+        { $set: billData },
+        { upsert: true, new: true, runValidators: true }
+      );
+      booking.vendorBillId = vendorBill._id;
+    }
 
     const billingSummary = {
       totalActiveMinutes,
       totalPausedMinutes,
       adminBaseCharge,
       timeCharge,
-      subtotal,
-      discount,
-      finalPayable,
+      subtotal: baseAmount,
+      tax: gstAmount,
+      discount: booking.discount || 0,
+      finalPayable: finalAmount,
       isPartialEnd: Boolean(isPartial),
       partialEndReason: reason || (isPartial ? 'Service ended prematurely due to breakdown or early completion' : null),
       calculatedAt: now
     };
 
     booking.serviceTimer.billingSummary = billingSummary;
-    booking.finalAmount = finalPayable;
-    booking.userPayableAmount = finalPayable;
-    booking.completedAt = now;
-    booking.status = BOOKING_STATUS.COMPLETED;
+    booking.finalAmount = finalAmount;
+    booking.userPayableAmount = finalAmount;
+
+    // Payment flow separation
+    const isCashPayment = booking.paymentMethod === 'cash' || booking.paymentMethod === 'pay_at_home';
+    const isPrepaid = booking.paymentStatus === 'SUCCESS' || booking.paymentStatus === 'success' || booking.paymentStatus === 'paid' || booking.paymentStatus === 'PAID' || booking.paymentMethod === 'plan_benefit';
+
+    if (isPrepaid && !isCashPayment) {
+      booking.status = BOOKING_STATUS.COMPLETED;
+      booking.paymentStatus = PAYMENT_STATUS.SUCCESS;
+      booking.cashCollected = false;
+      booking.completedAt = now;
+
+      // Credit vendor wallet directly for online/prepaid
+      if (booking.vendorId) {
+        const Vendor = require('../../models/Vendor');
+        const Transaction = require('../../models/Transaction');
+        await Vendor.findByIdAndUpdate(booking.vendorId, {
+          $inc: { 'wallet.earnings': vendorEarning }
+        });
+        await Transaction.create({
+          vendorId: booking.vendorId,
+          bookingId: booking._id,
+          type: 'earnings_credit',
+          amount: vendorEarning,
+          status: 'completed',
+          paymentMethod: 'wallet',
+          description: `Earnings ₹${vendorEarning} credited for service #${booking.bookingNumber || booking._id}.`,
+          metadata: { type: 'agriculture_timer', billId: vendorBill?._id?.toString() }
+        });
+      }
+    } else {
+      // Cash / Pay at field / Pending
+      booking.status = BOOKING_STATUS.WORK_DONE;
+      booking.paymentStatus = PAYMENT_STATUS.PENDING;
+      booking.cashCollected = false;
+
+      // Generate payment OTP for cash collection
+      const payOtp = Math.floor(1000 + Math.random() * 9000).toString();
+      booking.paymentOtp = payOtp;
+      booking.customerConfirmationOTP = payOtp;
+
+      const { createNotification } = require('../notificationControllers/notificationController');
+      await createNotification({
+        userId: booking.userId,
+        type: 'work_completed',
+        title: 'Work Completed & Bill Ready',
+        message: `Your equipment service has ended. Total Bill: ₹${finalAmount}. Payment OTP: ${payOtp}. Share this OTP with the operator to confirm cash payment.`,
+        relatedId: booking._id,
+        relatedType: 'booking',
+        priority: 'high',
+        pushData: {
+          type: 'work_done',
+          bookingId: booking._id.toString(),
+          paymentOtp: payOtp,
+          link: `/user/booking/${booking._id}`
+        }
+      });
+    }
 
     booking.serviceTimer.logs.push({
       action: isPartial ? 'PARTIAL_END' : 'END',
@@ -487,15 +595,26 @@ const endServiceTimer = async (req, res) => {
     await booking.save();
     broadcastTimerUpdate(booking, isPartial ? 'PARTIAL_END' : 'END', {
       performedBy: role,
-      billingSummary
+      billingSummary,
+      status: booking.status,
+      paymentStatus: booking.paymentStatus,
+      paymentOtp: booking.paymentOtp,
+      customerConfirmationOTP: booking.customerConfirmationOTP,
+      vendorBillId: vendorBill?._id
     });
 
     res.status(200).json({
       success: true,
       message: isPartial ? 'Service ended with partial bill' : 'Service completed successfully',
       data: {
+        bookingId: booking._id,
+        status: booking.status,
+        paymentStatus: booking.paymentStatus,
+        paymentOtp: booking.paymentOtp,
+        customerConfirmationOTP: booking.customerConfirmationOTP,
         serviceTimer: booking.serviceTimer,
-        billingSummary
+        billingSummary,
+        vendorBillId: vendorBill?._id
       }
     });
   } catch (error) {

@@ -499,7 +499,7 @@ const bookingSchema = new mongoose.Schema({
   serviceTimer: {
     status: {
       type: String,
-      enum: ['NOT_STARTED', 'RUNNING', 'PAUSED', 'COMPLETED'],
+      enum: ['NOT_STARTED', 'RUNNING', 'PAUSED', 'COMPLETED', 'CANCELLED', 'STOPPED'],
       default: 'NOT_STARTED',
       index: true
     },

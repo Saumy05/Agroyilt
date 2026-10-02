@@ -187,15 +187,16 @@ const BookingDetails = () => {
 
   const socket = useAppNotifications();
 
-  const isBookingCompleted = ['completed', 'work_done'].includes(booking?.status?.toLowerCase());
-  const showCompletionExit = Boolean(isBookingCompleted && !isFromHistory && !stayOnPage);
+  const isPaid = ['success', 'paid', 'collected_by_vendor'].includes(booking?.paymentStatus?.toLowerCase());
+  const isBookingCompleted = booking?.status?.toLowerCase() === 'completed';
+  const showCompletionExit = Boolean(isBookingCompleted && isPaid && !isFromHistory && !stayOnPage);
 
   const isAgri = ['agriculture', 'agri', 'equipment', 'machinery', 'tractor'].includes(booking?.serviceCategory?.toLowerCase()) ||
     ['agriculture', 'agri', 'equipment', 'machinery', 'tractor'].includes(booking?.categoryTitle?.toLowerCase()) ||
     booking?.providerType === 'MACHINERY' ||
     Boolean(booking?.equipmentId);
 
-  // Auto-redirect timer when work is completed in active live flow
+  // Auto-redirect timer when work is completed and paid in active live flow
   useEffect(() => {
     if (!showCompletionExit) return;
 
@@ -483,7 +484,7 @@ const BookingDetails = () => {
             razorpay_payment_id: response.razorpay_payment_id,
             razorpay_signature: response.razorpay_signature
           });
-          toast.dismiss();
+          toastManager.dismiss();
 
           if (verifyResponse.success) {
             toastManager.success('Payment successful!');
@@ -511,7 +512,7 @@ const BookingDetails = () => {
       setPaying(true);
       toastManager.info('Creating payment order...');
       const orderResponse = await paymentService.createOrder(booking._id || booking.id);
-      toast.dismiss();
+      toastManager.dismiss();
 
       if (!orderResponse.success) {
         toastManager.error(orderResponse.message || 'Failed to create payment order');
@@ -533,7 +534,7 @@ const BookingDetails = () => {
             razorpay_payment_id: response.razorpay_payment_id,
             razorpay_signature: response.razorpay_signature
           });
-          toast.dismiss();
+          toastManager.dismiss();
 
           if (verifyResponse.success) {
             toastManager.success('Payment successful!');
@@ -561,7 +562,7 @@ const BookingDetails = () => {
       const razorpay = new window.Razorpay(options);
       razorpay.open();
     } catch (error) {
-      toast.dismiss();
+      toastManager.dismiss();
       toastManager.error('Failed to process payment');
       setPaying(false);
     }
@@ -571,21 +572,22 @@ const BookingDetails = () => {
     try {
       toastManager.info('Confirming request...');
       let response;
-      if (booking.workerId && !booking.vendorId) {
+      const isWorkDoneOrDone = ['work_done', 'awaiting_payment', 'completed'].includes(booking?.status?.toLowerCase()) || Boolean(booking?.finalAmount);
+      if (isWorkDoneOrDone || (booking.workerId && !booking.vendorId)) {
         response = await bookingService.selectOfflinePayment(booking._id || booking.id);
       } else {
         response = await paymentService.confirmPayAtHome(booking._id || booking.id);
       }
-      toast.dismiss();
+      toastManager.dismiss();
 
       if (response.success) {
-        toastManager.success('Offline payment selected! Provide the OTP to the worker.');
+        toastManager.success('Offline payment selected! Provide the OTP to complete cash payment.');
         loadBooking();
       } else {
         toastManager.error(response.message || 'Failed to confirm booking');
       }
     } catch (error) {
-      toast.dismiss();
+      toastManager.dismiss();
       toastManager.error('Failed to process request');
     }
   };
@@ -1298,20 +1300,20 @@ const BookingDetails = () => {
                 </div>
 
                 {/* Action Button for Online Payment - Only show if not paid */}
-                {booking.paymentStatus !== 'success' && (
+                {!isPaid && (
                   <>
                     <button
                       onClick={(e) => { e.stopPropagation(); setShowPaymentModal(true); }}
-                      className="w-full py-4 mb-4 bg-white text-orange-600 rounded-2xl font-black text-sm shadow-xl hover:bg-orange-50 active:scale-95 transition-all flex items-center justify-center gap-2 group"
+                      className="w-full py-4 mb-4 bg-white text-orange-600 rounded-2xl font-black text-sm shadow-xl hover:bg-orange-50 active:scale-95 transition-all flex items-center justify-center gap-2 group cursor-pointer"
                     >
                       <FaRupeeSign className="w-3.5 h-3.5 group-hover:rotate-12 transition-transform" />
                       Pay Now
                       <FiChevronRight className="w-4 h-4" />
                     </button>
 
-                    { booking.status?.toLowerCase() !== 'completed' && (booking.customerConfirmationOTP || booking.paymentOtp) && (
+                    {(booking.customerConfirmationOTP || booking.paymentOtp) && (
                       <div className="flex flex-col items-center mb-6">
-                        <p className="text-[10px] font-bold text-orange-100 uppercase tracking-[0.2em] mb-3 opacity-90">Verification Code</p>
+                        <p className="text-[10px] font-bold text-orange-100 uppercase tracking-[0.2em] mb-3 opacity-90">Cash Payment Verification Code</p>
                         <div className="flex justify-center gap-2">
                           {String(booking.customerConfirmationOTP || booking.paymentOtp || '0000').split('').map((digit, idx) => (
                             <div
@@ -1323,7 +1325,7 @@ const BookingDetails = () => {
                           ))}
                         </div>
                         <p className="text-[10px] text-orange-50 mt-3 font-medium bg-black/10 px-3 py-1 rounded-full backdrop-blur-sm">
-                          Share this code with the professional ONLY after your satisfaction
+                          Share this code with the operator / vendor ONLY when paying cash
                         </p>
                       </div>
                     )}
@@ -2141,10 +2143,10 @@ const BookingDetails = () => {
                 </button>
               </div>
               
-              {/* Show OTP for Independent Worker Offline Payment */}
-              {booking.paymentMethod === 'cash' && (booking.customerConfirmationOTP || booking.paymentOtp) && (
+              {/* Show OTP for Offline Payment */}
+              {(booking.paymentMethod === 'cash' || booking.paymentMethod === 'pay_at_home' || booking.status === 'awaiting_payment' || booking.status === 'work_done') && (booking.customerConfirmationOTP || booking.paymentOtp) && (
                 <div className="mt-4 p-4 bg-teal-50 border border-teal-200 rounded-2xl text-center">
-                   <p className="text-sm font-bold text-teal-800 mb-2">Share this OTP with the worker to confirm cash payment</p>
+                   <p className="text-sm font-bold text-teal-800 mb-2">Share this OTP with the operator / vendor to confirm cash payment</p>
                    <div className="text-3xl tracking-[0.5em] font-black text-teal-600">{booking.customerConfirmationOTP || booking.paymentOtp}</div>
                 </div>
               )}

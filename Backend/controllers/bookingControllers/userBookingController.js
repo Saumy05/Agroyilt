@@ -1639,6 +1639,49 @@ const cancelBooking = async (req, res) => {
       console.warn('[cancelBooking] Error syncing worker cancellation (non-fatal):', workerSyncErr.message);
     }
 
+    // Sync Vendor cancellation, timer cleanup & availability
+    if (booking.vendorId) {
+      try {
+        await Vendor.findByIdAndUpdate(booking.vendorId, { availability: 'AVAILABLE' });
+        
+        // Stop any active service timers for this booking
+        if (booking.serviceTimer && ['RUNNING', 'PAUSED'].includes(booking.serviceTimer.status)) {
+          booking.serviceTimer.status = 'STOPPED';
+          booking.serviceTimer.stoppedAt = new Date();
+          await booking.save();
+        }
+
+        await createNotification({
+          vendorId: booking.vendorId,
+          type: 'booking_cancelled',
+          title: '❌ Booking Cancelled',
+          message: `Booking #${booking.bookingNumber} (${booking.serviceName || 'Service'}) has been cancelled by the customer.`,
+          relatedId: booking._id,
+          relatedType: 'booking',
+          pushData: {
+            type: 'booking_cancelled',
+            bookingId: booking._id.toString(),
+            link: `/vendor/bookings`
+          }
+        });
+
+        const io = req.app?.get ? req.app.get('io') : (global.io || null);
+        if (io) {
+          const vPayload = {
+            bookingId: booking._id.toString(),
+            bookingNumber: booking.bookingNumber,
+            serviceName: booking.serviceName,
+            message: `Booking #${booking.bookingNumber} has been cancelled by the customer.`
+          };
+          io.to(`vendor_${booking.vendorId}`).emit('vendor_booking_cancelled', vPayload);
+          io.to(`vendor_${booking.vendorId}`).emit('booking_cancelled', vPayload);
+          io.to(`booking_${booking._id}`).emit('booking_cancelled', vPayload);
+        }
+      } catch (vErr) {
+        console.warn('[cancelBooking] Error syncing vendor cancellation (non-fatal):', vErr.message);
+      }
+    }
+
     res.status(200).json({
       success: true,
       message: refundMessage || 'Booking cancelled successfully',
@@ -2547,19 +2590,50 @@ const farmerSelectOfflinePayment = async (req, res) => {
 
     await booking.save();
 
-    // Notify Worker that Farmer selected offline payment and to collect cash
-    await createNotification({
-      workerId: booking.workerId,
-      type: 'payment_received', // Repurposing or a custom one
-      title: 'Collect Cash',
-      message: `Farmer selected offline payment. Please collect ₹${booking.finalAmount} and enter the OTP provided by the Farmer.`,
-      relatedId: booking._id,
-      relatedType: 'booking',
-      pushData: {
-        type: 'offline_payment_selected',
-        bookingId: booking._id.toString()
-      }
-    });
+    // Notify Worker or Vendor that Farmer selected offline payment and to collect cash
+    if (booking.workerId) {
+      await createNotification({
+        workerId: booking.workerId,
+        type: 'payment_received',
+        title: 'Collect Cash',
+        message: `Farmer selected offline payment. Please collect ₹${booking.finalAmount} and enter the OTP provided by the Farmer.`,
+        relatedId: booking._id,
+        relatedType: 'booking',
+        pushData: {
+          type: 'offline_payment_selected',
+          bookingId: booking._id.toString()
+        }
+      });
+    }
+
+    if (booking.vendorId) {
+      await createNotification({
+        vendorId: booking.vendorId,
+        type: 'payment_received',
+        title: 'Collect Cash',
+        message: `Farmer selected offline payment. Please collect ₹${booking.finalAmount} and enter the OTP (${payOtp}) provided by the Farmer.`,
+        relatedId: booking._id,
+        relatedType: 'booking',
+        pushData: {
+          type: 'offline_payment_selected',
+          bookingId: booking._id.toString()
+        }
+      });
+    }
+
+    const io = req.app.get('io') || global.io;
+    if (io) {
+      const payload = {
+        bookingId: booking._id.toString(),
+        status: booking.status,
+        paymentMethod: 'cash',
+        amount: booking.finalAmount,
+        paymentOtp: payOtp
+      };
+      if (booking.workerId) io.to(`worker_${booking.workerId}`).emit('offline_payment_selected', payload);
+      if (booking.vendorId) io.to(`vendor_${booking.vendorId}`).emit('offline_payment_selected', payload);
+      io.to(`booking_${booking._id}`).emit('payment_pending', payload);
+    }
 
     res.status(200).json({
       success: true,
