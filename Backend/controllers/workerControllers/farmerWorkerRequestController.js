@@ -1002,482 +1002,499 @@ exports.createFarmerRequest = async (req, res) => {
 
 // â”€â”€â”€ Dispatch to Independent Workers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+
+// ════════════════════════════════════════════════════════════════════════════
+// SMART DISPATCH ENGINE — Implements A1, A2, A3, A4, A7
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * A3: Compute LIVE available member count for a team leader on a given date range.
+ * "Available" means the member has no active assignment on that date.
+ * @returns {Promise<number>} — count of available members (NOT including the leader themselves)
+ */
+async function getLiveTeamCapacity(leaderId, bookingType, schedule) {
+  try {
+    const leader = await Worker.findById(leaderId).select('teamId').lean();
+    if (!leader?.teamId) return 0;
+
+    // All members of this team (excluding leader)
+    const members = await Worker.find({
+      teamId:   leader.teamId,
+      _id:      { $ne: leaderId },
+      isActive: { $ne: false }
+    }).select('_id').lean();
+
+    if (!members.length) return 0;
+    const memberIds = members.map(m => m._id);
+    const busySet = new Set();
+
+    if (bookingType === 'DAILY') {
+      const { startDate, endDate } = schedule;
+      const busyRequests = await WorkerBookingRequest.find({
+        bookingType: 'DAILY',
+        startDate:   { $lte: new Date(endDate) },
+        endDate:     { $gte: new Date(startDate) },
+        status:      { $in: ['confirmed', 'in_progress', 'pending', 'awaiting_farmer_confirmation'] },
+        $or: [
+          { selectedWorkerIds: { $in: memberIds } },
+          { finalWorkers:      { $in: memberIds } },
+          { dispatchedTo: { $elemMatch: { workerId: { $in: memberIds }, status: 'accepted' } } }
+        ]
+      }).select('selectedWorkerIds finalWorkers dispatchedTo').lean();
+
+      for (const r of busyRequests) {
+        for (const id of (r.selectedWorkerIds || [])) busySet.add(id.toString());
+        for (const id of (r.finalWorkers      || [])) busySet.add(id.toString());
+        for (const d  of (r.dispatchedTo      || [])) {
+          if (d.status === 'accepted') busySet.add(d.workerId.toString());
+        }
+      }
+    } else {
+      // HOURLY — individual time-conflict check per member
+      const { scheduledDate, startTime, endTime } = schedule;
+      for (const m of members) {
+        const conflict = await hasTimeConflict(m._id, scheduledDate, startTime, endTime);
+        if (conflict) busySet.add(m._id.toString());
+      }
+    }
+
+    return Math.max(0, members.length - busySet.size);
+  } catch (err) {
+    console.error('[getLiveTeamCapacity]', err);
+    return 0;
+  }
+}
+
+/**
+ * Build a MongoDB query for Workers matching required skills.
+ */
+function buildSkillQuery(requiredSkills, extra = {}) {
+  const base = {
+    $or: [
+      { approvalStatus: { $in: ['approved', 'APPROVED', 'pending', 'PENDING'] } },
+      { approvalStatus: { $exists: false } }
+    ],
+    isActive: { $ne: false },
+    ...extra
+  };
+
+  if (!requiredSkills || !requiredSkills.length) return base;
+
+  const regex = requiredSkills.map(s => new RegExp(`^${s}$`, 'i'));
+  const words = requiredSkills
+    .flatMap(s => (typeof s === 'string' ? s.split(/[\s,]+/) : []))
+    .filter(w => w && w.length > 2);
+  words.forEach(w => regex.push(new RegExp(w, 'i')));
+
+  return {
+    ...base,
+    $and: [{
+      $or: [
+        { skills:             { $in: regex } },
+        { primaryService:     { $in: regex } },
+        { serviceCategory:    { $in: regex } },
+        { serviceCategories:  { $in: regex } }
+      ]
+    }]
+  };
+}
+
+/**
+ * A2: Sort workers into 3 distance waves.
+ * Wave 0: 0-5 km, Wave 1: 5-15 km, Wave 2: 15+ km
+ */
+function sortIntoWaves(workers, farmLat, farmLng) {
+  if (farmLat === undefined || farmLng === undefined ||
+      isNaN(Number(farmLat)) || isNaN(Number(farmLng))) {
+    return [workers, [], []]; // No location — all in one wave
+  }
+
+  const wave0 = [], wave1 = [], wave2 = [];
+  for (const w of workers) {
+    const lat = Number(w.location?.lat);
+    const lng = Number(w.location?.lng);
+    if (isNaN(lat) || isNaN(lng)) {
+      wave1.push(w); // No coords — mid bucket
+      continue;
+    }
+    const dist = calculateDistance({ lat: Number(farmLat), lng: Number(farmLng) }, { lat, lng });
+    w._distKm = dist;
+    if      (dist <=  5) wave0.push(w);
+    else if (dist <= 15) wave1.push(w);
+    else                  wave2.push(w);
+  }
+
+  wave0.sort((a, b) => (a._distKm || 0) - (b._distKm || 0));
+  wave1.sort((a, b) => (a._distKm || 0) - (b._distKm || 0));
+  wave2.sort((a, b) => (a._distKm || 0) - (b._distKm || 0));
+  return [wave0, wave1, wave2];
+}
+
+/**
+ * Persist a dispatch wave to DB + fire FCM/socket notifications.
+ * @param {Object}  request
+ * @param {Array}   workers
+ * @param {string}  farmerName
+ * @param {boolean} isSubsequentWave — if true, appends to existing dispatchedTo
+ */
+async function dispatchWave(request, workers, farmerName, isSubsequentWave = false) {
+  if (!workers.length) return;
+
+  const newEntries = workers.map(w => ({ workerId: w._id, status: 'pending' }));
+
+  if (isSubsequentWave) {
+    await WorkerBookingRequest.findByIdAndUpdate(request._id, {
+      $push: { dispatchedTo: { $each: newEntries } },
+      $inc:  { dispatchedWorkersCount: workers.length, eligibleWorkersCount: workers.length }
+    });
+  } else {
+    await WorkerBookingRequest.findByIdAndUpdate(request._id, {
+      $set: {
+        eligibleWorkersCount:   workers.length,
+        dispatchedWorkersCount: workers.length,
+        dispatchedTo:           newEntries,
+        status:                 'pending'
+      }
+    });
+  }
+
+  // Build notification payload
+  const notifData = {
+    requestId:        request._id,
+    _id:              request._id,
+    farmerId:         request.farmerId,
+    farmerName,
+    workTitle:        request.workTitle,
+    workCategory:     request.workCategory,
+    workDescription:  request.workDescription,
+    requiredSkills:   request.requiredSkills,
+    requiredWorkers:  request.requiredWorkers,
+    location:         request.location,
+    rateUnit:         request.rateUnit,
+    isFarmerBroadcast: true
+  };
+
+  if (request.bookingType === 'DAILY') {
+    Object.assign(notifData, {
+      bookingType:  'DAILY',
+      startDate:    request.startDate,
+      endDate:      request.endDate,
+      numberOfDays: request.numberOfDays,
+      minRate:      request.minDailyRate,
+      maxRate:      request.maxDailyRate
+    });
+  } else {
+    Object.assign(notifData, {
+      scheduledDate:     request.scheduledDate,
+      startTime:         request.startTime,
+      endTime:           request.endTime,
+      minRate:           request.minRate,
+      maxRate:           request.maxRate,
+      farmerOfferedRate: request.farmerOfferedRate || request.minRate
+    });
+  }
+
+  for (const w of workers) {
+    const isLeader = ['TEAM_LEADER', 'team_leader', 'LEADER', 'leader'].includes(w.workerType);
+    await notify({
+      recipientType: 'worker',
+      recipientId:   w._id,
+      type:          isLeader ? 'group_booking_request' : 'worker_booking_request',
+      title:         isLeader ? '🌾 New Group Work Request' : '🌾 New Work Request',
+      message:       `A farmer needs ${request.requiredWorkers} worker(s) for ${request.workTitle}`,
+      relatedId:     request._id,
+      relatedType:   'WorkerBookingRequest',
+      data:          notifData
+    });
+  }
+}
+
+/**
+ * A7: After delayMs, if no Team Leader has accepted, auto-fall back to independent worker pool.
+ */
+async function scheduleTeamLeaderFallback(request, normalSkills, radiusKm, delayMs = 30 * 60 * 1000) {
+  setTimeout(async () => {
+    try {
+      const fresh = await WorkerBookingRequest.findById(request._id).lean();
+      if (!fresh) return;
+
+      const terminalStatuses = ['accepted', 'awaiting_farmer_confirmation', 'confirmed', 'cancelled', 'expired', 'rejected', 'completed'];
+      if (terminalStatuses.includes(fresh.status)) return;
+
+      const anyAccepted = (fresh.dispatchedTo || []).some(d => d.status === 'accepted');
+      if (anyAccepted) return;
+
+      console.log(`[FALLBACK A7] No TL accepted request ${request._id} after ${delayMs / 60000}min — re-dispatching to independent workers.`);
+
+      await WorkerBookingRequest.findByIdAndUpdate(request._id, {
+        bookingMode:  'INDEPENDENT_WORKERS',
+        requestType:  'independent_broadcast',
+        dispatchedTo: [],
+        status:       'matching'
+      });
+
+      const updatedReq = await WorkerBookingRequest.findById(request._id);
+      if (!updatedReq) return;
+
+      if (updatedReq.bookingType === 'DAILY') {
+        await dispatchToIndependentWorkersForDaily({
+          request: updatedReq, requiredSkills: normalSkills,
+          startDate: updatedReq.startDate, endDate: updatedReq.endDate,
+          workerLocation: updatedReq.location, radiusKm
+        });
+      } else {
+        await dispatchToIndependentWorkers({
+          request: updatedReq, requiredSkills: normalSkills,
+          scheduledDate: updatedReq.scheduledDate,
+          startTime: updatedReq.startTime, endTime: updatedReq.endTime,
+          workerLocation: updatedReq.location, radiusKm
+        });
+      }
+    } catch (err) {
+      console.error('[scheduleTeamLeaderFallback ERROR]', err);
+    }
+  }, delayMs);
+}
+
+// ─── A1+A2: Dispatch to Independent Workers (HOURLY) ──────────────────────────
 async function dispatchToIndependentWorkers({
   request, requiredSkills, scheduledDate, startTime, endTime,
   workerLocation, radiusKm
 }) {
   try {
-    // Expiry guard: do not dispatch if request already passed its window
     if (isBookingExpired(request).isExpired) {
       console.log(`[DISPATCH CANCELLED] Request ${request._id} has already expired.`);
       await expireWorkerBookingRequest(request, 'Expired before worker dispatch');
       return;
     }
 
-    // Base query for active workers: broad to avoid excluding workers due to case or status flags
-    const baseQuery = {
-      $or: [
-        { approvalStatus: { $in: ['approved', 'APPROVED', 'pending', 'PENDING'] } },
-        { approvalStatus: { $exists: false } }
-      ],
-      isActive: { $ne: false }
-    };
+    // A1: Equal pool — all active workers + free Team Leaders (no workerType filter)
+    let candidates = await Worker.find(buildSkillQuery(requiredSkills))
+      .select('_id name workerType skills primaryService serviceCategory serviceCategories location address status fcmTokens approvalStatus isActive teamId')
+      .lean();
 
-    // Total active workers in DB
-    const allWorkers = await Worker.find({ isActive: { $ne: false } }).lean();
-    console.log(`[DISPATCH] Total active workers in DB: ${allWorkers.length}`);
-
-    let candidates = [];
-
-    // 1. Skill & Category filtering: Match exact string OR words in skills / services
-    if (requiredSkills && requiredSkills.length > 0) {
-      const regexConditions = requiredSkills.map(s => new RegExp(`^${s}$`, 'i'));
-      
-      const words = requiredSkills
-        .flatMap(s => (typeof s === 'string' ? s.split(/[\s,]+/) : []))
-        .filter(w => w && w.length > 2);
-        
-      words.forEach(w => regexConditions.push(new RegExp(w, 'i')));
-      
-      const skillQuery = {
-        ...baseQuery,
-        $or: [
-          { skills: { $in: regexConditions } },
-          { primaryService: { $in: regexConditions } },
-          { serviceCategory: { $in: regexConditions } },
-          { serviceCategories: { $in: regexConditions } }
-        ]
-      };
-
-      candidates = await Worker.find(skillQuery)
-        .select('_id name skills primaryService serviceCategory serviceCategories location address status fcmTokens approvalStatus isActive')
+    if (!candidates.length) {
+      candidates = await Worker.find({ isActive: { $ne: false } })
+        .select('_id name workerType skills primaryService serviceCategory serviceCategories location address status fcmTokens approvalStatus isActive teamId')
         .lean();
     }
 
-    // 2. Fallback: If no workers match specific skills, broaden to all active workers
-    if (!candidates || candidates.length === 0) {
-      console.log('[DISPATCH] Broadening to all active workers in DB.');
-      candidates = await Worker.find(baseQuery)
-        .select('_id name skills primaryService serviceCategory serviceCategories location address status fcmTokens approvalStatus isActive')
-        .lean();
-    }
-
-    // 3. Fallback: If still empty, grab any worker in the DB
-    if (!candidates || candidates.length === 0) {
-      candidates = allWorkers;
-    }
-
-    console.log(`[DISPATCH] Candidate workers matching criteria: ${candidates.length}`);
-
-    // Filter by radius (Haversine, server-side)
-    const farmLat = workerLocation?.lat;
-    const farmLng = workerLocation?.lng;
-
-    let eligible = candidates;
-
-    if (farmLat !== undefined && farmLng !== undefined &&
-        !isNaN(Number(farmLat)) && !isNaN(Number(farmLng))) {
-      const radiusFiltered = candidates.filter(w => {
-        // If worker has no coords, fallback to city matching if available
-        if (!w.location?.lat || !w.location?.lng || isNaN(Number(w.location.lat)) || isNaN(Number(w.location.lng))) {
-          if (w.address && request.location?.city) {
-            const reqCity = request.location.city.trim().toLowerCase();
-            const wCity = (w.address.city || '').trim().toLowerCase();
-            const wFull = (w.address.fullAddress || '').toLowerCase();
-            
-            const match = wCity === reqCity || wCity.includes(reqCity) || wFull.includes(reqCity);
-            return match;
-          }
-          return true; // No coordinates/city info -> allow
-        }
-        const dist = calculateDistance(
-          { lat: Number(farmLat), lng: Number(farmLng) },
-          { lat: Number(w.location.lat), lng: Number(w.location.lng) }
-        );
-        const withinRadius = dist <= radiusKm;
-        return withinRadius;
-      });
-
-      if (radiusFiltered.length >= (request.requiredWorkers || 1)) {
-        eligible = radiusFiltered;
-      } else if (radiusFiltered.length > 0) {
-        // Radius returned fewer workers than requested by farmer.
-        // Supplement with closest remaining candidate workers so farmer's multi-worker request can be fulfilled.
-        const remaining = candidates.filter(c => !radiusFiltered.some(r => r._id.toString() === c._id.toString()));
-        remaining.sort((a, b) => {
-          const distA = (a.location?.lat && a.location?.lng)
-            ? calculateDistance({ lat: Number(farmLat), lng: Number(farmLng) }, { lat: Number(a.location.lat), lng: Number(a.location.lng) })
-            : 9999;
-          const distB = (b.location?.lat && b.location?.lng)
-            ? calculateDistance({ lat: Number(farmLat), lng: Number(farmLng) }, { lat: Number(b.location.lat), lng: Number(b.location.lng) })
-            : 9999;
-          return distA - distB;
-        });
-        eligible = [...radiusFiltered, ...remaining];
-      } else {
-        console.log(`[DISPATCH] 0 workers strictly within ${radiusKm}km radius. Falling back to all candidate workers.`);
-        eligible = candidates;
-      }
-    }
-
-    // ── Pre-Dispatch Conflict Check (Per-Worker Independent Evaluation) ─────
-    const finalWorkers = [];
-    const reqDateDisplay = getCalendarDateStrings(scheduledDate)[0] || String(scheduledDate);
-
-    for (const w of eligible) {
+    // Filter by HOURLY time conflict
+    const available = [];
+    for (const w of candidates) {
       try {
         const conflict = await hasTimeConflict(w._id, scheduledDate, startTime, endTime, request._id);
-        if (conflict) {
-          console.log(`[DISPATCH] Worker: ${w._id} (${w.name || 'N/A'}) | Requested: ${reqDateDisplay} ${startTime}-${endTime} | Conflict: true | Action: SKIPPED`);
-        } else {
-          console.log(`[DISPATCH] Worker: ${w._id} (${w.name || 'N/A'}) | Requested: ${reqDateDisplay} ${startTime}-${endTime} | Conflict: false | Action: DISPATCHED`);
-          finalWorkers.push(w);
-        }
-      } catch (checkErr) {
-        console.error(`[DISPATCH ERROR] Could not evaluate availability for worker ${w._id} (${w.name || 'N/A'}): ${checkErr.message} | Action: SKIPPED (Safety)`);
-      }
+        if (!conflict) available.push(w);
+      } catch (_) {}
     }
 
-    console.log(`[DISPATCH] Eligible candidates: ${eligible.length} | Available (no conflict): ${finalWorkers.length}`);
-
-    const dispatchedTo = finalWorkers.map(w => ({
-      workerId: w._id,
-      status:   'pending'
-    }));
-
-    // Update request with dispatch info
-    await WorkerBookingRequest.findByIdAndUpdate(request._id, {
-      eligibleWorkersCount:   finalWorkers.length,
-      dispatchedWorkersCount: finalWorkers.length,
-      dispatchedTo,
-      status: 'pending'
-    });
-
-    // Populate farmer details if available
     let farmerName = 'Farmer';
     try {
-      if (request.farmerId) {
-        const farmerDoc = await User.findById(request.farmerId).select('name phone').lean();
-        if (farmerDoc?.name) farmerName = farmerDoc.name;
-      }
-    } catch (e) {
-      console.warn('[DISPATCH] Could not fetch farmer name:', e.message);
+      const f = await User.findById(request.farmerId).select('name').lean();
+      if (f?.name) farmerName = f.name;
+    } catch (_) {}
+
+    // A2: Wave-wise dispatch by proximity
+    const [wave0, wave1, wave2] = sortIntoWaves(available, workerLocation?.lat, workerLocation?.lng);
+    console.log(`[HOURLY DISPATCH] Wave0(0-5km): ${wave0.length} | Wave1(5-15km): ${wave1.length} | Wave2(15km+): ${wave2.length}`);
+
+    // Dispatch wave 0 immediately (or fallback to next if empty)
+    const firstWave = wave0.length ? wave0 : wave1.length ? wave1 : wave2;
+    await dispatchWave(request, firstWave, farmerName, false);
+
+    // Wave 1 after 10 minutes (only if wave0 ran first)
+    if (wave0.length && wave1.length) {
+      setTimeout(async () => {
+        const fresh = await WorkerBookingRequest.findById(request._id).lean();
+        if (!fresh || ['confirmed', 'awaiting_farmer_confirmation', 'cancelled', 'expired', 'rejected'].includes(fresh.status)) return;
+        if ((fresh.dispatchedTo || []).filter(d => d.status === 'accepted').length >= request.requiredWorkers) return;
+        console.log(`[HOURLY DISPATCH] Wave1 — dispatching ${wave1.length} more for request ${request._id}`);
+        await dispatchWave(request, wave1, farmerName, true);
+      }, 10 * 60 * 1000);
     }
 
-    // Notify each worker via socket + notification
-    for (const w of finalWorkers) {
-      console.log(`[DISPATCH] Notifying worker ${w.name || w._id} (${w._id}) for request ${request._id}`);
-      await notify({
-        recipientType: 'worker',
-        recipientId:   w._id,
-        type:          'worker_booking_request',
-        title:         '🌾 New Work Request',
-        message:       `A farmer needs ${request.requiredWorkers} worker(s) for ${request.workTitle}`,
-        relatedId:     request._id,
-        relatedType:   'WorkerBookingRequest',
-        data: {
-          requestId:       request._id,
-          _id:             request._id,
-          farmerId:        request.farmerId,
-          farmerName:      farmerName,
-          workTitle:       request.workTitle,
-          workCategory:    request.workCategory,
-          workDescription: request.workDescription,
-          requiredSkills:  request.requiredSkills,
-          requiredWorkers: request.requiredWorkers,
-          scheduledDate:   request.scheduledDate,
-          startTime:       request.startTime,
-          endTime:         request.endTime,
-          location:        request.location,
-          minRate:         request.minRate,
-          maxRate:         request.maxRate,
-          farmerOfferedRate: request.farmerOfferedRate || request.minRate,
-          rateUnit:        request.rateUnit,
-          isFarmerBroadcast: true
-        }
-      });
+    // Wave 2 after 20 minutes
+    if (wave2.length && (wave0.length || wave1.length)) {
+      setTimeout(async () => {
+        const fresh = await WorkerBookingRequest.findById(request._id).lean();
+        if (!fresh || ['confirmed', 'awaiting_farmer_confirmation', 'cancelled', 'expired', 'rejected'].includes(fresh.status)) return;
+        if ((fresh.dispatchedTo || []).filter(d => d.status === 'accepted').length >= request.requiredWorkers) return;
+        console.log(`[HOURLY DISPATCH] Wave2 — dispatching ${wave2.length} more for request ${request._id}`);
+        await dispatchWave(request, wave2, farmerName, true);
+      }, 20 * 60 * 1000);
     }
+
   } catch (err) {
     console.error('[dispatchToIndependentWorkers]', err);
-    // Don't throw — keep request alive, just no dispatches
     await WorkerBookingRequest.findByIdAndUpdate(request._id, { status: 'pending' });
   }
 }
 
-// --- Dispatch to Independent Workers (DAILY) ---------------------------------
-
+// ─── A1+A2: Dispatch to Independent Workers (DAILY) ───────────────────────────
 async function dispatchToIndependentWorkersForDaily({
   request, requiredSkills, startDate, endDate, workerLocation, radiusKm
 }) {
   try {
-    // Expiry guard: do not dispatch if request already passed its window
     if (isBookingExpired(request).isExpired) {
       console.log(`[DISPATCH CANCELLED] DAILY Request ${request._id} has already expired.`);
       await expireWorkerBookingRequest(request, 'Expired before worker dispatch');
       return;
     }
 
-    const baseQuery = {
-      $or: [
-        { approvalStatus: { $in: ['approved', 'APPROVED', 'pending', 'PENDING'] } },
-        { approvalStatus: { $exists: false } }
-      ],
-      isActive: { $ne: false }
-    };
+    // A1: Equal pool
+    let candidates = await Worker.find(buildSkillQuery(requiredSkills))
+      .select('_id name workerType skills primaryService serviceCategory serviceCategories location address status fcmTokens approvalStatus isActive teamId')
+      .lean();
 
-    let candidates = [];
-    if (requiredSkills && requiredSkills.length > 0) {
-      const regexConditions = requiredSkills.map(s => new RegExp(`^${s}$`, 'i'));
-      const words = requiredSkills
-        .flatMap(s => (typeof s === 'string' ? s.split(/[\s,]+/) : []))
-        .filter(w => w && w.length > 2);
-      words.forEach(w => regexConditions.push(new RegExp(w, 'i')));
-
-      candidates = await Worker.find({
-        ...baseQuery,
-        $or: [
-          { skills: { $in: regexConditions } },
-          { primaryService: { $in: regexConditions } },
-          { serviceCategory: { $in: regexConditions } },
-          { serviceCategories: { $in: regexConditions } }
-        ]
-      }).select('_id name skills primaryService serviceCategory serviceCategories location address status fcmTokens approvalStatus isActive').lean();
-    }
-
-    if (!candidates || candidates.length === 0) {
-      candidates = await Worker.find(baseQuery)
-        .select('_id name skills primaryService serviceCategory serviceCategories location address status fcmTokens approvalStatus isActive')
+    if (!candidates.length) {
+      candidates = await Worker.find({ isActive: { $ne: false } })
+        .select('_id name workerType skills primaryService serviceCategory serviceCategories location address status fcmTokens approvalStatus isActive teamId')
         .lean();
     }
 
-    const farmLat = workerLocation?.lat;
-    const farmLng = workerLocation?.lng;
-    let eligible = candidates;
-
-    if (farmLat !== undefined && farmLng !== undefined &&
-        !isNaN(Number(farmLat)) && !isNaN(Number(farmLng))) {
-      const radiusFiltered = candidates.filter(w => {
-        if (!w.location?.lat || !w.location?.lng || isNaN(Number(w.location.lat)) || isNaN(Number(w.location.lng))) {
-          if (w.address && request.location?.city) {
-            const reqCity = request.location.city.trim().toLowerCase();
-            const wCity = (w.address.city || '').trim().toLowerCase();
-            return wCity === reqCity || wCity.includes(reqCity);
-          }
-          return true;
-        }
-        const dist = calculateDistance(
-          { lat: Number(farmLat), lng: Number(farmLng) },
-          { lat: Number(w.location.lat), lng: Number(w.location.lng) }
-        );
-        return dist <= radiusKm;
-      });
-      if (radiusFiltered.length >= (request.requiredWorkers || 1)) {
-        eligible = radiusFiltered;
-      } else if (radiusFiltered.length > 0) {
-        const remaining = candidates.filter(c => !radiusFiltered.some(r => r._id.toString() === c._id.toString()));
-        remaining.sort((a, b) => {
-          const distA = (a.location?.lat && a.location?.lng)
-            ? calculateDistance({ lat: Number(farmLat), lng: Number(farmLng) }, { lat: Number(a.location.lat), lng: Number(a.location.lng) })
-            : 9999;
-          const distB = (b.location?.lat && b.location?.lng)
-            ? calculateDistance({ lat: Number(farmLat), lng: Number(farmLng) }, { lat: Number(b.location.lat), lng: Number(b.location.lng) })
-            : 9999;
-          return distA - distB;
-        });
-        eligible = [...radiusFiltered, ...remaining];
-      } else {
-        console.log(`[DAILY DISPATCH] 0 workers strictly within ${radiusKm}km radius. Falling back to all candidate workers.`);
-        eligible = candidates;
-      }
-    }
-
-    // Pre-dispatch DAILY conflict check
-    const finalWorkers = [];
-    for (const w of eligible) {
+    const available = [];
+    for (const w of candidates) {
       try {
         const conflict = await hasDailyConflict(w._id, startDate, endDate, request._id);
-        if (!conflict) finalWorkers.push(w);
-        else console.log(`[DAILY DISPATCH] Worker ${w._id} has date conflict. Skipped.`);
-      } catch (checkErr) {
-        console.error(`[DAILY DISPATCH] Conflict check error for worker ${w._id}: ${checkErr.message}. Skipped.`);
-      }
+        if (!conflict) available.push(w);
+      } catch (_) {}
     }
-
-    console.log(`[DAILY DISPATCH] Eligible: ${eligible.length} | Available: ${finalWorkers.length}`);
-
-    const dispatchedTo = finalWorkers.map(w => ({ workerId: w._id, status: 'pending' }));
-    await WorkerBookingRequest.findByIdAndUpdate(request._id, {
-      eligibleWorkersCount:   finalWorkers.length,
-      dispatchedWorkersCount: finalWorkers.length,
-      dispatchedTo,
-      status: 'pending'
-    });
 
     let farmerName = 'Farmer';
     try {
-      if (request.farmerId) {
-        const farmerDoc = await User.findById(request.farmerId).select('name').lean();
-        if (farmerDoc?.name) farmerName = farmerDoc.name;
-      }
-    } catch (e) { /* non-fatal */ }
+      const f = await User.findById(request.farmerId).select('name').lean();
+      if (f?.name) farmerName = f.name;
+    } catch (_) {}
 
-    for (const w of finalWorkers) {
-      await notify({
-        recipientType: 'worker',
-        recipientId:   w._id,
-        type:          'worker_booking_request',
-        title:         '📅 New Daily Work Request',
-        message:       `Farmer needs ${request.requiredWorkers} worker(s) for ${request.numberOfDays} day(s): ${request.workTitle}`,
-        relatedId:     request._id,
-        relatedType:   'WorkerBookingRequest',
-        data: {
-          requestId:       request._id,
-          _id:             request._id,
-          bookingType:     'DAILY',
-          farmerId:        request.farmerId,
-          farmerName,
-          workTitle:       request.workTitle,
-          workCategory:    request.workCategory,
-          workDescription: request.workDescription,
-          requiredSkills:  request.requiredSkills,
-          requiredWorkers: request.requiredWorkers,
-          startDate:       request.startDate,
-          endDate:         request.endDate,
-          numberOfDays:    request.numberOfDays,
-          location:        request.location,
-          minRate:         request.minDailyRate,
-          maxRate:         request.maxDailyRate,
-          rateUnit:        'daily',
-          isFarmerBroadcast: true
-        }
-      });
+    // A2: Wave-wise dispatch
+    const [wave0, wave1, wave2] = sortIntoWaves(available, workerLocation?.lat, workerLocation?.lng);
+    console.log(`[DAILY DISPATCH] Wave0(0-5km): ${wave0.length} | Wave1(5-15km): ${wave1.length} | Wave2(15km+): ${wave2.length}`);
+
+    const firstWave = wave0.length ? wave0 : wave1.length ? wave1 : wave2;
+    await dispatchWave(request, firstWave, farmerName, false);
+
+    if (wave0.length && wave1.length) {
+      setTimeout(async () => {
+        const fresh = await WorkerBookingRequest.findById(request._id).lean();
+        if (!fresh || ['confirmed', 'awaiting_farmer_confirmation', 'cancelled', 'expired', 'rejected'].includes(fresh.status)) return;
+        if ((fresh.dispatchedTo || []).filter(d => d.status === 'accepted').length >= request.requiredWorkers) return;
+        await dispatchWave(request, wave1, farmerName, true);
+      }, 10 * 60 * 1000);
     }
+
+    if (wave2.length && (wave0.length || wave1.length)) {
+      setTimeout(async () => {
+        const fresh = await WorkerBookingRequest.findById(request._id).lean();
+        if (!fresh || ['confirmed', 'awaiting_farmer_confirmation', 'cancelled', 'expired', 'rejected'].includes(fresh.status)) return;
+        if ((fresh.dispatchedTo || []).filter(d => d.status === 'accepted').length >= request.requiredWorkers) return;
+        await dispatchWave(request, wave2, farmerName, true);
+      }, 20 * 60 * 1000);
+    }
+
   } catch (err) {
     console.error('[dispatchToIndependentWorkersForDaily]', err);
     await WorkerBookingRequest.findByIdAndUpdate(request._id, { status: 'pending' });
   }
 }
 
-// â”€â”€â”€ Dispatch to Team Leaders â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
+// ─── A3+A4+A7: Dispatch to Team Leaders ───────────────────────────────────────
 async function dispatchToTeamLeaders({
   request, requiredSkills, requiredWorkers,
   scheduledDate, startTime, endTime,
   workerLocation, radiusKm
 }) {
   try {
-    // Expiry guard: do not dispatch if request already passed its window
     if (isBookingExpired(request).isExpired) {
       console.log(`[DISPATCH CANCELLED] Team Leader Request ${request._id} has already expired.`);
       await expireWorkerBookingRequest(request, 'Expired before leader dispatch');
       return;
     }
 
-    const baseQuery = {
+    const leaderQuery = {
       $or: [
         { approvalStatus: { $in: ['approved', 'APPROVED', 'pending', 'PENDING'] } },
         { approvalStatus: { $exists: false } }
       ],
-      isActive: { $ne: false },
+      isActive:   { $ne: false },
       workerType: { $in: ['TEAM_LEADER', 'team_leader', 'LEADER', 'leader'] }
     };
 
-    if (requiredSkills && requiredSkills.length > 0) {
-      const regexConditions = requiredSkills.map(s => new RegExp(`^${s}$`, 'i'));
-      const words = requiredSkills
-        .flatMap(s => (typeof s === 'string' ? s.split(/[\s,]+/) : []))
-        .filter(w => w && w.length > 2);
-        
-      words.forEach(w => regexConditions.push(new RegExp(w, 'i')));
-      baseQuery.skills = { $in: regexConditions };
-    }
-
-    let leaders = await Worker.find(baseQuery)
-      .select('_id name skills location status teamId')
+    let leaders = await Worker.find(leaderQuery)
+      .select('_id name skills workerType location status teamId fcmTokens')
       .populate('teamId', 'name memberCount status')
       .lean();
 
-    if (!leaders || leaders.length === 0) {
-      leaders = await Worker.find({
-        isActive: { $ne: false },
-        workerType: { $in: ['TEAM_LEADER', 'team_leader', 'LEADER', 'leader'] }
-      })
-      .select('_id name skills location status teamId')
-      .populate('teamId', 'name memberCount status')
-      .lean();
+    if (!leaders.length) {
+      console.warn(`[DISPATCH] No Team Leaders found in DB for request ${request._id}`);
     }
 
-    const farmLat = workerLocation?.lat;
-    const farmLng = workerLocation?.lng;
+    const farmLat    = workerLocation?.lat;
+    const farmLng    = workerLocation?.lng;
+    const bType      = request.bookingType || 'HOURLY';
+    const schedule   = bType === 'DAILY'
+      ? { startDate: request.startDate, endDate: request.endDate }
+      : { scheduledDate, startTime, endTime };
 
     const eligibleLeaders = [];
 
     for (const leader of leaders) {
-      // Must have an active team
       if (!leader.teamId || leader.teamId.status !== 'ACTIVE') continue;
-      // Team must have enough members for the required workers
-      if ((leader.teamId.memberCount || 0) < requiredWorkers) continue;
+
+      // A3: Live capacity check
+      const liveCapacity   = await getLiveTeamCapacity(leader._id, bType, schedule);
+      const totalDeployable = liveCapacity + 1; // +1 for the leader themselves
+
+      if (totalDeployable < requiredWorkers) {
+        console.log(`[TL DISPATCH] Leader ${leader._id}: live capacity ${totalDeployable} < needed ${requiredWorkers} — skipped`);
+        continue;
+      }
+
+      // A4: Right-sized matching — don't send small jobs to very large teams
+      const maxAllowed = Math.max(requiredWorkers * 2, requiredWorkers + 2);
+      if (totalDeployable > maxAllowed) {
+        console.log(`[TL DISPATCH] Leader ${leader._id}: team too large (${totalDeployable}) for ${requiredWorkers}-person job — skipped`);
+        continue;
+      }
 
       // Radius check
       if (farmLat !== undefined && farmLng !== undefined &&
-          !isNaN(Number(farmLat)) && !isNaN(Number(farmLng))) {
-        if (!leader.location?.lat || !leader.location?.lng) continue;
+          !isNaN(Number(farmLat)) && !isNaN(Number(farmLng)) &&
+          leader.location?.lat && leader.location?.lng) {
         const dist = calculateDistance(
           { lat: Number(farmLat), lng: Number(farmLng) },
           { lat: Number(leader.location.lat), lng: Number(leader.location.lng) }
         );
-        if (dist > radiusKm) continue;
+        if (dist > radiusKm) {
+          console.log(`[TL DISPATCH] Leader ${leader._id}: ${dist.toFixed(1)}km > radius ${radiusKm}km — skipped`);
+          continue;
+        }
+        leader._distKm = dist;
       }
 
+      leader._liveCapacity = totalDeployable;
       eligibleLeaders.push(leader);
     }
 
-    const dispatchedTo = eligibleLeaders.map(l => ({
-      workerId: l._id,
-      status:   'pending'
-    }));
+    eligibleLeaders.sort((a, b) => (a._distKm || 999) - (b._distKm || 999));
+    console.log(`[TL DISPATCH] Eligible leaders (live capacity, right-sized): ${eligibleLeaders.length}`);
 
-    await WorkerBookingRequest.findByIdAndUpdate(request._id, {
-      eligibleWorkersCount:   eligibleLeaders.length,
-      dispatchedWorkersCount: eligibleLeaders.length,
-      dispatchedTo,
-      status: 'pending'
-    });
+    let farmerName = 'Farmer';
+    try {
+      const f = await User.findById(request.farmerId).select('name').lean();
+      if (f?.name) farmerName = f.name;
+    } catch (_) {}
 
-    for (const leader of eligibleLeaders) {
-      await notify({
-        recipientType: 'worker',
-        recipientId:   leader._id,
-        type:          'group_booking_request',
-        title:         '🌾 New Group Work Request',
-        message:       `A farmer needs ${requiredWorkers} workers for ${request.workTitle}`,
-        relatedId:     request._id,
-        relatedType:   'WorkerBookingRequest',
-        data: {
-          requestId:       request._id,
-          farmerId:        request.farmerId,
-          workTitle:       request.workTitle,
-          workCategory:    request.workCategory,
-          workDescription: request.workDescription,
-          requiredSkills:  request.requiredSkills,
-          requiredWorkers: request.requiredWorkers,
-          scheduledDate:   request.scheduledDate,
-          startTime:       request.startTime,
-          endTime:         request.endTime,
-          location:        request.location,
-          minRate:         request.minRate,
-          maxRate:         request.maxRate,
-          rateUnit:        request.rateUnit,
-          isGroupRequest:  true,
-          isFarmerBroadcast: true
-        }
-      });
-    }
+    await dispatchWave(request, eligibleLeaders, farmerName, false);
+
+    // A7: Fallback to independent workers after 30 minutes if no TL accepts
+    scheduleTeamLeaderFallback(request, requiredSkills, radiusKm, 30 * 60 * 1000);
+
   } catch (err) {
     console.error('[dispatchToTeamLeaders]', err);
     await WorkerBookingRequest.findByIdAndUpdate(request._id, { status: 'pending' });
   }
 }
+
 
 // â”€â”€â”€ Controller: getMyFarmerRequests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
