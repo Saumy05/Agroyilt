@@ -3,7 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { 
   FiChevronLeft, FiPlus, FiTrash2, FiUpload, 
   FiSettings, FiCheckCircle, FiInfo, FiUser,
-  FiZap, FiMapPin, FiClock, FiCalendar, FiSmartphone, FiCreditCard, FiChevronDown, FiActivity, FiSearch
+  FiZap, FiMapPin, FiClock, FiCalendar, FiSmartphone, FiCreditCard, FiChevronDown, FiActivity, FiSearch,
+  FiTruck, FiTool, FiCheck, FiSave
 } from 'react-icons/fi';
 import { toastManager } from '../../../../utils/toastManager';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -132,6 +133,7 @@ const AddEquipment = () => {
           activeCategoryId = catId;
           setForm({
             ...item,
+            listingType: item.listingType || 'service',
             categoryId: catId,
             requestedCategoryName: item.requestedCategoryName || '',
             requestedCityName: item.requestedCityName || '',
@@ -237,7 +239,7 @@ const AddEquipment = () => {
         setCategoryMeta({ trackingType: selected.trackingType || 'none', requiresDriver: selected.requiresDriver || false });
         setForm(prev => ({
           ...prev,
-          listingType: isService ? 'service' : 'rental',
+          listingType: isEdit ? (prev.listingType || (isService ? 'service' : 'rental')) : (isService ? 'service' : 'rental'),
           includesDriver: selected.requiresDriver || false
         }));
       }
@@ -304,6 +306,21 @@ const AddEquipment = () => {
     
     // 1. Basic Identity Validation
     const submissionData = { ...form };
+    submissionData.implements = (form.implements || []).map(i => {
+      const hPrice = parseFloat(i.pricing?.hourly?.price) || 0;
+      const lPrice = parseFloat(i.pricing?.land_based?.price) || 0;
+      const dPrice = parseFloat(i.pricing?.daily?.price) || 0;
+      return {
+        subCategoryId: i.subCategoryId?._id || i.subCategoryId,
+        pricing: {
+          hourly: { price: hPrice, isEnabled: hPrice > 0 || !!form.pricing?.hourly?.isEnabled },
+          land_based: { price: lPrice, isEnabled: lPrice > 0 || !!form.pricing?.land_based?.isEnabled },
+          daily: { price: dPrice, isEnabled: dPrice > 0 || !!form.pricing?.daily?.isEnabled }
+        }
+      };
+    });
+    submissionData.subCategoryIds = submissionData.implements.map(i => i.subCategoryId);
+
     if (!isRequestingCategory && !submissionData.categoryId) {
       return toastManager.error('Please select machine type');
     }
@@ -317,10 +334,6 @@ const AddEquipment = () => {
     }
 
     if (!submissionData.name || submissionData.name.length < 3) return toastManager.error('Please enter a valid machine name');
-
-    if (machineImplements.length > 0 && form.implements.length === 0) {
-      return toastManager.error('Please select at least one implement for this machine');
-    }
     
     // 2. Pricing Validation
     const enabledModes = Object.keys(form.pricing).filter(k => form.pricing[k].isEnabled);
@@ -341,8 +354,9 @@ const AddEquipment = () => {
       if (!form.driver.aadharNumber || !/^\d{12}$/.test(form.driver.aadharNumber)) {
         return toastManager.error('Valid 12-digit Aadhar Card number is required');
       }
-      const dlRegex = /^[A-Z]{2}[0-9A-Z]{13₹4}$/;
-      if (!form.driver.licenseNumber || !dlRegex.test(form.driver.licenseNumber.toUpperCase())) {
+      const cleanDL = (form.driver.licenseNumber || '').trim().toUpperCase().replace(/[\s-]/g, '');
+      const dlRegex = /^[A-Z]{2}[0-9A-Z]{9,15}$/;
+      if (!cleanDL || !dlRegex.test(cleanDL)) {
         return toastManager.error('Please enter a valid Driving License number (e.g. RJ1420230001234)');
       }
     }
@@ -371,402 +385,631 @@ const AddEquipment = () => {
   if (loading) return <LogoLoader />;
 
   return (
-    <div className="min-h-screen bg-[#F0F5F9] pb-32">
-      {/* Simple Header */}
-      <div className="px-6 pt-6 pb-2 flex items-center gap-4">
-        <button onClick={() => navigate(-1)} className="p-3 bg-white rounded-2xl shadow-sm">
-          <FiChevronLeft className="w-6 h-6 text-slate-600" />
-        </button>
-        <div>
-          <h1 className="text-xl font-black text-slate-800 tracking-tight">
-            {isEdit ? 'Edit Asset' : 'New Machine'}
-          </h1>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5"> Machinery Catalog </p>
+    <div className="min-h-screen bg-[#F0F5F9] pb-28">
+      {/* Clean Sticky Header */}
+      <div className="sticky top-0 z-20 bg-[#F0F5F9]/90 backdrop-blur-md px-4 sm:px-6 py-3.5 border-b border-slate-200/60">
+        <div className="max-w-xl mx-auto flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <button 
+              type="button"
+              onClick={() => navigate(-1)} 
+              className="w-10 h-10 bg-white hover:bg-slate-50 border border-slate-200/80 rounded-xl shadow-2xs flex items-center justify-center text-slate-700 flex-shrink-0 transition-colors"
+            >
+              <FiChevronLeft className="w-5 h-5" />
+            </button>
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight leading-tight truncate">
+                {isEdit ? 'Edit Equipment' : 'Add Equipment'}
+              </h1>
+              <p className="text-xs text-slate-500 font-medium truncate">
+                {form.name || (isEdit ? 'Update specifications & pricing' : 'List your machine on Agroyilt')}
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={submitting}
+            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors flex-shrink-0"
+          >
+            {submitting ? (
+              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <>
+                <FiSave className="w-3.5 h-3.5" />
+                <span>{isEdit ? 'Save' : 'Publish'}</span>
+              </>
+            )}
+          </button>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        
-        {/* Centralized Form Container */}
-        <FormContainer>
+      <div className="max-w-xl mx-auto px-4 sm:px-6 pt-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           
-          {/* Main Configuration Section */}
-          <FormSection 
-            subtitle="Main Configuration" 
-            title={form.name || 'Untitled Machine'}
-            titleClassName="text-slate-800 text-xl font-black tracking-tight mt-0.5"
-          >
-            <div className="space-y-4">
-              {!isRequestingCategory ? (
-                <div className="space-y-2">
-                  <div className="relative">
-                    <label className="absolute left-4 top-2 text-[9px] font-bold text-slate-400 uppercase">Machine Category</label>
-                    <select 
-                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 pt-6 text-sm font-black text-slate-800 outline-none appearance-none"
-                      value={form.categoryId}
-                      onChange={(e) => handleCategoryChange(e.target.value)}
-                    >
-                      <option value="" className="text-slate-800">Select Type (Tractor etc)</option>
-                      {machineTypes.map(t => <option key={t.id} value={t.id} className="text-slate-800">{t.title}</option>)}
-                    </select>
-                    <FiChevronDown className="absolute right-5 bottom-4 text-slate-400 pointer-events-none" />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsRequestingCategory(true);
-                      setForm(p => ({ ...p, categoryId: '', implements: [], subCategoryIds: [] }));
-                    }}
-                    className="text-[10px] text-slate-400 hover:text-blue-600 font-bold transition-colors flex flex-wrap items-center gap-x-1.5 gap-y-1 ml-1"
-                  >
-                    <span>Can't find your machine type?</span>
-                    <span className="bg-blue-50 text-blue-600 px-2.5 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-wider border border-blue-100 shadow-sm">Request one</span>
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="relative">
-                    <label className="absolute left-4 top-2 text-[9px] font-bold text-slate-400 uppercase">Request Machine Type</label>
-                    <input 
-                      type="text"
-                      placeholder="e.g. Sugarcane Planter"
-                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 pt-6 text-sm font-black text-slate-800 outline-none placeholder:text-slate-400 focus:border-blue-500/20 focus:bg-slate-50/50 transition-all"
-                      value={form.requestedCategoryName}
-                      onChange={e => setForm(p => ({ ...p, requestedCategoryName: e.target.value }))}
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsRequestingCategory(false);
-                      setForm(p => ({ ...p, requestedCategoryName: '' }));
-                    }}
-                    className="text-[10px] text-slate-400 hover:text-blue-600 font-bold transition-colors flex items-center gap-1 ml-1"
-                  >
-                    <span>← Back to category list</span>
-                  </button>
-                </div>
-              )}
-
-              <AnimatePresence>
-                {machineImplements.length > 0 && (
-                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="space-y-3">
-                     <p className="text-slate-400 text-[9px] font-bold uppercase ml-1">Implements & Pricing</p>
-                     
-                     {machineImplements.length > 5 && (
-                       <div className="relative mb-2">
-                         <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                         <input 
-                           type="text"
-                           placeholder="Search implements..."
-                           className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 pl-9 text-xs font-bold focus:bg-white focus:border-blue-500/20 outline-none transition-all placeholder:text-slate-400"
-                           onChange={(e) => setImplementSearch(e.target.value.toLowerCase())}
-                         />
-                       </div>
-                     )}
-
-                     <div className="space-y-1 max-h-64 overflow-y-auto custom-scrollbar pr-2">
-                      {machineImplements
-                        .filter(impl => !implementSearch || impl.title.toLowerCase().includes(implementSearch))
-                        .map(impl => {
-                        const selected = form.implements.find(i => i.subCategoryId === impl.id);
-                        return (
-                          <div key={impl.id} className="py-2 border-b border-slate-100 last:border-0">
-                            {/* Implement Header - Toggle */}
-                            <div className="flex items-center justify-between">
-                              <span className={`text-[11px] font-black uppercase ${selected ? 'text-slate-800' : 'text-slate-400'}`}>{impl.title}</span>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const exists = form.implements.find(i => i.subCategoryId === impl.id);
-                                  if (exists) {
-                                    setForm(p => ({ ...p, implements: p.implements.filter(i => i.subCategoryId !== impl.id) }));
-                                  } else {
-                                    setForm(p => ({
-                                      ...p,
-                                      implements: [...p.implements, {
-                                        subCategoryId: impl.id,
-                                        pricing: {
-                                          hourly:     { price: 0, isEnabled: form.pricing.hourly.isEnabled },
-                                          land_based: { price: 0, isEnabled: form.pricing.land_based.isEnabled },
-                                          daily:      { price: 0, isEnabled: form.pricing.daily.isEnabled }
-                                        }
-                                      }]
-                                    }));
-                                  }
-                                }}
-                                className={`w-8 h-4 rounded-full relative transition-all ${selected ? 'bg-blue-600' : 'bg-slate-200'}`}
-                              >
-                                <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${selected ? 'right-0.5' : 'left-0.5'}`} />
-                              </button>
-                            </div>
-                            {/* Per-implement pricing has been removed to use master service pricing only */}
-                          </div>
-                        );
-                      })}
-                     </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </FormSection>
-
-          {/* Details Section */}
-          <FormSection subtitle="Specifications" title="Asset Details">
-             <div className="grid grid-cols-2 gap-4">
-               <div className="col-span-2 relative">
-                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Full Title</label>
-                 <input 
-                  className="w-full bg-slate-50 border border-slate-300 rounded-2xl p-4 text-sm font-black focus:bg-white focus:border-blue-500/20 outline-none transition-all placeholder:text-slate-500"
-                  placeholder="e.g. John Deere 5050D"
-                  value={form.name}
-                  onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
-                 />
-               </div>
-               <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Model No</label>
-                  <input className="w-full bg-slate-50 border border-slate-300 rounded-2xl p-4 text-sm font-black focus:bg-white focus:border-blue-500/20 outline-none transition-all placeholder:text-slate-500" value={form.modelNumber} onChange={e => setForm(p => ({ ...p, modelNumber: e.target.value }))} />
-               </div>
-               <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Mfg Year</label>
-                  <input className="w-full bg-slate-50 border border-slate-300 rounded-2xl p-4 text-sm font-black focus:bg-white focus:border-blue-500/20 outline-none transition-all placeholder:text-slate-500" type="number" value={form.year} onChange={e => setForm(p => ({ ...p, year: e.target.value }))} />
-               </div>
-               <div className="col-span-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Description / Special Terms</label>
-                  <textarea 
-                    rows="3" 
-                    className="w-full bg-slate-50 border border-slate-300 rounded-2xl p-4 text-sm font-black resize-none focus:bg-white focus:border-blue-500/20 outline-none transition-all placeholder:text-slate-500" 
-                    placeholder="e.g. Fuel extra, comes with rotavator attachment..." 
-                    value={form.description} 
-                    onChange={e => setForm(p => ({ ...p, description: e.target.value }))} 
-                  />
-               </div>
-             </div>
-          </FormSection>
-
-          {/* Pricing Section */}
-          <FormSection subtitle="Pricing Model" title="Rate Strategy" icon={FiCreditCard}>
-            <div className="space-y-4">
-              {['hourly', 'land_based', 'daily'].map(key => {
-                const isEnabled = form.pricing[key].isEnabled;
-                return (
-                  <div key={key} className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0">
-                    <div className="flex items-center gap-3">
-                      <button 
-                        type="button" 
-                        onClick={() => setForm(p => ({ ...p, pricing: { ...p.pricing, [key]: { ...p.pricing[key], isEnabled: !p.pricing[key].isEnabled } } }))}
-                        className={`w-10 h-5 rounded-full relative transition-all duration-200 ${isEnabled ? 'bg-blue-600' : 'bg-slate-200'}`}
+          {/* Main Card Container */}
+          <FormContainer className="!p-5 sm:!p-6 !rounded-2xl">
+            
+            {/* Machine Setup */}
+            <FormSection title="Machine Setup">
+              <div className="space-y-4">
+                {/* Category Dropdown */}
+                <div>
+                  <label className="text-xs font-bold text-slate-700 mb-1.5 block">Category</label>
+                  {!isRequestingCategory ? (
+                    <div className="space-y-1.5">
+                      <div className="relative">
+                        <select 
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3.5 pr-10 text-xs sm:text-sm font-semibold text-slate-800 outline-none appearance-none focus:bg-white focus:border-blue-500 transition-all"
+                          value={form.categoryId}
+                          onChange={(e) => handleCategoryChange(e.target.value)}
+                        >
+                          <option value="">Select Category (e.g. Tractor)</option>
+                          {machineTypes.map(t => {
+                            const cleanName = t.title ? t.title.split('(')[0].trim() : '';
+                            return (
+                              <option key={t.id} value={t.id}>{cleanName}</option>
+                            );
+                          })}
+                        </select>
+                        <FiChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none w-4 h-4" />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsRequestingCategory(true);
+                          setForm(p => ({ ...p, categoryId: '', implements: [], subCategoryIds: [] }));
+                        }}
+                        className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold transition-colors ml-0.5"
                       >
-                        <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all duration-200 ${isEnabled ? 'right-1' : 'left-1'}`} />
+                        + Request new category
                       </button>
-                      <span className={`text-xs font-black uppercase tracking-wider ${isEnabled ? 'text-slate-800' : 'text-slate-400'}`}>
-                        {key === 'land_based' ? 'Per Acre' : key === 'hourly' ? 'Hourly' : 'Daily'}
-                      </span>
                     </div>
-                    {isEnabled ? (
-                      <div className="flex flex-col items-end">
-                        <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 w-36 transition-all">
-                          <span className="text-slate-500 font-bold text-sm">₹</span>
-                          <input 
-                            className="w-full bg-transparent border-none p-0 text-sm font-black text-slate-800 outline-none text-right placeholder:text-slate-400"
-                            type="number"
-                            placeholder="0"
-                            onFocus={(e) => e.target.select()}
-                            value={form.pricing[key].price === 0 ? "" : form.pricing[key].price}
-                            onChange={e => setForm(p => ({ ...p, pricing: { ...p.pricing, [key]: { ...p.pricing[key], price: parseFloat(e.target.value) || 0 } } }))}
-                          />
-                        </div>
-                        {key === 'hourly' && form.pricing.hourly.price > 0 && (
-                          <span className="text-[10px] font-bold text-emerald-600 mt-1">
-                            ≈ ₹{(form.pricing.hourly.price / 60).toFixed(2)} / min
+                  ) : (
+                    <div className="space-y-1.5">
+                      <input 
+                        type="text"
+                        placeholder="Enter machine type (e.g. Sugarcane Planter)"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3.5 text-xs sm:text-sm font-semibold text-slate-800 outline-none focus:bg-white focus:border-blue-500 transition-all"
+                        value={form.requestedCategoryName}
+                        onChange={e => setForm(p => ({ ...p, requestedCategoryName: e.target.value }))}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsRequestingCategory(false);
+                          setForm(p => ({ ...p, requestedCategoryName: '' }));
+                        }}
+                        className="text-[11px] text-slate-500 hover:text-slate-700 font-semibold transition-colors ml-0.5"
+                      >
+                        ← Back to category list
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Service Model Segmented Switch */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 block">Service Model</label>
+                  <div className="grid grid-cols-2 p-1 bg-slate-100 rounded-xl border border-slate-200/60">
+                    <button
+                      type="button"
+                      onClick={() => setForm(p => ({ ...p, listingType: 'service' }))}
+                      className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg font-semibold text-xs transition-all ${
+                        form.listingType === 'service'
+                          ? 'bg-white text-slate-900 shadow-xs'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <FiTruck className={`w-4 h-4 ${form.listingType === 'service' ? 'text-blue-600' : 'text-slate-400'}`} />
+                      <span>Machine Service</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setForm(p => ({ ...p, listingType: 'rental', includesDriver: false }))}
+                      className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg font-semibold text-xs transition-all ${
+                        form.listingType === 'rental'
+                          ? 'bg-white text-slate-900 shadow-xs'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <FiTool className={`w-4 h-4 ${form.listingType === 'rental' ? 'text-amber-600' : 'text-slate-400'}`} />
+                      <span>Tool Rental</span>
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-slate-400 pl-0.5">
+                    {form.listingType === 'service' ? 'Includes operator & live GPS tracking' : 'Equipment only (operated by farmer)'}
+                  </p>
+                </div>
+
+                {/* Available Attachments & Direct Pricing */}
+                <AnimatePresence>
+                  {machineImplements.length > 0 && (
+                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="space-y-3 pt-1">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-slate-700 block">Available Attachments</label>
+                        {form.implements.length > 0 && (
+                          <span className="text-[11px] font-semibold text-blue-600">
+                            {form.implements.length} selected
                           </span>
                         )}
                       </div>
-                    ) : (
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Disabled</span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </FormSection>
 
-          {/* Driver Section */}
-          <FormSection 
-            subtitle="Operator Module" 
-            title="Driver Profile"
-            headerRight={
-              <div className="flex flex-col items-end">
-                <button 
-                  type="button"
-                  onClick={() => {
-                    if (!categoryMeta.requiresDriver) {
-                      setForm(p => ({ ...p, includesDriver: !p.includesDriver }));
-                    } else {
-                      toastManager.info('This category requires a professional driver by policy.', { icon: '🛡️' });
-                    }
-                  }}
-                  className={`w-12 h-6 rounded-full relative transition-all duration-200 ${form.includesDriver ? 'bg-purple-600' : 'bg-slate-200'} ${categoryMeta.requiresDriver ? 'cursor-not-allowed' : ''}`}
-                >
-                  <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all duration-200 ${form.includesDriver ? 'right-1' : 'left-1'}`} />
-                </button>
-                {categoryMeta.requiresDriver && (
-                  <span className="text-[7px] font-black text-slate-400 uppercase mt-1 tracking-widest">Mandatory Policy</span>
-                )}
-              </div>
-            }
-          >
-            <AnimatePresence>
-              {form.includesDriver && (
-                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} className="space-y-4">
-                  
-                  {/* Worker Link Toggle */}
-                  {!isEdit && vendorWorkers.length > 0 && (
-                    <div className="flex flex-col gap-2">
-                      <button 
-                        type="button"
-                        onClick={() => setShowWorkerLink(!showWorkerLink)}
-                        className="text-[10px] font-black text-slate-400 hover:text-purple-600 uppercase tracking-widest flex items-center gap-1 transition-colors"
-                      >
-                        {showWorkerLink ? "← Back to Manual Entry" : "🔗 Link from Registered Workers"}
-                      </button>
-                      
-                      {showWorkerLink && (
-                        <div className="grid grid-cols-1 gap-2 mt-1">
-                          {vendorWorkers.map(w => (
+                      {/* Implement Selection Chips */}
+                      <div className="flex flex-wrap gap-2">
+                        {machineImplements.map(impl => {
+                          const implId = impl.id || impl._id;
+                          const isSelected = form.implements.some(i => (i.subCategoryId?._id || i.subCategoryId) === implId);
+                          const cleanName = impl.title ? impl.title.split('(')[0].trim() : '';
+
+                          return (
                             <button
-                              key={w._id}
+                              key={implId}
                               type="button"
                               onClick={() => {
-                                setForm(p => ({
-                                  ...p,
-                                  workerId: w._id,
-                                  driver: {
-                                    ...p.driver,
-                                    name: w.name,
-                                    phone: w.phone,
-                                    photo: w.profilePhoto || '',
-                                    aadharNumber: w.aadhar?.number || '',
+                                setForm(p => {
+                                  const exists = p.implements.some(i => (i.subCategoryId?._id || i.subCategoryId) === implId);
+                                  if (exists) {
+                                    return {
+                                      ...p,
+                                      implements: p.implements.filter(i => (i.subCategoryId?._id || i.subCategoryId) !== implId),
+                                      subCategoryIds: p.subCategoryIds.filter(id => id !== implId)
+                                    };
+                                  } else {
+                                    return {
+                                      ...p,
+                                      implements: [...p.implements, {
+                                        subCategoryId: implId,
+                                        pricing: {
+                                          hourly: { price: 0, isEnabled: p.pricing.hourly.isEnabled },
+                                          land_based: { price: 0, isEnabled: p.pricing.land_based.isEnabled },
+                                          daily: { price: 0, isEnabled: p.pricing.daily.isEnabled }
+                                        }
+                                      }],
+                                      subCategoryIds: [...p.subCategoryIds, implId]
+                                    };
                                   }
-                                }));
-                                setShowWorkerLink(false);
-                                toastManager.success(`Linked to ${w.name}`);
+                                });
                               }}
-                              className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${form.workerId === w._id ? 'bg-purple-50/50 border-purple-200' : 'bg-slate-50 border-slate-100'}`}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                                isSelected 
+                                  ? 'bg-blue-600 text-white shadow-xs' 
+                                  : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200/80'
+                              }`}
                             >
-                              <div className="w-8 h-8 rounded-full bg-slate-200 overflow-hidden">
-                                {w.profilePhoto ? <img src={w.profilePhoto} className="w-full h-full object-cover" /> : <FiUser className="m-auto text-slate-400" />}
-                              </div>
-                              <div className="flex-1 text-left">
-                                <p className={`text-xs font-black ${form.workerId === w._id ? 'text-purple-700' : 'text-slate-800'}`}>{w.name}</p>
-                                <p className={`text-[9px] font-bold ${form.workerId === w._id ? 'text-purple-400' : 'text-slate-400'}`}>{w.phone}</p>
-                              </div>
-                              <div className="text-[9px] font-bold text-purple-600 bg-purple-50 px-2 py-1 rounded-md uppercase tracking-wider">
-                                Select
-                              </div>
+                              {isSelected ? <FiCheck className="w-3.5 h-3.5 stroke-[3]" /> : <FiPlus className="w-3.5 h-3.5 text-slate-400" />}
+                              <span>{cleanName}</span>
                             </button>
-                          ))}
+                          );
+                        })}
+                      </div>
+
+                      {/* Attachment Rates Configuration Cards */}
+                      {form.implements.length > 0 && (
+                        <div className="space-y-2 pt-2 border-t border-slate-100">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                              Attachment Rates (Add-on to Tractor)
+                            </span>
+                            <span className="text-[10px] text-slate-400">₹0 = Included with Tractor</span>
+                          </div>
+
+                          <div className="space-y-2">
+                            {form.implements.map(implItem => {
+                              const currentImplId = implItem.subCategoryId?._id || implItem.subCategoryId;
+                              const implMeta = machineImplements.find(m => (m.id || m._id) === currentImplId);
+                              const name = implMeta ? implMeta.title.split('(')[0].trim() : 'Attachment';
+
+                              return (
+                                <div key={currentImplId} className="p-3 bg-slate-50/80 border border-slate-200/80 rounded-xl space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                      <FiTool className="w-3.5 h-3.5 text-blue-600" />
+                                      <span>{name}</span>
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setForm(p => ({
+                                          ...p,
+                                          implements: p.implements.filter(i => (i.subCategoryId?._id || i.subCategoryId) !== currentImplId),
+                                          subCategoryIds: p.subCategoryIds.filter(id => id !== currentImplId)
+                                        }));
+                                      }}
+                                      className="text-[11px] font-semibold text-rose-500 hover:text-rose-700 transition-colors"
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {form.pricing.hourly.isEnabled && (
+                                      <div className="flex items-center justify-between bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 focus-within:border-blue-500 transition-colors">
+                                        <span className="text-[11px] text-slate-600 font-medium">Hourly Add-on</span>
+                                        <div className="flex items-center gap-1 w-24">
+                                          <span className="text-xs text-slate-400 font-bold">₹</span>
+                                          <input
+                                            type="number"
+                                            placeholder="0"
+                                            className="w-full text-right text-xs font-bold text-slate-800 outline-none bg-transparent"
+                                            onFocus={(e) => e.target.select()}
+                                            value={implItem.pricing?.hourly?.price === 0 ? '' : implItem.pricing?.hourly?.price}
+                                            onChange={e => {
+                                              const val = parseFloat(e.target.value) || 0;
+                                              setForm(p => ({
+                                                ...p,
+                                                implements: p.implements.map(i => 
+                                                  (i.subCategoryId?._id || i.subCategoryId) === currentImplId
+                                                    ? { ...i, pricing: { ...i.pricing, hourly: { price: val, isEnabled: true } } }
+                                                    : i
+                                                )
+                                              }));
+                                            }}
+                                          />
+                                          <span className="text-[10px] text-slate-400">/hr</span>
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {form.pricing.land_based.isEnabled && (
+                                      <div className="flex items-center justify-between bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 focus-within:border-blue-500 transition-colors">
+                                        <span className="text-[11px] text-slate-600 font-medium">Per Acre Add-on</span>
+                                        <div className="flex items-center gap-1 w-24">
+                                          <span className="text-xs text-slate-400 font-bold">₹</span>
+                                          <input
+                                            type="number"
+                                            placeholder="0"
+                                            className="w-full text-right text-xs font-bold text-slate-800 outline-none bg-transparent"
+                                            onFocus={(e) => e.target.select()}
+                                            value={implItem.pricing?.land_based?.price === 0 ? '' : implItem.pricing?.land_based?.price}
+                                            onChange={e => {
+                                              const val = parseFloat(e.target.value) || 0;
+                                              setForm(p => ({
+                                                ...p,
+                                                implements: p.implements.map(i => 
+                                                  (i.subCategoryId?._id || i.subCategoryId) === currentImplId
+                                                    ? { ...i, pricing: { ...i.pricing, land_based: { price: val, isEnabled: true } } }
+                                                    : i
+                                                )
+                                              }));
+                                            }}
+                                          />
+                                          <span className="text-[10px] text-slate-400">/ac</span>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Live Total Rate Preview */}
+                                  <div className="text-[11px] text-slate-500 font-medium flex items-center gap-1.5 pt-0.5">
+                                    <span className="text-slate-400">Farmer pays:</span>
+                                    {form.pricing.hourly.isEnabled && (
+                                      <span className="font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.5 rounded text-[10px]">
+                                        ₹{(Number(form.pricing.hourly.price) || 0) + (Number(implItem.pricing?.hourly?.price) || 0)}/hr
+                                      </span>
+                                    )}
+                                    {form.pricing.land_based.isEnabled && (
+                                      <span className="font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.5 rounded text-[10px]">
+                                        ₹{(Number(form.pricing.land_based.price) || 0) + (Number(implItem.pricing?.land_based?.price) || 0)}/acre
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
                       )}
-                    </div>
+                    </motion.div>
                   )}
+                </AnimatePresence>
 
-                  <div className="flex items-center gap-4">
-                    <label className="w-16 h-16 rounded-2xl bg-slate-50 border border-slate-300 flex items-center justify-center cursor-pointer overflow-hidden p-1 shadow-inner relative">
-                      <input type="file" className="hidden" accept="image/*" onChange={(e) => handleImageUpload(e, 'driver')} />
-                      {form.driver.photo ? <img src={form.driver.photo} className="w-full h-full object-cover rounded-xl" /> : <FiUser className="text-slate-400" />}
-                    </label>
-                    <div className="flex-1 space-y-2">
-                      <input 
-                        className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-xs font-black text-slate-800 placeholder:text-slate-500 focus:bg-white focus:border-purple-200 outline-none transition-all" 
-                        placeholder="Driver Name" 
-                        value={form.driver.name} 
-                        onChange={e => {
-                          const val = e.target.value.replace(/[^a-zA-Z\s]/g, '');
-                          setForm(p => ({ ...p, driver: { ...p.driver, name: val } }));
-                        }} 
-                      />
-                      <input 
-                        className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-xs font-black text-slate-800 placeholder:text-slate-500 focus:bg-white focus:border-purple-200 outline-none transition-all" 
-                        type="tel" 
-                        maxLength="10" 
-                        placeholder="Phone Number" 
-                        value={form.driver.phone} 
-                        onChange={e => setForm(p => ({ ...p, driver: { ...p.driver, phone: e.target.value.replace(/\D/g, '') } }))} 
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                     <input 
-                       className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-[10px] font-black text-slate-800 placeholder:text-slate-500 focus:bg-white focus:border-purple-200 outline-none transition-all" 
-                       type="tel" 
-                       maxLength="12" 
-                       placeholder="Aadhar Card" 
-                       value={form.driver.aadharNumber} 
-                       onChange={e => setForm(p => ({ ...p, driver: { ...p.driver, aadharNumber: e.target.value.replace(/\D/g, '') } }))} 
-                     />
-                     <input 
-                       className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-[10px] font-black text-slate-800 placeholder:text-slate-500 uppercase focus:bg-white focus:border-purple-200 outline-none transition-all" 
-                       maxLength={16} 
-                       placeholder="Driving License (Alphanumeric)" 
-                       value={form.driver.licenseNumber} 
-                       onChange={e => {
-                         const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-                         setForm(p => ({ ...p, driver: { ...p.driver, licenseNumber: val } }));
-                       }} 
-                     />
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </FormSection>
-
-          {/* Gallery Section */}
-          <FormSection 
-            subtitle="Gallery Images" 
-            title="Machine Photos"
-            headerRight={
-              <div className="text-[9px] font-black text-slate-400 bg-slate-50 border border-slate-100 px-2.5 py-1 rounded-lg">
-                {form.images.length} / 5
               </div>
-            }
-          >
-             <div className="grid grid-cols-4 gap-3">
-               {form.images.map((img, idx) => (
-                   <div key={idx} className="relative aspect-square rounded-2xl overflow-hidden border border-slate-100 bg-slate-50 shadow-sm">
-                     <img src={img} className="w-full h-full object-cover" alt={`Machine photo ${idx + 1}`} />
-                     <button 
-                       type="button" 
-                       onClick={() => setForm(p => ({ ...p, images: p.images.filter((_, i) => i !== idx) }))} 
-                       className="absolute top-1 right-1 w-6 h-6 bg-red-600 text-white rounded-full flex items-center justify-center shadow-md active:scale-90 transition-transform z-10"
-                     >
-                       <FiTrash2 className="w-3 h-3" />
-                     </button>
-                   </div>
+            </FormSection>
+
+            {/* Details Section */}
+            <FormSection title="Machine Details">
+              <div className="space-y-3.5">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 mb-1.5 block">Machine Name</label>
+                  <input 
+                    type="text"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3.5 text-xs sm:text-sm font-semibold text-slate-800 outline-none focus:bg-white focus:border-blue-500 transition-all placeholder:text-slate-400"
+                    placeholder="e.g. John Deere 5045y"
+                    value={form.name}
+                    onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 mb-1.5 block">Model Number</label>
+                    <input 
+                      type="text"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3.5 text-xs sm:text-sm font-semibold text-slate-800 outline-none focus:bg-white focus:border-blue-500 transition-all placeholder:text-slate-400"
+                      placeholder="e.g. 5045y"
+                      value={form.modelNumber}
+                      onChange={e => setForm(p => ({ ...p, modelNumber: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 mb-1.5 block">Mfg Year</label>
+                    <input 
+                      type="number"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3.5 text-xs sm:text-sm font-semibold text-slate-800 outline-none focus:bg-white focus:border-blue-500 transition-all placeholder:text-slate-400"
+                      placeholder="2023"
+                      value={form.year}
+                      onChange={e => setForm(p => ({ ...p, year: e.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 mb-1.5 block">Notes / Terms (Optional)</label>
+                  <textarea 
+                    rows="2" 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3.5 text-xs sm:text-sm font-semibold text-slate-800 resize-none outline-none focus:bg-white focus:border-blue-500 transition-all placeholder:text-slate-400" 
+                    placeholder="e.g. Fuel included, standard maintenance..." 
+                    value={form.description} 
+                    onChange={e => setForm(p => ({ ...p, description: e.target.value }))} 
+                  />
+                </div>
+              </div>
+            </FormSection>
+
+            {/* Pricing Section */}
+            <FormSection title="Rental Rates">
+              <div className="space-y-2.5">
+                {[
+                  { key: 'hourly', label: 'Hourly Rate', unit: '/ hr' },
+                  { key: 'land_based', label: 'Per Acre Rate', unit: '/ acre' },
+                  { key: 'daily', label: 'Daily Rate', unit: '/ day' }
+                ].map(({ key, label, unit }) => {
+                  const isEnabled = form.pricing[key].isEnabled;
+                  const price = form.pricing[key].price;
+                  return (
+                    <div 
+                      key={key} 
+                      className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
+                        isEnabled ? 'bg-slate-50/70 border-slate-200' : 'bg-slate-50/30 border-slate-100 opacity-60'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <button 
+                          type="button" 
+                          onClick={() => setForm(p => ({ ...p, pricing: { ...p.pricing, [key]: { ...p.pricing[key], isEnabled: !p.pricing[key].isEnabled } } }))}
+                          className={`w-9 h-5 rounded-full relative transition-colors ${isEnabled ? 'bg-blue-600' : 'bg-slate-200'}`}
+                        >
+                          <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all shadow-xs ${isEnabled ? 'right-0.5' : 'left-0.5'}`} />
+                        </button>
+                        <div>
+                          <p className="text-xs font-semibold text-slate-800">{label}</p>
+                          {isEnabled && key === 'hourly' && price > 0 && (
+                            <p className="text-[10px] text-emerald-600 font-medium">≈ ₹{(price / 60).toFixed(2)}/min</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {isEnabled ? (
+                        <div className="flex items-center bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 w-32 focus-within:border-blue-500 transition-colors">
+                          <span className="text-xs text-slate-400 font-semibold mr-1">₹</span>
+                          <input 
+                            type="number"
+                            placeholder="0"
+                            className="w-full bg-transparent border-none p-0 text-xs font-bold text-slate-800 outline-none text-right"
+                            onFocus={(e) => e.target.select()}
+                            value={price === 0 ? '' : price}
+                            onChange={e => setForm(p => ({ ...p, pricing: { ...p.pricing, [key]: { ...p.pricing[key], price: parseFloat(e.target.value) || 0 } } }))}
+                          />
+                          <span className="text-[10px] text-slate-400 ml-1 whitespace-nowrap">{unit}</span>
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-slate-400 font-medium">Off</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </FormSection>
+
+            {/* Driver Section - Only rendered for Machine Service */}
+            {form.listingType === 'service' && (
+              <FormSection 
+                title="Operator / Driver"
+                headerRight={
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      if (!categoryMeta.requiresDriver) {
+                        setForm(p => ({ ...p, includesDriver: !p.includesDriver }));
+                      } else {
+                        toastManager.info('This machine category requires an operator.');
+                      }
+                    }}
+                    className={`w-9 h-5 rounded-full relative transition-colors ${form.includesDriver ? 'bg-blue-600' : 'bg-slate-200'} ${categoryMeta.requiresDriver ? 'cursor-not-allowed' : ''}`}
+                  >
+                    <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all shadow-xs ${form.includesDriver ? 'right-0.5' : 'left-0.5'}`} />
+                  </button>
+                }
+              >
+                <AnimatePresence>
+                  {form.includesDriver && (
+                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} className="space-y-3 pt-1">
+                      
+                      {/* Registered Worker Quick Link */}
+                      {!isEdit && vendorWorkers.length > 0 && (
+                        <div>
+                          <button 
+                            type="button"
+                            onClick={() => setShowWorkerLink(!showWorkerLink)}
+                            className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1.5 transition-colors"
+                          >
+                            <span>{showWorkerLink ? '← Enter driver manually' : '🔗 Link registered worker'}</span>
+                          </button>
+                          
+                          {showWorkerLink && (
+                            <div className="grid grid-cols-1 gap-2 mt-2">
+                              {vendorWorkers.map(w => (
+                                <button
+                                  key={w._id}
+                                  type="button"
+                                  onClick={() => {
+                                    setForm(p => ({
+                                      ...p,
+                                      workerId: w._id,
+                                      driver: {
+                                        ...p.driver,
+                                        name: w.name,
+                                        phone: w.phone,
+                                        photo: w.profilePhoto || '',
+                                        aadharNumber: w.aadhar?.number || '',
+                                      }
+                                    }));
+                                    setShowWorkerLink(false);
+                                    toastManager.success(`Linked to ${w.name}`);
+                                  }}
+                                  className={`flex items-center gap-3 p-2.5 rounded-xl border text-left transition-all ${
+                                    form.workerId === w._id ? 'bg-blue-50/70 border-blue-200' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                                  }`}
+                                >
+                                  <div className="w-8 h-8 rounded-full bg-slate-200 overflow-hidden flex-shrink-0">
+                                    {w.profilePhoto ? <img src={w.profilePhoto} className="w-full h-full object-cover" /> : <FiUser className="m-auto text-slate-400 mt-2" />}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-bold text-slate-800 truncate">{w.name}</p>
+                                    <p className="text-[11px] text-slate-500">{w.phone}</p>
+                                  </div>
+                                  <span className="text-xs font-semibold text-blue-600">Select</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-3">
+                        <label className="w-14 h-14 rounded-xl bg-slate-50 border border-slate-200 hover:bg-slate-100 flex items-center justify-center cursor-pointer overflow-hidden relative flex-shrink-0 transition-colors">
+                          <input type="file" className="hidden" accept="image/*" onChange={(e) => handleImageUpload(e, 'driver')} />
+                          {form.driver.photo ? (
+                            <img src={form.driver.photo} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="flex flex-col items-center justify-center text-slate-400">
+                              <FiUser className="w-5 h-5" />
+                              <span className="text-[8px] mt-0.5">Photo</span>
+                            </div>
+                          )}
+                        </label>
+                        <div className="flex-1 space-y-2">
+                          <input 
+                            type="text"
+                            placeholder="Driver Name" 
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs sm:text-sm font-semibold text-slate-800 outline-none focus:bg-white focus:border-blue-500 transition-all placeholder:text-slate-400"
+                            value={form.driver.name} 
+                            onChange={e => {
+                              const val = e.target.value.replace(/[^a-zA-Z\s]/g, '');
+                              setForm(p => ({ ...p, driver: { ...p.driver, name: val } }));
+                            }} 
+                          />
+                          <input 
+                            type="tel" 
+                            maxLength="10" 
+                            placeholder="Mobile (10 digits)" 
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs sm:text-sm font-semibold text-slate-800 outline-none focus:bg-white focus:border-blue-500 transition-all placeholder:text-slate-400"
+                            value={form.driver.phone} 
+                            onChange={e => setForm(p => ({ ...p, driver: { ...p.driver, phone: e.target.value.replace(/\D/g, '') } }))} 
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <input 
+                          type="tel" 
+                          maxLength="12" 
+                          placeholder="Aadhaar (12 digits)" 
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-blue-500 transition-all placeholder:text-slate-400"
+                          value={form.driver.aadharNumber} 
+                          onChange={e => setForm(p => ({ ...p, driver: { ...p.driver, aadharNumber: e.target.value.replace(/\D/g, '') } }))} 
+                        />
+                        <input 
+                          type="text"
+                          maxLength={16} 
+                          placeholder="Driving License" 
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 uppercase outline-none focus:bg-white focus:border-blue-500 transition-all placeholder:text-slate-400"
+                          value={form.driver.licenseNumber} 
+                          onChange={e => {
+                            const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                            setForm(p => ({ ...p, driver: { ...p.driver, licenseNumber: val } }));
+                          }} 
+                        />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </FormSection>
+            )}
+
+            {/* Photos Section */}
+            <FormSection 
+              title="Photos"
+              headerRight={
+                <span className="text-xs font-semibold text-slate-400 bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-md">
+                  {form.images.length}/5
+                </span>
+              }
+            >
+              <div className="grid grid-cols-4 sm:grid-cols-5 gap-2.5">
+                {form.images.map((img, idx) => (
+                  <div key={idx} className="relative aspect-square rounded-xl overflow-hidden border border-slate-200 bg-slate-50 shadow-2xs group">
+                    <img src={img} className="w-full h-full object-cover" alt={`Photo ${idx + 1}`} />
+                    <button 
+                      type="button" 
+                      onClick={() => setForm(p => ({ ...p, images: p.images.filter((_, i) => i !== idx) }))} 
+                      className="absolute top-1 right-1 w-6 h-6 bg-slate-900/80 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-xs transition-colors z-10"
+                    >
+                      <FiTrash2 className="w-3 h-3" />
+                    </button>
+                  </div>
                 ))}
-               {form.images.length < 5 && (
-                  <label className="aspect-square rounded-2xl border-2 border-dashed border-slate-200 flex items-center justify-center bg-slate-50 hover:bg-slate-100/50 hover:border-slate-300 cursor-pointer active:scale-95 transition-all shadow-sm">
+                {form.images.length < 5 && (
+                  <label className="aspect-square rounded-xl border border-dashed border-slate-300 hover:border-blue-500 flex flex-col items-center justify-center bg-slate-50 hover:bg-blue-50/20 cursor-pointer transition-colors">
                     <input type="file" className="hidden" accept="image/*" multiple onChange={(e) => handleImageUpload(e)} disabled={uploading} />
-                    {uploading ? <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" /> : <FiPlus className="text-slate-400 w-5 h-5" />}
+                    {uploading ? (
+                      <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        <FiPlus className="text-slate-400 w-5 h-5 mb-0.5" />
+                        <span className="text-[10px] font-medium text-slate-400">Add</span>
+                      </>
+                    )}
                   </label>
-               )}
-             </div>
-          </FormSection>
+                )}
+              </div>
+            </FormSection>
 
-        </FormContainer>
+          </FormContainer>
 
-        {/* Large Launcher Button (Gradient) */}
-        <div className="px-5">
-          <button 
-            type="submit"
-            disabled={submitting}
-            className="w-full py-6 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-[32px] shadow-lg shadow-blue-500/20 text-sm font-black uppercase tracking-[0.2em] active:scale-[0.98] transition-all flex items-center justify-center gap-3"
-          >
-            {submitting ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><FiActivity /> <span>Launch Listing</span></>}
-          </button>
-        </div>
+          {/* Bottom Primary Button */}
+          <div className="pt-2">
+            <button 
+              type="submit"
+              disabled={submitting}
+              className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-sm font-semibold shadow-sm active:scale-[0.99] transition-all flex items-center justify-center gap-2"
+            >
+              {submitting ? (
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <>
+                  <FiCheckCircle className="w-4 h-4" />
+                  <span>{isEdit ? 'Save Changes' : 'Publish Equipment'}</span>
+                </>
+              )}
+            </button>
+          </div>
 
-      </form>
+        </form>
+      </div>
     </div>
   );
 };
