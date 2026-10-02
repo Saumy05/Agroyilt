@@ -130,6 +130,8 @@ export default function BookingDetails() {
   const [showDisputeModal, setShowDisputeModal] = useState(false); // NEW
   const [tripMode, setTripMode] = useState('start'); // 'start' | 'end'
   const [bookingCommissionPct, setBookingCommissionPct] = useState(10); // Commission % from settings
+  const [isCashModalOpen, setIsCashModalOpen] = useState(false);
+  const [cashModalMode, setCashModalMode] = useState('qr');
   // ─────────────────────────────────────────────────────────────
   const [confirmDialog, setConfirmDialog] = useState({
     isOpen: false,
@@ -1571,14 +1573,29 @@ export default function BookingDetails() {
                 </div>
               )}
 
-              <div className="flex flex-col gap-3 w-full">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
                 <button
+                  type="button"
+                  id="vendor-scan-admin-qr-btn"
+                  onClick={() => {
+                    setCashModalMode('qr');
+                    setIsCashModalOpen(true);
+                  }}
+                  disabled={loading}
+                  className="w-full py-4 rounded-xl font-black bg-gradient-to-r from-emerald-600 via-teal-600 to-green-700 hover:from-emerald-700 hover:to-green-800 text-white flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md cursor-pointer"
+                >
+                  <FiCheckCircle className="w-5 h-5 text-emerald-200" />
+                  <span>📲 Scan Admin QR (Online)</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={handleCollectCashClick}
                   disabled={loading}
-                  className="w-full py-4 rounded-xl font-bold bg-gray-900 text-white flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg"
+                  className="w-full py-4 rounded-xl font-bold bg-gray-900 hover:bg-black text-white flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md cursor-pointer"
                 >
-                  <FiDollarSign className="w-5 h-5" />
-                  {booking.paymentMethod === 'plan_benefit' ? 'Prepare/Edit Final Bill' : 'Prepare Bill & Collect Cash'}
+                  <FiDollarSign className="w-5 h-5 text-orange-400" />
+                  <span>{booking.paymentMethod === 'plan_benefit' ? 'Prepare/Edit Final Bill' : '💵 Collect Cash Notes'}</span>
                 </button>
               </div>
             </div>
@@ -1910,6 +1927,26 @@ export default function BookingDetails() {
           }
         }}
         bookingId={id}
+      />
+
+      {/* Cash / Admin QR Collection Modal */}
+      <CashCollectionModal
+        isOpen={isCashModalOpen}
+        defaultMode={cashModalMode}
+        onClose={() => {
+          setIsCashModalOpen(false);
+          window.dispatchEvent(new Event('vendorJobsUpdated'));
+        }}
+        booking={booking}
+        onConfirm={async (finalTotal, extraItems, otpString) => {
+          await vendorWalletService.confirmCashCollection(id, finalTotal, otpString, extraItems);
+          window.dispatchEvent(new Event('vendorJobsUpdated'));
+        }}
+        onInitiateOTP={async (finalTotal, extraItems) => {
+          await vendorWalletService.initiateCashCollection(id, finalTotal, extraItems);
+          window.dispatchEvent(new Event('vendorJobsUpdated'));
+        }}
+        loading={actionLoading}
       />
 
       <BottomNav />

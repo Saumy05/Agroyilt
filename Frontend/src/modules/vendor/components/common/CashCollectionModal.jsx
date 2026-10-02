@@ -17,9 +17,10 @@ const CashCollectionModal = ({
   booking,
   onConfirm,
   onInitiateOTP,
-  loading
+  loading,
+  defaultMode = 'cash'
 }) => {
-  const [paymentMode, setPaymentMode] = useState('cash'); // 'cash' or 'qr'
+  const [paymentMode, setPaymentMode] = useState(defaultMode || 'cash'); // 'cash' or 'qr'
   const [extraItems, setExtraItems] = useState([]);
   const [step, setStep] = useState('summary'); // 'summary' or 'otp'
   const [otp, setOtp] = useState(['', '', '', '']);
@@ -76,7 +77,7 @@ const CashCollectionModal = ({
         setOtp(['', '', '', '']);
       }
 
-      setPaymentMode('cash');
+      setPaymentMode(defaultMode || 'cash');
       setSubmitting(false);
       setQrData(null);
       setQrError(null);
