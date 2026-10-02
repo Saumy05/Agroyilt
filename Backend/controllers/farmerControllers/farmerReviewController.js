@@ -25,10 +25,12 @@ const farmerReviewController = {
       const review = new Review({
         bookingId,
         userId: farmerId,
-        vendorId: booking.vendorId,
-        serviceId: booking.serviceId,
+        vendorId: booking.vendorId || undefined,
+        workerId: booking.workerId || undefined,
+        serviceId: booking.serviceId || undefined,
         rating,
-        reviewText,
+        reviewText: reviewText || '',
+        review: reviewText || '',
         images: images || [],
         status: 'approved' // Auto-approve or pending based on admin settings
       });
@@ -39,6 +41,19 @@ const farmerReviewController = {
       booking.review = reviewText;
       booking.reviewedAt = new Date();
       await booking.save();
+
+      // If this was a worker booking, also update Worker rating and totalReviews
+      if (booking.workerId) {
+        const Worker = require('../../models/Worker');
+        const workerReviews = await Review.find({ workerId: booking.workerId, status: { $ne: 'deleted' } });
+        if (workerReviews.length > 0) {
+          const avgRating = workerReviews.reduce((sum, r) => sum + r.rating, 0) / workerReviews.length;
+          await Worker.findByIdAndUpdate(booking.workerId, {
+            rating: Number(avgRating.toFixed(2)),
+            totalReviews: workerReviews.length
+          });
+        }
+      }
 
       res.status(201).json({ success: true, message: 'Review submitted successfully', data: review });
     } catch (error) {

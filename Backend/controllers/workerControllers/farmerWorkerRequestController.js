@@ -2220,6 +2220,12 @@ exports.workerRespondToFarmerRequest = async (req, res) => {
         }
 
         const isTeamLeaderReq = request.requestType === 'team_leader' || request.bookingMode === 'TEAM_LEADER';
+        if (isTeamLeaderReq && request.teamLeaderId && request.teamLeaderId.toString() !== workerId.toString()) {
+            return res.status(409).json({
+                success: false,
+                message: 'This group booking has already been claimed by another Team Leader.'
+            });
+        }
         acceptingWorker = await Worker.findById(workerId);
 
         if (isTeamLeaderReq && acceptingWorker && acceptingWorker.workerType === 'TEAM_LEADER' && acceptingWorker.teamId) {
@@ -2416,6 +2422,26 @@ exports.workerRespondToFarmerRequest = async (req, res) => {
         requestId: request._id,
         dispatchedCount: invitationsToCreate.length
       });
+
+      // Withdraw request for other dispatched team leaders so their alerts update cleanly
+      await WorkerBookingRequest.updateOne(
+        { _id: request._id },
+        {
+          $set: {
+            'dispatchedTo.$[other].status': 'withdrawn'
+          }
+        },
+        {
+          arrayFilters: [{ 'other.workerId': { $ne: workerId }, 'other.status': 'pending' }]
+        }
+      );
+
+      for (const d of (request.dispatchedTo || [])) {
+        if (d.workerId && d.workerId.toString() !== workerId.toString()) {
+          emitSafe(`worker_${d.workerId}`, 'workerJobsUpdated', {});
+          emitSafe(`worker_${d.workerId}`, 'booking_request_taken', { requestId: request._id });
+        }
+      }
     }
 
     const updated = await WorkerBookingRequest.findById(request._id);
@@ -2808,11 +2834,12 @@ exports.cancelFarmerRequest = async (req, res) => {
         );
       }
 
-      // 3. Process Wallet Refund
+      // 3. Process Wallet Refund (Only if farmer paid online upfront)
+      const isPaidOnline = request.paymentStatus === 'success' && request.paymentMethod !== 'cash';
       const snap = request.financialSnapshot || {};
-      const refundAmount = Number(snap.totalPayable || snap.maximumWorkerAmount || 0);
+      const refundAmount = isPaidOnline ? Number(snap.totalPayable || snap.maximumWorkerAmount || 0) : 0;
 
-      if (refundAmount > 0 && !request.refundCredited) {
+      if (isPaidOnline && refundAmount > 0 && !request.refundCredited) {
         let farmerWallet = await Wallet.findOne({ userId: farmerId, userModel: 'User' });
         if (!farmerWallet) {
           farmerWallet = await Wallet.create({ userId: farmerId, userModel: 'User', balance: 0 });
@@ -2880,8 +2907,8 @@ exports.cancelFarmerRequest = async (req, res) => {
         recipientType: 'user',
         recipientId: farmerId,
         type: 'booking_cancelled',
-        title: 'Booking Cancelled & Refunded',
-        message: refundAmount > 0
+        title: isPaidOnline && refundAmount > 0 ? 'Booking Cancelled & Refunded' : 'Booking Cancelled',
+        message: isPaidOnline && refundAmount > 0
           ? `Your booking for ${request.workTitle} has been cancelled. ₹${refundAmount} has been credited back to your AgroYilt Wallet.`
           : `Your booking for ${request.workTitle} has been cancelled.`,
         relatedId: request._id,
@@ -2929,7 +2956,7 @@ exports.cancelFarmerRequest = async (req, res) => {
 
       return res.json({
         success: true,
-        message: refundAmount > 0
+        message: isPaidOnline && refundAmount > 0
           ? `Booking cancelled. ₹${refundAmount} has been refunded to your wallet.`
           : 'Booking cancelled successfully.'
       });

@@ -11,7 +11,14 @@ const { recordBookingEarning } = require('../../services/earningTrackerService')
 exports.initiateCashCollection = async (req, res) => {
   try {
     const { id } = req.params;
-    const booking = await Booking.findById(id);
+    let booking = await Booking.findById(id);
+    if (!booking) {
+      const IndWorkerAssignment = require('../../models/IndWorkerAssignment');
+      const assignment = await IndWorkerAssignment.findById(id);
+      if (assignment && assignment.legacyBookingId) {
+        booking = await Booking.findById(assignment.legacyBookingId);
+      }
+    }
 
     if (!booking) {
       return res.status(404).json({ success: false, message: 'Booking not found' });
@@ -127,7 +134,14 @@ exports.confirmCashCollection = async (req, res) => {
     const userId = req.user?._id || req.user?.id;
     const userRole = req.user?.role;
 
-    const booking = await Booking.findById(id).select('+paymentOtp +driver_end_otp');
+    let booking = await Booking.findById(id).select('+paymentOtp +driver_end_otp');
+    if (!booking) {
+      const IndWorkerAssignment = require('../../models/IndWorkerAssignment');
+      const assignment = await IndWorkerAssignment.findById(id);
+      if (assignment && assignment.legacyBookingId) {
+        booking = await Booking.findById(assignment.legacyBookingId).select('+paymentOtp +driver_end_otp');
+      }
+    }
 
     if (!booking) {
       return res.status(404).json({ success: false, message: 'Booking not found' });
@@ -523,7 +537,14 @@ exports.customerConfirmPayment = async (req, res) => {
 exports.getCashCollectionStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const booking = await Booking.findById(id).select('cashCollected cashCollectedAt cashCollectedBy paymentStatus');
+    let booking = await Booking.findById(id).select('cashCollected cashCollectedAt cashCollectedBy paymentStatus');
+    if (!booking) {
+      const IndWorkerAssignment = require('../../models/IndWorkerAssignment');
+      const assignment = await IndWorkerAssignment.findById(id);
+      if (assignment && assignment.legacyBookingId) {
+        booking = await Booking.findById(assignment.legacyBookingId).select('cashCollected cashCollectedAt cashCollectedBy paymentStatus');
+      }
+    }
 
     if (!booking) {
       return res.status(404).json({ success: false, message: 'Booking not found' });

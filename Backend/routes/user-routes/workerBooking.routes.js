@@ -27,6 +27,7 @@ router.post('/farmer-worker-request/:id/confirm-cash',       authenticate, fwr.c
 router.post('/farmer-worker-request/:id/confirm',            authenticate, fwr.confirmWorkerBookingCash);
 router.post('/farmer-worker-request/:id/assignment/:assignmentId/completion-otp', authenticate, fwr.generateFarmerCompletionOtp);
 router.delete('/farmer-worker-request/:id',                  authenticate, fwr.cancelFarmerRequest);
+router.post('/farmer-worker-request/:id/cancel',             authenticate, fwr.cancelFarmerRequest);
 
 // ── DAILY BOOKING ROUTES ───────────────────────────────────────────────────
 router.post('/farmer-worker-request/:id/decrease-worker',                                  authenticate, fwr.decreaseWorker);
