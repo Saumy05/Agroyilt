@@ -337,6 +337,15 @@ exports.processFarmerBookingRefund = async (parentRequestId) => {
     return { success: true, message: 'Refund already credited', refundAmount: request.refundAmount };
   }
 
+  // Cash bookings do not pay reserve upfront; no wallet refund is due
+  const isPaidOnline = ['success', 'paid', 'PAID', 'SUCCESS'].includes(request.paymentStatus) && request.paymentMethod !== 'cash';
+  if (!isPaidOnline) {
+    request.refundAmount   = 0;
+    request.refundCredited = false;
+    await request.save();
+    return { success: true, message: 'Cash booking - refund not applicable', refundAmount: 0 };
+  }
+
   const snap = request.financialSnapshot;
   if (!snap || !snap.maximumWorkerAmount) {
     return { success: false, message: 'No financial snapshot found' };
@@ -626,6 +635,15 @@ exports.processDailyFarmerRefund = async (parentRequestId) => {
   if (request.bookingType !== 'DAILY') return { success: false, message: 'Not a DAILY booking' };
   if (request.refundCredited) {
     return { success: true, message: 'Refund already credited', refundAmount: request.refundAmount };
+  }
+
+  // Cash bookings do not pay reserve upfront; no wallet refund is due
+  const isPaidOnline = ['success', 'paid', 'PAID', 'SUCCESS'].includes(request.paymentStatus) && request.paymentMethod !== 'cash';
+  if (!isPaidOnline) {
+    request.refundAmount   = 0;
+    request.refundCredited = false;
+    await request.save();
+    return { success: true, message: 'Cash booking - refund not applicable', refundAmount: 0 };
   }
 
   const snap = request.financialSnapshot;

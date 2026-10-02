@@ -1107,6 +1107,75 @@ const collectCash = async (req, res) => {
           });
         }
       }
+    } else if (booking.workerId && !booking.vendorId) {
+      // Independent Worker Cash Collection Logic
+      const Worker = require('../../models/Worker');
+      const IndWorkerAssignment = require('../../models/IndWorkerAssignment');
+      const WorkerBookingRequest = require('../../models/WorkerBookingRequest');
+      const Transaction = require('../../models/Transaction');
+      
+      const commissionRate = booking.commissionRate ?? 10;
+      const commissionAmount = booking.commissionAmount ?? Math.round((grandTotal * commissionRate) / 100);
+      const workerNetEarning = grandTotal - commissionAmount;
+
+      const workerDoc = await Worker.findById(workerId);
+      if (workerDoc) {
+        let walletBalance = workerDoc.wallet?.balance || 0;
+        if (walletBalance >= commissionAmount) {
+          workerDoc.wallet.balance = walletBalance - commissionAmount;
+        } else {
+          const remainingDue = commissionAmount - walletBalance;
+          workerDoc.wallet.balance = 0;
+          workerDoc.outstandingDues = (workerDoc.outstandingDues || 0) + remainingDue;
+        }
+        workerDoc.status = 'ONLINE';
+        await workerDoc.save();
+      }
+
+      await Transaction.create({
+        workerId: workerId,
+        bookingId: booking._id,
+        amount: grandTotal,
+        type: 'cash_collected',
+        paymentMethod: 'cash',
+        status: 'completed',
+        description: `Cash ₹${grandTotal} collected directly from farmer for booking #${booking.bookingNumber || booking._id.toString().slice(-6)}. Platform commission ₹${commissionAmount} applied.`,
+        metadata: {
+          type: 'cash_collection',
+          bookingNumber: booking.bookingNumber,
+          grandTotal,
+          commissionAmount,
+          workerNetEarning
+        }
+      });
+
+      // Atomically settle linked IndWorkerAssignment
+      try {
+        const assignment = await IndWorkerAssignment.findOne({
+          $or: [{ legacyBookingId: booking._id }, { parentRequestId: booking.workerRequestId, workerId }]
+        });
+        if (assignment) {
+          assignment.settlementStatus = 'SETTLED';
+          assignment.completionStatus = 'OTP_VERIFIED';
+          assignment.workStatus = 'COMPLETED';
+          assignment.settledAt = new Date();
+          assignment.workCompletedAt = new Date();
+          await assignment.save();
+
+          if (assignment.parentRequestId) {
+            const allAssignments = await IndWorkerAssignment.find({
+              parentRequestId: assignment.parentRequestId,
+              assignmentStatus: { $ne: 'CANCELLED' }
+            });
+            const allSettled = allAssignments.length > 0 && allAssignments.every(a => a.settlementStatus === 'SETTLED');
+            if (allSettled) {
+              await WorkerBookingRequest.findByIdAndUpdate(assignment.parentRequestId, { status: 'completed' });
+            }
+          }
+        }
+      } catch (assignErr) {
+        console.warn('[WorkerBookingController Cash Collection Assignment Settle]', assignErr.message);
+      }
     }
 
     // Notify User

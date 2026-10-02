@@ -293,11 +293,21 @@ const indWorkerAssignmentSchema = new mongoose.Schema(
       index: true
     },
 
-    // Backward compat
     legacyBookingId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Booking',
       default: null
+    },
+
+    // Payment details
+    paymentMethod: {
+      type: String,
+      enum: ['online', 'cash', 'plan_benefit'],
+      default: 'online'
+    },
+    isCashBooking: {
+      type: Boolean,
+      default: false
     },
 
     // ════════════════════════════════════════════════════════════════════════

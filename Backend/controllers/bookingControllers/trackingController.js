@@ -972,28 +972,71 @@ exports.workerCompleteJob = async (req, res) => {
         await assignment.save();
 
         try {
-          const netEarning = assignment.netEarning;
-          await Worker.findByIdAndUpdate(workerId, {
-            $inc: { 'wallet.balance': netEarning }
-          });
+          const isCash = Boolean(assignment.isCashBooking) || assignment.paymentMethod === 'cash' || (booking && booking.paymentMethod === 'cash');
 
-          let workerWallet = await Wallet.findOne({ workerId, userModel: 'Worker' }) || await Wallet.findOne({ userId: workerId });
-          if (!workerWallet) {
-            workerWallet = await Wallet.create({ userId: workerId, userModel: 'Worker', balance: netEarning });
+          if (isCash) {
+            const commission = assignment.commissionAmount || 0;
+            const workerDoc = await Worker.findById(workerId);
+            if (workerDoc) {
+              let walletBal = workerDoc.wallet?.balance || 0;
+              if (walletBal >= commission) {
+                workerDoc.wallet.balance = walletBal - commission;
+              } else {
+                const remainingDue = commission - walletBal;
+                workerDoc.wallet.balance = 0;
+                workerDoc.outstandingDues = (workerDoc.outstandingDues || 0) + remainingDue;
+              }
+              workerDoc.status = 'ONLINE';
+              await workerDoc.save();
+
+              let workerWallet = await Wallet.findOne({ workerId, userModel: 'Worker' }) || await Wallet.findOne({ userId: workerId });
+              if (workerWallet) {
+                workerWallet.balance = workerDoc.wallet.balance;
+                await workerWallet.save();
+              }
+            } else {
+              await Worker.findByIdAndUpdate(workerId, { status: 'ONLINE' });
+            }
+
+            await Transaction.create({
+              workerId,
+              type: 'commission_deduction',
+              amount: commission,
+              status: 'completed',
+              paymentMethod: 'cash',
+              description: `Cash Commission ₹${commission} for assignment ${assignment._id}`,
+              referenceId: idempotencyKey,
+              metadata: {
+                type: 'cash_collection_commission',
+                grossAmount: assignment.grossAmount,
+                commissionAmount: commission,
+                netEarning: assignment.netEarning
+              }
+            });
           } else {
-            workerWallet.balance = (workerWallet.balance || 0) + netEarning;
-            await workerWallet.save();
-          }
+            const netEarning = assignment.netEarning;
+            await Worker.findByIdAndUpdate(workerId, {
+              $inc: { 'wallet.balance': netEarning }
+            });
 
-          await Transaction.create({
-            workerId,
-            type: 'earnings_credit',
-            amount: netEarning,
-            status: 'completed',
-            paymentMethod: 'wallet',
-            description: `Earnings for assignment ${assignment._id}`,
-            referenceId: idempotencyKey
-          });
+            let workerWallet = await Wallet.findOne({ workerId, userModel: 'Worker' }) || await Wallet.findOne({ userId: workerId });
+            if (!workerWallet) {
+              workerWallet = await Wallet.create({ userId: workerId, userModel: 'Worker', balance: netEarning });
+            } else {
+              workerWallet.balance = (workerWallet.balance || 0) + netEarning;
+              await workerWallet.save();
+            }
+
+            await Transaction.create({
+              workerId,
+              type: 'earnings_credit',
+              amount: netEarning,
+              status: 'completed',
+              paymentMethod: 'wallet',
+              description: `Earnings for assignment ${assignment._id}`,
+              referenceId: idempotencyKey
+            });
+          }
 
           assignment.settlementStatus = 'SETTLED';
           assignment.settledAt = new Date();

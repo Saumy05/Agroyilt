@@ -697,29 +697,74 @@ exports.verifyCompletionOtp = async (req, res) => {
           assignment.settlementStatus = 'PROCESSING';
           await assignment.save();
 
-          await Worker.findByIdAndUpdate(workerId, {
-            $inc: { 'wallet.balance': settlement.netEarning },
-            status: 'ONLINE'
-          });
+          const parentReq = await WorkerBookingRequest.findById(assignment.parentRequestId);
+          const isCash = Boolean(assignment.isCashBooking) || assignment.paymentMethod === 'cash' || (parentReq && parentReq.paymentMethod === 'cash');
 
-          let workerWallet = await Wallet.findOne({ workerId, userModel: 'Worker' });
-          if (!workerWallet) workerWallet = await Wallet.findOne({ userId: workerId });
-          if (workerWallet) {
-            workerWallet.balance = (workerWallet.balance || 0) + settlement.netEarning;
-            await workerWallet.save();
+          if (isCash) {
+            // Worker collected physical cash on farm directly from customer
+            const commission = settlement.commissionAmount || 0;
+            const workerDoc = await Worker.findById(workerId);
+            if (workerDoc) {
+              let walletBal = workerDoc.wallet?.balance || 0;
+              if (walletBal >= commission) {
+                workerDoc.wallet.balance = walletBal - commission;
+              } else {
+                const remainingDue = commission - walletBal;
+                workerDoc.wallet.balance = 0;
+                workerDoc.outstandingDues = (workerDoc.outstandingDues || 0) + remainingDue;
+              }
+              workerDoc.status = 'ONLINE';
+              await workerDoc.save();
+
+              let workerWallet = await Wallet.findOne({ workerId, userModel: 'Worker' }) || await Wallet.findOne({ userId: workerId });
+              if (workerWallet) {
+                workerWallet.balance = workerDoc.wallet.balance;
+                await workerWallet.save();
+              }
+            } else {
+              await Worker.findByIdAndUpdate(workerId, { status: 'ONLINE' });
+            }
+
+            await Transaction.create({
+              workerId,
+              type: 'commission_deduction',
+              amount: commission,
+              status: 'completed',
+              paymentMethod: 'cash',
+              description: `DAILY Cash Commission ₹${commission} for ${assignment.workedDays} days (Assignment ${assignment._id})`,
+              referenceId: idempotencyKey,
+              metadata: {
+                type: 'cash_collection_commission',
+                grossAmount: settlement.grossAmount,
+                commissionAmount: commission,
+                netEarning: settlement.netEarning
+              }
+            });
           } else {
-            await Wallet.create({ userId: workerId, userModel: 'Worker', balance: settlement.netEarning });
-          }
+            await Worker.findByIdAndUpdate(workerId, {
+              $inc: { 'wallet.balance': settlement.netEarning },
+              status: 'ONLINE'
+            });
 
-          await Transaction.create({
-            workerId,
-            type: 'earnings_credit',
-            amount: settlement.netEarning,
-            status: 'completed',
-            paymentMethod: 'wallet',
-            description: `DAILY Earnings for ${assignment.workedDays} days (Assignment ${assignment._id})`,
-            referenceId: idempotencyKey
-          });
+            let workerWallet = await Wallet.findOne({ workerId, userModel: 'Worker' });
+            if (!workerWallet) workerWallet = await Wallet.findOne({ userId: workerId });
+            if (workerWallet) {
+              workerWallet.balance = (workerWallet.balance || 0) + settlement.netEarning;
+              await workerWallet.save();
+            } else {
+              await Wallet.create({ userId: workerId, userModel: 'Worker', balance: settlement.netEarning });
+            }
+
+            await Transaction.create({
+              workerId,
+              type: 'earnings_credit',
+              amount: settlement.netEarning,
+              status: 'completed',
+              paymentMethod: 'wallet',
+              description: `DAILY Earnings for ${assignment.workedDays} days (Assignment ${assignment._id})`,
+              referenceId: idempotencyKey
+            });
+          }
 
           assignment.settlementStatus = 'SETTLED';
           assignment.settledAt = new Date();
@@ -800,36 +845,81 @@ exports.verifyCompletionOtp = async (req, res) => {
         assignment.settlementStatus = 'PROCESSING';
         await assignment.save();
 
-        const netEarning = assignment.netEarning;
+        const parentReq = await WorkerBookingRequest.findById(assignment.parentRequestId);
+        const isCash = Boolean(assignment.isCashBooking) || assignment.paymentMethod === 'cash' || (parentReq && parentReq.paymentMethod === 'cash');
 
-        // 1. Credit Worker in Worker Model
-        await Worker.findByIdAndUpdate(workerId, {
-          $inc: { 'wallet.balance': netEarning },
-          status: 'ONLINE'
-        });
+        if (isCash) {
+          // Cash on Service flow
+          const commission = assignment.commissionAmount || 0;
+          const workerDoc = await Worker.findById(workerId);
+          if (workerDoc) {
+            let walletBal = workerDoc.wallet?.balance || 0;
+            if (walletBal >= commission) {
+              workerDoc.wallet.balance = walletBal - commission;
+            } else {
+              const remainingDue = commission - walletBal;
+              workerDoc.wallet.balance = 0;
+              workerDoc.outstandingDues = (workerDoc.outstandingDues || 0) + remainingDue;
+            }
+            workerDoc.status = 'ONLINE';
+            await workerDoc.save();
 
-        // 2. Also ensure Wallet doc exists & credit
-        let workerWallet = await Wallet.findOne({ workerId, userModel: 'Worker' });
-        if (!workerWallet) {
-          workerWallet = await Wallet.findOne({ userId: workerId });
-        }
-        if (workerWallet) {
-          workerWallet.balance = (workerWallet.balance || 0) + netEarning;
-          await workerWallet.save();
+            let workerWallet = await Wallet.findOne({ workerId, userModel: 'Worker' }) || await Wallet.findOne({ userId: workerId });
+            if (workerWallet) {
+              workerWallet.balance = workerDoc.wallet.balance;
+              await workerWallet.save();
+            }
+          } else {
+            await Worker.findByIdAndUpdate(workerId, { status: 'ONLINE' });
+          }
+
+          await Transaction.create({
+            workerId,
+            type: 'commission_deduction',
+            amount: commission,
+            status: 'completed',
+            paymentMethod: 'cash',
+            description: `Cash Commission ₹${commission} for assignment ${assignment._id}`,
+            referenceId: idempotencyKey,
+            metadata: {
+              type: 'cash_collection_commission',
+              grossAmount: assignment.grossAmount,
+              commissionAmount: commission,
+              netEarning: assignment.netEarning
+            }
+          });
         } else {
-          await Wallet.create({ userId: workerId, userModel: 'Worker', balance: netEarning });
-        }
+          const netEarning = assignment.netEarning;
 
-        // 3. Create Transaction records
-        await Transaction.create({
-          workerId,
-          type: 'earnings_credit',
-          amount: netEarning,
-          status: 'completed',
-          paymentMethod: 'wallet',
-          description: `Earnings for assignment ${assignment._id}`,
-          referenceId: idempotencyKey
-        });
+          // 1. Credit Worker in Worker Model
+          await Worker.findByIdAndUpdate(workerId, {
+            $inc: { 'wallet.balance': netEarning },
+            status: 'ONLINE'
+          });
+
+          // 2. Also ensure Wallet doc exists & credit
+          let workerWallet = await Wallet.findOne({ workerId, userModel: 'Worker' });
+          if (!workerWallet) {
+            workerWallet = await Wallet.findOne({ userId: workerId });
+          }
+          if (workerWallet) {
+            workerWallet.balance = (workerWallet.balance || 0) + netEarning;
+            await workerWallet.save();
+          } else {
+            await Wallet.create({ userId: workerId, userModel: 'Worker', balance: netEarning });
+          }
+
+          // 3. Create Transaction records
+          await Transaction.create({
+            workerId,
+            type: 'earnings_credit',
+            amount: netEarning,
+            status: 'completed',
+            paymentMethod: 'wallet',
+            description: `Earnings for assignment ${assignment._id}`,
+            referenceId: idempotencyKey
+          });
+        }
 
         assignment.settlementStatus = 'SETTLED';
         assignment.settledAt = new Date();

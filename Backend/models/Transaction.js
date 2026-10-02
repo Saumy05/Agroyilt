@@ -23,7 +23,7 @@ const transactionSchema = new mongoose.Schema({
   },
     type: {
     type: String,
-    enum: ['credit', 'debit', 'refund', 'withdrawal', 'commission', 'cash_collected', 'settlement', 'worker_payment', 'earnings_credit', 'tds_deduction', 'payment', 'platform_fee', 'convenience_fee', 'gst', 'penalty', 'ecommerce_full_payment', 'referral_reward', 'referral_reversal'],
+    enum: ['credit', 'debit', 'refund', 'withdrawal', 'commission', 'commission_deduction', 'cash_collected', 'settlement', 'worker_payment', 'earnings_credit', 'tds_deduction', 'payment', 'platform_fee', 'convenience_fee', 'gst', 'penalty', 'ecommerce_full_payment', 'referral_reward', 'referral_reversal'],
     required: true
   },
   amount: {
