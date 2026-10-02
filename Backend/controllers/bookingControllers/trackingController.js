@@ -333,6 +333,13 @@ exports.getTrackingSnapshot = async (req, res) => {
           finalVisitOtp = currentDayLog.visitOtpCode || null;
         }
         if (currentDayLog && currentDayLog.workStatus === 'IN_PROGRESS') {
+          if (!currentDayLog.completionOtpCode && b.save) {
+            const rawCompletionOtp = Math.floor(1000 + Math.random() * 9000).toString();
+            currentDayLog.completionOtpCode = rawCompletionOtp;
+            currentDayLog.completionOtpHash = crypto.createHash('sha256').update(rawCompletionOtp).digest('hex');
+            currentDayLog.completionOtpExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+            b.save().catch(e => console.warn('[Auto-gen daily completion OTP save warn]', e.message));
+          }
           finalCompletionOtp = currentDayLog.completionOtpCode || null;
         }
       }

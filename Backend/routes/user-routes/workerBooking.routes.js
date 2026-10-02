@@ -23,6 +23,8 @@ router.get('/farmer-worker-request/:id',                     authenticate, fwr.g
 router.post('/farmer-worker-request/:id/select-workers',     authenticate, fwr.farmerSelectWorkers);
 router.post('/farmer-worker-request/:id/create-payment',     authenticate, fwr.createWorkerBookingPayment);
 router.post('/farmer-worker-request/:id/verify-payment',     authenticate, fwr.verifyWorkerBookingPayment);
+router.post('/farmer-worker-request/:id/confirm-cash',       authenticate, fwr.confirmWorkerBookingCash);
+router.post('/farmer-worker-request/:id/confirm',            authenticate, fwr.confirmWorkerBookingCash);
 router.post('/farmer-worker-request/:id/assignment/:assignmentId/completion-otp', authenticate, fwr.generateFarmerCompletionOtp);
 router.delete('/farmer-worker-request/:id',                  authenticate, fwr.cancelFarmerRequest);
 

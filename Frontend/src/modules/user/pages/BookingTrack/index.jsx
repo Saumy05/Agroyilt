@@ -18,6 +18,7 @@ import LogoLoader from '../../../../components/common/LogoLoader';
 import DailyTrackingView from './components/DailyTrackingView';
 import DecreaseWorkerModal from './components/DecreaseWorkerModal';
 import ExtensionModal from './components/ExtensionModal';
+import workerBookingService from '../../../../services/workerBookingService';
 
 // Fix Leaflet default marker icon path broken by Vite/webpack bundling
 delete L.Icon.Default.prototype._getIconUrl;
@@ -237,6 +238,20 @@ const BookingTrack = () => {
       setRefreshing(false);
     }
   }, [id]);
+
+  const handleGenerateCompletionOtp = async (assignmentId) => {
+    try {
+      const res = await workerBookingService.generateCompletionOtp(id, assignmentId);
+      if (res?.success) {
+        toastManager.success(`Completion OTP: ${res.data?.completionOtp || res.completionOtp || 'Generated'}`);
+        fetchSnapshot(false);
+      } else {
+        toastManager.error(res?.message || 'Failed to generate Completion OTP');
+      }
+    } catch (err) {
+      toastManager.error(err.response?.data?.message || 'Failed to generate Completion OTP');
+    }
+  };
 
   // Initial Load & Regular Resync Interval (15s)
   useEffect(() => {
@@ -1029,6 +1044,7 @@ const BookingTrack = () => {
             workers={workersList}
             onDecreaseClick={(worker) => setDecreaseTargetWorker(worker)}
             onRequestExtensionClick={() => setIsExtensionModalOpen(true)}
+            onGenerateCompletionOtp={handleGenerateCompletionOtp}
           />
         )}
 

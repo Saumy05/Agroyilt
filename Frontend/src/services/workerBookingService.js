@@ -56,6 +56,11 @@ export const workerBookingService = {
     return response.data;
   },
 
+  confirmWorkerBookingCash: async (requestId) => {
+    const response = await api.post(`/users/farmer-worker-request/${requestId}/confirm-cash`);
+    return response.data;
+  },
+
   getTrackingData: async (requestId) => {
     const response = await api.get(`/users/farmer-worker-request/${requestId}/tracking`);
     return response.data;

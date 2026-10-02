@@ -337,37 +337,83 @@ exports.confirmCashCollection = async (req, res) => {
         }
       }
     } else if (booking.workerId && !booking.vendorId) {
-      // Independent Worker Logic
+      // Independent Worker Cash Collection Logic
       const Worker = require('../../models/Worker');
+      const IndWorkerAssignment = require('../../models/IndWorkerAssignment');
+      const WorkerBookingRequest = require('../../models/WorkerBookingRequest');
       const workerId = booking.workerId;
       
-      const workerEarning = grandTotal; 
-      
-      await Worker.findByIdAndUpdate(workerId, {
-        $inc: { 'wallet.balance': workerEarning }
-      });
-      
+      const commissionRate = booking.commissionRate ?? 10;
+      const commissionAmount = booking.commissionAmount ?? Math.round((grandTotal * commissionRate) / 100);
+      const workerNetEarning = grandTotal - commissionAmount;
+
+      const workerDoc = await Worker.findById(workerId);
+      if (workerDoc) {
+        // Worker collected grandTotal in physical cash in hand.
+        // Platform commission is deducted from wallet balance if positive, or added to dues.
+        let walletBalance = workerDoc.wallet?.balance || 0;
+        if (walletBalance >= commissionAmount) {
+          workerDoc.wallet.balance = walletBalance - commissionAmount;
+        } else {
+          const remainingDue = commissionAmount - walletBalance;
+          workerDoc.wallet.balance = 0;
+          workerDoc.outstandingDues = (workerDoc.outstandingDues || 0) + remainingDue;
+        }
+        await workerDoc.save();
+      }
+
       await Transaction.create({
         workerId: workerId,
         bookingId: booking._id,
-        amount: workerEarning,
+        amount: grandTotal,
         type: 'cash_collected',
         paymentMethod: 'cash',
         status: 'completed',
-        description: `Earnings ₹${workerEarning} credited for booking #${booking.bookingNumber || booking._id.toString().slice(-6)} (offline payment)`,
+        description: `Cash ₹${grandTotal} collected directly from farmer for booking #${booking.bookingNumber || booking._id.toString().slice(-6)}. Platform commission ₹${commissionAmount} applied.`,
         metadata: {
-          type: 'earnings_increase',
-          bookingNumber: booking.bookingNumber
+          type: 'cash_collection',
+          bookingNumber: booking.bookingNumber,
+          grandTotal,
+          commissionAmount,
+          workerNetEarning
         }
       });
+
+      // Atomically settle linked IndWorkerAssignment
+      try {
+        const assignment = await IndWorkerAssignment.findOne({
+          $or: [{ legacyBookingId: booking._id }, { parentRequestId: booking.workerRequestId, workerId }]
+        });
+        if (assignment) {
+          assignment.settlementStatus = 'SETTLED';
+          assignment.completionStatus = 'OTP_VERIFIED';
+          assignment.workStatus = 'COMPLETED';
+          assignment.settledAt = new Date();
+          assignment.workCompletedAt = new Date();
+          await assignment.save();
+
+          if (assignment.parentRequestId) {
+            const allAssignments = await IndWorkerAssignment.find({
+              parentRequestId: assignment.parentRequestId,
+              assignmentStatus: { $ne: 'CANCELLED' }
+            });
+            const allSettled = allAssignments.length > 0 && allAssignments.every(a => a.settlementStatus === 'SETTLED');
+            if (allSettled) {
+              await WorkerBookingRequest.findByIdAndUpdate(assignment.parentRequestId, { status: 'completed' });
+            }
+          }
+        }
+      } catch (assignErr) {
+        console.warn('[Cash Collection Assignment Settle]', assignErr.message);
+      }
     }
 
     // Record stats in the Daily Earning Tracker
     recordBookingEarning({
       date: new Date(),
       totalRevenue: bill ? bill.grandTotal : collectionAmount,
-      platformCommission: bill ? bill.companyRevenue : (collectionAmount * 0.2),
-      vendorEarnings: vendorEarning > 0 ? vendorEarning : (collectionAmount * 0.8),
+      platformCommission: bill ? bill.companyRevenue : (collectionAmount * 0.1),
+      vendorEarnings: vendorEarning > 0 ? vendorEarning : (collectionAmount * 0.9),
       totalGST: bill ? bill.totalGST : 0,
       totalTDS: 0 // Captured separately during withdrawal
     });

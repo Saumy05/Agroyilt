@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
-import { FiArrowLeft, FiShield, FiLock, FiCheckCircle, FiAlertCircle } from 'react-icons/fi';
+import { FiArrowLeft, FiShield, FiLock, FiCheckCircle, FiAlertCircle, FiCreditCard, FiDollarSign } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import workerBookingService from '../../../../services/workerBookingService';
 
@@ -11,6 +11,25 @@ const WorkerSelectionPayment = () => {
   const [request, setRequest] = useState(null);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState('online'); // 'online' | 'cash'
+
+  const handleCashConfirm = async () => {
+    try {
+      setProcessing(true);
+      toast.loading('Confirming booking with Cash on Service...', { id: 'cash-toast' });
+      const res = await workerBookingService.confirmWorkerBookingCash(id);
+      if (res && res.success) {
+        toast.success('Booking Confirmed! Pay cash to worker upon completion.', { id: 'cash-toast' });
+        navigate(`/user/farmer-worker-request/${id}`);
+      } else {
+        toast.error(res?.message || 'Failed to confirm booking.', { id: 'cash-toast' });
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Failed to confirm booking with cash.', { id: 'cash-toast' });
+    } finally {
+      setProcessing(false);
+    }
+  };
 
   useEffect(() => {
     const fetchDetails = async () => {
@@ -219,27 +238,92 @@ const WorkerSelectionPayment = () => {
           </div>
         </div>
 
-        {/* Info Card */}
-        <div className="bg-blue-50 border border-blue-100 rounded-3xl p-5 flex gap-3">
-          <FiCheckCircle className="text-blue-500 shrink-0 mt-0.5" size={20} />
-          <p className="text-xs text-blue-800 font-medium leading-relaxed">
-            <strong className="font-bold">Why pay the max budget?</strong> Workers may bid lower than your max rate. Any unused amount after payment will be instantly credited back to your AgroYilt wallet. You are fully protected.
-          </p>
+        {/* Payment Method Selector */}
+        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5 space-y-3">
+          <h3 className="font-black text-sm text-slate-800">Choose Payment Method</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => setPaymentMethod('online')}
+              className={`p-4 rounded-2xl border text-left transition-all ${
+                paymentMethod === 'online'
+                  ? 'border-emerald-500 bg-emerald-50/60 ring-2 ring-emerald-500/20'
+                  : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <FiCreditCard className={paymentMethod === 'online' ? 'text-emerald-600' : 'text-slate-400'} size={20} />
+                {paymentMethod === 'online' && <FiCheckCircle className="text-emerald-600" size={16} />}
+              </div>
+              <p className="font-bold text-xs text-slate-900">Pay Online</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">UPI / Card / Netbanking with Auto-Refund</p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setPaymentMethod('cash')}
+              className={`p-4 rounded-2xl border text-left transition-all ${
+                paymentMethod === 'cash'
+                  ? 'border-emerald-500 bg-emerald-50/60 ring-2 ring-emerald-500/20'
+                  : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <FiDollarSign className={paymentMethod === 'cash' ? 'text-emerald-600' : 'text-slate-400'} size={20} />
+                {paymentMethod === 'cash' && <FiCheckCircle className="text-emerald-600" size={16} />}
+              </div>
+              <p className="font-bold text-xs text-slate-900">Cash on Service</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">Pay worker directly upon work completion</p>
+            </button>
+          </div>
         </div>
 
-        <button
-          onClick={handlePayment}
-          disabled={processing}
-          className="w-full mt-6 py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-[0_4px_12px_rgba(15,23,42,0.25)] disabled:opacity-75"
-        >
-          {processing ? (
-            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-          ) : (
-            <>
-              <FiLock /> Pay ₹{financials.totalPayable} Securely
-            </>
-          )}
-        </button>
+        {/* Info Card */}
+        {paymentMethod === 'online' ? (
+          <div className="bg-blue-50 border border-blue-100 rounded-3xl p-5 flex gap-3">
+            <FiCheckCircle className="text-blue-500 shrink-0 mt-0.5" size={20} />
+            <p className="text-xs text-blue-800 font-medium leading-relaxed">
+              <strong className="font-bold">Online Escrow Protection:</strong> Workers may bid lower than your max rate. Any unused amount after work verification is instantly refunded to your AgroYilt wallet.
+            </p>
+          </div>
+        ) : (
+          <div className="bg-emerald-50 border border-emerald-100 rounded-3xl p-5 flex gap-3">
+            <FiShield className="text-emerald-600 shrink-0 mt-0.5" size={20} />
+            <p className="text-xs text-emerald-800 font-medium leading-relaxed">
+              <strong className="font-bold">Pay Cash on Farm:</strong> No advance payment required now. You will pay the worker directly in physical cash when the service is completed and you share the completion OTP.
+            </p>
+          </div>
+        )}
+
+        {paymentMethod === 'online' ? (
+          <button
+            onClick={handlePayment}
+            disabled={processing}
+            className="w-full mt-6 py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-[0_4px_12px_rgba(15,23,42,0.25)] disabled:opacity-75"
+          >
+            {processing ? (
+              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <>
+                <FiLock /> Pay ₹{financials.totalPayable} Securely
+              </>
+            )}
+          </button>
+        ) : (
+          <button
+            onClick={handleCashConfirm}
+            disabled={processing}
+            className="w-full mt-6 py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-[0_4px_12px_rgba(5,150,105,0.3)] disabled:opacity-75"
+          >
+            {processing ? (
+              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <>
+                <FiCheckCircle /> Confirm Booking (Cash on Service)
+              </>
+            )}
+          </button>
+        )}
 
       </div>
     </div>

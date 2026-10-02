@@ -621,9 +621,11 @@ const FarmerRequestDetail = () => {
             </div>
 
             {(() => {
-              const isPaid = request.paymentStatus === 'success';
+              const isCash = request.paymentMethod === 'cash';
+              const isConfirmed = request.status === 'confirmed';
+              const isPaid = request.paymentStatus === 'success' || (isCash && isConfirmed);
               const isDaily = request.bookingType === 'DAILY' || request.rateUnit === 'daily';
-              const effectiveWorkerCount = isPaid
+              const effectiveWorkerCount = (isPaid || isConfirmed)
                 ? (request.paymentSummary?.selectedWorkerCount || request.selectedWorkerIds?.length || 1)
                 : (selectedWorkerIds.length > 0 ? selectedWorkerIds.length : (request.selectedWorkerIds?.length || request.requiredWorkers || 1));
 
@@ -755,16 +757,29 @@ const FarmerRequestDetail = () => {
                     <span className="font-bold text-slate-900">
                       +₹{platformFee.toLocaleString('en-IN')}
                     </span>
-                  </div>
+                  {request.paymentMethod && (
+                    <div className="flex justify-between items-center text-slate-600">
+                      <span className="font-medium">Payment Mode</span>
+                      <span className={`font-bold px-2.5 py-0.5 rounded-full text-xs uppercase ${
+                        isCash ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                      }`}>
+                        {isCash ? '💵 Cash on Service' : '💳 Online Escrow'}
+                      </span>
+                    </div>
+                  )}
 
                   <div className="border-t border-dashed border-slate-200 my-1" />
 
-                  <div className="flex justify-between items-center bg-teal-50/60 p-3 rounded-2xl border border-teal-100">
+                  <div className={`flex justify-between items-center p-3 rounded-2xl border ${isCash ? 'bg-amber-50/60 border-amber-200' : 'bg-teal-50/60 border-teal-100'}`}>
                     <div>
-                      <span className="font-black text-teal-900 text-sm block">{isPaid ? 'Total Paid' : 'Total Payable'}</span>
-                      <span className="text-[10px] text-teal-700 font-medium">Reserve + Platform Fee</span>
+                      <span className={`font-black text-sm block ${isCash ? 'text-amber-900' : 'text-teal-900'}`}>
+                        {isCash ? 'Pay on Completion (Cash)' : (isPaid ? 'Total Paid' : 'Total Payable')}
+                      </span>
+                      <span className={`text-[10px] font-medium ${isCash ? 'text-amber-700' : 'text-teal-700'}`}>
+                        {isCash ? 'Pay worker directly upon completion' : 'Reserve + Platform Fee'}
+                      </span>
                     </div>
-                    <span className="text-xl font-black text-teal-700">
+                    <span className={`text-xl font-black ${isCash ? 'text-amber-700' : 'text-teal-700'}`}>
                       ₹{totalAmount.toLocaleString('en-IN')}
                     </span>
                   </div>

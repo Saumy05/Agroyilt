@@ -689,8 +689,17 @@ exports.leaderRespondToRequest = async (req, res) => {
     const leaderId = req.user._id;
     const { action, rate, message } = req.body;
 
-    const request = await WorkerGroupRequest.findOne({ _id: req.params.id, teamLeaderId: leaderId });
-    if (!request) return res.status(404).json({ success: false, message: 'Request not found.' });
+    let request = await WorkerGroupRequest.findOne({ _id: req.params.id, teamLeaderId: leaderId });
+    if (!request) {
+      // Fallback: Check WorkerBookingRequest (unified flow)
+      const bookingReq = await WorkerBookingRequest.findById(req.params.id);
+      if (bookingReq) {
+        req.body.offeredRate = rate || req.body.offeredRate;
+        const fwr = require('./farmerWorkerRequestController');
+        return fwr.workerRespondToFarmerRequest(req, res);
+      }
+      return res.status(404).json({ success: false, message: 'Request not found.' });
+    }
 
     const expiryEval = isBookingExpired(request);
     const isTerminal = ['cancelled', 'expired', 'completed'].includes(request.status);
@@ -776,10 +785,88 @@ exports.dispatchToMembers = async (req, res) => {
     const leaderId = req.user._id;
     const { memberIds } = req.body || {};
 
-    const request = await WorkerGroupRequest.findOne({
+    let request = await WorkerGroupRequest.findOne({
       _id: req.params.id, teamLeaderId: leaderId, status: 'leader_accepted'
     });
-    if (!request) return res.status(404).json({ success: false, message: 'Request not found or not in leader_accepted state.' });
+    if (!request) {
+      // Fallback: Check WorkerBookingRequest (unified flow)
+      const bookingReq = await WorkerBookingRequest.findById(req.params.id);
+      if (bookingReq) {
+        const leaderDoc = await Worker.findById(leaderId);
+        if (!leaderDoc || !leaderDoc.teamId) {
+          return res.status(400).json({ success: false, message: 'You are not associated with a team.' });
+        }
+        const memberQuery = {
+          teamId: leaderDoc.teamId,
+          _id: { $ne: leaderId },
+          isActive: true,
+          approvalStatus: 'approved'
+        };
+        if (Array.isArray(memberIds) && memberIds.length > 0) {
+          memberQuery._id = { $in: memberIds, $ne: leaderId };
+        }
+        const members = await Worker.find(memberQuery).select('_id name phone skills isOfflineMember status');
+        if (members.length === 0) {
+          return res.status(400).json({ success: false, message: 'No eligible team members found to dispatch.' });
+        }
+
+        const eligibleMembers = [];
+        const offlineMemberIds = new Set();
+        for (const m of members) {
+          const conflict = bookingReq.bookingType === 'DAILY'
+            ? await hasTimeConflict(m._id, bookingReq.startDate, '00:00', '23:59')
+            : await hasTimeConflict(m._id, bookingReq.scheduledDate, bookingReq.startTime, bookingReq.endTime);
+          if (!conflict) {
+            eligibleMembers.push(m);
+            if (m.isOfflineMember) offlineMemberIds.add(m._id.toString());
+          }
+        }
+        if (eligibleMembers.length === 0) {
+          return res.status(400).json({ success: false, message: 'All selected team members have conflicting bookings.' });
+        }
+
+        const agreedRate = bookingReq.workerRate || bookingReq.farmerOfferedRate || bookingReq.maxRate || bookingReq.minRate || 0;
+        const rateUnit = bookingReq.bookingType === 'DAILY' ? 'daily' : 'hourly';
+
+        if (!bookingReq.memberInvitations) bookingReq.memberInvitations = [];
+
+        for (const tm of eligibleMembers) {
+          const existingInv = bookingReq.memberInvitations.find(inv => inv.workerId.toString() === tm._id.toString());
+          if (!existingInv) {
+            bookingReq.memberInvitations.push({
+              workerId: tm._id,
+              leaderId: leaderId,
+              offeredRate: agreedRate,
+              rateUnit: rateUnit,
+              status: tm.isOfflineMember ? 'member_accepted' : 'member_pending',
+              respondedAt: tm.isOfflineMember ? new Date() : undefined,
+              invitedAt: new Date()
+            });
+          }
+        }
+        await bookingReq.save();
+
+        for (const tm of eligibleMembers) {
+          if (!tm.isOfflineMember) {
+            await notify({
+              recipientType: 'worker', recipientId: tm._id,
+              type: 'team_member_invitation',
+              title: '👥 Team Job Invitation',
+              message: `Your team leader ${leaderDoc.name} has a job for you.`,
+              relatedId: bookingReq._id, relatedType: 'worker_booking_request'
+            });
+            emitSafe(`worker_${tm._id}`, 'workerJobsUpdated', {});
+          }
+        }
+
+        return res.json({
+          success: true,
+          message: `Request dispatched to ${eligibleMembers.length} team members.`,
+          data: bookingReq
+        });
+      }
+      return res.status(404).json({ success: false, message: 'Request not found or not in leader_accepted state.' });
+    }
 
     // Find active team members (excluding the leader)
     const memberQuery = {
@@ -993,12 +1080,33 @@ exports.leaderSelectWorkers = async (req, res) => {
       return res.status(400).json({ success: false, message: 'workerIds must be a non-empty array.' });
     }
 
-    const request = await WorkerGroupRequest.findOne({
+    let request = await WorkerGroupRequest.findOne({
       _id: req.params.id,
       teamLeaderId: leaderId,
       status: { $in: ['selection_pending', 'collecting_members'] }
     });
-    if (!request) return res.status(404).json({ success: false, message: 'Request not found or not ready for selection.' });
+    if (!request) {
+      // Fallback: Check WorkerBookingRequest (unified flow)
+      const bookingReq = await WorkerBookingRequest.findById(req.params.id);
+      if (bookingReq) {
+        if (workerIds.length > bookingReq.requiredWorkers) {
+          return res.status(400).json({
+            success: false,
+            message: `Cannot select more than ${bookingReq.requiredWorkers} workers.`
+          });
+        }
+        bookingReq.finalWorkers = workerIds;
+        bookingReq.selectedWorkerIds = workerIds;
+        bookingReq.status = 'awaiting_farmer_confirmation';
+        await bookingReq.save();
+        return res.json({
+          success: true,
+          message: 'Workers selected successfully. Waiting for farmer confirmation.',
+          data: bookingReq
+        });
+      }
+      return res.status(404).json({ success: false, message: 'Request not found or not ready for selection.' });
+    }
 
     // SECURITY: Backend enforces max workers
     if (workerIds.length > request.requiredWorkers) {
@@ -1125,11 +1233,38 @@ exports.leaderSelectWorkers = async (req, res) => {
 exports.getMemberResponses = async (req, res) => {
   try {
     const leaderId = req.user._id;
-    const request = await WorkerGroupRequest.findOne({
+    let request = await WorkerGroupRequest.findOne({
       _id: req.params.id, teamLeaderId: leaderId
     }).populate('memberRequests.workerId', 'name profilePhoto skills rating dailyRate');
 
-    if (!request) return res.status(404).json({ success: false, message: 'Request not found.' });
+    if (!request) {
+      // Fallback: Check WorkerBookingRequest (unified flow)
+      const bookingReq = await WorkerBookingRequest.findById(req.params.id)
+        .populate('memberInvitations.workerId', 'name profilePhoto skills rating dailyRate');
+      if (bookingReq) {
+        const memberRequests = (bookingReq.memberInvitations || []).map(m => ({
+          _id: m._id,
+          workerId: m.workerId,
+          status: m.status === 'member_accepted' ? 'accepted' : m.status === 'member_rejected' ? 'rejected' : 'pending',
+          respondedAt: m.respondedAt,
+          offeredRate: m.offeredRate
+        }));
+        return res.json({
+          success: true,
+          data: {
+            requiredWorkers: bookingReq.requiredWorkers,
+            memberRequests: memberRequests,
+            acceptedCount: memberRequests.filter(m => m.status === 'accepted').length,
+            rejectedCount: memberRequests.filter(m => m.status === 'rejected').length,
+            pendingCount:  memberRequests.filter(m => m.status === 'pending').length,
+            selectedWorkers: bookingReq.finalWorkers || [],
+            status: bookingReq.status,
+            financialSnapshot: bookingReq.financialSnapshot
+          }
+        });
+      }
+      return res.status(404).json({ success: false, message: 'Request not found.' });
+    }
     return res.json({
       success: true,
       data: {

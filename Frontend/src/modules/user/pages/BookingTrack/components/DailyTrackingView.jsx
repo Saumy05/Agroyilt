@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   FiCalendar, FiClock, FiCheck, FiUsers, FiUserX,
-  FiPlus, FiKey, FiAlertCircle, FiArrowRight, FiShield
+  FiPlus, FiKey, FiAlertCircle, FiArrowRight, FiShield, FiCopy
 } from 'react-icons/fi';
 
 /**
@@ -186,9 +186,38 @@ const DailyTrackingView = ({
                         <FiShield className="text-emerald-600" size={14} />
                         <span className="text-xs text-emerald-900 font-bold">Today’s Completion OTP:</span>
                       </div>
-                      <span className="text-base font-black font-mono tracking-widest text-emerald-700 bg-white px-2.5 py-0.5 rounded-lg border border-emerald-200">
-                        {completionOtp}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-base font-black font-mono tracking-widest text-emerald-700 bg-white px-2.5 py-0.5 rounded-lg border border-emerald-200">
+                          {completionOtp}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard?.writeText(completionOtp);
+                          }}
+                          className="p-1.5 text-emerald-700 hover:bg-emerald-100 rounded-lg transition-colors"
+                          title="Copy OTP"
+                        >
+                          <FiCopy size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Generate Completion OTP Button if In Progress and not yet generated */}
+                  {isInProgress && !completionOtp && onGenerateCompletionOtp && (
+                    <div className="mt-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <FiShield className="text-emerald-600" size={14} />
+                        <span className="text-xs text-emerald-900 font-bold">Today’s Completion OTP:</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onGenerateCompletionOtp(w.assignmentId || w.bookingId)}
+                        className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all active:scale-95"
+                      >
+                        Generate OTP
+                      </button>
                     </div>
                   )}
                 </div>
