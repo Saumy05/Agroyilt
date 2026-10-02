@@ -17,7 +17,8 @@ const DailyTrackingView = ({
   onDecreaseClick,
   onRequestExtensionClick,
   onAddWorkersClick,
-  onGenerateCompletionOtp
+  onGenerateCompletionOtp,
+  onPayViaQrClick
 }) => {
   const totalDays = Number(trackingData?.numberOfDays) || 1;
   const currentDay = Math.max(1, Math.max(...workers.map(w => w.currentDayIndex || 1)));
@@ -26,7 +27,7 @@ const DailyTrackingView = ({
     <div className="space-y-4">
       {/* ── Multi-Day Progress Banner ─────────────────────────────────────── */}
       <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <span className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-black text-sm">
               <FiCalendar size={16} />
@@ -37,7 +38,18 @@ const DailyTrackingView = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {onPayViaQrClick && (
+              <button
+                type="button"
+                id="pay-via-qr-btn"
+                onClick={() => onPayViaQrClick()}
+                className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-2xl border border-indigo-200 flex items-center gap-1.5 active:scale-95 transition-all shadow-xs"
+              >
+                <span>📲 Pay via QR</span>
+              </button>
+            )}
+
             {onAddWorkersClick && (
               <button
                 type="button"
@@ -238,18 +250,27 @@ const DailyTrackingView = ({
                 </div>
 
                 {/* Worker Action Buttons */}
-                {!isFinished && !isDecreased && (
-                  <div className="flex justify-end pt-1">
+                <div className="flex justify-between items-center pt-1 flex-wrap gap-2">
+                  {!isFinished && onPayViaQrClick && (
+                    <button
+                      type="button"
+                      onClick={() => onPayViaQrClick(w)}
+                      className="text-xs text-indigo-700 hover:text-indigo-800 font-bold flex items-center gap-1 hover:underline active:scale-95 transition-all"
+                    >
+                      <span>📲 Pay via Admin QR</span>
+                    </button>
+                  )}
+                  {!isFinished && !isDecreased && (
                     <button
                       type="button"
                       onClick={() => onDecreaseClick(w)}
-                      className="text-xs text-amber-700 hover:text-amber-800 font-bold flex items-center gap-1 hover:underline active:scale-95 transition-all"
+                      className="text-xs text-amber-700 hover:text-amber-800 font-bold flex items-center gap-1 hover:underline active:scale-95 transition-all ml-auto"
                     >
                       <FiUserX size={13} />
                       <span>Stop after today (Decrease)</span>
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             );
           })}

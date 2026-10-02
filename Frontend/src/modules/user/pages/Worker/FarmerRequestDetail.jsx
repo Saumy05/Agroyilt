@@ -757,6 +757,8 @@ const FarmerRequestDetail = () => {
                     <span className="font-bold text-slate-900">
                       +₹{platformFee.toLocaleString('en-IN')}
                     </span>
+                  </div>
+
                   {request.paymentMethod && (
                     <div className="flex justify-between items-center text-slate-600">
                       <span className="font-medium">Payment Mode</span>

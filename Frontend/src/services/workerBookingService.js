@@ -61,6 +61,21 @@ export const workerBookingService = {
     return response.data;
   },
 
+  generateAdminPaymentQr: async (id, amount, extraItems = []) => {
+    const response = await api.post(`/bookings/payment/${id}/generate-admin-qr`, { amount, extraItems });
+    return response.data;
+  },
+
+  confirmAdminPaymentQr: async (id, utr, amount) => {
+    const response = await api.post(`/bookings/payment/${id}/confirm-admin-qr`, { utr, amount });
+    return response.data;
+  },
+
+  getAdminPaymentQrStatus: async (id) => {
+    const response = await api.get(`/bookings/payment/${id}/qr-status`);
+    return response.data;
+  },
+
   getTrackingData: async (requestId) => {
     const response = await api.get(`/users/farmer-worker-request/${requestId}/tracking`);
     return response.data;

@@ -109,6 +109,15 @@ const settingsSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  // Admin Company UPI Settings for QR Payments
+  adminUpiId: {
+    type: String,
+    default: 'agroyilt@icici'
+  },
+  adminUpiMerchantName: {
+    type: String,
+    default: 'AgroYilt Technologies'
+  },
   // Cloudinary Settings
   cloudinaryCloudName: {
     type: String,

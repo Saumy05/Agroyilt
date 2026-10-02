@@ -209,11 +209,21 @@ const workerBookingRequestSchema = new mongoose.Schema({
   },
   paymentMethod: {
     type: String,
-    enum: ['online', 'wallet', 'cash', null],
+    enum: ['online', 'wallet', 'cash', 'qr_online', null],
     default: null
   },
   razorpayOrderId:   { type: String, default: null },
   razorpayPaymentId: { type: String, default: null },
+  qrPayment: {
+    refId: { type: String, default: null },
+    amount: { type: Number, default: null },
+    adminUpiId: { type: String, default: null },
+    status: { type: String, enum: ['PENDING', 'COMPLETED', 'FAILED'], default: 'PENDING' },
+    utr: { type: String, default: null },
+    generatedAt: { type: Date, default: null },
+    confirmedAt: { type: Date, default: null },
+    expiresAt: { type: Date, default: null }
+  },
 
   // Immutable financial snapshot (locked at payment creation time)
   financialSnapshot: {

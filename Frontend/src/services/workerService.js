@@ -145,6 +145,27 @@ const workerService = {
     return response.data;
   },
 
+  generateAdminQr: async (id, amount, extraItems = []) => {
+    const response = await api.post(`/bookings/cash/${id}/generate-admin-qr`, {
+      amount,
+      extraItems
+    });
+    return response.data;
+  },
+
+  confirmAdminQr: async (id, utr, amount) => {
+    const response = await api.post(`/bookings/cash/${id}/confirm-admin-qr`, {
+      utr,
+      amount
+    });
+    return response.data;
+  },
+
+  getAdminQrStatus: async (id) => {
+    const response = await api.get(`/bookings/cash/${id}/qr-status`);
+    return response.data;
+  },
+
   addJobNotes: async (id, notes) => {
     const response = await api.post(`/workers/jobs/${id}/notes`, { notes });
     return response.data;

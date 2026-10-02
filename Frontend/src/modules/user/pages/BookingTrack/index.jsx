@@ -19,6 +19,7 @@ import DailyTrackingView from './components/DailyTrackingView';
 import DecreaseWorkerModal from './components/DecreaseWorkerModal';
 import ExtensionModal from './components/ExtensionModal';
 import AddWorkersModal from './components/AddWorkersModal';
+import FarmerQrPaymentModal from './components/FarmerQrPaymentModal';
 import workerBookingService from '../../../../services/workerBookingService';
 
 // Fix Leaflet default marker icon path broken by Vite/webpack bundling
@@ -114,6 +115,8 @@ const BookingTrack = () => {
   const [decreaseTargetWorker, setDecreaseTargetWorker] = useState(null);
   const [payingExtensionId, setPayingExtensionId] = useState(null);
   const [redirectCountdown, setRedirectCountdown] = useState(3);
+  const [isQrPaymentModalOpen, setIsQrPaymentModalOpen] = useState(false);
+  const [qrPaymentTarget, setQrPaymentTarget] = useState(null);
   // leafletLoaded state removed — L is now imported directly from npm
 
   const mapContainerRef = useRef(null);
@@ -133,6 +136,8 @@ const BookingTrack = () => {
     setIsFullScreen(false);
     setRedirectCountdown(3);
     setSelectedProofModal(null);
+    setIsQrPaymentModalOpen(false);
+    setQrPaymentTarget(null);
 
     // Destroy previous Leaflet map instance fully
     if (mapInstanceRef.current) {
@@ -1048,6 +1053,16 @@ const BookingTrack = () => {
             onRequestExtensionClick={() => setIsExtensionModalOpen(true)}
             onAddWorkersClick={() => setIsAddWorkersModalOpen(true)}
             onGenerateCompletionOtp={handleGenerateCompletionOtp}
+            onPayViaQrClick={(worker) => {
+              setQrPaymentTarget(worker ? {
+                id: worker.assignmentId || worker.bookingId,
+                amount: worker.agreedRate
+              } : {
+                id: trackingData?.requestId || id,
+                amount: trackingData?.paymentSummary?.estimatedTotal
+              });
+              setIsQrPaymentModalOpen(true);
+            }}
           />
         )}
 
@@ -1280,6 +1295,26 @@ const BookingTrack = () => {
                       </div>
                     </div>
                   )}
+
+                  {/* Pay Worker via QR Button (for Cash Bookings) */}
+                  {!['COMPLETED', 'CANCELLED'].includes(worker.journeyStatus) && (
+                    <div className="mt-3 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setQrPaymentTarget({
+                            id: worker.assignmentId || worker.bookingId,
+                            amount: worker.agreedRate
+                          });
+                          setIsQrPaymentModalOpen(true);
+                        }}
+                        className="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl text-xs border border-indigo-200 flex items-center gap-1.5 transition-all active:scale-95 shadow-2xs"
+                      >
+                        <span>📲 Pay this Worker via Admin QR</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })
@@ -1383,6 +1418,18 @@ const BookingTrack = () => {
         defaultRate={trackingData?.maxDailyRate || trackingData?.minDailyRate || 500}
         remainingDays={Math.max(1, (trackingData?.numberOfDays || 1) - (workersList[0]?.currentDayIndex || 1) + 1)}
         onWorkersAdded={() => fetchSnapshot(false)}
+      />
+
+      {/* ── Farmer Admin QR Payment Modal ── */}
+      <FarmerQrPaymentModal
+        isOpen={isQrPaymentModalOpen}
+        onClose={() => {
+          setIsQrPaymentModalOpen(false);
+          setQrPaymentTarget(null);
+        }}
+        targetId={qrPaymentTarget?.id || trackingData?.requestId || id}
+        amount={qrPaymentTarget?.amount}
+        onPaymentSuccess={() => fetchSnapshot(false)}
       />
     </div>
   );

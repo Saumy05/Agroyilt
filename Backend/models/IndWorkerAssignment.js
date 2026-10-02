@@ -302,12 +302,22 @@ const indWorkerAssignmentSchema = new mongoose.Schema(
     // Payment details
     paymentMethod: {
       type: String,
-      enum: ['online', 'cash', 'plan_benefit'],
+      enum: ['online', 'cash', 'plan_benefit', 'qr_online'],
       default: 'online'
     },
     isCashBooking: {
       type: Boolean,
       default: false
+    },
+    qrPayment: {
+      refId: { type: String, default: null },
+      amount: { type: Number, default: null },
+      adminUpiId: { type: String, default: null },
+      status: { type: String, enum: ['PENDING', 'COMPLETED', 'FAILED'], default: 'PENDING' },
+      utr: { type: String, default: null },
+      generatedAt: { type: Date, default: null },
+      confirmedAt: { type: Date, default: null },
+      expiresAt: { type: Date, default: null }
     },
 
     // ════════════════════════════════════════════════════════════════════════
