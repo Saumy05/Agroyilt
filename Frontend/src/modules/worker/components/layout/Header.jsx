@@ -44,7 +44,16 @@ const Header = ({
     if (showNotifications) {
       fetchUnreadCount();
       const interval = setInterval(fetchUnreadCount, 60000); // Poll every minute
-      return () => clearInterval(interval);
+
+      const handleUpdate = () => {
+        fetchUnreadCount();
+      };
+      window.addEventListener('workerNotificationsUpdated', handleUpdate);
+
+      return () => {
+        clearInterval(interval);
+        window.removeEventListener('workerNotificationsUpdated', handleUpdate);
+      };
     }
   }, [showNotifications]);
 

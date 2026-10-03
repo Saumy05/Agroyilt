@@ -418,6 +418,7 @@ const expireWorkerBookingRequest = async (requestOrId, reason = 'Booking request
       emitSafe(`user_${farmerIdStr}`, 'userBookingsUpdated', {});
       emitSafe(`user:${farmerIdStr}`, 'userBookingsUpdated', {});
 
+      const link = `/user/farmer-worker-request/${request._id}`;
       Notification.create({
         userId: request.farmerId,
         type: 'worker_request_expired',
@@ -425,8 +426,16 @@ const expireWorkerBookingRequest = async (requestOrId, reason = 'Booking request
         message: `Your booking request for "${request.workTitle || 'Workers'}" expired because no worker accepted before the scheduled time.`,
         relatedId: request._id,
         relatedType: 'WorkerBookingRequest',
-        data: { requestId: request._id }
-      }).catch(() => {});
+        data: { requestId: request._id, link }
+      }).then(notif => {
+        const payload = notif.toObject ? notif.toObject() : notif;
+        emitSafe(`user_${farmerIdStr}`, 'notification', { ...payload, link });
+        emitSafe(`user:${farmerIdStr}`, 'notification', { ...payload, link });
+        emitSafe(`user_${farmerIdStr}`, 'userNotificationsUpdated', { unreadCountIncrement: 1 });
+        emitSafe(`user:${farmerIdStr}`, 'userNotificationsUpdated', { unreadCountIncrement: 1 });
+      }).catch(err => {
+        console.warn('[Expiry Notification non-fatal]:', err?.message);
+      });
     }
 
     // 9. Broadcast to shared booking request rooms

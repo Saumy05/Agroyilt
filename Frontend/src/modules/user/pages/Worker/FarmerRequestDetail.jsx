@@ -84,9 +84,11 @@ const FarmerRequestDetail = () => {
 
     window.addEventListener('team_member_status_updated', handleTeamMemberUpdate);
     window.addEventListener('userBookingsUpdated', handleUserBookingsUpdate);
+    window.addEventListener('userNotificationsUpdated', handleUserBookingsUpdate);
     return () => {
       window.removeEventListener('team_member_status_updated', handleTeamMemberUpdate);
       window.removeEventListener('userBookingsUpdated', handleUserBookingsUpdate);
+      window.removeEventListener('userNotificationsUpdated', handleUserBookingsUpdate);
     };
   }, [id, fetchRequest]);
 
@@ -522,6 +524,31 @@ const FarmerRequestDetail = () => {
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Active Booking Banner (Confirmed, pending payment) ─────────────── */}
+        {request.status === 'confirmed' && request.paymentStatus !== 'success' && (
+          <div className="bg-gradient-to-r from-emerald-500 to-teal-600 rounded-3xl p-5 shadow-lg shadow-emerald-400/20 relative overflow-hidden">
+            <div className="absolute -top-6 -right-6 w-24 h-24 bg-white/10 rounded-full" />
+            <div className="absolute -bottom-6 -left-6 w-20 h-20 bg-white/10 rounded-full" />
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center shrink-0 text-xl">🎉</div>
+              <div>
+                <h3 className="text-white font-black text-base">Active Booking!</h3>
+                <p className="text-emerald-100 text-xs font-medium">Workers are confirmed for your job</p>
+              </div>
+            </div>
+            <p className="text-emerald-50 text-xs mb-4 font-medium leading-relaxed">
+              {request.acceptedWorkersCount || request.finalWorkers?.length || 0} worker(s) accepted your request for <span className="font-black">{request.workTitle}</span>. Track them live or contact them directly.
+            </p>
+            <button
+              onClick={() => navigate(`/user/farmer-worker-request/${request._id}/tracking`)}
+              className="w-full py-3 bg-white text-emerald-700 rounded-2xl font-black text-sm flex items-center justify-center gap-2 active:scale-95 transition-all shadow-md"
+            >
+              <FiNavigation size={16} className="animate-pulse text-emerald-600" />
+              Track Workers Live
+            </button>
           </div>
         )}
 

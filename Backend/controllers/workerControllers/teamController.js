@@ -4,16 +4,60 @@ const Team = require('../../models/Team');
 const TeamRequest = require('../../models/TeamRequest');
 const Notification = require('../../models/Notification');
 
-// Utility to create notifications
+const { getIO } = require('../../sockets');
+const { sendNotificationToWorker } = require('../../services/firebaseAdmin');
+
+// Safe emit helper
+const emitSafe = (room, event, data) => {
+  try {
+    const io = getIO();
+    if (io) io.to(room).emit(event, data);
+  } catch (e) {
+    console.warn('[Socket] emit failed (non-fatal):', e.message);
+  }
+};
+
+// Utility to create notifications + emit real-time sockets + FCM push
 const sendTeamNotification = async (userId, title, message, relatedType, type) => {
   try {
-    await Notification.create({
+    const link = '/worker/team';
+    const notif = await Notification.create({
       workerId: userId,
       title,
       message,
       relatedType,
-      type
+      type,
+      data: { link }
     });
+
+    const payload = notif.toObject ? notif.toObject() : notif;
+    const idStr = userId.toString();
+    const rooms = [`worker_${idStr}`, `worker:${idStr}`];
+
+    rooms.forEach(room => {
+      emitSafe(room, 'notification', { ...payload, link });
+      if (type) emitSafe(room, type, { ...payload, link });
+      emitSafe(room, 'workerNotificationsUpdated', { unreadCountIncrement: 1, notificationId: notif._id });
+      emitSafe(room, 'team_update', { type, title, message });
+    });
+
+    // FCM Push Notification Fallback
+    try {
+      sendNotificationToWorker(userId, {
+        title: title || 'Team Alert',
+        body: message || '',
+        data: {
+          type: type || 'notification',
+          link
+        }
+      }).catch(fcmErr => {
+        if (process.env.NODE_ENV !== 'test') {
+          console.warn('[FCM Team Worker Notify Non-fatal]:', fcmErr?.message);
+        }
+      });
+    } catch (fcmSyncErr) {
+      console.warn('[FCM Team Sync Notify Non-fatal]:', fcmSyncErr?.message);
+    }
   } catch (error) {
     console.error('Notification error:', error);
   }
@@ -374,6 +418,20 @@ exports.rejectRequest = async (req, res) => {
     );
     if (!request) return res.status(404).json({ success: false, message: 'Request not found' });
     
+    // Notify the inviter that the invite was declined
+    try {
+      const rejectingWorker = await Worker.findById(req.userId).select('name');
+      await sendTeamNotification(
+        request.senderId,
+        'Team Invite Declined',
+        `${rejectingWorker?.name || 'Worker'} declined your team invitation.`,
+        'team_request',
+        'team_invite_rejected'
+      );
+    } catch (e) {
+      console.warn('[rejectRequest notify error]:', e.message);
+    }
+
     res.status(200).json({ success: true, message: 'Request rejected' });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server Error' });
@@ -392,6 +450,19 @@ exports.cancelRequest = async (req, res) => {
     );
     if (!request) return res.status(404).json({ success: false, message: 'Request not found' });
     
+    // Notify the receiver that the invite was cancelled
+    try {
+      await sendTeamNotification(
+        request.receiverId,
+        'Team Invite Cancelled',
+        'The team invitation has been cancelled by the sender.',
+        'team_request',
+        'team_invite_cancelled'
+      );
+    } catch (e) {
+      console.warn('[cancelRequest notify error]:', e.message);
+    }
+
     res.status(200).json({ success: true, message: 'Request cancelled' });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server Error' });

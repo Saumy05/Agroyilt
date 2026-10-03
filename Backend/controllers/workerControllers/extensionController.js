@@ -27,6 +27,8 @@ const { getWorkerFinancialSettings } = require('../../services/workerFinancialSe
 const { createOrder, verifyPayment } = require('../../services/razorpayService');
 const { getIO } = require('../../sockets');
 
+const { sendNotificationToUser, sendNotificationToWorker } = require('../../services/firebaseAdmin');
+
 // Helpers for integer paise math
 const toP = (inr) => Math.round(Number(inr) * 100);
 const toINR = (p) => p / 100;
@@ -46,7 +48,20 @@ const emitSafe = (room, event, data) => {
 /** Create notification helper */
 const notify = async ({ recipientType, recipientId, type, title, message, relatedId, relatedType, data }) => {
   try {
-    const notifDoc = { type, title, message, relatedId, relatedType, data: data || {} };
+    const deepLink = data?.link || (
+      recipientType === 'user'
+        ? (relatedId ? `/user/farmer-worker-request/${relatedId}/track` : '/user/my-bookings')
+        : (relatedId ? `/worker/job/${relatedId}` : '/worker/jobs')
+    );
+
+    const notifDoc = {
+      type,
+      title,
+      message,
+      relatedId,
+      relatedType,
+      data: { ...(data || {}), link: deepLink }
+    };
     if (recipientType === 'user') notifDoc.userId = recipientId;
     if (recipientType === 'worker') notifDoc.workerId = recipientId;
 
@@ -63,12 +78,63 @@ const notify = async ({ recipientType, recipientId, type, title, message, relate
       createdAt: new Date()
     };
 
+    const broadcastPayload = {
+      ...payload,
+      link: deepLink,
+      ...(data || {})
+    };
+
     const idStr = recipientId.toString();
     const rooms = recipientType === 'user'
       ? [`user_${idStr}`, `user:${idStr}`]
       : [`worker_${idStr}`, `worker:${idStr}`];
 
-    rooms.forEach(room => emitSafe(room, 'notification', payload));
+    rooms.forEach(room => {
+      emitSafe(room, 'notification', broadcastPayload);
+      if (type) {
+        emitSafe(room, type, broadcastPayload);
+      }
+      if (recipientType === 'user') {
+        emitSafe(room, 'userNotificationsUpdated', { unreadCountIncrement: 1, notificationId: payload._id });
+      } else if (recipientType === 'worker') {
+        emitSafe(room, 'workerNotificationsUpdated', { unreadCountIncrement: 1, notificationId: payload._id });
+      }
+    });
+
+    // FCM Push Notification Fallback
+    try {
+      if (recipientType === 'worker') {
+        sendNotificationToWorker(recipientId, {
+          title: title || 'Time Extension Alert',
+          body: message || '',
+          data: {
+            type: type || 'notification',
+            requestId: String(relatedId || ''),
+            link: deepLink
+          }
+        }).catch(fcmErr => {
+          if (process.env.NODE_ENV !== 'test') {
+            console.warn('[FCM Worker Extension Notify Non-fatal]:', fcmErr?.message);
+          }
+        });
+      } else if (recipientType === 'user') {
+        sendNotificationToUser(recipientId, {
+          title: title || 'AgroYilt Update',
+          body: message || '',
+          data: {
+            type: type || 'notification',
+            requestId: String(relatedId || ''),
+            link: deepLink
+          }
+        }).catch(fcmErr => {
+          if (process.env.NODE_ENV !== 'test') {
+            console.warn('[FCM User Extension Notify Non-fatal]:', fcmErr?.message);
+          }
+        });
+      }
+    } catch (fcmSyncErr) {
+      console.warn('[FCM Sync Extension Notify Non-fatal]:', fcmSyncErr?.message);
+    }
   } catch (e) {
     console.warn('[Notification] failed (non-fatal):', e.message);
   }
@@ -556,6 +622,23 @@ exports.verifyExtensionPayment = async (req, res) => {
         });
       }
     }
+
+    // Notify farmer of confirmed extension
+    const extDesc = isDaily ? `${extension.additionalDays} extra day(s)` : `${extension.extensionMinutes} extra minutes`;
+    await notify({
+      recipientType: 'user',
+      recipientId:   extension.farmerId,
+      type:          'extension_confirmed',
+      title:         '🎉 Extension Confirmed & Paid!',
+      message:       `Your extension of ${extDesc} has been confirmed for ${acceptedWorkers.length} worker(s).`,
+      relatedId:     extension._id,
+      relatedType:   'IndWorkerExtension',
+      data: {
+        extensionId: extension._id,
+        requestId:   id,
+        link:        `/user/farmer-worker-request/${id}/track`
+      }
+    });
 
     emitSafe(`booking_req:${id}`, 'extension_confirmed', {
       extensionId: extension._id,

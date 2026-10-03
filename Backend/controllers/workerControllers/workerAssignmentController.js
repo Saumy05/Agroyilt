@@ -22,6 +22,8 @@ const { getIO }             = require('../../sockets');
 
 const mongoose              = require('mongoose');
 
+const { sendNotificationToUser, sendNotificationToWorker } = require('../../services/firebaseAdmin');
+
 /** Emit socket event safely */
 const emitSafe = (room, event, data) => {
   try {
@@ -37,7 +39,20 @@ const emitSafe = (room, event, data) => {
 /** Create Notification helper */
 const notify = async ({ recipientType, recipientId, type, title, message, relatedId, relatedType, data }) => {
   try {
-    const notifDoc = { type, title, message, relatedId, relatedType, data: data || {} };
+    const deepLink = data?.link || (
+      recipientType === 'user'
+        ? (relatedId ? `/user/farmer-worker-request/${relatedId}/track` : '/user/my-bookings')
+        : (relatedId ? `/worker/job/${relatedId}` : '/worker/jobs')
+    );
+
+    const notifDoc = {
+      type,
+      title,
+      message,
+      relatedId,
+      relatedType,
+      data: { ...(data || {}), link: deepLink }
+    };
     if (recipientType === 'user')   notifDoc.userId   = recipientId;
     if (recipientType === 'worker') notifDoc.workerId = recipientId;
     
@@ -54,12 +69,63 @@ const notify = async ({ recipientType, recipientId, type, title, message, relate
       createdAt: new Date()
     };
 
+    const broadcastPayload = {
+      ...payload,
+      link: deepLink,
+      ...(data || {})
+    };
+
     const idStr = recipientId.toString();
     const rooms = recipientType === 'user'
       ? [`user_${idStr}`, `user:${idStr}`]
       : [`worker_${idStr}`, `worker:${idStr}`];
 
-    rooms.forEach(room => emitSafe(room, 'notification', payload));
+    rooms.forEach(room => {
+      emitSafe(room, 'notification', broadcastPayload);
+      if (type) {
+        emitSafe(room, type, broadcastPayload);
+      }
+      if (recipientType === 'user') {
+        emitSafe(room, 'userNotificationsUpdated', { unreadCountIncrement: 1, notificationId: payload._id });
+      } else if (recipientType === 'worker') {
+        emitSafe(room, 'workerNotificationsUpdated', { unreadCountIncrement: 1, notificationId: payload._id });
+      }
+    });
+
+    // FCM Push Notification Fallback
+    try {
+      if (recipientType === 'worker') {
+        sendNotificationToWorker(recipientId, {
+          title: title || 'AgroYilt Work Update',
+          body: message || '',
+          data: {
+            type: type || 'notification',
+            requestId: String(relatedId || ''),
+            link: deepLink
+          }
+        }).catch(fcmErr => {
+          if (process.env.NODE_ENV !== 'test') {
+            console.warn('[FCM Worker Notify Non-fatal]:', fcmErr?.message);
+          }
+        });
+      } else if (recipientType === 'user') {
+        sendNotificationToUser(recipientId, {
+          title: title || 'AgroYilt Update',
+          body: message || '',
+          data: {
+            type: type || 'notification',
+            requestId: String(relatedId || ''),
+            link: deepLink
+          }
+        }).catch(fcmErr => {
+          if (process.env.NODE_ENV !== 'test') {
+            console.warn('[FCM User Notify Non-fatal]:', fcmErr?.message);
+          }
+        });
+      }
+    } catch (fcmSyncErr) {
+      console.warn('[FCM Sync Notify Non-fatal]:', fcmSyncErr?.message);
+    }
   } catch (e) {
     console.warn('[Notification] creation failed (non-fatal):', e.message);
   }

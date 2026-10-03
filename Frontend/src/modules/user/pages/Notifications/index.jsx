@@ -117,17 +117,66 @@ const Notifications = () => {
     }
   };
 
+  const handleNotificationClick = (notif) => {
+    // Mark as read when clicked
+    if (!notif.read) {
+      handleMarkAsRead(notif.id);
+    }
+
+    if (notif.data?.link) {
+      navigate(notif.data.link);
+      return;
+    }
+
+    const type = (notif.type || '').toLowerCase();
+    const relatedType = (notif.relatedType || '').toLowerCase();
+    const relatedId = notif.relatedId || notif.data?.bookingId || notif.bookingId;
+
+    if (type.includes('support') || relatedType.includes('support')) {
+      const tId = notif.data?.ticketId || notif.relatedId;
+      navigate(`/user/help-support${tId ? `?ticketId=${tId}` : ''}`);
+    } else if (type.includes('dispute') || relatedType.includes('dispute')) {
+      if (relatedId) navigate(`/user/booking/${relatedId}`);
+      else navigate('/user/my-bookings');
+    } else if (type.includes('ecommerce') || type.includes('order')) {
+      navigate('/user/my-agri-orders');
+    } else if (type.includes('soil')) {
+      navigate('/user/soil-testing');
+    } else if (type.includes('wallet') || type.includes('refund')) {
+      navigate('/user/wallet');
+    } else if (
+      relatedType === 'workerbookingrequest' ||
+      notif.data?.requestId ||
+      ['worker_booking', 'worker_request', 'day_completed', 'worker_arrived', 'worker_journey', 'worker_decreased', 'extra_worker', 'extension_'].some(k => type.includes(k))
+    ) {
+      const reqId = notif.data?.requestId || notif.relatedId;
+      if (['worker_journey_started', 'worker_arrived', 'worker_work_submitted', 'day_completed'].some(k => type.includes(k))) {
+        if (reqId) navigate(`/user/farmer-worker-request/${reqId}/track`);
+        else navigate('/user/my-bookings');
+      } else if (reqId) {
+        navigate(`/user/farmer-worker-request/${reqId}`);
+      } else {
+        navigate('/user/my-bookings');
+      }
+    } else if (relatedType === 'booking' || ['booking', 'job', 'work', 'journey', 'trip', 'visit', 'vendor', 'cash', 'offline'].some(k => type.includes(k))) {
+      if (relatedId) navigate(`/user/booking/${relatedId}`);
+      else navigate('/user/my-bookings');
+    } else if (relatedId) {
+      navigate(`/user/booking/${relatedId}`);
+    }
+  };
+
   const filteredNotifications = notifications.filter(notif => {
     if (filter === 'all') return true;
 
     const type = (notif.type || '').toLowerCase();
 
     if (filter === 'payments') {
-      return ['payment_', 'refund_', 'wallet_'].some(prefix => type.includes(prefix));
+      return ['payment_', 'refund_', 'wallet_', 'cash_payment', 'offline_payment', 'earnings_credit', 'decrease_refund'].some(prefix => type.includes(prefix));
     }
 
     if (filter === 'jobs') { // Mapped to 'Bookings' in UI
-      return ['booking_', 'job_', 'worker_', 'visit_', 'work_', 'journey_', 'vendor_', 'soil_test_'].some(prefix => type.includes(prefix));
+      return ['booking_', 'job_', 'worker_', 'visit_', 'work_', 'journey_', 'vendor_', 'soil_test_', 'trip_', 'timer_', 'service_timer_', 'cash_payment', 'offline_payment', 'day_completed', 'extension_'].some(prefix => type.includes(prefix));
     }
 
     if (filter === 'alerts') {
@@ -142,6 +191,7 @@ const Notifications = () => {
 
     if (['support', 'ticket'].some(t => type.includes(t))) return '🎧';
     if (['payment', 'refund', 'wallet'].some(t => type.includes(t))) return '💰';
+    if (['worker', 'farmer'].some(t => type.includes(t))) return '🌾';
     if (['booking', 'job', 'work', 'visit', 'journey', 'vendor', 'scrap', 'soil_test'].some(t => type.includes(t))) return '📋';
     if (['alert', 'general'].some(t => type.includes(t))) return '🔔';
     if (['ecommerce', 'order'].some(t => type.includes(t))) return '🛍️';
@@ -265,10 +315,11 @@ const Notifications = () => {
             {filteredNotifications.map((notif) => (
               <div
                 key={notif.id}
-                className={`bg-white rounded-xl p-4 shadow-md transition-all relative group ${!notif.read ? 'border-l-4' : ''
+                onClick={() => handleNotificationClick(notif)}
+                className={`bg-white rounded-xl p-4 shadow-md transition-all relative group cursor-pointer hover:shadow-lg ${!notif.read ? 'border-l-4' : ''
                   }`}
                 style={{
-                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
                   borderLeftColor: !notif.read ? getNotificationColor(notif.type) : 'transparent',
                 }}
               >
@@ -279,7 +330,7 @@ const Notifications = () => {
                   >
                     {getNotificationIcon(notif.type)}
                   </div>
-                  <div className="flex-1 pr-6"> {/* Added pr-6 to avoid overlap with delete btn */}
+                  <div className="flex-1 pr-14">
                     <div className="flex items-start justify-between mb-1">
                       <div>
                         <p className={`font-semibold text-gray-800 ${!notif.read ? 'font-bold' : ''}`}>{notif.title}</p>
@@ -287,73 +338,17 @@ const Notifications = () => {
                       </div>
                     </div>
                     <p className="text-xs text-gray-400 mt-2 font-medium">{notif.time}</p>
-                    {notif.action && (
-                      <button
-                        onClick={() => {
-                          if (notif.type?.toLowerCase().includes('support') || notif.relatedType?.toLowerCase().includes('support')) {
-                            const tId = notif.data?.ticketId || notif.relatedId;
-                            navigate(`/user/help-support${tId ? `?ticketId=${tId}` : ''}`);
-                          } else if (notif.action === 'view_booking') {
-                            navigate(`/user/booking/${notif.bookingId}`);
-                          } else if (notif.action === 'view_wallet') {
-                            navigate('/user/wallet');
-                          } else if (notif.type?.includes('dispute') || notif.relatedType?.includes('dispute')) {
-                            const bId = notif.data?.bookingId || notif.bookingId;
-                            if (bId) navigate(`/user/booking/${bId}`);
-                          }
-                        }}
-                        className="mt-3 text-sm font-bold flex items-center gap-1"
-                        style={{ color: themeColors.button }}
-                      >
-                        View Details
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                      </button>
-                    )}
-                    {!notif.action && (notif.type?.toLowerCase().includes('support') || notif.relatedType?.toLowerCase().includes('support')) && (
-                      <button
-                        onClick={() => {
-                          const tId = notif.data?.ticketId || notif.relatedId;
-                          navigate(`/user/help-support${tId ? `?ticketId=${tId}` : ''}`);
-                        }}
-                        className="mt-3 text-sm font-bold flex items-center gap-1 text-emerald-700"
-                      >
-                        View Support Ticket
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                      </button>
-                    )}
-                    {!notif.action && (notif.type?.includes('dispute') || notif.relatedType?.includes('dispute')) && (
-                      <button
-                        onClick={() => {
-                          const bId = notif.data?.bookingId || notif.bookingId;
-                          if (bId) navigate(`/user/booking/${bId}`);
-                        }}
-                        className="mt-3 text-sm font-bold flex items-center gap-1"
-                        style={{ color: themeColors.button }}
-                      >
-                        View Details
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                      </button>
-                    )}
-                    {!notif.action && (notif.type?.includes('ecommerce') || notif.type?.includes('order')) && (
-                      <button
-                        onClick={() => {
-                          navigate('/user/my-agri-orders');
-                        }}
-                        className="mt-3 text-sm font-bold flex items-center gap-1"
-                        style={{ color: themeColors.button }}
-                      >
-                        View Details
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                      </button>
-                    )}
                   </div>
                 </div>
 
                 {/* Actions: Mark Read & Delete */}
-                <div className="absolute top-3 right-3 flex gap-2">
+                <div className="absolute top-3 right-3 flex items-center gap-1.5">
                   {!notif.read && (
                     <button
-                      onClick={() => handleMarkAsRead(notif.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleMarkAsRead(notif.id);
+                      }}
                       className="p-1.5 rounded-full bg-gray-50 hover:bg-gray-100 text-green-600 transition-colors shadow-sm"
                       title="Mark as read"
                     >
@@ -367,6 +362,13 @@ const Notifications = () => {
                   >
                     <FiX className="w-3.5 h-3.5" />
                   </button>
+                  
+                  {/* Chevron Right indicator */}
+                  <div className="text-gray-300 group-hover:text-gray-500 transition-colors ml-1">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
                 </div>
               </div>
             ))}

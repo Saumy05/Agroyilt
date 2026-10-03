@@ -215,22 +215,77 @@ export const SocketProvider = ({ children }) => {
           data={data}
           onClick={() => {
             toast.dismiss(t.id);
-            // Optional: navigate based on relatedId
-            if (data.relatedId || data.type?.includes('ecommerce') || data.type?.includes('order')) {
-              if (userType === 'vendor') {
-                if (data.type?.includes('ecommerce') || data.type?.includes('order')) {
-                  navigate('/vendor/store/orders');
-                } else {
-                  navigate(`/vendor/booking/${data.relatedId}`);
-                }
-              } else if (userType === 'worker') {
-                navigate(`/worker/job/${data.relatedId}`);
+            const directLink = data.link || data.data?.link;
+            if (directLink) {
+              navigate(directLink);
+              return;
+            }
+
+            const targetId = data.relatedId || data.data?.bookingId || data.data?.requestId;
+            const notifType = (data.type || '').toLowerCase();
+            const relType = (data.relatedType || '').toLowerCase();
+
+            if (userType === 'vendor') {
+              if (notifType.includes('ecommerce') || notifType.includes('order')) {
+                navigate('/vendor/store/orders');
+              } else if (notifType.includes('soil')) {
+                navigate('/vendor/soil-tests');
+              } else if (notifType.includes('wallet') || notifType.includes('payout')) {
+                navigate('/vendor/wallet');
+              } else if (notifType.includes('support') || relType.includes('support')) {
+                const ticketId = data.data?.ticketId || targetId;
+                navigate(`/vendor/help-support${ticketId ? `?ticketId=${ticketId}` : ''}`);
+              } else if (targetId) {
+                navigate(`/vendor/booking/${targetId}`);
               } else {
-                if (data.type?.includes('ecommerce') || data.type?.includes('order')) {
-                  navigate('/user/my-agri-orders');
+                navigate('/vendor/jobs');
+              }
+            } else if (userType === 'worker') {
+              if (notifType.includes('team')) {
+                navigate('/worker/team');
+              } else if (notifType === 'group_booking_request' || notifType === 'group_member_request') {
+                navigate('/worker/group-requests');
+              } else if (['worker_booking_request', 'new_booking_request', 'job_request', 'extra_worker_dispatch'].includes(notifType)) {
+                navigate('/worker/booking-requests');
+              } else if (notifType.includes('wallet') || ['assignment_settled', 'earnings_credit', 'payment_received', 'payout_processed'].includes(notifType)) {
+                navigate('/worker/wallet');
+              } else if (notifType.includes('support') || relType.includes('support')) {
+                const ticketId = data.data?.ticketId || targetId;
+                navigate(`/worker/help-support${ticketId ? `?ticketId=${ticketId}` : ''}`);
+              } else if (targetId) {
+                navigate(`/worker/job/${targetId}`);
+              } else {
+                navigate('/worker/jobs');
+              }
+            } else {
+              // User (Farmer)
+              if (notifType.includes('ecommerce') || notifType.includes('order')) {
+                navigate('/user/my-agri-orders');
+              } else if (notifType.includes('soil')) {
+                navigate('/user/soil-testing');
+              } else if (notifType.includes('wallet') || notifType.includes('refund')) {
+                navigate('/user/wallet');
+              } else if (notifType.includes('support') || relType.includes('support')) {
+                const ticketId = data.data?.ticketId || targetId;
+                navigate(`/user/help-support${ticketId ? `?ticketId=${ticketId}` : ''}`);
+              } else if (
+                relType === 'workerbookingrequest' ||
+                data.data?.requestId ||
+                ['worker_booking', 'worker_request', 'day_completed', 'worker_arrived', 'worker_journey', 'worker_decreased', 'extra_worker', 'extension_'].some(k => notifType.includes(k))
+              ) {
+                const reqId = data.data?.requestId || targetId;
+                if (['worker_journey_started', 'worker_arrived', 'worker_work_submitted', 'day_completed'].some(k => notifType.includes(k))) {
+                  if (reqId) navigate(`/user/farmer-worker-request/${reqId}/track`);
+                  else navigate('/user/my-bookings');
+                } else if (reqId) {
+                  navigate(`/user/farmer-worker-request/${reqId}`);
                 } else {
-                  navigate(`/user/booking/${data.relatedId}`);
+                  navigate('/user/my-bookings');
                 }
+              } else if (targetId) {
+                navigate(`/user/booking/${targetId}`);
+              } else {
+                navigate('/user/my-bookings');
               }
             }
           }}
@@ -244,6 +299,7 @@ export const SocketProvider = ({ children }) => {
       // Dispatch update events to refresh UI components
       if (userType === 'worker') {
         window.dispatchEvent(new Event('workerJobsUpdated'));
+        window.dispatchEvent(new Event('workerNotificationsUpdated'));
         if (
           data.type === 'worker_booking_request' ||
           data.type === 'new_booking_request' ||
@@ -313,6 +369,7 @@ export const SocketProvider = ({ children }) => {
       }
       if (userType === 'user') {
         window.dispatchEvent(new Event('userBookingsUpdated'));
+        window.dispatchEvent(new Event('userNotificationsUpdated'));
       }
       if (userType === 'admin') {
         window.dispatchEvent(new Event('adminNotificationsUpdated'));

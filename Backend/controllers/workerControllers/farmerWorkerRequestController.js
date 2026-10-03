@@ -276,14 +276,26 @@ const notify = async ({
       ? [`user_${idStr}`, `user:${idStr}`]
       : [`worker_${idStr}`, `worker:${idStr}`];
 
+    const deepLink = data?.link || (
+      recipientType === 'user'
+        ? (relatedId ? `/user/farmer-worker-request/${relatedId}` : '/user/my-bookings')
+        : (relatedId ? `/worker/job/${relatedId}` : '/worker/jobs')
+    );
+
     rooms.forEach(room => {
       // 1. Generic notification event
-      emitSafe(room, 'notification', broadcastPayload);
+      emitSafe(room, 'notification', { ...broadcastPayload, link: deepLink });
       // 2. Specific type event (e.g. 'worker_booking_request')
       if (type) {
-        emitSafe(room, type, broadcastPayload);
+        emitSafe(room, type, { ...broadcastPayload, link: deepLink });
       }
-      // 3. Explicit worker alert events (ONLY when the event is an actual booking request and not expired)
+      // 3. Real-time unread count badge update
+      if (recipientType === 'user') {
+        emitSafe(room, 'userNotificationsUpdated', { unreadCountIncrement: 1, notificationId: payload._id });
+      } else if (recipientType === 'worker') {
+        emitSafe(room, 'workerNotificationsUpdated', { unreadCountIncrement: 1, notificationId: payload._id });
+      }
+      // 4. Explicit worker alert events (ONLY when the event is an actual booking request and not expired)
       if (recipientType === 'worker' && (type === 'worker_booking_request' || type === 'new_booking_request' || type === 'booking_request')) {
         const isExp = isBookingExpired(data).isExpired;
         if (isExp) {
@@ -302,11 +314,11 @@ const notify = async ({
         }
         emitSafe(room, 'group_booking_request', broadcastPayload);
       }
-      // 4. Booking update event for refreshing lists
+      // 5. Booking update event for refreshing lists
       emitSafe(room, 'worker_booking_update', { requestId: relatedId, type, data });
     });
 
-    // 5. FCM Push Notification Fallback (non-blocking, only for active/valid requests)
+    // 6. FCM Push Notification Fallback (non-blocking, only for active/valid requests)
     try {
       if (recipientType === 'worker') {
         const isExp = isBookingExpired(data).isExpired;
@@ -321,7 +333,8 @@ const notify = async ({
             type: type || 'worker_booking_request',
             requestId: String(relatedId || ''),
             workTitle: String(broadcastPayload.workTitle || ''),
-            farmerName: String(broadcastPayload.farmerName || '')
+            farmerName: String(broadcastPayload.farmerName || ''),
+            link: deepLink
           }
         }).catch(fcmErr => {
           if (process.env.NODE_ENV !== 'test') {
@@ -334,7 +347,8 @@ const notify = async ({
           body: message || '',
           data: {
             type: type || 'notification',
-            requestId: String(relatedId || '')
+            requestId: String(relatedId || ''),
+            link: deepLink
           }
         }).catch(fcmErr => {
           if (process.env.NODE_ENV !== 'test') {
@@ -984,6 +998,24 @@ exports.createFarmerRequest = async (req, res) => {
 
     const savedRequest = await WorkerBookingRequest.findById(newRequest._id);
 
+    // Notify Farmer that request has been posted and worker matching is active
+    await notify({
+      recipientType: 'user',
+      recipientId:   farmerId,
+      type:          'worker_booking_request',
+      title:         '🌾 Worker Request Posted',
+      message:       `Your request for "${newRequest.workTitle}" (${workerQty} worker${workerQty > 1 ? 's' : ''}) has been posted. We are finding matching workers for you.`,
+      relatedId:     newRequest._id,
+      relatedType:   'WorkerBookingRequest',
+      data: {
+        requestId:       newRequest._id,
+        workTitle:       newRequest.workTitle,
+        requiredWorkers: workerQty,
+        bookingType,
+        link:            `/user/farmer-worker-request/${newRequest._id}`
+      }
+    });
+
     return res.status(201).json({
       success: true,
       message: requestType === 'independent_broadcast'
@@ -1525,9 +1557,36 @@ exports.getMyFarmerRequests = async (req, res) => {
       WorkerBookingRequest.countDocuments(filter)
     ]);
 
+    // ── Auto-expire stale pending/matching requests on read ─────────────────
+    // This prevents the farmer list from showing "Waiting for Responses" forever
+    // when no worker accepted before the scheduled window closed.
+    const now = new Date();
+    const staleStatuses = new Set(['pending', 'matching', 'awaiting_farmer_confirmation']);
+    const autoExpirePromises = [];
+    const result = requests.map(req => {
+      if (staleStatuses.has(req.status)) {
+        const evalResult = isBookingExpired(req, now);
+        if (evalResult.isExpired) {
+          // Fire-and-forget auto-expiry with farmer notification
+          autoExpirePromises.push(
+            WorkerBookingRequest.findById(req._id)
+              .then(doc => doc ? expireWorkerBookingRequest(doc, evalResult.reason) : null)
+              .catch(e => console.warn('[AutoExpire getMyFarmerRequests]:', e.message))
+          );
+          return { ...req, status: 'expired' };
+        }
+      }
+      return req;
+    });
+
+    // Don't await — these run in background
+    if (autoExpirePromises.length > 0) {
+      Promise.all(autoExpirePromises).catch(() => {});
+    }
+
     return res.json({
       success: true,
-      data: requests,
+      data: result,
       pagination: { page, limit, total, pages: Math.ceil(total / limit) }
     });
   } catch (err) {
@@ -3405,13 +3464,34 @@ exports.verifyWorkerBookingPayment = async (req, res) => {
         recipientType: 'worker',
         recipientId: a.workerId,
         type: 'worker_booking_confirmed',
-        title: 'Booking Confirmed & Paid!',
-        message: `Your booking for ${request.workTitle} has been confirmed. You will earn ?${a.netEarning}.`,
+        title: '🎉 Booking Confirmed & Paid!',
+        message: `Your booking for ${request.workTitle} has been confirmed. You will earn ₹${a.netEarning}.`,
         relatedId: request._id,
         relatedType: 'WorkerBookingRequest',
-        data: { assignmentId: a._id, requestId: request._id }
+        data: {
+          assignmentId: a._id,
+          requestId: request._id,
+          link: `/worker/job/${a._id}`
+        }
       });
     }
+
+    // Notify farmer of successful booking and payment
+    await notify({
+      recipientType: 'user',
+      recipientId: farmerId,
+      type: 'worker_booking_confirmed',
+      title: '🎉 Worker Booking Confirmed & Paid!',
+      message: `Payment successful! ${createdAssignments.length} worker(s) confirmed for "${request.workTitle}".`,
+      relatedId: request._id,
+      relatedType: 'WorkerBookingRequest',
+      data: {
+        requestId: request._id,
+        workTitle: request.workTitle,
+        workerCount: createdAssignments.length,
+        link: `/user/farmer-worker-request/${request._id}`
+      }
+    });
 
     // Emit socket event to parent request room
     emitSafe(`booking_req:${request._id}`, 'booking_confirmed', {
@@ -3420,6 +3500,7 @@ exports.verifyWorkerBookingPayment = async (req, res) => {
       totalWorkers: request.assignmentIds.length,
       serverTimestamp: new Date()
     });
+    emitSafe(`user_${farmerId}`, 'userBookingsUpdated', {});
 
     return res.json({
       success: true,
@@ -3653,6 +3734,24 @@ exports.confirmWorkerBookingCash = async (req, res) => {
       });
       emitSafe(`worker_${a.workerId}`, 'workerJobsUpdated', {});
     }
+
+    // Notify farmer of confirmed booking with cash on service
+    await notify({
+      recipientType: 'user',
+      recipientId:   farmerId,
+      type:          'worker_booking_confirmed',
+      title:         '🎉 Worker Booking Confirmed (Cash on Service)!',
+      message:       `Booking confirmed with ${createdAssignments.length} worker(s) for "${request.workTitle}". Payment will be collected in cash upon work completion.`,
+      relatedId:     request._id,
+      relatedType:   'WorkerBookingRequest',
+      data: {
+        requestId:             request._id,
+        workTitle:             request.workTitle,
+        workerCount:           createdAssignments.length,
+        paymentMethod:         'cash',
+        link:                  `/user/farmer-worker-request/${request._id}`
+      }
+    });
 
     emitSafe(`user_${farmerId}`, 'booking_confirmed', {
       requestId: request._id,

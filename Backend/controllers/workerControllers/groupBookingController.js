@@ -38,7 +38,7 @@ const crypto                = require('crypto');
 const { getIO }             = require('../../sockets');
 const { createOrder, verifyPayment } = require('../../services/razorpayService');
 const { getWorkerFinancialSettings } = require('../../services/workerFinancialService');
-const { sendNotificationToWorker } = require('../../services/firebaseAdmin');
+const { sendNotificationToWorker, sendNotificationToUser } = require('../../services/firebaseAdmin');
 const {
   getBookingScheduledExpiry,
   isBookingExpired
@@ -91,14 +91,92 @@ const emitSafe = (room, event, data) => {
 
 const notify = async ({ recipientType, recipientId, type, title, message, relatedId, relatedType, data }) => {
   try {
-    const notifDoc = { type, title, message, relatedId, relatedType, data: data || {} };
+    const deepLink = data?.link || (
+      recipientType === 'user'
+        ? (relatedId ? `/user/farmer-worker-request/${relatedId}` : '/user/my-bookings')
+        : (relatedId ? `/worker/job/${relatedId}` : '/worker/jobs')
+    );
+
+    const notifDoc = {
+      type,
+      title,
+      message,
+      relatedId,
+      relatedType,
+      data: { ...(data || {}), link: deepLink }
+    };
     if (recipientType === 'user')   notifDoc.userId   = recipientId;
     if (recipientType === 'worker') notifDoc.workerId = recipientId;
 
-    const notif = await Notification.create(notifDoc);
-    const room = recipientType === 'user' ? `user_${recipientId}` : `worker_${recipientId}`;
-    emitSafe(room, 'notification', notif);
-    emitSafe(room, 'worker_group_update', { requestId: relatedId, type });
+    let notif = null;
+    try {
+      notif = await Notification.create(notifDoc);
+    } catch (dbErr) {
+      console.warn('[GroupBooking Notification DB Create Non-fatal]:', dbErr?.message);
+    }
+
+    const payload = notif ? (notif.toObject ? notif.toObject() : notif) : {
+      ...notifDoc,
+      _id: new mongoose.Types.ObjectId(),
+      createdAt: new Date()
+    };
+
+    const broadcastPayload = {
+      ...payload,
+      link: deepLink,
+      ...(data || {})
+    };
+
+    const idStr = recipientId.toString();
+    const rooms = recipientType === 'user'
+      ? [`user_${idStr}`, `user:${idStr}`]
+      : [`worker_${idStr}`, `worker:${idStr}`];
+
+    rooms.forEach(room => {
+      emitSafe(room, 'notification', broadcastPayload);
+      if (type) emitSafe(room, type, broadcastPayload);
+      if (recipientType === 'user') {
+        emitSafe(room, 'userNotificationsUpdated', { unreadCountIncrement: 1, notificationId: payload._id });
+      } else if (recipientType === 'worker') {
+        emitSafe(room, 'workerNotificationsUpdated', { unreadCountIncrement: 1, notificationId: payload._id });
+      }
+      emitSafe(room, 'worker_group_update', { requestId: relatedId, type });
+    });
+
+    // FCM Push Notification Fallback
+    try {
+      if (recipientType === 'worker') {
+        sendNotificationToWorker(recipientId, {
+          title: title || 'Group Work Alert',
+          body: message || '',
+          data: {
+            type: type || 'notification',
+            requestId: String(relatedId || ''),
+            link: deepLink
+          }
+        }).catch(fcmErr => {
+          if (process.env.NODE_ENV !== 'test') {
+            console.warn('[FCM Group Worker Notify Non-fatal]:', fcmErr?.message);
+          }
+        });
+      } else if (recipientType === 'user') {
+        sendNotificationToUser(recipientId, {
+          title: title || 'AgroYilt Update',
+          body: message || '',
+          data: {
+            type: type || 'notification',
+            requestId: String(relatedId || ''),
+            link: deepLink
+          }
+        }).catch(fcmErr => {
+          if (process.env.NODE_ENV !== 'test') {
+            console.warn('[FCM Group User Notify Non-fatal]:', fcmErr?.message);
+          }
+        });
+      }
+    } catch (fcmSyncErr) {
+      console.warn('[FCM Group Sync Notify Non-fatal]:', fcmSyncErr?.message);
+    }
   } catch (e) {
     console.warn('[GroupBooking Notify] failed:', e.message);
   }
