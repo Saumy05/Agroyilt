@@ -136,7 +136,49 @@ function isIntervalOverlapping(slotA, slotB) {
   return intA.startMinutes < intB.endMinutes && intA.endMinutes > intB.startMinutes;
 }
 
+// Customers book in local (Indian) time while servers usually run in UTC.
+// Override with APP_TZ_OFFSET_MINUTES (IST = 330).
+const APP_TZ_OFFSET_MINUTES = Number(process.env.APP_TZ_OFFSET_MINUTES ?? 330);
+const MAX_ADVANCE_DAYS = 90;
+
+/** "YYYY-MM-DD" calendar date of an instant, in the app's timezone. */
+function appDateKey(input) {
+  if (typeof input === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(input.trim())) return input.trim();
+  const d = new Date(input);
+  if (isNaN(d.getTime())) return null;
+  return new Date(d.getTime() + APP_TZ_OFFSET_MINUTES * 60000).toISOString().slice(0, 10);
+}
+
+/**
+ * Validates a requested date + slot against "now" in the app timezone.
+ * @returns {{ok:true}|{ok:false,message:string}}
+ */
+function validateSchedule(scheduledDate, timeSlot, now = new Date()) {
+  const dateKey = appDateKey(scheduledDate);
+  if (!dateKey) return { ok: false, message: 'Valid scheduled date is required' };
+
+  const start = parseTimeToMinutes(timeSlot?.start);
+  const end = parseTimeToMinutes(timeSlot?.end);
+  if (start === null || end === null) return { ok: false, message: 'Valid time slot is required' };
+  if (end <= start) return { ok: false, message: 'End time must be later than start time' };
+
+  const todayKey = appDateKey(now);
+  if (dateKey < todayKey) return { ok: false, message: 'You cannot book a date in the past.' };
+
+  const maxKey = appDateKey(new Date(now.getTime() + MAX_ADVANCE_DAYS * 86400000));
+  if (dateKey > maxKey) return { ok: false, message: `Bookings can be made at most ${MAX_ADVANCE_DAYS} days in advance.` };
+
+  if (dateKey === todayKey) {
+    const local = new Date(now.getTime() + APP_TZ_OFFSET_MINUTES * 60000);
+    const nowMinutes = local.getUTCHours() * 60 + local.getUTCMinutes();
+    if (start <= nowMinutes) return { ok: false, message: 'This time slot has already passed. Please select a future time.' };
+  }
+  return { ok: true, dateKey };
+}
+
 module.exports = {
+  appDateKey,
+  validateSchedule,
   parseTimeToMinutes,
   parseSlotInterval,
   isIntervalOverlapping

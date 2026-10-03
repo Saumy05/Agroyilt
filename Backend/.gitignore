@@ -33,7 +33,7 @@ db_test_*.js
 scratch/
 tmp/
 temp/
-tests/
+# tests/ is the real automated suite (npm test) — keep it tracked
 *.tmp
 
 # OS & IDE

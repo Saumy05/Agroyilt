@@ -60,7 +60,8 @@ const PAYMENT_STATUS = {
   FAILED: 'failed',
   REFUNDED: 'refunded',
   COLLECTED_BY_VENDOR: 'collected_by_vendor',
-  PLAN_COVERED: 'plan_covered' // For plan_benefit bookings until bill is finalized
+  PLAN_COVERED: 'plan_covered', // For plan_benefit bookings until bill is finalized
+  PARTIAL: 'partial' // Advance paid, but final bill is higher; balanceDue remains
 };
 
 // Service Status
