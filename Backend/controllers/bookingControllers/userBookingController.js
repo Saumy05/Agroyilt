@@ -863,7 +863,7 @@ const createBooking = async (req, res) => {
           pushData: {
             type: 'new_booking',
             dataOnly: false,
-            link: `/vendor/bookings/${booking._id}`
+            link: `/vendor/booking/${booking._id}`
           }
         }).catch(err => console.error('[Notification] Background save error (vendor):', err));
       } else {
@@ -1033,18 +1033,26 @@ const createBooking = async (req, res) => {
       { $set: { items: [] } }
     );
 
-    // Send notification to vendor only if assigned (Direct Booking)
+    // Send notification to vendor only if assigned directly and not already notified above
     let vendorObj = null;
-    if (vendorId) {
+    if (vendorId && !chosenVendor) {
       await createNotification({
         vendorId,
         type: 'booking_created',
         title: 'New Booking Received',
         message: `You have received a new booking ${booking.bookingNumber} for ${service.title}.`,
         relatedId: booking._id,
-        relatedType: 'booking'
+        relatedType: 'booking',
+        pushData: {
+          type: 'booking_created',
+          bookingId: booking._id.toString(),
+          link: `/vendor/booking/${booking._id}`
+        }
       });
       // Fetch vendor details for email
+      const Vendor = require('../../models/Vendor');
+      vendorObj = await Vendor.findById(vendorId);
+    } else if (vendorId) {
       const Vendor = require('../../models/Vendor');
       vendorObj = await Vendor.findById(vendorId);
     }
@@ -1754,17 +1762,45 @@ const rescheduleBooking = async (req, res) => {
     await booking.save();
 
     // Send notification to vendor
+    if (booking.vendorId) {
+      await createNotification({
+        vendorId: booking.vendorId,
+        type: 'booking_rescheduled',
+        title: 'Booking Rescheduled',
+        message: `Booking ${booking.bookingNumber} has been rescheduled to ${new Date(scheduledDate).toLocaleDateString()} at ${scheduledTime}.`,
+        relatedId: booking._id,
+        relatedType: 'booking',
+        pushData: {
+          type: 'booking_rescheduled',
+          bookingId: booking._id.toString(),
+          link: `/vendor/booking/${booking._id}`
+        }
+      });
+
+      const io = req.app.get('io') || global.io;
+      if (io) {
+        io.to(`vendor_${booking.vendorId}`).emit('booking_updated', {
+          bookingId: booking._id,
+          status: booking.status,
+          scheduledDate: booking.scheduledDate,
+          scheduledTime: booking.scheduledTime,
+          message: `Booking ${booking.bookingNumber} has been rescheduled`
+        });
+      }
+    }
+
+    // Send confirmation notification to farmer
     await createNotification({
-      vendorId: booking.vendorId,
-      type: 'booking_created', // Keeping type as is for now
+      userId: booking.userId,
+      type: 'booking_rescheduled',
       title: 'Booking Rescheduled',
-      message: `Booking ${booking.bookingNumber} has been rescheduled.`,
+      message: `Your booking ${booking.bookingNumber} has been rescheduled to ${new Date(scheduledDate).toLocaleDateString()} at ${scheduledTime}.`,
       relatedId: booking._id,
       relatedType: 'booking',
       pushData: {
         type: 'booking_rescheduled',
         bookingId: booking._id.toString(),
-        link: `/vendor/bookings/${booking._id}`
+        link: `/user/booking/${booking._id}`
       }
     });
 
@@ -2450,9 +2486,29 @@ const reselectVendor = async (req, res) => {
       pushData: {
         type: 'new_booking',
         dataOnly: false,
-        link: `/vendor/bookings/${booking._id}`
+        link: `/vendor/booking/${booking._id}`
       }
     }).catch(err => console.error('[Notification] Error creating vendor notification:', err));
+
+    // Send confirmation notification to farmer
+    createNotification({
+      userId: booking.userId,
+      type: 'booking_requested',
+      title: 'Booking Request Sent',
+      message: `Your booking request for ${booking.bookingNumber} has been sent to ${targetVendor.businessName || targetVendor.name}.`,
+      relatedId: booking._id,
+      relatedType: 'booking',
+      data: {
+        bookingId: booking._id,
+        vendorId: targetVendor._id,
+        vendorName: targetVendor.businessName || targetVendor.name
+      },
+      pushData: {
+        type: 'booking_requested',
+        bookingId: booking._id.toString(),
+        link: `/user/booking/${booking._id}`
+      }
+    }).catch(err => console.error('[Notification] Error creating user confirmation notification:', err));
 
     res.status(200).json({
       success: true,
@@ -2609,17 +2665,40 @@ const farmerSelectOfflinePayment = async (req, res) => {
     if (booking.vendorId) {
       await createNotification({
         vendorId: booking.vendorId,
-        type: 'payment_received',
+        type: 'offline_payment_selected',
         title: 'Collect Cash',
-        message: `Farmer selected offline payment. Please collect ₹${booking.finalAmount} and enter the OTP (${payOtp}) provided by the Farmer.`,
+        message: `Farmer selected offline cash payment. Please collect ₹${booking.finalAmount} and enter the verification OTP provided by the Farmer.`,
         relatedId: booking._id,
         relatedType: 'booking',
         pushData: {
           type: 'offline_payment_selected',
-          bookingId: booking._id.toString()
+          bookingId: booking._id.toString(),
+          link: `/vendor/booking/${booking._id}`
         }
       });
     }
+
+    // Notify Farmer with their cash verification OTP
+    await createNotification({
+      userId: booking.userId,
+      type: 'cash_payment_selected',
+      title: '💵 Cash Payment Selected',
+      message: `You selected cash payment of ₹${booking.finalAmount}. Please share OTP (${payOtp}) with the operator only after paying cash.`,
+      relatedId: booking._id,
+      relatedType: 'booking',
+      priority: 'high',
+      data: {
+        bookingId: booking._id,
+        paymentOtp: payOtp,
+        finalAmount: booking.finalAmount
+      },
+      pushData: {
+        type: 'cash_payment_selected',
+        bookingId: booking._id.toString(),
+        paymentOtp: payOtp,
+        link: `/user/booking/${booking._id}`
+      }
+    });
 
     const io = req.app.get('io') || global.io;
     if (io) {

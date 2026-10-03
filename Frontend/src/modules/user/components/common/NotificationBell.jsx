@@ -36,8 +36,12 @@ const NotificationBell = ({ notificationCount = 0, size = 38 }) => {
     };
 
     fetchUnreadCount();
+    window.addEventListener('userNotificationsUpdated', fetchUnreadCount);
     const interval = setInterval(fetchUnreadCount, 60000);
-    return () => clearInterval(interval);
+    return () => {
+      window.removeEventListener('userNotificationsUpdated', fetchUnreadCount);
+      clearInterval(interval);
+    };
   }, []);
 
   return (

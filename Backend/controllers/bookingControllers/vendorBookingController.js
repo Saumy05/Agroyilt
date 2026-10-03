@@ -767,7 +767,7 @@ const updateBookingStatus = async (req, res) => {
 
     await booking.save();
 
-    // Send notification
+    // Send notifications based on updated status
     if (status === BOOKING_STATUS.COMPLETED) {
       await createNotification({
         userId: booking.userId,
@@ -783,10 +783,6 @@ const updateBookingStatus = async (req, res) => {
         }
       });
 
-      // Send FCM push notification to user
-      // Manual push removed - auto handled by createNotification
-      // sendNotificationToUser(booking.userId, { ... });
-
       // SEND INVOICE EMAILS
       try {
         const { sendBookingCompletionEmails } = require('../../services/emailService');
@@ -799,6 +795,51 @@ const updateBookingStatus = async (req, res) => {
       } catch (emailErr) {
         console.error('Failed to send completion emails:', emailErr);
       }
+    } else if (status === BOOKING_STATUS.CANCELLED || status === 'cancelled') {
+      await createNotification({
+        userId: booking.userId,
+        type: 'booking_cancelled',
+        title: 'Booking Cancelled by Vendor',
+        message: `Your booking ${booking.bookingNumber} was cancelled by the vendor. Any payments made have been refunded to your wallet.`,
+        relatedId: booking._id,
+        relatedType: 'booking',
+        priority: 'high',
+        pushData: {
+          type: 'booking_cancelled',
+          bookingId: booking._id.toString(),
+          link: `/user/booking/${booking._id}`
+        }
+      });
+    } else if (status === BOOKING_STATUS.IN_PROGRESS || status === 'in_progress') {
+      await createNotification({
+        userId: booking.userId,
+        type: 'work_started',
+        title: 'Service In Progress',
+        message: `Your booking ${booking.bookingNumber} is now in progress.`,
+        relatedId: booking._id,
+        relatedType: 'booking',
+        priority: 'high',
+        pushData: {
+          type: 'in_progress',
+          bookingId: booking._id.toString(),
+          link: `/user/booking/${booking._id}`
+        }
+      });
+    } else if (status === BOOKING_STATUS.REJECTED || status === 'rejected') {
+      await createNotification({
+        userId: booking.userId,
+        type: 'booking_rejected',
+        title: 'Vendor Declined Request',
+        message: `The vendor declined booking ${booking.bookingNumber}. You can choose another available vendor.`,
+        relatedId: booking._id,
+        relatedType: 'booking',
+        priority: 'high',
+        pushData: {
+          type: 'booking_rejected',
+          bookingId: booking._id.toString(),
+          link: `/user/booking/${booking._id}`
+        }
+      });
     }
 
     // Emit socket event for real-time UI refresh
@@ -1283,13 +1324,19 @@ const completeSelfJob = async (req, res) => {
       userId: booking.userId,
       type: 'work_completed',
       title: 'Work Completed & Bill Ready',
-      message: `Work finished!  Please wait for the bill expert is preparing !`,
+      message: `Work completed for booking ${booking.bookingNumber}. Total bill: ₹${grandTotal}. Please review the invoice and complete payment.`,
       relatedId: booking._id,
       relatedType: 'booking',
       priority: 'high',
+      data: {
+        bookingId: booking._id,
+        grandTotal,
+        paymentOtp: payOtp
+      },
       pushData: {
         type: 'work_completed',
         bookingId: booking._id.toString(),
+        finalAmount: grandTotal,
         link: `/user/booking/${booking._id}`
       }
     });
@@ -1496,8 +1543,31 @@ const collectSelfCash = async (req, res) => {
       message: `Payment of ₹${grandTotal} received in cash for booking ${booking.bookingNumber}. Job Completed. Thanks!`,
       relatedId: booking._id,
       relatedType: 'booking',
-      priority: 'high'
+      priority: 'high',
+      data: {
+        bookingId: booking._id,
+        finalAmount: grandTotal,
+        paymentMethod: 'cash',
+        status: BOOKING_STATUS.COMPLETED
+      },
+      pushData: {
+        type: 'payment_received',
+        bookingId: booking._id.toString(),
+        link: `/user/booking/${booking._id}`
+      }
     });
+
+    const io = req.app.get('io') || global.io;
+    if (io) {
+      io.to(`user_${booking.userId}`).emit('booking_updated', {
+        bookingId: booking._id,
+        status: BOOKING_STATUS.COMPLETED,
+        paymentStatus: PAYMENT_STATUS.SUCCESS,
+        paymentMethod: 'cash',
+        finalAmount: grandTotal,
+        message: 'Payment received in cash. Job completed!'
+      });
+    }
 
     res.status(200).json({ success: true, message: 'Cash collected, job completed', data: booking });
   } catch (error) {
@@ -1783,6 +1853,47 @@ const startTrip = async (req, res) => {
     }
 
     await booking.save();
+
+    // Notify farmer that machinery trip / service has started
+    try {
+      const { createNotification } = require('../notificationControllers/notificationController');
+      const serviceName = booking.serviceName || booking.serviceId?.title || 'Machinery';
+      await createNotification({
+        userId: booking.userId,
+        type: 'trip_started',
+        title: requiresDriver ? '🚜 Machinery Engine Started' : '📦 Equipment Handed Over',
+        message: requiresDriver
+          ? `The operator has started the engine for ${serviceName}. Work is now in progress.`
+          : `The equipment for booking ${booking.bookingNumber} has been handed over. Rental period is now active.`,
+        relatedId: booking._id,
+        relatedType: 'booking',
+        priority: 'high',
+        data: {
+          bookingId: booking._id,
+          serviceName,
+          status: BOOKING_STATUS.IN_PROGRESS,
+          startedAt: booking.startedAt
+        },
+        pushData: {
+          type: 'trip_started',
+          bookingId: booking._id.toString(),
+          link: `/user/booking/${booking._id}`
+        }
+      });
+    } catch (notifErr) {
+      console.error('[StartTrip] Notification error:', notifErr.message);
+    }
+
+    const io = req.app.get('io') || global.io;
+    if (io) {
+      io.to(`user_${booking.userId}`).emit('booking_updated', {
+        bookingId: booking._id,
+        status: BOOKING_STATUS.IN_PROGRESS,
+        startedAt: booking.startedAt,
+        message: requiresDriver ? 'Machinery engine started' : 'Equipment handed over'
+      });
+    }
+
     res.status(200).json({ success: true, message: requiresDriver ? 'Engine started successfully' : 'Equipment handed over successfully', data: booking });
   } catch (error) {
     console.error('Start trip error:', error);
