@@ -745,10 +745,19 @@ const BookingDetails = () => {
   const bill = booking.bill;
 
   // Base Logic (Services)
-  // Use bill.originalServiceBase if available, else fallback to totalServiceBase (for older bookings), else booking.basePrice
+  // Use bill.originalServiceBase if available, else timer subtotal, else fallback to totalServiceBase, else booking.basePrice
+  const hasServiceTimer = Boolean(
+    booking.serviceTimer && (
+      booking.serviceTimer.billingSummary?.subtotal ||
+      (booking.serviceTimer.accumulatedActiveSeconds && booking.serviceTimer.accumulatedActiveSeconds > 0) ||
+      booking.serviceTimer.status === 'COMPLETED'
+    )
+  );
+  const timerBase = booking.serviceTimer?.billingSummary?.subtotal;
+
   const originalBase = bill 
     ? (bill.originalServiceBase || bill.totalServiceBase || 0) 
-    : (parseFloat(booking.basePrice) || 0);
+    : ((hasServiceTimer && timerBase) ? timerBase : (parseFloat(booking.basePrice) || 0));
 
   // Extra Services & Parts from vendor bill (if available)
   const allBillServices = bill?.services || [];
@@ -1724,7 +1733,15 @@ const BookingDetails = () => {
                       <div className="space-y-2 pl-1">
                         {/* Original Base */}
                         <div className="flex justify-between items-center text-gray-600">
-                          <span>Original Booking : {originalServiceFromBill?.name || booking.serviceName || 'Service'}</span>
+                          <span>
+                            Original Booking : {
+                              originalServiceFromBill?.name ||
+                              (booking.serviceTimer?.billingSummary
+                                ? `${booking.serviceName || 'Machinery Service'} (${booking.serviceTimer.billingSummary.totalActiveMinutes} Mins Work, ${booking.serviceTimer.billingSummary.totalPausedMinutes || 0} Mins Downtime Free)`
+                                : (booking.serviceName || 'Service')
+                              )
+                            }
+                          </span>
                           {isPlanBenefit ? (
                             <div className="flex items-center gap-2">
                               <span className="line-through text-gray-400 text-xs">₹{originalBase.toLocaleString('en-IN')}</span>

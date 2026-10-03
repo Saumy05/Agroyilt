@@ -128,18 +128,31 @@ const BillingPage = () => {
       ? Math.round((Number(booking.tax) / Number(booking.basePrice)) * 100)
       : (isAgriService ? (rentalGstPct || 5) : (serviceGstPct || 18));
 
+    // Check if live agricultural service timer was used
+    const hasServiceTimer = Boolean(
+      booking.serviceTimer && (
+        booking.serviceTimer.billingSummary?.subtotal ||
+        (booking.serviceTimer.accumulatedActiveSeconds && booking.serviceTimer.accumulatedActiveSeconds > 0) ||
+        booking.serviceTimer.status === 'COMPLETED'
+      )
+    );
+
+    const timerBase = booking.serviceTimer?.billingSummary?.subtotal;
+
     // Original booking base
     const isPlanBooking = booking.paymentMethod === 'plan_benefit';
-    const originalBase = isPlanBooking ? 0 : Number(booking.basePrice || 0);
+    const originalBase = isPlanBooking 
+      ? 0 
+      : Number((hasServiceTimer && timerBase) ? timerBase : (booking.basePrice || 0));
 
     // Exact GST from booking record (or fallback calculation)
     const originalServiceGST = isPlanBooking
       ? 0
-      : (booking.tax !== undefined && booking.tax !== null && Number(booking.tax) > 0)
+      : (booking.tax !== undefined && booking.tax !== null && Number(booking.tax) > 0 && !hasServiceTimer)
       ? Number(booking.tax)
       : parseFloat(((originalBase * effectiveGstPct) / 100).toFixed(2));
 
-    const visitingCharges = Number(booking.visitingCharges) || 0;
+    const visitingCharges = hasServiceTimer ? 0 : (Number(booking.visitingCharges) || 0);
 
     // Total Bill amount payable by farmer (100% matched to checkout)
     const finalBillAmount = (booking.finalAmount && Number(booking.finalAmount) > 0)
@@ -165,7 +178,9 @@ const BillingPage = () => {
       vendorServiceEarnings,
       servicePayoutPct: effectivePayoutPct,
       platformCommission,
-      isAgriService
+      isAgriService,
+      hasServiceTimer,
+      timerSummary: booking.serviceTimer?.billingSummary || null
     };
   }, [booking, payoutSettings]);
 
@@ -350,7 +365,14 @@ const BillingPage = () => {
                   ))
                 ) : (
                   <div className="flex justify-between text-xs py-1">
-                    <span className="font-bold text-slate-700">Original Service: {booking.serviceName || 'Equipment Booking'}</span>
+                    <div>
+                      <span className="font-bold text-slate-700">Original Service: {booking.serviceName || 'Equipment Booking'}</span>
+                      {calculations.timerSummary && (
+                        <span className="block text-[10.5px] text-emerald-700 font-bold mt-0.5">
+                          ⏱️ {calculations.timerSummary.totalActiveMinutes} mins field work ({calculations.timerSummary.totalPausedMinutes || 0} mins pause free)
+                        </span>
+                      )}
+                    </div>
                     <span className="font-black text-slate-900">₹{calculations.originalBase.toFixed(2)}</span>
                   </div>
                 )}

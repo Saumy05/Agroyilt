@@ -47,17 +47,51 @@ const createOrUpdateBill = async (req, res) => {
     const partsGstPct = settings?.partsGstPercentage ?? 18;
 
     // ═══════════════════════════════════════
-    // 1. ORIGINAL SERVICE (from booking)
+    // ═══════════════════════════════════════
+    // 1. ORIGINAL SERVICE (from booking or live service timer)
     // ═══════════════════════════════════════
     const isPlanBooking = booking.paymentMethod === 'plan_benefit';
-    const originalServiceBaseForBill = isPlanBooking ? 0 : (booking.basePrice || 0);
-    const originalServiceBaseForEarnings = booking.basePrice || 0;
+
+    // Check if live agricultural/machinery service timer was used
+    const hasServiceTimer = Boolean(
+      booking.serviceTimer && (
+        booking.serviceTimer.billingSummary?.subtotal ||
+        booking.serviceTimer.accumulatedActiveSeconds > 0 ||
+        booking.serviceTimer.status === 'RUNNING' ||
+        booking.serviceTimer.status === 'PAUSED' ||
+        booking.serviceTimer.status === 'COMPLETED'
+      )
+    );
+
+    let timingBaseAmount = 0;
+    if (hasServiceTimer) {
+      if (booking.serviceTimer.billingSummary?.subtotal) {
+        timingBaseAmount = Number(booking.serviceTimer.billingSummary.subtotal);
+      } else {
+        const now = new Date();
+        let activeSec = booking.serviceTimer.accumulatedActiveSeconds || 0;
+        if (booking.serviceTimer.status === 'RUNNING' && booking.serviceTimer.currentSessionStartedAt) {
+          activeSec += Math.max(0, Math.floor((now.getTime() - new Date(booking.serviceTimer.currentSessionStartedAt).getTime()) / 1000));
+        }
+        const activeMins = Math.max(activeSec > 0 ? 1 : 0, Math.ceil(activeSec / 60));
+        const ratePerMin = booking.serviceTimer.ratePerMinute || 15;
+        const adminBase = booking.serviceTimer.adminBaseCharge || booking.visitingCharges || 0;
+        timingBaseAmount = adminBase + (activeMins * ratePerMin);
+      }
+    }
+
+    const effectiveOriginalBase = (hasServiceTimer && timingBaseAmount > 0)
+      ? timingBaseAmount
+      : (booking.basePrice || 0);
+
+    const originalServiceBaseForBill = isPlanBooking ? 0 : effectiveOriginalBase;
+    const originalServiceBaseForEarnings = effectiveOriginalBase;
     const originalGST = isPlanBooking 
       ? 0 
-      : (booking.tax !== undefined && booking.tax !== null && Number(booking.tax) > 0 
+      : (booking.tax !== undefined && booking.tax !== null && Number(booking.tax) > 0 && !hasServiceTimer
           ? Number(booking.tax) 
           : parseFloat(((originalServiceBaseForBill * serviceGstPct) / 100).toFixed(2)));
-    const visitingCharges = Number(booking.visitingCharges) || 0;
+    const visitingCharges = hasServiceTimer ? 0 : (Number(booking.visitingCharges) || 0);
 
     // ═══════════════════════════════════════
     // 2. VENDOR-ADDED SERVICES
@@ -177,11 +211,15 @@ const createOrUpdateBill = async (req, res) => {
     // ═══════════════════════════════════════
     // 6. ALL SERVICES (original + vendor-added)
     // ═══════════════════════════════════════
+    const serviceLineName = hasServiceTimer && booking.serviceTimer?.billingSummary
+      ? `${booking.serviceName || 'Equipment / Field Service'} (${booking.serviceTimer.billingSummary.totalActiveMinutes} Mins Work, ${booking.serviceTimer.billingSummary.totalPausedMinutes || 0} Mins Downtime Free)`
+      : (booking.serviceName || 'Original Service');
+
     const allServices = [
       {
-        name: booking.serviceName || 'Original Service',
+        name: serviceLineName,
         price: originalServiceBaseForBill,
-        gstPercentage: (booking.tax && originalServiceBaseForBill > 0) ? Math.round((Number(booking.tax) / originalServiceBaseForBill) * 100) : serviceGstPct,
+        gstPercentage: (booking.tax && originalServiceBaseForBill > 0 && !hasServiceTimer) ? Math.round((Number(booking.tax) / originalServiceBaseForBill) * 100) : serviceGstPct,
         quantity: 1,
         gstAmount: originalGST,
         total: parseFloat((originalServiceBaseForBill + originalGST).toFixed(2)),
