@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { FiCheck, FiClock, FiUser, FiUsers, FiMapPin, FiTool, FiDollarSign, FiFileText, FiCheckCircle, FiX, FiNavigation, FiPackage } from 'react-icons/fi';
 import { vendorTheme as themeColors } from '../../../../theme';

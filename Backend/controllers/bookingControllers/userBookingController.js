@@ -945,19 +945,26 @@ const createBooking = async (req, res) => {
 
     // NOTIFY USER: Send actionable notification so they can track status
 
-    // Send notification to user
+    // Send notification to user.
+    // If booking is held for online payment, suppress the push (user is still on the Razorpay screen).
+    // A proper "Payment Successful / Booking Confirmed" push is sent once payment verifies.
+    const isHeldForPayment = booking.requestHeldForPayment === true;
     await createNotification({
       userId,
       type: 'booking_requested',
-      title: 'Booking Created',
-      message: `Your booking ${booking.bookingNumber} has been created successfully.`,
+      title: isHeldForPayment ? 'Complete Your Payment' : 'Booking Created',
+      message: isHeldForPayment
+        ? `Complete the payment of ₹${booking.finalAmount || booking.basePrice || 0} to confirm your booking ${booking.bookingNumber}.`
+        : `Your booking ${booking.bookingNumber} has been created successfully.`,
       relatedId: booking._id,
       relatedType: 'booking',
       pushData: {
         type: 'booking_requested',
         bookingId: booking._id.toString(),
-        link: `/user/booking/${booking._id}`
-        // dataOnly: true // Removed to ensure User sees the visual notification
+        link: `/user/booking/${booking._id}`,
+        // For held-payment bookings, send as a silent data-only push so the user isn't
+        // notified of a "booking" before they have actually paid.
+        dataOnly: isHeldForPayment
       }
     });
 

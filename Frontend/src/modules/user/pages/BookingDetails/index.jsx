@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useLocation, useSearchParams } from 'react-router-dom';
 import { toastManager } from '../../../../utils/toastManager';
 import useAppNotifications from '../../../../hooks/useAppNotifications';
