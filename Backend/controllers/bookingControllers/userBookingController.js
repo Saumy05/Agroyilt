@@ -14,9 +14,37 @@ const WorkerBookingRequest = require('../../models/WorkerBookingRequest');
 const { validationResult } = require('express-validator');
 const { BOOKING_STATUS, PAYMENT_STATUS } = require('../../utils/constants');
 const { createNotification } = require('../notificationControllers/notificationController');
+const { dispatchVendorRequest } = require('../../services/bookingSettlementService');
 const { sendNotificationToUser, sendNotificationToVendor, sendNotificationToWorker } = require('../../services/firebaseAdmin');
 const { sendNewBookingNotification } = require('../../services/firebaseNotificationService');
-const { parseTimeToMinutes, parseSlotInterval, isIntervalOverlapping } = require('../../utils/timeSlotHelper');
+const { parseTimeToMinutes, parseSlotInterval, isIntervalOverlapping, validateSchedule } = require('../../utils/timeSlotHelper');
+const {
+  vendorIneligibleReason,
+  findVendorSlotConflict,
+  CONFLICT_STATUSES,
+  cancelBookingWithRefund,
+  refundToWallet,
+  getAdvancePaid,
+  expireOpenRequests,
+  releaseVendorIfIdle,
+  generateDistinctOtp
+} = require('../../services/bookingSettlementService');
+
+const MAX_OPEN_REQUESTS_PER_FARMER = 5;
+
+/** Atomically moves a booking to CANCELLED on behalf of the farmer (refund is handled by the caller). */
+const cancelBookingWithRefundNoRefund = async (bookingId, userId, reason, allowedStatuses) => {
+  const doc = await Booking.findOneAndUpdate(
+    { _id: bookingId, userId, status: { $in: allowedStatuses } },
+    { $set: { status: BOOKING_STATUS.CANCELLED, cancelledAt: new Date(), cancelledBy: 'user', cancellationReason: reason || 'Cancelled by user' } },
+    { new: true }
+  );
+  if (doc && doc.serviceTimer && ['RUNNING', 'PAUSED'].includes(doc.serviceTimer.status)) {
+    require('../../services/bookingSettlementService').closeServiceTimer(doc, new Date(), 'STOPPED');
+    await doc.save();
+  }
+  return { booking: doc };
+};
 
 /**
  * Create a new booking
@@ -66,44 +94,26 @@ const createBooking = async (req, res) => {
       equipmentId   // NEW: For direct marketplace booking of specific equipment
     } = req.body;
 
-    // --- TIME VALIDATION ---
-    if (timeSlot && timeSlot.start && timeSlot.end) {
-      // Validate that end time is strictly after start time
-      if (timeSlot.end <= timeSlot.start) {
-        return res.status(400).json({
-          success: false,
-          message: 'End time must be later than start time'
-        });
-      }
+    // --- TIME VALIDATION (timezone-aware: past dates, passed slots, >90 days ahead) ---
+    const schedule = validateSchedule(scheduledDate, timeSlot);
+    if (!schedule.ok) {
+      return res.status(400).json({ success: false, message: schedule.message });
+    }
 
-      // Check if booking is for today and validate against current time
-      if (scheduledDate) {
-        const localNow = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000);
-        const today = localNow.toISOString().split('T')[0];
-        // Ensure scheduledDate can be parsed safely
-        const scheduledDateObj = new Date(scheduledDate);
-        if (!isNaN(scheduledDateObj.getTime())) {
-          const selectedDateString = scheduledDateObj.toISOString().split('T')[0];
-  
-          if (selectedDateString === today) {
-            const now = new Date();
-            const currentHours = now.getHours();
-            const currentMinutes = now.getMinutes();
-            const [startHours, startMinutes] = timeSlot.start.split(':').map(Number);
-            
-            if (startHours < currentHours || (startHours === currentHours && startMinutes <= currentMinutes)) {
-              return res.status(400).json({
-                success: false,
-                message: 'This time slot has already passed. Please select a future time.'
-              });
-            }
-          }
-        }
-      }
+    // Anti-hoarding: a farmer can only have a handful of unanswered requests at once
+    const openRequests = await Booking.countDocuments({
+      userId, status: { $in: [BOOKING_STATUS.REQUESTED, BOOKING_STATUS.SEARCHING] }
+    });
+    if (openRequests >= MAX_OPEN_REQUESTS_PER_FARMER) {
+      return res.status(429).json({
+        success: false,
+        message: 'You have too many pending booking requests. Please wait for vendors to respond or cancel some first.'
+      });
     }
     // --- END TIME VALIDATION ---
 
-    let visitingCharges = reqVisitingCharges !== undefined ? reqVisitingCharges : (reqVisitationFee || 0);
+    // Visiting charges are set by the platform (Settings), never by the client.
+    let visitingCharges = 0;
 
     // Calculate total value from booked items or fallback to base (Move to top)
     let totalServiceValue = 0;
@@ -193,11 +203,11 @@ const createBooking = async (req, res) => {
     const isAgriService = service.category === 'Agriculture' || (category && category.title === 'Agriculture') || reqServiceCategory === 'Agriculture';
 
     let equipmentObj = null;
+    let calculatedDurationMinutes = null; // hoisted: persisted on the booking below
 
     if (isAgriService) {
       // ── Agriculture Dynamic Multiplier Logic ──
       let multiplier = 1;
-      let calculatedDurationMinutes = null;
 
       if (rental_type === 'hourly') {
         if (timeSlot && timeSlot.start && timeSlot.end) {
@@ -398,6 +408,26 @@ const createBooking = async (req, res) => {
     }
     // --- END PROVIDER SEARCH BLOCK ---
 
+    // Direct-vendor eligibility: approved, active, not cash-blocked, and the machine really is theirs & live
+    if (providerType === 'VENDOR') {
+      const directVendorId = vendorId || (equipmentObj ? equipmentObj.vendorId : null);
+      if (directVendorId) {
+        const directVendor = await Vendor.findById(directVendorId).select('approvalStatus isActive wallet');
+        const reason = vendorIneligibleReason(directVendor);
+        if (reason) {
+          return res.status(400).json({ success: false, message: reason });
+        }
+        if (equipmentObj) {
+          if (String(equipmentObj.vendorId) !== String(directVendorId)) {
+            return res.status(400).json({ success: false, message: 'The selected equipment does not belong to the selected vendor.' });
+          }
+          if (!['active', 'approved'].includes(equipmentObj.status)) {
+            return res.status(400).json({ success: false, message: 'The selected equipment is not available for booking.' });
+          }
+        }
+      }
+    }
+
     // Calculate pricing - use amount from frontend if provided, otherwise calculate
     let basePrice, discount, tax, finalAmount;
     let bookingStatus = BOOKING_STATUS.SEARCHING;
@@ -498,7 +528,7 @@ const createBooking = async (req, res) => {
         discount = Math.round(rentalDiscountAmount + totalProductDiscount);
 
         // 5. Free Transport/Delivery Check
-        visitingCharges = (reqVisitingCharges !== undefined) ? reqVisitingCharges : (visitingCharges !== undefined ? visitingCharges : 49);
+        visitingCharges = (await Settings.findOne({ type: 'global' }))?.visitedCharges ?? 49;
         if (userPlan.freeTransport) {
             visitingCharges = 0; // Waive transport fee
         }
@@ -519,7 +549,7 @@ const createBooking = async (req, res) => {
       
       // Override visiting charges with settings unless it's a worker booking without conveyance
       const systemVisitingCharges = settings?.visitedCharges || 49;
-      visitingCharges = reqVisitingCharges !== undefined ? reqVisitingCharges : systemVisitingCharges;
+      visitingCharges = systemVisitingCharges;
       
       const gstPercentage = isAgriService ? (settings?.rentalGstPercentage || 5) : (settings?.serviceGstPercentage || 18);
       const gstDecMultiplier = gstPercentage / 100;
@@ -534,6 +564,18 @@ const createBooking = async (req, res) => {
       } else {
         // Standard Services (Wait until we migrate these to full backend authoritativeness too)
         // For now, doing a safer recalculation
+        const clientNums = [amount, reqBasePrice, reqDiscount].filter(v => v !== undefined && v !== null);
+        if (clientNums.some(v => !Number.isFinite(Number(v)) || Number(v) < 0)) {
+          return res.status(400).json({ success: false, message: 'Invalid price details' });
+        }
+        const priceFloor = Number(service.priceRangeMin) > 0 ? Number(service.priceRangeMin) : 0;
+        const clientBase = reqBasePrice !== undefined ? Number(reqBasePrice) : (amount ? Number(amount) - Number(visitingCharges) : undefined);
+        if (clientBase !== undefined && clientBase < priceFloor) {
+          return res.status(400).json({ success: false, message: 'The submitted price is below the minimum for this service.' });
+        }
+        if (reqDiscount !== undefined && Number(reqDiscount) > (reqBasePrice !== undefined ? Number(reqBasePrice) : Infinity)) {
+          return res.status(400).json({ success: false, message: 'Discount cannot exceed the price.' });
+        }
         if (amount && amount > 0) {
            if (reqBasePrice !== undefined) {
                basePrice = reqBasePrice;
@@ -560,11 +602,7 @@ const createBooking = async (req, res) => {
     // This prevents inconsistency between Booking and VendorBill.
     console.log(`[CreateBooking] Payment=${paymentMethod}, FinalAmount=${finalAmount}, Penalty=${pendingPenalty}`);
 
-    // Clear penalty from user wallet if we charged it
-    if (pendingPenalty > 0) {
-      user.wallet.penalty = 0;
-      await user.save();
-    }
+    // NOTE: the carried-over penalty is cleared only after the booking is safely created (see end of createBooking).
 
     // Ensure minimum amount for Razorpay (₹1) for paid bookings
     if (isNaN(finalAmount) || finalAmount < 1) {
@@ -640,7 +678,7 @@ const createBooking = async (req, res) => {
       landSize: landSize || null,
       endDate: (endDate && !isNaN(new Date(endDate).getTime())) ? new Date(endDate) : null,
       estimatedDuration: (estimatedDuration !== undefined && estimatedDuration !== null && !isNaN(Number(estimatedDuration))) ? Number(estimatedDuration) : null,
-      durationMinutes: typeof calculatedDurationMinutes !== 'undefined' ? calculatedDurationMinutes : null,
+      durationMinutes: calculatedDurationMinutes,
 
       description: service.description,
       serviceImages: service.images || [],
@@ -678,20 +716,9 @@ const createBooking = async (req, res) => {
       selectedImplements: selectedImplements || []
     });
 
-    // If Plus membership was added, update user status
-    if (isPlusAdded) {
-      const expiryDate = new Date();
-      expiryDate.setFullYear(expiryDate.getFullYear() + 1); // 1 year membership
-      user.plans = {
-        isActive: true,
-        name: 'Plus Membership',
-        expiry: expiryDate,
-        price: 999 // Or fetch based on constants if needed, hardcoding placeholder or 0
-      };
-      await user.save();
-      console.log(`User ${userId} upgraded to Plus Membership until ${expiryDate}`);
-    }
+    // NOTE: a client-supplied `isPlusAdded` flag must never grant a paid membership; plans are bought through the plan-order flow.
 
+    let chosenVendor = null; // hoisted: used again after the targeted-vendor block
     const WAVE_1_COUNT = 3;
     const io = req.app.get('io');
     const BookingRequest = require('../../models/BookingRequest');
@@ -701,7 +728,7 @@ const createBooking = async (req, res) => {
 
       if (targetVendorId) {
         // TARGETED SINGLE-VENDOR FLOW: Send ONLY to the farmer's selected vendor
-        const chosenVendor = nearbyVendors.find(v => (v._id || v.id).toString() === targetVendorId.toString())
+        chosenVendor = nearbyVendors.find(v => (v._id || v.id).toString() === targetVendorId.toString())
           || await Vendor.findById(targetVendorId);
 
         if (!chosenVendor) {
@@ -712,40 +739,13 @@ const createBooking = async (req, res) => {
           });
         }
 
-        // Concurrency / conflict check: verify vendor doesn't have an overlapping booking for this slot
-        const startOfDay = new Date(new Date(scheduledDate).setHours(0, 0, 0, 0));
-        const endOfDay = new Date(new Date(scheduledDate).setHours(23, 59, 59, 999));
-        const conflictingBookings = await Booking.find({
-          _id: { $ne: booking._id },
-          vendorId: targetVendorId,
-          scheduledDate: { $gte: startOfDay, $lte: endOfDay },
-          status: {
-            $in: [
-              BOOKING_STATUS.REQUESTED,
-              BOOKING_STATUS.CONFIRMED,
-              BOOKING_STATUS.ACCEPTED,
-              BOOKING_STATUS.ASSIGNED,
-              BOOKING_STATUS.JOURNEY_STARTED,
-              BOOKING_STATUS.IN_PROGRESS,
-              BOOKING_STATUS.WORK_DONE
-            ]
-          }
-        }).select('equipmentId scheduledDate scheduledTime timeSlot rental_type status bookingNumber');
-
-        const reqInterval = parseSlotInterval(timeSlot, scheduledTime, rental_type);
+        // Conflict check: vendor must not have an overlapping booking for this slot
         const resolvedEquipId = equipmentId || (equipmentObj ? equipmentObj._id : null);
-
-        let conflictBooking = null;
-        for (const cb of conflictingBookings) {
-          const isSameMachine = !resolvedEquipId || !cb.equipmentId || cb.equipmentId.toString() === resolvedEquipId.toString();
-          if (!isSameMachine) continue;
-
-          const cbInterval = parseSlotInterval(cb.timeSlot, cb.scheduledTime, cb.rental_type);
-          if (isIntervalOverlapping(cbInterval, reqInterval)) {
-            conflictBooking = cb;
-            break;
-          }
-        }
+        const conflictBooking = await findVendorSlotConflict(
+          { scheduledDate, timeSlot, scheduledTime, rental_type, equipmentId: resolvedEquipId },
+          targetVendorId,
+          { excludeId: booking._id, statuses: [BOOKING_STATUS.REQUESTED, ...CONFLICT_STATUSES] }
+        );
 
         if (conflictBooking) {
           await Booking.findByIdAndDelete(booking._id);
@@ -770,102 +770,37 @@ const createBooking = async (req, res) => {
 
         booking.vendorId = targetVendorId;
         booking.equipmentId = equipmentId || (equipmentObj ? equipmentObj._id : null);
-        booking.status = BOOKING_STATUS.REQUESTED;
+        // Pay-online bookings are held (vendor not alerted) until the payment is verified
+        const holdForPayment = ['online', 'razorpay'].includes(paymentMethod) && finalAmount > 0 && !usePlanBenefits;
+        booking.status = holdForPayment ? BOOKING_STATUS.AWAITING_PAYMENT : BOOKING_STATUS.REQUESTED;
+        booking.requestHeldForPayment = holdForPayment;
         booking.potentialVendors = []; // NO WAVES
         booking.currentWave = 1;
         booking.waveStartedAt = new Date();
-        booking.notifiedVendors = [targetVendorId];
+        booking.notifiedVendors = holdForPayment ? [] : [targetVendorId];
         await booking.save();
 
-        console.log(`[CreateBooking] Targeted flow: Alerting selected vendor ${targetVendorId} only`);
-
-        const singleRequest = {
-          bookingId: booking._id,
-          providerType: 'VENDOR',
-          vendorId: targetVendorId,
-          status: 'PENDING',
-          wave: 1,
-          distance: vendorDist,
-          sentAt: new Date(),
-          expiresAt: new Date(Date.now() + 15 * 60 * 1000) // 15 mins window
-        };
-
-        try {
-          await BookingRequest.create(singleRequest);
-        } catch (err) {
-          if (err.code !== 11000) console.error('[CreateBooking] BookingRequest create error:', err);
+        // Two farmers racing for the same slot: the later request backs off
+        const racer = await findVendorSlotConflict(
+          { scheduledDate, timeSlot, scheduledTime, rental_type, equipmentId: resolvedEquipId },
+          targetVendorId,
+          { excludeId: booking._id, statuses: [BOOKING_STATUS.REQUESTED, ...CONFLICT_STATUSES], beatenBy: { field: 'createdAt', at: booking.createdAt, id: booking._id } }
+        );
+        if (racer) {
+          await Booking.findByIdAndDelete(booking._id);
+          return res.status(409).json({
+            success: false,
+            conflict: true,
+            message: 'This vendor was just booked for this time slot. Please choose another vendor or time slot.'
+          });
         }
 
-        if (io) {
-          const bookingData = {
-            bookingId: booking._id,
-            bookingNumber: booking.bookingNumber,
-            serviceName: service.title,
-            serviceCategory: category ? category.title : 'Category',
-            customerName: user.name,
-            customerPhone: user.phone,
-            scheduledDate: scheduledDate,
-            scheduledTime: scheduledTime,
-            timeSlot: timeSlot,
-            price: finalAmount,
-            basePrice: basePrice,
-            address: address,
-            distance: vendorDist,
-            rental_type: rental_type || '',
-            estimatedDuration: booking.estimatedDuration || '',
-            landSize: landSize || '',
-            selectedImplements: selectedImplements || [],
-            playSound: true,
-            message: `New booking request from ${user.name}!`
-          };
-
-          const room = `vendor_${targetVendorId.toString()}`;
-          console.log(`[BOOKING SOCKET] Emitting to selected vendor room: ${room}`);
-          io.to(room).emit('new_booking_request', bookingData);
-          io.to(room).emit('new_booking', bookingData);
-          io.to(room).emit('booking_updated', { bookingId: booking._id, status: 'requested' });
+        if (holdForPayment) {
+          // Online payment first: the vendor is alerted only once the payment is verified (see applyOnlinePayment)
+          console.log(`[CreateBooking] Holding request for vendor ${targetVendorId} until payment is verified`);
+        } else {
+          await dispatchVendorRequest(booking, { io, distance: vendorDist, chosenVendor });
         }
-
-        // Push notification ONLY to targeted vendor
-        try {
-          const vendorDoc = chosenVendor?.fcmTokens ? chosenVendor : await Vendor.findById(targetVendorId);
-          if (vendorDoc && vendorDoc.fcmTokens && vendorDoc.fcmTokens.length > 0) {
-            await sendNewBookingNotification(
-              vendorDoc.fcmTokens,
-              booking._id,
-              service.title,
-              `${address.city || ''}, ${address.state || ''}`.trim()
-            );
-          }
-        } catch (err) {
-          console.error('[FCM] Push notification failed for vendor', targetVendorId, err);
-        }
-
-        // Database notification for targeted vendor
-        createNotification({
-          vendorId: targetVendorId,
-          type: 'booking_request',
-          title: 'New Booking Request',
-          message: `New booking request for ${service.title} from ${user.name}`,
-          relatedId: booking._id,
-          relatedType: 'booking',
-          data: {
-            bookingId: booking._id,
-            serviceName: service.title,
-            customerName: user.name,
-            customerPhone: user.phone,
-            scheduledDate: scheduledDate,
-            scheduledTime: scheduledTime,
-            location: address,
-            price: finalAmount,
-            distance: vendorDist
-          },
-          pushData: {
-            type: 'new_booking',
-            dataOnly: false,
-            link: `/vendor/booking/${booking._id}`
-          }
-        }).catch(err => console.error('[Notification] Background save error (vendor):', err));
       } else {
         // Fallback if no specific vendor requested
         booking.vendorId = null;
@@ -1035,7 +970,7 @@ const createBooking = async (req, res) => {
 
     // Send notification to vendor only if assigned directly and not already notified above
     let vendorObj = null;
-    if (vendorId && !chosenVendor) {
+    if (vendorId && !chosenVendor && booking.status !== BOOKING_STATUS.AWAITING_PAYMENT) {
       await createNotification({
         vendorId,
         type: 'booking_created',
@@ -1060,7 +995,7 @@ const createBooking = async (req, res) => {
     // SEND EMAILS (Confirmation)
     const { sendBookingEmails } = require('../../services/emailService');
     // Run in background (no await) to speed up response
-    sendBookingEmails(populatedBooking, user, vendorObj, service).catch(err => console.error(err));
+    sendBookingEmails(populatedBooking, user, booking.requestHeldForPayment ? null : vendorObj, service).catch(err => console.error(err));
 
     // Clear booked items from user's cart
     try {
@@ -1124,20 +1059,25 @@ const createBooking = async (req, res) => {
       console.error('Final cart clear failed:', e);
     }
 
+    // The carried-over penalty was added to this booking's total: clear it now that the booking exists
+    if (pendingPenalty > 0) {
+      await User.updateOne({ _id: userId, 'wallet.penalty': { $gte: pendingPenalty } }, { $inc: { 'wallet.penalty': -pendingPenalty } });
+    }
+
     res.status(201).json({
       success: true,
       message: hasTargetVendor 
-        ? 'Booking request sent to selected vendor' 
+        ? (booking.requestHeldForPayment ? 'Booking created. Complete the payment to send the request to the vendor' : 'Booking request sent to selected vendor')
         : (activeProviders.length > 0 ? 'Booking created successfully' : (providerType === 'WORKER' ? 'No workers found nearby' : 'No vendors found nearby')),
       noVendorsFound: !hasTargetVendor && activeProviders.length === 0,
+      paymentRequired: booking.status === BOOKING_STATUS.AWAITING_PAYMENT && !!booking.requestHeldForPayment,
       data: populatedBooking
     });
   } catch (error) {
     console.error('Create booking error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to create booking. ' + (error.message || 'Unknown error'),
-      stack: error.stack
+      message: 'Failed to create booking. Please try again.'
     });
   }
 };
@@ -1358,7 +1298,7 @@ const cancelBooking = async (req, res) => {
     const { id } = req.params;
     const { cancellationReason } = req.body;
 
-    const booking = await Booking.findOne({ _id: id, userId });
+    let booking = await Booking.findOne({ _id: id, userId });
 
     if (!booking) {
       return res.status(404).json({
@@ -1369,27 +1309,32 @@ const cancelBooking = async (req, res) => {
 
     // Check if booking can be cancelled
     if (booking.status === BOOKING_STATUS.CANCELLED) {
+      return res.status(400).json({ success: false, message: 'Booking is already cancelled' });
+    }
+    if (booking.status === BOOKING_STATUS.COMPLETED) {
+      return res.status(400).json({ success: false, message: 'Cannot cancel completed booking' });
+    }
+    // Once the work has started the bill is the vendor's to collect: no walking away from it.
+    if ([BOOKING_STATUS.IN_PROGRESS, BOOKING_STATUS.WORK_DONE, BOOKING_STATUS.AWAITING_PAYMENT].includes(booking.status) && !booking.requestHeldForPayment) {
       return res.status(400).json({
         success: false,
-        message: 'Booking is already cancelled'
+        message: 'Work has already started on this booking, so it can no longer be cancelled. Please complete payment or raise a dispute from support.'
       });
     }
-
-    if (booking.status === BOOKING_STATUS.COMPLETED) {
-      return res.status(400).json({
-        success: false,
-        message: 'Cannot cancel completed booking'
-      });
+    const CANCELLABLE = [
+      BOOKING_STATUS.SEARCHING, BOOKING_STATUS.REQUESTED, BOOKING_STATUS.PENDING, BOOKING_STATUS.CONFIRMED,
+      BOOKING_STATUS.ACCEPTED, BOOKING_STATUS.ASSIGNED, BOOKING_STATUS.JOURNEY_STARTED, BOOKING_STATUS.VISITED,
+      BOOKING_STATUS.REJECTED, BOOKING_STATUS.AWAITING_PAYMENT
+    ];
+    if (!CANCELLABLE.includes(booking.status)) {
+      return res.status(400).json({ success: false, message: `Cannot cancel a booking that is ${booking.status}` });
     }
 
     // --- REFUND & CANCELLATION FEE LOGIC ---
-    let refundAmount = 0;
     let cancellationFee = 0;
     let refundMessage = '';
 
-    // Fetch dynamic cancellation penalty from Settings
-    const Settings = require('../../models/Settings');
-    let settingsPenalty = 49; // Default
+    let settingsPenalty = 49;
     try {
       const globalSettings = await Settings.findOne({ type: 'global' });
       if (globalSettings && globalSettings.cancellationPenalty !== undefined) {
@@ -1399,96 +1344,52 @@ const cancelBooking = async (req, res) => {
       console.error('Error fetching settings for cancellation penalty:', err);
     }
 
+    const advancePaid = getAdvancePaid(booking);
     const hasStartedJourney = !!booking.journeyStartedAt;
-    const isPaid = booking.paymentStatus === PAYMENT_STATUS.SUCCESS;
-    const isWalletOrOnline = ['wallet', 'razorpay', 'upi', 'card'].includes(booking.paymentMethod);
-    const isCash = booking.paymentMethod === 'cash';
+    // No fee when the vendor/system is the reason the booking fell through
+    const providerFault = ['vendor', 'system'].includes(booking.cancelledBy) || booking.status === BOOKING_STATUS.REJECTED;
 
-    if (hasStartedJourney) {
-      // SCENARIO: Worker/Vendor already started journey
+    if (hasStartedJourney && !providerFault) {
+      const hasReached = !!booking.visitedAt || booking.status === BOOKING_STATUS.VISITED;
+      cancellationFee = hasReached ? (booking.visitingCharges || 49) : settingsPenalty;
+    }
 
-      const hasReached = !!booking.visitedAt || booking.status === 'visited';
+    // Atomic claim: two simultaneous cancels (or a cancel racing an accept) cannot both win
+    const { booking: claimed } = await cancelBookingWithRefundNoRefund(booking._id, userId, cancellationReason, CANCELLABLE);
+    if (!claimed) {
+      return res.status(409).json({ success: false, message: 'Booking changed state, please refresh and try again.' });
+    }
+    booking = claimed;
 
-      if (hasReached) {
-        // Professional Reached -> Full Visiting Charges
-        cancellationFee = booking.visitingCharges || 49;
-      } else {
-        // Before Arrival (Journey Started) -> Dynamic Penalty
-        cancellationFee = settingsPenalty;
-      }
-
-      if (isPaid && isWalletOrOnline) {
-        // User paid upfront -> Refund (Total - Fee)
-        refundAmount = Math.max(0, booking.finalAmount - cancellationFee);
-        refundMessage = `Booking cancelled after ${hasReached ? 'professional arrival' : 'journey start'}. Refund of ₹${refundAmount} initiated (Cancellation Fee: ₹${cancellationFee} deducted).`;
-      } else {
-        // User hasn't paid (e.g. COD or pending) -> Add Penalty to Wallet for Next Booking
-        refundAmount = 0;
-        refundMessage = `Booking cancelled after ${hasReached ? 'professional arrival' : 'journey start'}. A cancellation fee of ₹${cancellationFee} has been added to your account and will be charged on your next booking.`;
-
-        // We will add this to user.wallet.penalty below
-      }
+    let refundAmount = 0;
+    if (advancePaid > 0) {
+      refundAmount = await refundToWallet(booking, {
+        amount: Math.max(0, advancePaid - cancellationFee),
+        reason: cancellationFee > 0 ? `Refund (cancellation fee ₹${cancellationFee} deducted)` : 'Refund for cancelled booking'
+      });
+      // If the fee exceeded the refundable amount, the remainder stays with the platform
+      refundMessage = cancellationFee > 0
+        ? `Booking cancelled. Refund of ₹${refundAmount} initiated (cancellation fee ₹${cancellationFee} deducted).`
+        : `Booking cancelled successfully. Full refund of ₹${refundAmount} initiated to your wallet.`;
+    } else if (cancellationFee > 0) {
+      await User.updateOne({ _id: userId }, { $inc: { 'wallet.penalty': cancellationFee } });
+      refundMessage = `Booking cancelled. A cancellation fee of ₹${cancellationFee} will be charged on your next booking.`;
     } else {
-      // SCENARIO: Cancelled before journey start
-      // Policy: Full Refund
-      cancellationFee = 0;
-
-      if (isPaid && isWalletOrOnline) {
-        refundAmount = booking.finalAmount;
-        refundMessage = `Booking cancelled successfully. Full refund of ₹${refundAmount} initiated to your wallet.`;
-      } else {
-        refundAmount = 0;
-        refundMessage = 'Booking cancelled successfully.';
-      }
+      refundMessage = 'Booking cancelled successfully.';
     }
 
-    // Update User Wallet
-    if (refundAmount > 0 || (cancellationFee > 0 && !isPaid)) {
-      const User = require('../../models/User');
-      const Transaction = require('../../models/Transaction');
-
-      const user = await User.findById(userId);
-
-      // 1. Process Refund
-      if (refundAmount > 0) {
-        user.wallet.balance = (user.wallet.balance || 0) + refundAmount;
-
-        await Transaction.create({
-          userId: user._id,
-          type: 'refund',
-          amount: refundAmount,
-          status: 'completed',
-          paymentMethod: 'wallet',
-          description: `Refund for booking #${booking.bookingNumber}`,
-          bookingId: booking._id,
-          balanceAfter: user.wallet.balance
-        });
-
-        booking.paymentStatus = PAYMENT_STATUS.REFUNDED;
-      }
-
-      // 2. Process Cancellation Fee and Restore Previous Unpaid Penalty
-      if (!isPaid) {
-        // If this booking had a previous unpaid penalty baked in, we must restore it to the user's bucket
-        const previousPenalty = booking.penalty || 0;
-        const totalNewPenalty = cancellationFee + previousPenalty;
-        
-        if (totalNewPenalty > 0) {
-          user.wallet.penalty = (user.wallet.penalty || 0) + totalNewPenalty;
-          console.log(`[CancelBooking] Restored previous penalty ₹${previousPenalty} and added new penalty ₹${cancellationFee} for user ${userId}. Total Penalty: ${user.wallet.penalty}`);
-        }
-      }
-
-      await user.save();
+    // A penalty that was baked into this unpaid booking goes back onto the farmer's account
+    if (advancePaid <= 0 && (booking.penalty || 0) > 0) {
+      await User.updateOne({ _id: userId }, { $inc: { 'wallet.penalty': booking.penalty } });
     }
 
-    // Update booking status
-    booking.status = BOOKING_STATUS.CANCELLED;
-    booking.cancelledAt = new Date();
-    booking.cancelledBy = 'user';
-    booking.cancellationReason = cancellationReason || 'Cancelled by user';
-
-    await booking.save();
+    // Stop timers, expire alerts, tell every vendor that was alerted
+    const alerted = (booking.notifiedVendors || []).map(String);
+    await expireOpenRequests(booking._id, 'CANCELLED');
+    try {
+      const ioC = req.app?.get ? req.app.get('io') : null;
+      if (ioC) alerted.forEach(v => ioC.to(`vendor_${v}`).emit('booking_cancelled', { bookingId: booking._id.toString(), message: `Booking ${booking.bookingNumber} has been cancelled by the customer.` }));
+    } catch (e) { /* non-fatal */ }
 
     // Send notification to user
     await createNotification({
@@ -1650,14 +1551,7 @@ const cancelBooking = async (req, res) => {
     // Sync Vendor cancellation, timer cleanup & availability
     if (booking.vendorId) {
       try {
-        await Vendor.findByIdAndUpdate(booking.vendorId, { availability: 'AVAILABLE' });
-        
-        // Stop any active service timers for this booking
-        if (booking.serviceTimer && ['RUNNING', 'PAUSED'].includes(booking.serviceTimer.status)) {
-          booking.serviceTimer.status = 'STOPPED';
-          booking.serviceTimer.stoppedAt = new Date();
-          await booking.save();
-        }
+        await releaseVendorIfIdle(booking.vendorId, booking._id);
 
         await createNotification({
           vendorId: booking.vendorId,
@@ -1711,11 +1605,7 @@ const rescheduleBooking = async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation failed',
-        errors: errors.array()
-      });
+      return res.status(400).json({ success: false, message: 'Validation failed', errors: errors.array() });
     }
 
     const userId = req.user.id;
@@ -1723,45 +1613,53 @@ const rescheduleBooking = async (req, res) => {
     const { scheduledDate, scheduledTime, timeSlot } = req.body;
 
     const booking = await Booking.findOne({ _id: id, userId });
-
     if (!booking) {
-      return res.status(404).json({
-        success: false,
-        message: 'Booking not found'
-      });
+      return res.status(404).json({ success: false, message: 'Booking not found' });
     }
 
-    // Check if booking can be rescheduled
-    if (booking.status === BOOKING_STATUS.COMPLETED) {
-      return res.status(400).json({
-        success: false,
-        message: 'Cannot reschedule completed booking'
-      });
+    // Only before the vendor has set out
+    const RESCHEDULABLE = [
+      BOOKING_STATUS.PENDING, BOOKING_STATUS.REQUESTED, BOOKING_STATUS.SEARCHING,
+      BOOKING_STATUS.CONFIRMED, BOOKING_STATUS.ACCEPTED, BOOKING_STATUS.ASSIGNED
+    ];
+    if (!RESCHEDULABLE.includes(booking.status)) {
+      return res.status(400).json({ success: false, message: `A booking that is ${booking.status} can no longer be rescheduled` });
     }
 
-    if (booking.status === BOOKING_STATUS.CANCELLED) {
-      return res.status(400).json({
-        success: false,
-        message: 'Cannot reschedule cancelled booking'
-      });
+    const schedule = validateSchedule(scheduledDate, timeSlot);
+    if (!schedule.ok) {
+      return res.status(400).json({ success: false, message: schedule.message });
     }
 
-    // Update booking
+    // Hourly machinery is priced by slot length: a different length needs a new booking
+    if (booking.rental_type === 'hourly') {
+      const oldLen = booking.durationMinutes ||
+        (parseTimeToMinutes(booking.timeSlot?.end) - parseTimeToMinutes(booking.timeSlot?.start));
+      const newLen = parseTimeToMinutes(timeSlot.end) - parseTimeToMinutes(timeSlot.start);
+      if (oldLen > 0 && newLen !== oldLen) {
+        return res.status(400).json({ success: false, message: 'The new slot must be the same length as the booked one. Cancel and rebook to change the duration.' });
+      }
+    }
+
+    // The vendor must be free at the new time
+    if (booking.vendorId) {
+      const conflict = await findVendorSlotConflict(
+        { scheduledDate, timeSlot, scheduledTime, rental_type: booking.rental_type, equipmentId: booking.equipmentId },
+        booking.vendorId,
+        { excludeId: booking._id, statuses: [BOOKING_STATUS.REQUESTED, ...CONFLICT_STATUSES] }
+      );
+      if (conflict) {
+        return res.status(409).json({ success: false, message: 'The vendor is not available at that time. Please pick another slot.' });
+      }
+    }
+
     booking.scheduledDate = new Date(scheduledDate);
     booking.scheduledTime = scheduledTime;
-    booking.timeSlot = {
-      start: timeSlot.start,
-      end: timeSlot.end
-    };
-
-    // Reset status to pending if it was confirmed
-    if (booking.status === BOOKING_STATUS.CONFIRMED) {
-      booking.status = BOOKING_STATUS.PENDING;
-    }
-
+    booking.timeSlot = { start: timeSlot.start, end: timeSlot.end };
+    booking.startReminderSent = false;
+    booking.endReminderSent = false;
     await booking.save();
 
-    // Send notification to vendor
     if (booking.vendorId) {
       await createNotification({
         vendorId: booking.vendorId,
@@ -1770,26 +1668,17 @@ const rescheduleBooking = async (req, res) => {
         message: `Booking ${booking.bookingNumber} has been rescheduled to ${new Date(scheduledDate).toLocaleDateString()} at ${scheduledTime}.`,
         relatedId: booking._id,
         relatedType: 'booking',
-        pushData: {
-          type: 'booking_rescheduled',
-          bookingId: booking._id.toString(),
-          link: `/vendor/booking/${booking._id}`
-        }
+        pushData: { type: 'booking_rescheduled', bookingId: booking._id.toString(), link: `/vendor/booking/${booking._id}` }
       });
-
       const io = req.app.get('io') || global.io;
       if (io) {
         io.to(`vendor_${booking.vendorId}`).emit('booking_updated', {
-          bookingId: booking._id,
-          status: booking.status,
-          scheduledDate: booking.scheduledDate,
-          scheduledTime: booking.scheduledTime,
-          message: `Booking ${booking.bookingNumber} has been rescheduled`
+          bookingId: booking._id, status: booking.status, scheduledDate: booking.scheduledDate,
+          scheduledTime: booking.scheduledTime, message: `Booking ${booking.bookingNumber} has been rescheduled`
         });
       }
     }
 
-    // Send confirmation notification to farmer
     await createNotification({
       userId: booking.userId,
       type: 'booking_rescheduled',
@@ -1797,24 +1686,13 @@ const rescheduleBooking = async (req, res) => {
       message: `Your booking ${booking.bookingNumber} has been rescheduled to ${new Date(scheduledDate).toLocaleDateString()} at ${scheduledTime}.`,
       relatedId: booking._id,
       relatedType: 'booking',
-      pushData: {
-        type: 'booking_rescheduled',
-        bookingId: booking._id.toString(),
-        link: `/user/booking/${booking._id}`
-      }
+      pushData: { type: 'booking_rescheduled', bookingId: booking._id.toString(), link: `/user/booking/${booking._id}` }
     });
 
-    res.status(200).json({
-      success: true,
-      message: 'Booking rescheduled successfully',
-      data: booking
-    });
+    res.status(200).json({ success: true, message: 'Booking rescheduled successfully', data: booking });
   } catch (error) {
     console.error('Reschedule booking error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to reschedule booking. Please try again.'
-    });
+    res.status(500).json({ success: false, message: 'Failed to reschedule booking. Please try again.' });
   }
 };
 
@@ -1845,8 +1723,8 @@ const addReview = async (req, res) => {
       });
     }
 
-    // Check if booking is completed or work is done (work_done is for machinery after driver completes)
-    if (booking.status !== BOOKING_STATUS.COMPLETED && booking.status !== BOOKING_STATUS.WORK_DONE) {
+    // Reviews open only once the job is fully completed (work done AND paid)
+    if (booking.status !== BOOKING_STATUS.COMPLETED) {
       return res.status(400).json({
         success: false,
         message: 'You can only review a booking after the work has been completed by the service provider'
@@ -1861,13 +1739,16 @@ const addReview = async (req, res) => {
       });
     }
 
-    // Update booking
-    booking.rating = rating;
-    booking.review = review || null;
-    booking.reviewImages = reviewImages || [];
-    booking.reviewedAt = new Date();
-
-    await booking.save();
+    // Atomic: only the first submission can claim the review slot
+    const reviewed = await Booking.findOneAndUpdate(
+      { _id: booking._id, userId, rating: null, status: BOOKING_STATUS.COMPLETED },
+      { $set: { rating, review: review || null, reviewImages: reviewImages || [], reviewedAt: new Date() } },
+      { new: true }
+    );
+    if (!reviewed) {
+      return res.status(400).json({ success: false, message: 'Booking already reviewed' });
+    }
+    booking.rating = reviewed.rating;
 
     // Create a new Review document for the Review model (used by Admin)
     try {
@@ -1887,21 +1768,18 @@ const addReview = async (req, res) => {
       // We don't fail the request if the separate review creation fails
     }
 
-    // Helper to update cumulative rating on Model
+    // Cumulative rating as ONE atomic pipeline update (no read-modify-write races)
     const updateCumulativeRating = async (Model, docId, newRating) => {
       try {
-        const doc = await Model.findById(docId);
-        if (!doc) return;
-
-        const oldTotal = doc.totalReviews || 0;
-        const oldRating = doc.rating || 0;
-
-        const newTotal = oldTotal + 1;
-        const updatedRating = ((oldRating * oldTotal) + newRating) / newTotal;
-
-        doc.rating = Number(updatedRating.toFixed(2));
-        doc.totalReviews = newTotal;
-        await doc.save();
+        await Model.updateOne({ _id: docId }, [
+          { $set: {
+              rating: { $round: [{ $divide: [
+                { $add: [{ $multiply: [{ $ifNull: ['$rating', 0] }, { $ifNull: ['$totalReviews', 0] }] }, newRating] },
+                { $add: [{ $ifNull: ['$totalReviews', 0] }, 1] }
+              ] }, 2] },
+              totalReviews: { $add: [{ $ifNull: ['$totalReviews', 0] }, 1] }
+          } }
+        ]);
       } catch (err) {
         console.error(`Error updating rating for ${Model.modelName}:`, err);
       }
@@ -1923,7 +1801,7 @@ const addReview = async (req, res) => {
     }
 
     // Send notification to vendor
-    await createNotification({
+    if (booking.vendorId) await createNotification({
       vendorId: booking.vendorId,
       type: 'review_submitted',
       title: 'New Review Received',
@@ -2286,13 +2164,11 @@ const reselectVendor = async (req, res) => {
     }
 
     // Reselection allowed if booking was rejected, timed out, cancelled, or still searching/requested
+    // A CANCELLED booking is closed (and already refunded): it must never be revived.
     const allowedStatuses = [
       BOOKING_STATUS.REQUESTED,
       BOOKING_STATUS.REJECTED,
-      BOOKING_STATUS.SEARCHING,
-      BOOKING_STATUS.CANCELLED,
-      'vendor_rejected',
-      'timed_out'
+      BOOKING_STATUS.SEARCHING
     ];
 
     if (!allowedStatuses.includes(booking.status)) {
@@ -2307,41 +2183,24 @@ const reselectVendor = async (req, res) => {
     if (!targetVendor) {
       return res.status(404).json({ success: false, message: 'Selected vendor not found' });
     }
-
-    // Check real-time slot availability for the newly selected vendor
-    const startOfDay = new Date(new Date(booking.scheduledDate).setHours(0, 0, 0, 0));
-    const endOfDay = new Date(new Date(booking.scheduledDate).setHours(23, 59, 59, 999));
-    const conflictingBookings = await Booking.find({
-      _id: { $ne: booking._id },
-      vendorId: vendorId,
-      scheduledDate: { $gte: startOfDay, $lte: endOfDay },
-      status: {
-        $in: [
-          BOOKING_STATUS.REQUESTED,
-          BOOKING_STATUS.CONFIRMED,
-          BOOKING_STATUS.ACCEPTED,
-          BOOKING_STATUS.ASSIGNED,
-          BOOKING_STATUS.JOURNEY_STARTED,
-          BOOKING_STATUS.IN_PROGRESS,
-          BOOKING_STATUS.WORK_DONE
-        ]
-      }
-    }).select('equipmentId scheduledDate scheduledTime timeSlot rental_type status bookingNumber');
-
-    const reqInterval = parseSlotInterval(booking.timeSlot, booking.scheduledTime, booking.rental_type);
-    const targetEquipId = equipmentId || booking.equipmentId;
-
-    let conflictBooking = null;
-    for (const cb of conflictingBookings) {
-      const isSameMachine = !targetEquipId || !cb.equipmentId || cb.equipmentId.toString() === targetEquipId.toString();
-      if (!isSameMachine) continue;
-
-      const cbInterval = parseSlotInterval(cb.timeSlot, cb.scheduledTime, cb.rental_type);
-      if (isIntervalOverlapping(cbInterval, reqInterval)) {
-        conflictBooking = cb;
-        break;
+    const ineligible = vendorIneligibleReason(targetVendor);
+    if (ineligible) {
+      return res.status(400).json({ success: false, message: ineligible });
+    }
+    if (equipmentId) {
+      const eq = await VendorEquipment.findById(equipmentId);
+      if (!eq || String(eq.vendorId) !== String(vendorId) || !['active', 'approved'].includes(eq.status)) {
+        return res.status(400).json({ success: false, message: 'The selected equipment is not available from this vendor.' });
       }
     }
+    const previousVendorId = booking.vendorId ? String(booking.vendorId) : null;
+
+    // Check real-time slot availability for the newly selected vendor
+    const conflictBooking = await findVendorSlotConflict(
+      { scheduledDate: booking.scheduledDate, timeSlot: booking.timeSlot, scheduledTime: booking.scheduledTime, rental_type: booking.rental_type, equipmentId: equipmentId || booking.equipmentId },
+      vendorId,
+      { excludeId: booking._id, statuses: [BOOKING_STATUS.REQUESTED, ...CONFLICT_STATUSES] }
+    );
 
     if (conflictBooking) {
       const isRequested = conflictBooking.status === BOOKING_STATUS.REQUESTED;
@@ -2358,17 +2217,7 @@ const reselectVendor = async (req, res) => {
       booking.equipmentId = equipmentId;
     }
 
-    // Update pricing if passed from authoritative calculation
-    if (priceDetails) {
-      if (priceDetails.basePrice !== undefined) booking.basePrice = priceDetails.basePrice;
-      if (priceDetails.tax !== undefined) booking.tax = priceDetails.tax;
-      if (priceDetails.visitingCharges !== undefined) booking.visitingCharges = priceDetails.visitingCharges;
-      if (priceDetails.finalAmount !== undefined) {
-        booking.finalAmount = priceDetails.finalAmount;
-        booking.userPayableAmount = priceDetails.finalAmount;
-      }
-      if (priceDetails.pricing) booking.pricing = { ...booking.pricing, ...priceDetails.pricing };
-    }
+    // The quoted price is locked when the booking is created; client-supplied price details are ignored.
 
     // Update distance
     let vendorDist = null;
@@ -2392,6 +2241,14 @@ const reselectVendor = async (req, res) => {
     booking.currentWave = 1;
     booking.waveStartedAt = new Date();
     await booking.save();
+
+    // Dismiss the alert on the previous vendor's phone
+    if (previousVendorId && previousVendorId !== String(vendorId)) {
+      try {
+        const ioPrev = req.app.get('io');
+        if (ioPrev) ioPrev.to(`vendor_${previousVendorId}`).emit('booking_taken', { bookingId: booking._id.toString(), message: 'The customer chose another vendor.' });
+      } catch (e) { /* non-fatal */ }
+    }
 
     // Expire any previous requests
     const BookingRequest = require('../../models/BookingRequest');
@@ -2453,7 +2310,6 @@ const reselectVendor = async (req, res) => {
     // Push notification to vendor
     try {
       if (targetVendor.fcmTokens && targetVendor.fcmTokens.length > 0) {
-        const { sendNewBookingNotification } = require('../../services/pushNotificationService');
         await sendNewBookingNotification(
           targetVendor.fcmTokens,
           booking._id,
@@ -2627,6 +2483,9 @@ const farmerSelectOfflinePayment = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Booking not found' });
     }
 
+    if (booking.cashCollected || [PAYMENT_STATUS.SUCCESS, PAYMENT_STATUS.COLLECTED_BY_VENDOR, PAYMENT_STATUS.REFUNDED].includes(booking.paymentStatus)) {
+      return res.status(400).json({ success: false, message: 'This booking has already been paid' });
+    }
     if (booking.status !== BOOKING_STATUS.AWAITING_PAYMENT && booking.status !== BOOKING_STATUS.WORK_DONE) {
       return res.status(400).json({ success: false, message: `Cannot select payment for booking in status: ${booking.status}` });
     }
@@ -2635,12 +2494,12 @@ const farmerSelectOfflinePayment = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Final amount not confirmed yet' });
     }
 
-    // Set payment method to cash
-    booking.paymentMethod = 'cash';
+    // Set payment method to cash (keep online advance, if any, as it is)
+    if (!(booking.advancePaidAmount > 0)) booking.paymentMethod = 'cash';
     booking.status = BOOKING_STATUS.AWAITING_PAYMENT;
     
     // Generate OTP
-    const payOtp = Math.floor(1000 + Math.random() * 9000).toString();
+    const payOtp = generateDistinctOtp(booking.driver_start_otp, booking.driver_end_otp);
     booking.customerConfirmationOTP = payOtp;
     booking.paymentOtp = payOtp;
 
@@ -2702,16 +2561,17 @@ const farmerSelectOfflinePayment = async (req, res) => {
 
     const io = req.app.get('io') || global.io;
     if (io) {
+      // The OTP belongs to the farmer ONLY — it must never reach the vendor/worker/shared rooms.
       const payload = {
         bookingId: booking._id.toString(),
         status: booking.status,
         paymentMethod: 'cash',
-        amount: booking.finalAmount,
-        paymentOtp: payOtp
+        amount: booking.finalAmount
       };
       if (booking.workerId) io.to(`worker_${booking.workerId}`).emit('offline_payment_selected', payload);
       if (booking.vendorId) io.to(`vendor_${booking.vendorId}`).emit('offline_payment_selected', payload);
       io.to(`booking_${booking._id}`).emit('payment_pending', payload);
+      io.to(`user_${booking.userId}`).emit('payment_pending', { ...payload, paymentOtp: payOtp });
     }
 
     res.status(200).json({

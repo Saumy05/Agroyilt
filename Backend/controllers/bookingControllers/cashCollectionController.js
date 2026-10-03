@@ -1,466 +1,324 @@
 const Booking = require('../../models/Booking');
-const Vendor = require('../../models/Vendor');
 const Transaction = require('../../models/Transaction');
-const { PAYMENT_STATUS } = require('../../utils/constants');
+const { BOOKING_STATUS, PAYMENT_STATUS } = require('../../utils/constants');
 const { recordBookingEarning } = require('../../services/earningTrackerService');
+const {
+  generateDistinctOtp,
+  verifyBookingOtp,
+  settleVendorCash,
+  PAID_STATUSES
+} = require('../../services/bookingSettlementService');
+
+const WORK_DONE_STATES = [BOOKING_STATUS.WORK_DONE, BOOKING_STATUS.AWAITING_PAYMENT];
+// Independent-worker jobs can be settled slightly earlier in their lifecycle
+const WORKER_COLLECTABLE = [
+  BOOKING_STATUS.WORK_DONE, BOOKING_STATUS.AWAITING_PAYMENT, BOOKING_STATUS.IN_PROGRESS,
+  BOOKING_STATUS.VISITED, BOOKING_STATUS.ACCEPTED
+];
+
+/** Resolves a booking id, or an independent-worker assignment id that points at a booking. */
+const resolveBooking = async (id, selectExtra = '') => {
+  if (!id || !/^[0-9a-fA-F]{24}$/.test(String(id))) return { booking: null, assignment: null };
+  let booking = await Booking.findById(id).select(selectExtra);
+  let assignment = null;
+  if (!booking) {
+    const IndWorkerAssignment = require('../../models/IndWorkerAssignment');
+    assignment = await IndWorkerAssignment.findById(id);
+    if (assignment && assignment.legacyBookingId) {
+      booking = await Booking.findById(assignment.legacyBookingId).select(selectExtra);
+    }
+  }
+  return { booking, assignment };
+};
 
 /**
- * Initiate Cash Collection
- * Optional: Sends OTP to customer
+ * Who is this caller relative to the booking?
+ * Returns 'vendor' | 'worker' | 'farmer' | 'admin' | null. Role AND id must match.
+ */
+const callerRelation = (req, booking, assignment = null) => {
+  const role = String(req.userRole || req.user?.role || '').toUpperCase();
+  const uid = String(req.user?._id || req.user?.id || req.userId || '');
+  if (!uid) return null;
+  if (role === 'VENDOR' && booking.vendorId && String(booking.vendorId) === uid) return 'vendor';
+  if (role === 'WORKER') {
+    if (booking.workerId && String(booking.workerId) === uid) return 'worker';
+    if (assignment?.workerId && String(assignment.workerId) === uid) return 'worker';
+  }
+  if (role === 'USER' && String(booking.userId) === uid) return 'farmer';
+  if (role === 'ADMIN' || role === 'SUPER_ADMIN') return 'admin';
+  return null;
+};
+
+const isAlreadyPaid = (booking) =>
+  booking.cashCollected === true || PAID_STATUSES.includes(booking.paymentStatus) ||
+  booking.paymentStatus === PAYMENT_STATUS.REFUNDED;
+
+/**
+ * Initiate Cash Collection (vendor / assigned worker only)
+ * Finalises the bill and issues the farmer's payment OTP. Amounts come from the bill, never from the client
+ * (independent-worker jobs may set the final amount inside the agreed min/max range).
  */
 exports.initiateCashCollection = async (req, res) => {
   try {
-    const { id } = req.params;
-    let booking = await Booking.findById(id);
-    if (!booking) {
-      const IndWorkerAssignment = require('../../models/IndWorkerAssignment');
-      const assignment = await IndWorkerAssignment.findById(id);
-      if (assignment && assignment.legacyBookingId) {
-        booking = await Booking.findById(assignment.legacyBookingId);
-      }
+    const { booking, assignment } = await resolveBooking(req.params.id);
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+
+    const who = callerRelation(req, booking, assignment);
+    if (who !== 'vendor' && who !== 'worker') {
+      return res.status(403).json({ success: false, message: 'Only the assigned service provider can start cash collection.' });
     }
 
-    if (!booking) {
-      return res.status(404).json({ success: false, message: 'Booking not found' });
+    if (isAlreadyPaid(booking)) {
+      return res.status(400).json({ success: false, message: 'Payment has already been completed for this booking.' });
     }
 
-    if (booking.paymentStatus === 'SUCCESS') {
-      return res.status(400).json({ success: false, message: 'Payment has already been completed online.' });
-    }
-
-    // Allow cash, pay_at_home, plan_benefit, online AND null (independent workers haven't selected a method yet)
-    const allowedMethods = ['cash', 'pay_at_home', 'plan_benefit', 'online', null, undefined];
     const isIndependentWorker = !booking.vendorId && !!booking.workerId;
+    const allowedMethods = ['cash', 'pay_at_home', 'plan_benefit', 'online', 'razorpay', 'wallet', null, undefined];
     if (!isIndependentWorker && !allowedMethods.includes(booking.paymentMethod)) {
       return res.status(400).json({ success: false, message: 'This booking is not eligible for cash collection' });
     }
-
-    // Optional: Update final total and extra items if provided during initiation
-    const { totalAmount, extraItems } = req.body;
-    if (totalAmount !== undefined) {
-      booking.finalAmount = Number(totalAmount);
-      // Assuming no partial payment has been made yet (as status is pending/work_done)
-      booking.userPayableAmount = Number(totalAmount);
+    const okStatuses = isIndependentWorker ? WORKER_COLLECTABLE : WORK_DONE_STATES;
+    if (!okStatuses.includes(booking.status)) {
+      return res.status(400).json({ success: false, message: `Cannot collect payment while the booking is "${booking.status}"` });
     }
 
-    // Store extra items for proper commission calculation
-    if (extraItems && Array.isArray(extraItems) && extraItems.length > 0) {
-      // 1. Update workDoneDetails (Frontend display)
-      booking.workDoneDetails = {
-        ...booking.workDoneDetails,
-        items: extraItems.map(item => ({
-          title: item.name || item.title,
-          qty: Number(item.qty) || Number(item.quantity) || 1,
-          price: Number(item.price) || 0
-        }))
-      };
-
-      // 2. Update extraCharges (Backend calculation)
-      booking.extraCharges = extraItems.map(item => ({
-        name: item.name || item.title,
-        quantity: Number(item.qty) || Number(item.quantity) || 1,
-        price: Number(item.price) || 0,
-        total: (Number(item.qty) || Number(item.quantity) || 1) * (Number(item.price) || 0)
-      }));
-
-      // 3. Update extraChargesTotal
-      booking.extraChargesTotal = booking.extraCharges.reduce((sum, item) => sum + item.total, 0);
+    if (isIndependentWorker) {
+      const { totalAmount, extraItems } = req.body;
+      if (totalAmount !== undefined) {
+        const amt = Number(totalAmount);
+        const min = booking.minRate || 0;
+        const max = booking.maxRate || booking.minRate || 0;
+        if (!Number.isFinite(amt) || amt <= 0 || (max > 0 && (amt < min || amt > max))) {
+          return res.status(400).json({ success: false, message: `Amount must be between ₹${min} and ₹${max}` });
+        }
+        booking.finalAmount = amt;
+        booking.userPayableAmount = amt;
+      }
+      if (Array.isArray(extraItems) && extraItems.length > 0) {
+        booking.workDoneDetails = {
+          ...(booking.workDoneDetails || {}),
+          items: extraItems.slice(0, 50).map(item => ({
+            title: String(item.name || item.title || '').slice(0, 100),
+            qty: Math.max(1, Number(item.qty) || Number(item.quantity) || 1),
+            price: Math.max(0, Number(item.price) || 0)
+          }))
+        };
+        booking.markModified('workDoneDetails');
+      }
     }
 
-    // Force mark modified for nested object (just in case)
-    if (extraItems) {
-      booking.markModified('workDoneDetails');
-      booking.markModified('extraCharges');
-    }
-
-    // For backwards compatibility and future use, we can still generate it but not force it
-    let otp = booking.driver_end_otp;
-    if (!otp) {
-      otp = Math.floor(1000 + Math.random() * 9000).toString();
-    }
+    // Payment OTP is its own secret: never the start/end OTP. Re-use an existing one so retries are stable.
+    const existing = await Booking.findById(booking._id).select('+paymentOtp');
+    const otp = existing.paymentOtp || existing.customerConfirmationOTP ||
+      generateDistinctOtp(booking.driver_start_otp, booking.driver_end_otp);
     booking.customerConfirmationOTP = otp;
     booking.paymentOtp = otp;
     await booking.save();
 
-    // Emit socket event to user with full bill details and OTP
     const io = req.app?.get ? req.app.get('io') : null;
     if (io) {
       io.to(`user_${booking.userId}`).emit('booking_updated', {
         bookingId: booking._id,
         finalAmount: booking.finalAmount,
-        customerConfirmationOTP: booking.customerConfirmationOTP,
-        paymentOtp: booking.paymentOtp,
+        balanceDue: booking.balanceDue,
+        customerConfirmationOTP: otp,
+        paymentOtp: otp,
         workDoneDetails: booking.workDoneDetails
       });
     }
 
-    // Send Push Notification with OTP
     const { createNotification } = require('../notificationControllers/notificationController');
+    const due = booking.balanceDue > 0 ? booking.balanceDue : booking.finalAmount;
     await createNotification({
       userId: booking.userId,
       type: 'work_done',
       title: 'Payment Request & Bill Ready',
-      message: `Bill: ₹${booking.finalAmount}. OTP: ${otp}. Please verify bill and share OTP to complete payment.`,
+      message: `Bill: ₹${due}. OTP: ${otp}. Pay the cash first, then share this OTP to complete payment.`,
       relatedId: booking._id,
       relatedType: 'booking',
       priority: 'high',
-      pushData: {
-        type: 'work_done',
-        bookingId: booking._id.toString(),
-        paymentOtp: otp,
-        link: `/user/booking/${booking._id}`
-      }
+      pushData: { type: 'work_done', bookingId: booking._id.toString(), paymentOtp: otp, link: `/user/booking/${booking._id}` }
     });
 
-    res.status(200).json({
-      success: true,
-      message: 'Bill finalized',
-      totalAmount: booking.finalAmount
-    });
+    res.status(200).json({ success: true, message: 'Bill finalized', totalAmount: booking.finalAmount, amountDue: due });
   } catch (error) {
     console.error('Initiate cash collection error:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'Failed to initiate cash collection' });
   }
 };
 
 /**
- * Confirm Cash Collection (by Vendor/Worker)
- * Uses VendorBill as the single source of truth for earnings.
+ * Confirm Cash Collection (vendor / assigned worker only, with the farmer's PAYMENT OTP).
+ * Vendor bookings settle through the shared idempotent ledger; amounts always come from the bill.
  */
 exports.confirmCashCollection = async (req, res) => {
   try {
     const id = req.params.id || req.body.bookingId || req.body.id;
-    const { otp, amount, extraItems } = req.body;
-    const userId = req.user?._id || req.user?.id;
-    const userRole = req.user?.role;
+    const { otp } = req.body;
 
-    let booking = await Booking.findById(id).select('+paymentOtp +driver_end_otp');
-    if (!booking) {
-      const IndWorkerAssignment = require('../../models/IndWorkerAssignment');
-      const assignment = await IndWorkerAssignment.findById(id);
-      if (assignment && assignment.legacyBookingId) {
-        booking = await Booking.findById(assignment.legacyBookingId).select('+paymentOtp +driver_end_otp');
-      }
+    const { booking, assignment } = await resolveBooking(id, '+paymentOtp');
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+
+    const who = callerRelation(req, booking, assignment);
+    if (who !== 'vendor' && who !== 'worker') {
+      return res.status(403).json({ success: false, message: 'Only the assigned service provider can confirm cash collection.' });
     }
-
-    if (!booking) {
-      return res.status(404).json({ success: false, message: 'Booking not found' });
+    if (isAlreadyPaid(booking)) {
+      return res.status(409).json({ success: false, message: 'Payment has already been collected for this booking.' });
     }
-
-    if (booking.paymentStatus === 'SUCCESS') {
-      return res.status(400).json({ success: false, message: 'Payment has already been completed online.' });
-    }
-
-    // OTP Verification: check customerConfirmationOTP, paymentOtp, or driver_end_otp
-    const isPlanBenefitNoExtras = booking.paymentMethod === 'plan_benefit' && (!booking.userPayableAmount || booking.userPayableAmount === 0);
-    const validOtp = booking.customerConfirmationOTP || booking.paymentOtp || booking.driver_end_otp;
-
-    if (!isPlanBenefitNoExtras) {
-      if (!validOtp) {
-        return res.status(400).json({
-          success: false,
-          message: 'No Payment Confirmation OTP found for this booking. Please generate OTP first.'
-        });
-      }
-      const submittedOtp = otp ? otp.toString().trim() : '';
-      if (!submittedOtp || submittedOtp !== validOtp.toString().trim()) {
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid OTP. Please enter the exact 4-digit code provided by the customer.'
-        });
-      }
-    }
-
-    // --- ATOMIC LOCK AGAINST RACE CONDITIONS ---
-    const updateResult = await Booking.updateOne(
-      { _id: booking._id, cashCollected: { $ne: true } },
-      { $set: { cashCollected: true } }
-    );
-
-    if (updateResult.modifiedCount === 0) {
-      console.log(`[Race Condition Prevented] Booking ${booking._id} already processed.`);
-      return res.status(200).json({
-        success: true,
-        message: 'Cash collection already confirmed',
-        data: { bookingId: booking._id }
-      });
-    }
-
-    const collectionAmount = amount || booking.finalAmount;
-
-    // Store extra items in workDoneDetails (for display)
-    if (extraItems && Array.isArray(extraItems) && extraItems.length > 0) {
-      booking.workDoneDetails = {
-        ...booking.workDoneDetails,
-        items: extraItems.map(item => ({
-          title: item.name || item.title,
-          qty: Number(item.qty) || Number(item.quantity) || 1,
-          price: Number(item.price) || 0
-        }))
-      };
-
-      booking.extraCharges = extraItems.map(item => ({
-        name: item.name || item.title,
-        quantity: Number(item.qty) || Number(item.quantity) || 1,
-        price: Number(item.price) || 0,
-        total: (Number(item.qty) || Number(item.quantity) || 1) * (Number(item.price) || 0)
-      }));
-
-      booking.extraChargesTotal = booking.extraCharges.reduce((sum, item) => sum + item.total, 0);
-      booking.markModified('workDoneDetails');
-      booking.markModified('extraCharges');
-    }
-
-    // Fetch VendorBill (single source of truth for earnings) ONLY for vendors
-    let vendorEarning = 0;
-    let grandTotal = collectionAmount;
-    let bill = null;
-
-    if (booking.vendorId) {
-      const VendorBill = require('../../models/VendorBill');
-      bill = await VendorBill.findOne({ bookingId: booking._id });
-
-      if (bill) {
-        vendorEarning = bill.vendorTotalEarning;
-        grandTotal = bill.grandTotal || collectionAmount;
-
-        // Mark bill as paid
-        bill.status = 'paid';
-        bill.paidAt = new Date();
-        await bill.save();
-      } else {
-        // Fallback: create VendorBill on the fly
-        const Settings = require('../../models/Settings');
-        const settings = await Settings.findOne({ type: 'global' });
-        const serviceSplitPct = settings?.rentalPayoutPercentage ?? 90;
-        const gstPct = settings?.rentalGstPercentage ?? 5;
-        const baseAmount = Math.round(collectionAmount / (1 + gstPct / 100));
-        const gstAmount = parseFloat((collectionAmount - baseAmount).toFixed(2));
-        vendorEarning = parseFloat(((baseAmount * serviceSplitPct) / 100).toFixed(2));
-        grandTotal = collectionAmount;
-
-        bill = await VendorBill.create({
-          bookingId: booking._id,
-          vendorId: booking.vendorId,
-          services: [{
-            name: booking.serviceName || 'Equipment Service',
-            price: baseAmount,
-            gstPercentage: gstPct,
-            quantity: 1,
-            gstAmount: gstAmount,
-            total: grandTotal,
-            isOriginal: true
-          }],
-          originalServiceBase: baseAmount,
-          originalGST: gstAmount,
-          totalServiceBase: baseAmount,
-          totalGST: gstAmount,
-          grandTotal: grandTotal,
-          payoutConfig: {
-            serviceSplitPercentage: serviceSplitPct,
-            serviceGstPercentage: gstPct
-          },
-          vendorServiceEarning: vendorEarning,
-          vendorTotalEarning: vendorEarning,
-          companyRevenue: parseFloat((grandTotal - vendorEarning).toFixed(2)),
-          status: 'paid',
-          paidAt: new Date()
-        });
-        booking.vendorBillId = bill._id;
-      }
-    }
-
-    // Update Booking
-    booking.finalAmount = collectionAmount;
-    booking.userPayableAmount = collectionAmount;
-    booking.cashCollected = true;
-    booking.cashCollectedAt = new Date();
-    booking.cashCollectedBy = userRole === 'vendor' ? 'vendor' : 'worker';
-    booking.cashCollectorId = userId;
 
     const isIndependentWorker = !booking.vendorId && !!booking.workerId;
-    if (booking.paymentMethod === 'plan_benefit' || isIndependentWorker) {
-      booking.paymentStatus = PAYMENT_STATUS.SUCCESS;
-    } else {
-      booking.paymentStatus = PAYMENT_STATUS.COLLECTED_BY_VENDOR;
+    const okStatuses = isIndependentWorker ? WORKER_COLLECTABLE : WORK_DONE_STATES;
+    if (!okStatuses.includes(booking.status)) {
+      return res.status(400).json({ success: false, message: `Cannot collect payment while the booking is "${booking.status}"` });
     }
 
-    if (booking.status === 'work_done' || booking.status === 'visited' || booking.status === 'in_progress' || booking.status === 'awaiting_payment') {
-      booking.status = 'completed';
-      booking.completedAt = new Date();
+    const isPlanBenefitNoExtras = booking.paymentMethod === 'plan_benefit' && (!booking.userPayableAmount || booking.userPayableAmount === 0);
+    if (!isPlanBenefitNoExtras) {
+      const expected = booking.paymentOtp || booking.customerConfirmationOTP;
+      if (!expected) {
+        return res.status(400).json({ success: false, message: 'No Payment Confirmation OTP found for this booking. Please generate OTP first.' });
+      }
+      const check = await verifyBookingOtp(booking._id, 'payment', expected, otp);
+      if (!check.ok) return res.status(check.status).json({ success: false, message: check.message });
     }
 
-    await booking.save();
-
-    // Update Ledger (Vendor Wallet or Worker Wallet)
+    const collectorId = req.user?._id || req.user?.id;
+    let grandTotal = booking.finalAmount;
     let finalDues = null;
+
     if (booking.vendorId) {
-      const vendorId = booking.vendorId;
-      const vendor = await Vendor.findById(vendorId).lean();
+      let result;
+      try {
+        result = await settleVendorCash(booking._id, { collectorRole: who, collectorId });
+      } catch (e) {
+        if (e.status) return res.status(e.status).json({ success: false, message: e.message });
+        throw e;
+      }
+      grandTotal = result.grandTotal;
+      finalDues = result.dues;
+    } else {
+      // Independent worker: atomic claim so a double submit cannot settle twice
+      const claim = await Booking.updateOne(
+        { _id: booking._id, cashCollected: { $ne: true } },
+        { $set: { cashCollected: true } }
+      );
+      if (claim.modifiedCount === 0) {
+        return res.status(409).json({ success: false, message: 'Payment has already been collected for this booking.' });
+      }
+      try {
+        grandTotal = booking.finalAmount;
+        booking.cashCollected = true;
+        booking.cashCollectedAt = new Date();
+        booking.cashCollectedBy = 'worker';
+        booking.cashCollectorId = collectorId;
+        booking.paymentStatus = PAYMENT_STATUS.SUCCESS;
+        booking.status = BOOKING_STATUS.COMPLETED;
+        booking.completedAt = new Date();
+        booking.paymentOtp = undefined;
+        await booking.save();
 
-      if (vendor) {
-        const newDues = (vendor.wallet?.dues || 0) + grandTotal;
-        finalDues = newDues;
-        const newEarnings = (vendor.wallet?.earnings || 0) + vendorEarning;
-        const cashLimit = vendor.wallet?.cashLimit || 10000;
-        const netOwed = newDues - newEarnings;
-        const isOverLimit = netOwed > cashLimit;
-
-        const walletUpdate = {
-          $inc: {
-            'wallet.dues': grandTotal,
-            'wallet.earnings': vendorEarning,
-            'wallet.totalCashCollected': grandTotal
+    {
+          // Independent Worker Cash Collection Logic
+          const Worker = require('../../models/Worker');
+          const IndWorkerAssignment = require('../../models/IndWorkerAssignment');
+          const WorkerBookingRequest = require('../../models/WorkerBookingRequest');
+          const workerId = booking.workerId;
+          
+          const commissionRate = booking.commissionRate ?? 10;
+          const commissionAmount = booking.commissionAmount ?? Math.round((grandTotal * commissionRate) / 100);
+          const workerNetEarning = grandTotal - commissionAmount;
+    
+          const workerDoc = await Worker.findById(workerId);
+          if (workerDoc) {
+            // Worker collected grandTotal in physical cash in hand.
+            // Platform commission is deducted from wallet balance if positive, or added to dues.
+            let walletBalance = workerDoc.wallet?.balance || 0;
+            if (walletBalance >= commissionAmount) {
+              workerDoc.wallet.balance = walletBalance - commissionAmount;
+            } else {
+              const remainingDue = commissionAmount - walletBalance;
+              workerDoc.wallet.balance = 0;
+              workerDoc.outstandingDues = (workerDoc.outstandingDues || 0) + remainingDue;
+            }
+            await workerDoc.save();
           }
-        };
-
-        if (isOverLimit) {
-          walletUpdate.$set = {
-            'wallet.isBlocked': true,
-            'wallet.blockedAt': new Date(),
-            'wallet.blockReason': `Cash limit exceeded. Net owed: ₹${netOwed.toFixed(2)}, Limit: ₹${cashLimit}`
-          };
-        }
-
-        await Vendor.findByIdAndUpdate(vendorId, walletUpdate, { runValidators: false });
-
-        // Record Transaction - Cash Collected
-        await Transaction.create({
-          vendorId,
-          userId: booking.userId,
-          bookingId: booking._id,
-          amount: grandTotal,
-          type: 'cash_collected',
-          description: `Cash ₹${grandTotal} collected for booking ${booking.bookingNumber}`,
-          status: 'completed',
-          metadata: {
-            type: 'dues_increase',
-            collectedBy: userRole,
-            billId: bill?._id?.toString(),
-            vendorEarning,
-            companyRevenue: bill?.companyRevenue
-          }
-        });
-
-        // Record Transaction - Earnings Credit
-        if (vendorEarning > 0) {
+    
           await Transaction.create({
-            vendorId,
+            workerId: workerId,
             bookingId: booking._id,
-            amount: vendorEarning,
-            type: 'earnings_credit',
-            description: `Earnings ₹${vendorEarning} credited for booking ${booking.bookingNumber}`,
+            amount: grandTotal,
+            type: 'cash_collected',
+            paymentMethod: 'cash',
             status: 'completed',
+            description: `Cash ₹${grandTotal} collected directly from farmer for booking #${booking.bookingNumber || booking._id.toString().slice(-6)}. Platform commission ₹${commissionAmount} applied.`,
             metadata: {
-              type: 'earnings_increase',
-              billId: bill?._id?.toString(),
-              serviceEarning: bill?.vendorServiceEarning,
-              partsEarning: bill?.vendorPartsEarning
+              type: 'cash_collection',
+              bookingNumber: booking.bookingNumber,
+              grandTotal,
+              commissionAmount,
+              workerNetEarning
             }
           });
-        }
-      }
-    } else if (booking.workerId && !booking.vendorId) {
-      // Independent Worker Cash Collection Logic
-      const Worker = require('../../models/Worker');
-      const IndWorkerAssignment = require('../../models/IndWorkerAssignment');
-      const WorkerBookingRequest = require('../../models/WorkerBookingRequest');
-      const workerId = booking.workerId;
-      
-      const commissionRate = booking.commissionRate ?? 10;
-      const commissionAmount = booking.commissionAmount ?? Math.round((grandTotal * commissionRate) / 100);
-      const workerNetEarning = grandTotal - commissionAmount;
-
-      const workerDoc = await Worker.findById(workerId);
-      if (workerDoc) {
-        // Worker collected grandTotal in physical cash in hand.
-        // Platform commission is deducted from wallet balance if positive, or added to dues.
-        let walletBalance = workerDoc.wallet?.balance || 0;
-        if (walletBalance >= commissionAmount) {
-          workerDoc.wallet.balance = walletBalance - commissionAmount;
-        } else {
-          const remainingDue = commissionAmount - walletBalance;
-          workerDoc.wallet.balance = 0;
-          workerDoc.outstandingDues = (workerDoc.outstandingDues || 0) + remainingDue;
-        }
-        await workerDoc.save();
-      }
-
-      await Transaction.create({
-        workerId: workerId,
-        bookingId: booking._id,
-        amount: grandTotal,
-        type: 'cash_collected',
-        paymentMethod: 'cash',
-        status: 'completed',
-        description: `Cash ₹${grandTotal} collected directly from farmer for booking #${booking.bookingNumber || booking._id.toString().slice(-6)}. Platform commission ₹${commissionAmount} applied.`,
-        metadata: {
-          type: 'cash_collection',
-          bookingNumber: booking.bookingNumber,
-          grandTotal,
-          commissionAmount,
-          workerNetEarning
-        }
-      });
-
-      // Atomically settle linked IndWorkerAssignment
-      try {
-        const assignment = await IndWorkerAssignment.findOne({
-          $or: [{ legacyBookingId: booking._id }, { parentRequestId: booking.workerRequestId, workerId }]
-        });
-        if (assignment) {
-          assignment.settlementStatus = 'SETTLED';
-          assignment.completionStatus = 'OTP_VERIFIED';
-          assignment.workStatus = 'COMPLETED';
-          assignment.settledAt = new Date();
-          assignment.workCompletedAt = new Date();
-          await assignment.save();
-
-          if (assignment.parentRequestId) {
-            const allAssignments = await IndWorkerAssignment.find({
-              parentRequestId: assignment.parentRequestId,
-              assignmentStatus: { $ne: 'CANCELLED' }
+    
+          // Atomically settle linked IndWorkerAssignment
+          try {
+            const assignment = await IndWorkerAssignment.findOne({
+              $or: [{ legacyBookingId: booking._id }, { parentRequestId: booking.workerRequestId, workerId }]
             });
-            const allSettled = allAssignments.length > 0 && allAssignments.every(a => a.settlementStatus === 'SETTLED');
-            if (allSettled) {
-              await WorkerBookingRequest.findByIdAndUpdate(assignment.parentRequestId, { status: 'completed' });
+            if (assignment) {
+              assignment.settlementStatus = 'SETTLED';
+              assignment.completionStatus = 'OTP_VERIFIED';
+              assignment.workStatus = 'COMPLETED';
+              assignment.settledAt = new Date();
+              assignment.workCompletedAt = new Date();
+              await assignment.save();
+    
+              if (assignment.parentRequestId) {
+                const allAssignments = await IndWorkerAssignment.find({
+                  parentRequestId: assignment.parentRequestId,
+                  assignmentStatus: { $ne: 'CANCELLED' }
+                });
+                const allSettled = allAssignments.length > 0 && allAssignments.every(a => a.settlementStatus === 'SETTLED');
+                if (allSettled) {
+                  await WorkerBookingRequest.findByIdAndUpdate(assignment.parentRequestId, { status: 'completed' });
+                }
+              }
             }
+          } catch (assignErr) {
+            console.warn('[Cash Collection Assignment Settle]', assignErr.message);
           }
         }
-      } catch (assignErr) {
-        console.warn('[Cash Collection Assignment Settle]', assignErr.message);
+
+        recordBookingEarning({
+          date: new Date(),
+          totalRevenue: grandTotal,
+          platformCommission: Math.round(grandTotal * ((booking.commissionRate ?? 10) / 100)),
+          vendorEarnings: grandTotal - Math.round(grandTotal * ((booking.commissionRate ?? 10) / 100)),
+          totalGST: 0,
+          totalTDS: 0
+        });
+      } catch (e) {
+        await Booking.updateOne({ _id: booking._id }, { $set: { cashCollected: false } });
+        throw e;
       }
     }
 
-    // Record stats in the Daily Earning Tracker
-    recordBookingEarning({
-      date: new Date(),
-      totalRevenue: bill ? bill.grandTotal : collectionAmount,
-      platformCommission: bill ? bill.companyRevenue : (collectionAmount * 0.1),
-      vendorEarnings: vendorEarning > 0 ? vendorEarning : (collectionAmount * 0.9),
-      totalGST: bill ? bill.totalGST : 0,
-      totalTDS: 0 // Captured separately during withdrawal
-    });
-
-    // Emit socket event
     const io = req.app?.get ? req.app.get('io') : null;
     if (io) {
       const updatePayload = {
         bookingId: booking._id,
-        status: booking.status,
-        paymentStatus: booking.paymentStatus,
+        status: BOOKING_STATUS.COMPLETED,
+        paymentStatus: booking.vendorId ? PAYMENT_STATUS.COLLECTED_BY_VENDOR : PAYMENT_STATUS.SUCCESS,
         cashCollected: true,
-        finalAmount: booking.finalAmount,
+        finalAmount: grandTotal,
         message: 'Cash payment confirmed and booking completed!'
       };
       io.to(`user_${booking.userId}`).emit('booking_updated', updatePayload);
       io.to(`booking_${booking._id}`).emit('booking_updated', updatePayload);
-      if (booking.vendorId) {
-        io.to(`vendor_${booking.vendorId}`).emit('booking_updated', updatePayload);
-      }
+      if (booking.vendorId) io.to(`vendor_${booking.vendorId}`).emit('booking_updated', updatePayload);
     }
 
-    // Push Notification
     const { createNotification } = require('../notificationControllers/notificationController');
     await createNotification({
       userId: booking.userId,
@@ -472,96 +330,45 @@ exports.confirmCashCollection = async (req, res) => {
       priority: 'high'
     });
 
-    if (booking.vendorId) {
-      try {
-        await createNotification({
-          vendorId: booking.vendorId,
-          type: 'payment_success',
-          title: '💰 Wallet Credited (Cash)',
-          message: `Earnings of ₹${vendorEarning} credited to your wallet for booking ${booking.bookingNumber || booking._id.toString().slice(-6)}.`,
-          relatedId: booking._id,
-          relatedType: 'booking',
-          priority: 'high'
-        });
-      } catch (vendorNoticeErr) {
-        console.error('Notification error (Vendor Credit Cash):', vendorNoticeErr);
-      }
-    } else if (booking.workerId && !booking.vendorId) {
-      try {
-        await createNotification({
-          workerId: booking.workerId,
-          type: 'payment_success',
-          title: '💰 Wallet Credited (Cash)',
-          message: `Offline payment of ₹${grandTotal} has been confirmed.`,
-          relatedId: booking._id,
-          relatedType: 'booking',
-          priority: 'high',
-          pushData: {
-            type: 'payment_success',
-            bookingId: booking._id.toString()
-          }
-        });
-      } catch (workerNoticeErr) {
-        console.error('Notification error (Worker Credit Cash):', workerNoticeErr);
-      }
-    }
-
     res.status(200).json({
       success: true,
       message: 'Cash collection confirmed and recorded in ledger',
-      data: {
-        bookingId: booking._id,
-        amount: grandTotal,
-        walletDues: finalDues
-      }
+      data: { bookingId: booking._id, amount: grandTotal, walletDues: finalDues }
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error('Confirm cash collection error:', error);
+    res.status(500).json({ success: false, message: 'Failed to confirm cash collection' });
   }
 };
 
-/**
- * Customer Confirm Payment (Optional flow for user to confirm they paid)
- */
+/** Farmer acknowledges they paid. Only the booking's own farmer may do this. */
 exports.customerConfirmPayment = async (req, res) => {
   try {
-    const { id } = req.params;
-    const booking = await Booking.findById(id);
-
-    if (!booking) {
-      return res.status(404).json({ success: false, message: 'Booking not found' });
+    const { booking } = await resolveBooking(req.params.id);
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+    if (callerRelation(req, booking) !== 'farmer') {
+      return res.status(403).json({ success: false, message: 'Only the customer of this booking can confirm payment.' });
     }
-
-    booking.customerConfirmed = true;
-    await booking.save();
-
+    await Booking.updateOne({ _id: booking._id }, { $set: { customerConfirmed: true } });
     res.status(200).json({ success: true, message: 'Payment confirmed by customer' });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error('Customer confirm payment error:', error);
+    res.status(500).json({ success: false, message: 'Failed to confirm payment' });
   }
 };
 
-/**
- * Get Cash Collection Status
- */
+/** Cash status — visible only to the parties of the booking (and admins). */
 exports.getCashCollectionStatus = async (req, res) => {
   try {
-    const { id } = req.params;
-    let booking = await Booking.findById(id).select('cashCollected cashCollectedAt cashCollectedBy paymentStatus');
-    if (!booking) {
-      const IndWorkerAssignment = require('../../models/IndWorkerAssignment');
-      const assignment = await IndWorkerAssignment.findById(id);
-      if (assignment && assignment.legacyBookingId) {
-        booking = await Booking.findById(assignment.legacyBookingId).select('cashCollected cashCollectedAt cashCollectedBy paymentStatus');
-      }
+    const { booking, assignment } = await resolveBooking(req.params.id);
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+    if (!callerRelation(req, booking, assignment)) {
+      return res.status(403).json({ success: false, message: 'Not authorized for this booking.' });
     }
-
-    if (!booking) {
-      return res.status(404).json({ success: false, message: 'Booking not found' });
-    }
-
-    res.status(200).json({ success: true, data: booking });
+    const { cashCollected, cashCollectedAt, cashCollectedBy, paymentStatus, balanceDue } = booking;
+    res.status(200).json({ success: true, data: { _id: booking._id, cashCollected, cashCollectedAt, cashCollectedBy, paymentStatus, balanceDue } });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error('Cash status error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch status' });
   }
 };

@@ -3,6 +3,12 @@ const Category = require('../../models/Category');
 const VendorEquipment = require('../../models/VendorEquipment');
 const { BOOKING_STATUS, USER_ROLES } = require('../../utils/constants');
 const { getIO } = require('../../sockets');
+const {
+  generateDistinctOtp,
+  verifyBookingOtp,
+  closeServiceTimer,
+  finalizeMachineryBilling
+} = require('../../services/bookingSettlementService');
 
 /**
  * Helper to identify caller role relative to this booking
@@ -11,12 +17,18 @@ const getCallerRole = (req, booking) => {
   const currentUserId = (req.userId || req.user?.id || req.user?._id)?.toString();
   const bookingUserId = (booking.userId?._id || booking.userId)?.toString();
   const bookingVendorId = (booking.vendorId?._id || booking.vendorId)?.toString();
+  const bookingWorkerId = (booking.workerId?._id || booking.workerId)?.toString();
+  const roleUpper = String(req.userRole || req.user?.role || '').toUpperCase();
 
-  if (currentUserId === bookingUserId) return 'farmer';
-  if (currentUserId === bookingVendorId) return 'vendor';
+  // Compare id AND role: ids from different collections must never be treated as equal people
+  if (currentUserId === bookingUserId && (!roleUpper || roleUpper === 'USER')) return 'farmer';
+  if (currentUserId === bookingVendorId && (!roleUpper || roleUpper === 'VENDOR')) return 'vendor';
+  if (bookingWorkerId && currentUserId === bookingWorkerId && roleUpper === 'WORKER') return 'worker';
   if (req.userRole === USER_ROLES.ADMIN || req.userRole === 'admin' || req.userRole === 'super_admin') return 'admin';
   return null;
 };
+
+const isProvider = (role) => role === 'vendor' || role === 'worker';
 
 /**
  * Helper: Resolve per-minute rate and admin base charge
@@ -63,8 +75,10 @@ const resolveRates = async (booking) => {
       ratePerMinute = Math.round((combinedHourly / 60) * 100) / 100;
     } else if (booking.rateUnit === 'per_minute' && booking.agreedRate > 0) {
       ratePerMinute = booking.agreedRate;
-    } else if (booking.basePrice > 0) {
-      ratePerMinute = Math.round((booking.basePrice / 60) * 100) / 100;
+    } else if (booking.basePrice > 0 && (booking.durationMinutes > 0 || booking.estimatedDuration > 0)) {
+      // basePrice is the TOTAL for the booked duration, not an hourly rate
+      const bookedMinutes = booking.durationMinutes > 0 ? booking.durationMinutes : booking.estimatedDuration * 60;
+      ratePerMinute = Math.round((booking.basePrice / bookedMinutes) * 100) / 100;
     } else {
       // Industry default fallback (~₹900/hr = ₹15/min)
       ratePerMinute = 15;
@@ -120,7 +134,9 @@ const broadcastTimerUpdate = (booking, action, extra = {}) => {
 
     // Public / vendor payload: strictly strip resumeOtp so operator cannot self-resume
     const publicPayload = { ...commonPayload };
-    delete publicPayload.resumeOtp;
+    for (const k of ['resumeOtp', 'paymentOtp', 'customerConfirmationOTP', 'driver_end_otp', 'driver_start_otp', 'otp', 'end_otp']) {
+      delete publicPayload[k];
+    }
 
     io.to(`booking_${bId}`).emit('service_timer_updated', publicPayload);
     io.to(`booking:${bId}`).emit('service_timer_updated', publicPayload);
@@ -139,7 +155,8 @@ const broadcastTimerUpdate = (booking, action, extra = {}) => {
         resumeOtp: (booking.serviceTimer?.status === 'PAUSED')
           ? (booking.serviceTimer?.resumeOtp || booking.resumeOtp || null)
           : null,
-        driver_end_otp: booking.driver_end_otp || booking.customerConfirmationOTP || booking.paymentOtp || null
+        driver_end_otp: booking.driver_end_otp || null,
+        paymentOtp: booking.status === BOOKING_STATUS.WORK_DONE ? (extra.paymentOtp || booking.customerConfirmationOTP || null) : null
       };
       io.to(`user_${uId}`).emit('service_timer_updated', farmerPayload);
       io.to(`user:${uId}`).emit('service_timer_updated', farmerPayload);
@@ -212,7 +229,7 @@ const getServiceTimerStatus = async (req, res) => {
           ? (booking.serviceTimer?.resumeOtp || booking.resumeOtp || null)
           : null,
         driver_end_otp: (role === 'farmer' || role === 'admin')
-          ? (booking.driver_end_otp || booking.customerConfirmationOTP || booking.paymentOtp || null)
+          ? (booking.driver_end_otp || null)
           : null,
         requiresResumeOtp: Boolean(status === 'PAUSED'),
         billingSummary: booking.serviceTimer?.billingSummary || null,
@@ -234,57 +251,41 @@ const startServiceTimer = async (req, res) => {
   try {
     const { id } = req.params;
     const booking = await Booking.findById(id).populate('categoryId');
-    if (!booking) {
-      return res.status(404).json({ success: false, message: 'Booking not found' });
-    }
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
 
     const role = getCallerRole(req, booking);
-    if (!role) {
-      return res.status(403).json({ success: false, message: 'Not authorized' });
+    if (!role) return res.status(403).json({ success: false, message: 'Not authorized' });
+    // The farmer cannot start billing on their own; the operator starts it after the handover OTP.
+    if (role === 'farmer') {
+      return res.status(403).json({ success: false, message: 'Only the service provider can start the timer.' });
+    }
+    if (booking.status !== BOOKING_STATUS.IN_PROGRESS) {
+      return res.status(400).json({ success: false, message: 'The timer can only be started once the work has started (handover OTP verified).' });
     }
 
-    // Make sure timer schema object exists
-    if (!booking.serviceTimer) {
-      booking.serviceTimer = { status: 'NOT_STARTED', logs: [] };
-    }
-
+    if (!booking.serviceTimer) booking.serviceTimer = { status: 'NOT_STARTED', logs: [] };
     if (booking.serviceTimer.status === 'RUNNING') {
-      return res.status(200).json({
-        success: true,
-        message: 'Service is already running',
-        data: booking.serviceTimer
-      });
+      return res.status(200).json({ success: true, message: 'Service is already running', data: booking.serviceTimer });
+    }
+    if (['COMPLETED', 'CANCELLED', 'STOPPED'].includes(booking.serviceTimer.status)) {
+      return res.status(400).json({ success: false, message: 'This service timer has already finished.' });
     }
 
     const now = new Date();
     const { ratePerMinute, adminBaseCharge } = await resolveRates(booking);
-
     booking.serviceTimer.ratePerMinute = ratePerMinute;
     booking.serviceTimer.adminBaseCharge = adminBaseCharge;
     booking.serviceTimer.status = 'RUNNING';
     booking.serviceTimer.currentSessionStartedAt = now;
     booking.serviceTimer.currentPauseStartedAt = null;
+    if (!booking.startedAt) booking.startedAt = now;
+    if (!booking.driver_end_otp) booking.driver_end_otp = generateDistinctOtp(booking.driver_start_otp);
 
-    // Transition overall booking status if needed
-    if (booking.status !== BOOKING_STATUS.IN_PROGRESS) {
-      booking.status = BOOKING_STATUS.IN_PROGRESS;
-    }
-    if (!booking.startedAt) {
-      booking.startedAt = now;
-    }
-    if (!booking.driver_end_otp) {
-      const generatedOtp = Math.floor(1000 + Math.random() * 9000).toString();
-      booking.driver_end_otp = generatedOtp;
-      if (!booking.customerConfirmationOTP) booking.customerConfirmationOTP = generatedOtp;
-      if (!booking.paymentOtp) booking.paymentOtp = generatedOtp;
-    }
-
-    // Log action
     booking.serviceTimer.logs.push({
       action: 'START',
       performedBy: role,
       performedById: req.userId || req.user?.id,
-      performedByRole: role === 'vendor' ? 'Vendor' : 'User',
+      performedByRole: role === 'vendor' ? 'Vendor' : 'Worker',
       timestamp: now,
       activeSecondsSnapshot: booking.serviceTimer.accumulatedActiveSeconds || 0,
       pausedSecondsSnapshot: booking.serviceTimer.accumulatedPausedSeconds || 0
@@ -292,12 +293,7 @@ const startServiceTimer = async (req, res) => {
 
     await booking.save();
     broadcastTimerUpdate(booking, 'START', { performedBy: role });
-
-    res.status(200).json({
-      success: true,
-      message: 'Service timer started successfully',
-      data: booking.serviceTimer
-    });
+    res.status(200).json({ success: true, message: 'Service timer started successfully', data: booking.serviceTimer });
   } catch (error) {
     console.error('startServiceTimer error:', error);
     res.status(500).json({ success: false, message: 'Failed to start service timer' });
@@ -311,27 +307,23 @@ const startServiceTimer = async (req, res) => {
 const pauseServiceTimer = async (req, res) => {
   try {
     const { id } = req.params;
-    const { reason = 'machine_issue', notes = '' } = req.body;
+    const ALLOWED_REASONS = ['machine_issue', 'refueling', 'obstacle', 'break', 'other'];
+    const reason = ALLOWED_REASONS.includes(req.body.reason) ? req.body.reason : 'other';
+    const notes = String(req.body.notes || '').slice(0, 500);
 
     const booking = await Booking.findById(id);
-    if (!booking) {
-      return res.status(404).json({ success: false, message: 'Booking not found' });
-    }
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
 
     const role = getCallerRole(req, booking);
-    if (!role) {
-      return res.status(403).json({ success: false, message: 'Not authorized' });
+    if (!role) return res.status(403).json({ success: false, message: 'Not authorized' });
+    if (booking.status !== BOOKING_STATUS.IN_PROGRESS) {
+      return res.status(400).json({ success: false, message: 'Cannot pause: the service is not in progress' });
     }
-
     if (!booking.serviceTimer || booking.serviceTimer.status !== 'RUNNING') {
-      return res.status(400).json({
-        success: false,
-        message: 'Cannot pause: Service is not currently running'
-      });
+      return res.status(400).json({ success: false, message: 'Cannot pause: Service is not currently running' });
     }
 
     const now = new Date();
-    // Accumulate the active seconds from the active running chunk
     if (booking.serviceTimer.currentSessionStartedAt) {
       const deltaSec = Math.max(0, Math.floor((now.getTime() - new Date(booking.serviceTimer.currentSessionStartedAt).getTime()) / 1000));
       booking.serviceTimer.accumulatedActiveSeconds = (booking.serviceTimer.accumulatedActiveSeconds || 0) + deltaSec;
@@ -340,45 +332,40 @@ const pauseServiceTimer = async (req, res) => {
 
     booking.serviceTimer.status = 'PAUSED';
     booking.serviceTimer.currentPauseStartedAt = now;
-    booking.serviceTimer.lastPausedBy = role;
+    booking.serviceTimer.lastPausedBy = role === 'admin' ? 'vendor' : role;
     booking.serviceTimer.lastPauseReason = reason;
     booking.serviceTimer.lastPauseNotes = notes;
 
-    // Generate 4-digit Resume OTP for the customer/farmer to control resumption
-    const resumeOtp = Math.floor(1000 + Math.random() * 9000).toString();
-    booking.serviceTimer.resumeOtp = resumeOtp;
-    booking.resumeOtp = resumeOtp;
+    // Resume OTP is only needed when the PROVIDER paused (the farmer proves they are present).
+    // When the farmer paused, the provider can resume freely so billing cannot be stalled by a no-show.
+    const resumeOtp = generateDistinctOtp(booking.driver_start_otp, booking.driver_end_otp);
+    booking.serviceTimer.resumeOtp = isProvider(role) ? resumeOtp : null;
+    booking.resumeOtp = isProvider(role) ? resumeOtp : null;
 
-    // Notify farmer with resume OTP
-    try {
-      const { createNotification } = require('../notificationControllers/notificationController');
-      await createNotification({
-        userId: booking.userId,
-        type: 'service_timer_paused',
-        title: 'Work Paused - Resume OTP Generated',
-        message: `Work paused (${reason}). Share Resume OTP ${resumeOtp} with the operator when ready to resume work. Work cannot restart without this OTP.`,
-        relatedId: booking._id,
-        relatedType: 'booking',
-        priority: 'high',
-        pushData: {
-          type: 'timer_paused',
-          bookingId: booking._id.toString(),
-          resumeOtp: resumeOtp,
-          link: `/user/booking/${booking._id}`
-        }
-      });
-    } catch (notifErr) {
-      console.warn('[ServiceTimer] Notification error on pause:', notifErr.message);
+    if (isProvider(role)) {
+      try {
+        const { createNotification } = require('../notificationControllers/notificationController');
+        await createNotification({
+          userId: booking.userId,
+          type: 'service_timer_paused',
+          title: 'Work Paused - Resume OTP Generated',
+          message: `Work paused (${reason}). Share Resume OTP ${resumeOtp} with the operator when ready to resume work.`,
+          relatedId: booking._id,
+          relatedType: 'booking',
+          priority: 'high',
+          pushData: { type: 'timer_paused', bookingId: booking._id.toString(), resumeOtp, link: `/user/booking/${booking._id}` }
+        });
+      } catch (notifErr) {
+        console.warn('[ServiceTimer] Notification error on pause:', notifErr.message);
+      }
     }
 
     booking.serviceTimer.logs.push({
       action: 'PAUSE',
-      performedBy: role,
+      performedBy: role === 'admin' ? 'vendor' : role,
       performedById: req.userId || req.user?.id,
-      performedByRole: role === 'vendor' ? 'Vendor' : 'User',
-      reason,
-      notes,
-      timestamp: now,
+      performedByRole: role === 'vendor' ? 'Vendor' : (role === 'worker' ? 'Worker' : 'User'),
+      reason, notes, timestamp: now,
       activeSecondsSnapshot: booking.serviceTimer.accumulatedActiveSeconds,
       pausedSecondsSnapshot: booking.serviceTimer.accumulatedPausedSeconds || 0
     });
@@ -386,17 +373,10 @@ const pauseServiceTimer = async (req, res) => {
     await booking.save();
     broadcastTimerUpdate(booking, 'PAUSE', { performedBy: role, reason, notes });
 
-    // Prepare response data: never reveal resumeOtp to vendor
     const responseTimer = booking.serviceTimer.toObject ? booking.serviceTimer.toObject() : { ...booking.serviceTimer };
-    if (role !== 'farmer' && role !== 'admin') {
-      delete responseTimer.resumeOtp;
-    }
+    if (role !== 'farmer' && role !== 'admin') delete responseTimer.resumeOtp;
 
-    res.status(200).json({
-      success: true,
-      message: `Service paused by ${role}: ${reason}`,
-      data: responseTimer
-    });
+    res.status(200).json({ success: true, message: `Service paused by ${role}: ${reason}`, data: responseTimer });
   } catch (error) {
     console.error('pauseServiceTimer error:', error);
     res.status(500).json({ success: false, message: 'Failed to pause service timer' });
@@ -413,42 +393,33 @@ const resumeServiceTimer = async (req, res) => {
     const { otp } = req.body;
 
     const booking = await Booking.findById(id).select('+resumeOtp');
-    if (!booking) {
-      return res.status(404).json({ success: false, message: 'Booking not found' });
-    }
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
 
     const role = getCallerRole(req, booking);
-    if (!role) {
-      return res.status(403).json({ success: false, message: 'Not authorized' });
+    if (!role) return res.status(403).json({ success: false, message: 'Not authorized' });
+    if (booking.status !== BOOKING_STATUS.IN_PROGRESS) {
+      return res.status(400).json({ success: false, message: 'Cannot resume: the service is not in progress' });
     }
-
     if (!booking.serviceTimer || booking.serviceTimer.status !== 'PAUSED') {
-      return res.status(400).json({
-        success: false,
-        message: 'Cannot resume: Service is not paused'
-      });
+      return res.status(400).json({ success: false, message: 'Cannot resume: Service is not paused' });
     }
 
-    // Anti-fraud OTP verification: If vendor/worker/operator is resuming, customer Resume OTP is mandatory!
-    const expectedOtp = booking.serviceTimer?.resumeOtp || booking.resumeOtp;
-    if (role === 'vendor' || role === 'worker') {
+    // Provider resuming a pause THEY started needs the farmer's OTP. A farmer-initiated pause
+    // can be resumed by the provider without one.
+    const pausedByFarmer = booking.serviceTimer.lastPausedBy === 'farmer';
+    if (isProvider(role) && !pausedByFarmer) {
       if (!otp) {
         return res.status(400).json({
           success: false,
-          message: 'Resume OTP is required to restart billing and work. Please ask the farmer/customer for the 4-digit Resume OTP shown on their screen.'
+          message: 'Resume OTP is required to restart billing and work. Please ask the farmer for the 4-digit Resume OTP shown on their screen.'
         });
       }
-      const submittedOtp = otp.toString().trim();
-      if (!expectedOtp || submittedOtp !== expectedOtp.toString().trim()) {
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid Resume OTP. Please enter the correct 4-digit code shown on the farmer’s screen.'
-        });
-      }
+      const expected = booking.serviceTimer?.resumeOtp || booking.resumeOtp;
+      const check = await verifyBookingOtp(booking._id, 'resume', expected, otp);
+      if (!check.ok) return res.status(check.status).json({ success: false, message: check.message });
     }
 
     const now = new Date();
-    // Accumulate paused duration
     if (booking.serviceTimer.currentPauseStartedAt) {
       const deltaSec = Math.max(0, Math.floor((now.getTime() - new Date(booking.serviceTimer.currentPauseStartedAt).getTime()) / 1000));
       booking.serviceTimer.accumulatedPausedSeconds = (booking.serviceTimer.accumulatedPausedSeconds || 0) + deltaSec;
@@ -457,15 +428,14 @@ const resumeServiceTimer = async (req, res) => {
 
     booking.serviceTimer.status = 'RUNNING';
     booking.serviceTimer.currentSessionStartedAt = now;
-    // Clear consumed resumeOtp
-    booking.serviceTimer.resumeOtp = null;
+    booking.serviceTimer.resumeOtp = null; // single use
     booking.resumeOtp = null;
 
     booking.serviceTimer.logs.push({
       action: 'RESUME',
-      performedBy: role,
+      performedBy: role === 'admin' ? 'vendor' : role,
       performedById: req.userId || req.user?.id,
-      performedByRole: role === 'vendor' ? 'Vendor' : 'User',
+      performedByRole: role === 'vendor' ? 'Vendor' : (role === 'worker' ? 'Worker' : 'User'),
       timestamp: now,
       activeSecondsSnapshot: booking.serviceTimer.accumulatedActiveSeconds || 0,
       pausedSecondsSnapshot: booking.serviceTimer.accumulatedPausedSeconds || 0
@@ -473,12 +443,7 @@ const resumeServiceTimer = async (req, res) => {
 
     await booking.save();
     broadcastTimerUpdate(booking, 'RESUME', { performedBy: role });
-
-    res.status(200).json({
-      success: true,
-      message: `Service resumed successfully by ${role}`,
-      data: booking.serviceTimer
-    });
+    res.status(200).json({ success: true, message: `Service resumed successfully by ${role}`, data: { ...booking.serviceTimer.toObject(), resumeOtp: undefined } });
   } catch (error) {
     console.error('resumeServiceTimer error:', error);
     res.status(500).json({ success: false, message: 'Failed to resume service timer' });
@@ -494,226 +459,107 @@ const endServiceTimer = async (req, res) => {
     const { id } = req.params;
     const { isPartial = false, reason = '', end_otp = null } = req.body;
 
-    const booking = await Booking.findById(id).select('+driver_end_otp +paymentOtp');
-    if (!booking) {
-      return res.status(404).json({ success: false, message: 'Booking not found' });
-    }
+    const booking = await Booking.findById(id).populate('serviceId');
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
 
     const role = getCallerRole(req, booking);
-    if (!role) {
-      return res.status(403).json({ success: false, message: 'Not authorized' });
+    if (!role) return res.status(403).json({ success: false, message: 'Not authorized' });
+
+    if (booking.status !== BOOKING_STATUS.IN_PROGRESS || !booking.serviceTimer ||
+        !['RUNNING', 'PAUSED'].includes(booking.serviceTimer.status)) {
+      return res.status(400).json({ success: false, message: 'There is no running service to end.' });
     }
 
-    // Strict End OTP verification for vendor/operator
-    if (role === 'vendor') {
-      const expectedEndOtp = booking.driver_end_otp || booking.customerConfirmationOTP || booking.paymentOtp;
-      if (!expectedEndOtp) {
-        return res.status(400).json({
-          success: false,
-          message: 'No Completion OTP was found for this booking. Please check with the farmer.'
-        });
+    // The provider needs the farmer's end OTP (only the END OTP; never a payment OTP).
+    if (isProvider(role)) {
+      if (!booking.driver_end_otp) {
+        return res.status(400).json({ success: false, message: 'No Completion OTP was found for this booking. Please check with the farmer.' });
       }
-      if (!end_otp || end_otp.toString().trim() !== expectedEndOtp.toString().trim()) {
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid Completion OTP. Please enter the exact 4-digit code shown on the farmer’s screen.'
-        });
-      }
+      const check = await verifyBookingOtp(booking._id, 'end', booking.driver_end_otp, end_otp);
+      if (!check.ok) return res.status(check.status).json({ success: false, message: check.message });
     }
 
     const now = new Date();
+    // Claim: IN_PROGRESS → WORK_DONE so concurrent end calls cannot both bill
+    const claimed = await Booking.findOneAndUpdate(
+      { _id: booking._id, status: BOOKING_STATUS.IN_PROGRESS },
+      { $set: { status: BOOKING_STATUS.WORK_DONE } },
+      { new: true }
+    ).populate('serviceId');
+    if (!claimed) return res.status(409).json({ success: false, message: 'Booking changed state, please refresh.' });
 
-    // 1. Flush any open interval
-    if (booking.serviceTimer.status === 'RUNNING' && booking.serviceTimer.currentSessionStartedAt) {
-      const deltaSec = Math.max(0, Math.floor((now.getTime() - new Date(booking.serviceTimer.currentSessionStartedAt).getTime()) / 1000));
-      booking.serviceTimer.accumulatedActiveSeconds = (booking.serviceTimer.accumulatedActiveSeconds || 0) + deltaSec;
-      booking.serviceTimer.currentSessionStartedAt = null;
-    } else if (booking.serviceTimer.status === 'PAUSED' && booking.serviceTimer.currentPauseStartedAt) {
-      const deltaSec = Math.max(0, Math.floor((now.getTime() - new Date(booking.serviceTimer.currentPauseStartedAt).getTime()) / 1000));
-      booking.serviceTimer.accumulatedPausedSeconds = (booking.serviceTimer.accumulatedPausedSeconds || 0) + deltaSec;
-      booking.serviceTimer.currentPauseStartedAt = null;
-    }
+    claimed.driver_end_otp = null;
+    closeServiceTimer(claimed, now, 'COMPLETED');
 
-    booking.serviceTimer.status = 'COMPLETED';
-
-    const totalActiveSeconds = booking.serviceTimer.accumulatedActiveSeconds || 0;
-    const totalPausedSeconds = booking.serviceTimer.accumulatedPausedSeconds || 0;
-
-    // Minimum 1 minute if session was started
-    const totalActiveMinutes = Math.max(totalActiveSeconds > 0 ? 1 : 0, Math.ceil(totalActiveSeconds / 60));
-    const totalPausedMinutes = Math.floor(totalPausedSeconds / 60);
-
-    const ratePerMinute = booking.serviceTimer.ratePerMinute || 15;
-    const adminBaseCharge = booking.serviceTimer.adminBaseCharge || booking.visitingCharges || 0;
-
-    const timeCharge = Math.round(totalActiveMinutes * ratePerMinute);
-    const baseAmount = adminBaseCharge + timeCharge;
-
-    // Fetch settings for split & GST
-    const Settings = require('../../models/Settings');
-    const settings = await Settings.findOne({ type: 'global' });
-    const serviceSplitPct = settings?.rentalPayoutPercentage ?? 90;
-    const gstPct = settings?.rentalGstPercentage ?? 5;
-
-    const gstAmount = parseFloat(((baseAmount * gstPct) / 100).toFixed(2));
-    const finalAmount = parseFloat((baseAmount + gstAmount).toFixed(2));
-    const vendorEarning = parseFloat(((baseAmount * serviceSplitPct) / 100).toFixed(2));
-
-    // Generate/upsert VendorBill (single source of truth for vendor earnings)
-    const VendorBill = require('../../models/VendorBill');
-    const { BILL_STATUS, PAYMENT_STATUS } = require('../../utils/constants');
-
-    const billData = {
-      bookingId: booking._id,
-      vendorId: booking.vendorId,
-      services: [{
-        name: `${booking.serviceName || 'Equipment / Field Service'} (${totalActiveMinutes} Mins Work, ${totalPausedMinutes} Mins Downtime Free)`,
-        price: baseAmount,
-        gstPercentage: gstPct,
-        quantity: 1,
-        gstAmount: gstAmount,
-        total: finalAmount,
-        isOriginal: true
-      }],
-      originalServiceBase: baseAmount,
-      originalGST: gstAmount,
-      totalServiceBase: baseAmount,
-      totalGST: gstAmount,
-      grandTotal: finalAmount,
-      payoutConfig: {
-        serviceSplitPercentage: serviceSplitPct,
-        serviceGstPercentage: gstPct
-      },
-      vendorServiceEarning: vendorEarning,
-      vendorTotalEarning: vendorEarning,
-      companyRevenue: parseFloat((finalAmount - vendorEarning).toFixed(2)),
-      status: BILL_STATUS.GENERATED
-    };
-
-    let vendorBill = null;
-    if (booking.vendorId) {
-      vendorBill = await VendorBill.findOneAndUpdate(
-        { bookingId: booking._id },
-        { $set: billData },
-        { upsert: true, new: true, runValidators: true }
-      );
-      booking.vendorBillId = vendorBill._id;
-    }
+    const VendorEquipment = require('../../models/VendorEquipment');
+    const equipment = claimed.equipmentId ? await VendorEquipment.findById(claimed.equipmentId) : null;
+    const result = await finalizeMachineryBilling(claimed, { service: claimed.serviceId, equipment, now });
+    const b = result.booking;
 
     const billingSummary = {
-      totalActiveMinutes,
-      totalPausedMinutes,
-      adminBaseCharge,
-      timeCharge,
-      subtotal: baseAmount,
-      tax: gstAmount,
-      discount: booking.discount || 0,
-      finalPayable: finalAmount,
+      totalActiveMinutes: result.calc.totalActiveMinutes || 0,
+      totalPausedMinutes: Math.floor((b.serviceTimer.accumulatedPausedSeconds || 0) / 60),
+      adminBaseCharge: result.calc.adminBase || 0,
+      timeCharge: result.calc.timeCharge || 0,
+      subtotal: result.calc.base,
+      discount: b.discount || 0,
+      finalPayable: result.grandTotal,
       isPartialEnd: Boolean(isPartial),
-      partialEndReason: reason || (isPartial ? 'Service ended prematurely due to breakdown or early completion' : null),
+      partialEndReason: String(reason || '').slice(0, 300) || (isPartial ? 'Service ended prematurely due to breakdown or early completion' : null),
       calculatedAt: now
     };
-
-    booking.serviceTimer.billingSummary = billingSummary;
-    booking.finalAmount = finalAmount;
-    booking.userPayableAmount = finalAmount;
-
-    // Payment flow separation
-    const isCashPayment = booking.paymentMethod === 'cash' || booking.paymentMethod === 'pay_at_home';
-    const isPrepaid = booking.paymentStatus === 'SUCCESS' || booking.paymentStatus === 'success' || booking.paymentStatus === 'paid' || booking.paymentStatus === 'PAID' || booking.paymentMethod === 'plan_benefit';
-
-    if (isPrepaid && !isCashPayment) {
-      booking.status = BOOKING_STATUS.COMPLETED;
-      booking.paymentStatus = PAYMENT_STATUS.SUCCESS;
-      booking.cashCollected = false;
-      booking.completedAt = now;
-
-      // Credit vendor wallet directly for online/prepaid
-      if (booking.vendorId) {
-        const Vendor = require('../../models/Vendor');
-        const Transaction = require('../../models/Transaction');
-        await Vendor.findByIdAndUpdate(booking.vendorId, {
-          $inc: { 'wallet.earnings': vendorEarning }
-        });
-        await Transaction.create({
-          vendorId: booking.vendorId,
-          bookingId: booking._id,
-          type: 'earnings_credit',
-          amount: vendorEarning,
-          status: 'completed',
-          paymentMethod: 'wallet',
-          description: `Earnings ₹${vendorEarning} credited for service #${booking.bookingNumber || booking._id}.`,
-          metadata: { type: 'agriculture_timer', billId: vendorBill?._id?.toString() }
-        });
-      }
-    } else {
-      // Cash / Pay at field / Pending
-      booking.status = BOOKING_STATUS.WORK_DONE;
-      booking.paymentStatus = PAYMENT_STATUS.PENDING;
-      booking.cashCollected = false;
-
-      // Generate payment OTP for cash collection
-      const payOtp = Math.floor(1000 + Math.random() * 9000).toString();
-      booking.paymentOtp = payOtp;
-      booking.customerConfirmationOTP = payOtp;
-
-      const { createNotification } = require('../notificationControllers/notificationController');
-      await createNotification({
-        userId: booking.userId,
-        type: 'work_completed',
-        title: 'Work Completed & Bill Ready',
-        message: `Your equipment service has ended. Total Bill: ₹${finalAmount}. Payment OTP: ${payOtp}. Share this OTP with the operator to confirm cash payment.`,
-        relatedId: booking._id,
-        relatedType: 'booking',
-        priority: 'high',
-        pushData: {
-          type: 'work_done',
-          bookingId: booking._id.toString(),
-          paymentOtp: payOtp,
-          link: `/user/booking/${booking._id}`
-        }
-      });
-    }
-
-    booking.serviceTimer.logs.push({
+    b.serviceTimer.billingSummary = billingSummary;
+    b.serviceTimer.logs.push({
       action: isPartial ? 'PARTIAL_END' : 'END',
-      performedBy: role,
+      performedBy: role === 'admin' ? 'vendor' : role,
       performedById: req.userId || req.user?.id,
-      performedByRole: role === 'vendor' ? 'Vendor' : 'User',
-      reason: reason || (isPartial ? 'Partial Breakdown Finish' : 'Normal Service Completion'),
+      performedByRole: role === 'vendor' ? 'Vendor' : (role === 'worker' ? 'Worker' : 'User'),
+      reason: String(reason || '').slice(0, 300) || (isPartial ? 'Partial Breakdown Finish' : 'Normal Service Completion'),
       timestamp: now,
-      activeSecondsSnapshot: totalActiveSeconds,
-      pausedSecondsSnapshot: totalPausedSeconds
+      activeSecondsSnapshot: b.serviceTimer.accumulatedActiveSeconds || 0,
+      pausedSecondsSnapshot: b.serviceTimer.accumulatedPausedSeconds || 0
+    });
+    await b.save();
+
+    const needsPayment = b.status === BOOKING_STATUS.WORK_DONE;
+    const { createNotification } = require('../notificationControllers/notificationController');
+    await createNotification({
+      userId: b.userId,
+      type: 'work_completed',
+      title: 'Work Completed & Bill Ready',
+      message: needsPayment
+        ? `Your equipment service has ended. Amount due: ₹${b.balanceDue}. Payment OTP: ${b.paymentOtp}. Share this OTP with the operator ONLY after paying.`
+        : `Your equipment service has ended. Bill ₹${result.grandTotal} was settled from your advance${result.refunded ? `; ₹${result.refunded} refunded to your wallet` : ''}.`,
+      relatedId: b._id,
+      relatedType: 'booking',
+      priority: 'high',
+      pushData: { type: 'work_done', bookingId: b._id.toString(), paymentOtp: needsPayment ? b.paymentOtp : undefined, link: `/user/booking/${b._id}` }
     });
 
-    await booking.save();
-    broadcastTimerUpdate(booking, isPartial ? 'PARTIAL_END' : 'END', {
-      performedBy: role,
-      billingSummary,
-      status: booking.status,
-      paymentStatus: booking.paymentStatus,
-      paymentOtp: booking.paymentOtp,
-      customerConfirmationOTP: booking.customerConfirmationOTP,
-      vendorBillId: vendorBill?._id
+    broadcastTimerUpdate(b, isPartial ? 'PARTIAL_END' : 'END', {
+      performedBy: role, billingSummary, status: b.status, paymentStatus: b.paymentStatus,
+      paymentOtp: needsPayment ? b.paymentOtp : null,
+      vendorBillId: result.bill?._id
     });
 
+    const providerSide = isProvider(role);
     res.status(200).json({
       success: true,
       message: isPartial ? 'Service ended with partial bill' : 'Service completed successfully',
       data: {
-        bookingId: booking._id,
-        status: booking.status,
-        paymentStatus: booking.paymentStatus,
-        paymentOtp: booking.paymentOtp,
-        customerConfirmationOTP: booking.customerConfirmationOTP,
-        serviceTimer: booking.serviceTimer,
+        bookingId: b._id,
+        status: b.status,
+        paymentStatus: b.paymentStatus,
+        balanceDue: b.balanceDue,
+        // the payment OTP belongs to the farmer; the provider's response never carries it
+        paymentOtp: providerSide ? undefined : (needsPayment ? b.paymentOtp : undefined),
         billingSummary,
-        vendorBillId: vendorBill?._id
+        vendorBillId: result.bill?._id
       }
     });
   } catch (error) {
     console.error('endServiceTimer error:', error);
-    res.status(500).json({ success: false, message: 'Failed to end service timer' });
+    res.status(error.status || 500).json({ success: false, message: error.status ? error.message : 'Failed to end service timer' });
   }
 };
 

@@ -1,7 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../../middleware/authMiddleware');
-const { isVendor, isWorker } = require('../../middleware/roleMiddleware');
+const { isVendor, isWorker, isUser } = require('../../middleware/roleMiddleware');
+
+// Cash is only ever collected by the vendor or worker who did the job
+const isVendorOrWorker = (req, res, next) => {
+  const role = String(req.userRole || '').toUpperCase();
+  if (role === 'VENDOR' || role === 'WORKER') return next();
+  return res.status(403).json({ success: false, message: 'Access denied. Vendor or worker role required.' });
+};
 const {
   initiateCashCollection,
   confirmCashCollection,
@@ -18,8 +25,8 @@ const {
 router.use(authenticate);
 
 // Vendor/Worker routes
-router.post('/:id/initiate', initiateCashCollection);
-router.post('/:id/confirm', confirmCashCollection);
+router.post('/:id/initiate', isVendorOrWorker, initiateCashCollection);
+router.post('/:id/confirm', isVendorOrWorker, confirmCashCollection);
 
 // Admin Dynamic UPI QR Payment routes
 router.post('/:id/generate-admin-qr', generateAdminPaymentQr);
@@ -29,7 +36,7 @@ router.post('/confirm-admin-qr', confirmAdminQrPayment);
 router.get('/:id/qr-status', getAdminQrStatus);
 
 // Customer route
-router.post('/:id/customer-confirm', customerConfirmPayment);
+router.post('/:id/customer-confirm', isUser, customerConfirmPayment);
 
 // Status route (shared)
 router.get('/:id/status', getCashCollectionStatus);

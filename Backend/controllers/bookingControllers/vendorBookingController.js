@@ -10,6 +10,47 @@ const Settings = require('../../models/Settings');
 const Vendor = require('../../models/Vendor');
 const Service = require('../../models/Service'); // Using Service as ref by Booking.js
 const { BILL_STATUS } = require('../../utils/constants');
+const {
+  generateOtp,
+  generateDistinctOtp,
+  verifyBookingOtp,
+  toProviderView,
+  vendorIneligibleReason,
+  markVendorBusy,
+  releaseVendorIfIdle,
+  expireOpenRequests,
+  cancelBookingWithRefund,
+  closeServiceTimer,
+  findVendorSlotConflict,
+  CONFLICT_STATUSES,
+  settleVendorCash,
+  finalizeMachineryBilling,
+  applyBillToBooking,
+  round2
+} = require('../../services/bookingSettlementService');
+
+/** Street-level address is only revealed once the vendor has accepted the job. */
+const maskAddress = (a) => {
+  if (!a) return a;
+  const o = typeof a.toObject === 'function' ? a.toObject() : { ...a };
+  return {
+    type: o.type, city: o.city, district: o.district, state: o.state, pincode: o.pincode,
+    lat: typeof o.lat === 'number' ? Math.round(o.lat * 100) / 100 : o.lat,
+    lng: typeof o.lng === 'number' ? Math.round(o.lng * 100) / 100 : o.lng
+  };
+};
+
+/** Before a vendor owns a booking they must not see the customer's phone/email/exact address. */
+const maskUnassignedPii = (view) => {
+  if (!view || view.vendorId) return view;
+  const out = { ...view };
+  if (out.userId && typeof out.userId === 'object') {
+    const { phone, email, ...safe } = out.userId;
+    out.userId = safe;
+  }
+  out.address = maskAddress(out.address);
+  return out;
+};
 
 /**
  * Get vendor bookings with filters
@@ -18,69 +59,50 @@ const getVendorBookings = async (req, res) => {
   try {
     const vendorId = req.user.id;
     const { status, startDate, endDate, page = 1, limit = 10 } = req.query;
+    const BookingRequest = require('../../models/BookingRequest');
 
-    const vendor = await require('../../models/Vendor').findById(vendorId);
-    const vendorCategories = vendor?.service || [];
+    // Bookings this vendor already declined must not keep showing up as open requests.
+    const declined = await BookingRequest.find({ vendorId, status: 'REJECTED' }).distinct('bookingId');
 
-    // Build case-insensitive regex patterns from vendor categories
-    // This fixes mismatches like vendor having "tractor" but booking having "Tractor"
-    const categoryRegexPatterns = vendorCategories.map(cat => new RegExp(`^${cat.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'));
-
-    // Build query
     const query = {
       $or: [
-        { vendorId, status: { $ne: BOOKING_STATUS.AWAITING_PAYMENT } }, // Assigned to this vendor but not awaiting payment
+        { vendorId, status: { $ne: BOOKING_STATUS.AWAITING_PAYMENT } },
         {
           vendorId: null,
           status: { $in: [BOOKING_STATUS.REQUESTED, BOOKING_STATUS.SEARCHING] },
-          $or: [
-            { serviceCategory: { $in: categoryRegexPatterns } }, // Case-insensitive category match
-            { notifiedVendors: vendorId } // Also show bookings where this vendor was explicitly notified
-          ]
+          notifiedVendors: vendorId, // only requests this vendor was actually alerted about
+          _id: { $nin: declined }
         }
       ]
     };
-    if (status) {
-      query.status = status;
-    }
+    if (status) query.status = status;
     if (startDate || endDate) {
       query.scheduledDate = {};
       if (startDate) query.scheduledDate.$gte = new Date(startDate);
       if (endDate) query.scheduledDate.$lte = new Date(endDate);
     }
 
-    // Pagination
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const pageN = Math.max(1, parseInt(page) || 1);
+    const limitN = Math.min(100, Math.max(1, parseInt(limit) || 10));
 
-    // Get bookings
     const bookings = await Booking.find(query)
       .populate('userId', 'name phone email')
       .populate('serviceId', 'title iconUrl')
       .populate('categoryId', 'title slug')
       .populate('workerId', 'name phone rating')
       .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit));
-
-    // Get total count
+      .skip((pageN - 1) * limitN)
+      .limit(limitN);
     const total = await Booking.countDocuments(query);
 
     res.status(200).json({
       success: true,
-      data: bookings,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / parseInt(limit))
-      }
+      data: bookings.map(b => maskUnassignedPii(toProviderView(b))),
+      pagination: { page: pageN, limit: limitN, total, pages: Math.ceil(total / limitN) }
     });
   } catch (error) {
     console.error('Get vendor bookings error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch bookings. Please try again.'
-    });
+    res.status(500).json({ success: false, message: 'Failed to fetch bookings. Please try again.' });
   }
 };
 
@@ -91,12 +113,15 @@ const getBookingById = async (req, res) => {
   try {
     const vendorId = req.user.id;
     const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
 
     const booking = await Booking.findOne({
       _id: id,
       $or: [
         { vendorId },
-        { vendorId: null, status: { $in: ['requested', 'searching'] } }
+        { vendorId: null, status: { $in: [BOOKING_STATUS.REQUESTED, BOOKING_STATUS.SEARCHING] }, notifiedVendors: vendorId }
       ]
     })
       .populate('userId', 'name phone email profilePhoto')
@@ -106,22 +131,13 @@ const getBookingById = async (req, res) => {
       .populate('workerId', 'name phone rating totalJobs completedJobs');
 
     if (!booking) {
-      return res.status(404).json({
-        success: false,
-        message: 'Booking not found'
-      });
+      return res.status(404).json({ success: false, message: 'Booking not found' });
     }
 
-    res.status(200).json({
-      success: true,
-      data: booking
-    });
+    res.status(200).json({ success: true, data: maskUnassignedPii(toProviderView(booking)) });
   } catch (error) {
     console.error('Get booking error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch booking. Please try again.'
-    });
+    res.status(500).json({ success: false, message: 'Failed to fetch booking. Please try again.' });
   }
 };
 
@@ -132,232 +148,152 @@ const acceptBooking = async (req, res) => {
   try {
     const vendorId = req.user.id;
     const { id } = req.params;
+    const BookingRequest = require('../../models/BookingRequest');
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(404).json({ success: false, message: 'Booking not found.' });
+    }
+
+    // 1. Vendor must be allowed to take work (approved, active, not cash-blocked)
+    const vendorDoc = await Vendor.findById(vendorId).select('approvalStatus isActive wallet');
+    const ineligible = vendorIneligibleReason(vendorDoc);
+    if (ineligible) return res.status(403).json({ success: false, message: ineligible });
 
     const existingBooking = await Booking.findById(id);
     if (!existingBooking) {
-      return res.status(404).json({
+      return res.status(404).json({ success: false, message: 'Booking not found.' });
+    }
+
+    // 2. Vendor must actually have been alerted about this booking
+    const requestDoc = await BookingRequest.findOne({ bookingId: id, vendorId });
+    const isTargeted = existingBooking.vendorId && existingBooking.vendorId.toString() === vendorId.toString();
+    const wasNotified = isTargeted || !!requestDoc ||
+      (existingBooking.notifiedVendors || []).some(v => v.toString() === vendorId.toString());
+    if (!wasNotified) {
+      return res.status(403).json({ success: false, message: 'This booking was not sent to you.' });
+    }
+    if (requestDoc && (['EXPIRED', 'CANCELLED', 'REJECTED'].includes(requestDoc.status) ||
+        (requestDoc.expiresAt && requestDoc.expiresAt < new Date() && requestDoc.status !== 'ACCEPTED'))) {
+      return res.status(410).json({ success: false, message: 'This request has expired.' });
+    }
+
+    // 3. Overlap with an already-confirmed job of this vendor
+    const conflict = await findVendorSlotConflict(existingBooking, vendorId, {
+      excludeId: existingBooking._id,
+      statuses: CONFLICT_STATUSES
+    });
+    if (conflict) {
+      return res.status(409).json({
         success: false,
-        message: 'Booking not found.'
+        message: `You already have a confirmed booking (${conflict.bookingNumber || ''}) for this time slot. Cannot accept overlapping bookings.`
       });
     }
 
-    // Check if this vendor already has an active/confirmed booking overlapping with this time slot
-    if (existingBooking.scheduledDate) {
-      const { parseSlotInterval, isIntervalOverlapping } = require('../../utils/timeSlotHelper');
-      const startOfDay = new Date(new Date(existingBooking.scheduledDate).setHours(0, 0, 0, 0));
-      const endOfDay = new Date(new Date(existingBooking.scheduledDate).setHours(23, 59, 59, 999));
-
-      const confirmedBookings = await Booking.find({
-        _id: { $ne: existingBooking._id },
-        vendorId: vendorId,
-        scheduledDate: { $gte: startOfDay, $lte: endOfDay },
-        status: {
-          $in: [
-            BOOKING_STATUS.CONFIRMED,
-            BOOKING_STATUS.ACCEPTED,
-            BOOKING_STATUS.ASSIGNED,
-            BOOKING_STATUS.JOURNEY_STARTED,
-            BOOKING_STATUS.IN_PROGRESS,
-            BOOKING_STATUS.WORK_DONE
-          ]
-        }
-      }).select('equipmentId scheduledDate scheduledTime timeSlot rental_type status bookingNumber');
-
-      const reqInterval = parseSlotInterval(existingBooking.timeSlot, existingBooking.scheduledTime, existingBooking.rental_type);
-
-      for (const cb of confirmedBookings) {
-        const isSameMachine = !existingBooking.equipmentId || !cb.equipmentId || cb.equipmentId.toString() === existingBooking.equipmentId.toString();
-        if (!isSameMachine) continue;
-
-        const cbInterval = parseSlotInterval(cb.timeSlot, cb.scheduledTime, cb.rental_type);
-        if (isIntervalOverlapping(cbInterval, reqInterval)) {
-          return res.status(409).json({
-            success: false,
-            message: `You already have a confirmed booking (${cb.bookingNumber || ''}) for this time slot. Cannot accept overlapping bookings.`
-          });
-        }
-      }
-    }
-
-    // ATOMIC UPDATE: Check status and vendorId in query to prevent race conditions
-    // Only accept if status is REQUESTED/SEARCHING and NO vendor is assigned yet
+    // 4. Atomic claim — only one vendor can win, and only while still open
     const updatedBooking = await Booking.findOneAndUpdate(
       {
         _id: id,
         status: { $in: [BOOKING_STATUS.REQUESTED, BOOKING_STATUS.SEARCHING] },
-        $or: [
-          { vendorId: null }, // Ensures another request didn't just take it
-          { vendorId: vendorId } // Direct assigned booking
-        ]
+        $or: [{ vendorId: null }, { vendorId }]
       },
-      {
-        $set: {
-          vendorId: vendorId,
-          acceptedAt: new Date(),
-          // Check payment method for optimized status update logic
-          status: BOOKING_STATUS.CONFIRMED // Default to confirmed
-        }
-      },
-      { new: true } // Return updated doc
+      { $set: { vendorId, acceptedAt: new Date(), status: BOOKING_STATUS.CONFIRMED } },
+      { new: true }
     );
 
     if (!updatedBooking) {
-      // If update failed, check why (likely already taken)
-      const existing = await Booking.findById(id);
-      if (existing && existing.vendorId && existing.vendorId.toString() !== vendorId.toString()) {
-        return res.status(409).json({ // 409 Conflict
-          success: false,
-          message: 'Sorry, this job has already been accepted by another vendor.'
-        });
+      const current = await Booking.findById(id);
+      if (current && current.vendorId && current.vendorId.toString() !== vendorId.toString()) {
+        return res.status(409).json({ success: false, message: 'Sorry, this job has already been accepted by another vendor.' });
       }
-      return res.status(400).json({
-        success: false,
-        message: 'Booking is no longer available.'
-      });
+      return res.status(400).json({ success: false, message: 'Booking is no longer available.' });
     }
-
-    // Booking successfully accepted by THIS vendor
     const booking = updatedBooking;
-    
-    // --- LINK EQUIPMENT IF AGRI ---
-    if (booking.serviceCategory === 'Agriculture' || booking.categoryId?.title === 'Agriculture') {
-      const VendorEquipment = require('../../models/VendorEquipment');
-      const eq = await VendorEquipment.findOne({ vendorId: vendorId, categoryId: booking.categoryId });
-      if (eq) {
-        booking.equipmentId = eq._id;
-      }
+
+    // 5. Two accepts racing for the same slot: the later claim backs off
+    const rival = await findVendorSlotConflict(booking, vendorId, {
+      excludeId: booking._id,
+      beatenBy: { field: 'acceptedAt', at: booking.acceptedAt, id: booking._id }
+    });
+    if (rival) {
+      await Booking.updateOne(
+        { _id: booking._id, vendorId, status: BOOKING_STATUS.CONFIRMED },
+        { $set: { status: isTargeted ? BOOKING_STATUS.REQUESTED : BOOKING_STATUS.SEARCHING, acceptedAt: null, ...(isTargeted ? {} : { vendorId: null }) } }
+      );
+      return res.status(409).json({ success: false, message: 'You already have a confirmed booking for this time slot.' });
     }
 
-    // Automatically generate Handover OTP (driver_start_otp) for Standalone Machinery (ANY category)
-    // This is because we skip the "Assign Operator" step where OTP is normally generated.
-    let shouldGenOtp = false;
+    // 6. Link equipment (only an active machine of this vendor) when the booking has none yet
     const Category = require('../../models/Category');
-    const cat = await Category.findById(booking.categoryId);
-    
+    const cat = booking.categoryId ? await Category.findById(booking.categoryId) : null;
+    if (!booking.equipmentId && (booking.serviceCategory === 'Agriculture' || cat?.title === 'Agriculture')) {
+      const VendorEquipment = require('../../models/VendorEquipment');
+      const eq = await VendorEquipment.findOne({
+        vendorId, categoryId: booking.categoryId, status: { $in: ['active', 'approved'] }
+      });
+      if (eq) booking.equipmentId = eq._id;
+    }
+
+    // 7. Handover OTP for standalone machinery (no "assign operator" step to generate it)
+    let shouldGenOtp = false;
+    const serviceCat = (booking.serviceCategory || '').toLowerCase();
     if (cat) {
       const title = cat.title?.toLowerCase() || '';
       const slug = cat.slug?.toLowerCase() || '';
-      const serviceCat = (booking.serviceCategory || '').toLowerCase();
-      
-      // If category explicitly says no driver OR if it's one of the machinery/equipment keywords
-      if (cat.requiresDriver === false || 
-          title.includes('machinery') || title.includes('equipment') || 
-          slug.includes('machinery') || slug.includes('equipment') ||
-          serviceCat.includes('agriculture') || serviceCat.includes('machinery')) {
-        shouldGenOtp = true;
-      }
+      shouldGenOtp = cat.requiresDriver === false || title.includes('machinery') || title.includes('equipment') ||
+        slug.includes('machinery') || slug.includes('equipment') ||
+        serviceCat.includes('agriculture') || serviceCat.includes('machinery');
     } else {
-      const serviceCat = (booking.serviceCategory || '').toLowerCase();
-      if (booking.rental_type || serviceCat.includes('agri') || serviceCat.includes('machinery') || serviceCat.includes('tractor') || booking.equipmentId) {
-        shouldGenOtp = true;
-      }
+      shouldGenOtp = !!(booking.rental_type || serviceCat.includes('agri') || serviceCat.includes('machinery') ||
+        serviceCat.includes('tractor') || booking.equipmentId);
     }
-
-    if (shouldGenOtp && !booking.driver_start_otp) {
-      console.log(`[AcceptBooking] Generating Handover OTP for booking ${booking.bookingNumber}`);
-      const otp = Math.floor(1000 + Math.random() * 9000).toString();
-      booking.driver_start_otp = otp;
-    }
+    if (shouldGenOtp && !booking.driver_start_otp) booking.driver_start_otp = generateOtp();
 
     await booking.save();
 
-    // Update vendor availability to ON_JOB
-    const Vendor = require('../../models/Vendor');
-    await Vendor.findByIdAndUpdate(vendorId, { availability: 'ON_JOB' });
-
-    // Update BookingRequest statuses
-    const BookingRequest = require('../../models/BookingRequest');
-
-    // Mark this vendor's request as ACCEPTED
-    await BookingRequest.findOneAndUpdate(
-      { bookingId: id, vendorId },
-      { status: 'ACCEPTED', respondedAt: new Date() }
-    );
-
-    // Mark all other vendors' requests as EXPIRED/CANCELLED
+    // NOTE: availability is NOT flipped to ON_JOB here — the job may be days away.
+    await BookingRequest.findOneAndUpdate({ bookingId: id, vendorId }, { status: 'ACCEPTED', respondedAt: new Date() });
     await BookingRequest.updateMany(
-      { bookingId: id, vendorId: { $ne: vendorId } },
+      { bookingId: id, vendorId: { $ne: vendorId }, status: { $in: ['PENDING', 'VIEWED'] } },
       { status: 'EXPIRED', respondedAt: new Date() }
     );
 
-    // Check payment status correction (if needed, though we set CONFIRMED above)
-    if (booking.paymentMethod === 'plan_benefit' && booking.paymentStatus === PAYMENT_STATUS.SUCCESS) {
-      // already good
-    }
-
-    // NOTIFY OTHER VENDORS to remove this job
-    // Use the stored notifiedVendors list
     const io = req.app.get('io');
-    if (io && booking.notifiedVendors && booking.notifiedVendors.length > 0) {
-      console.log(`[AcceptBooking] Notifying ${booking.notifiedVendors.length} other vendors that job ${booking._id} was taken`);
+    if (io && booking.notifiedVendors?.length) {
       booking.notifiedVendors.forEach(otherVendorId => {
-        // Skip the current vendor
         if (otherVendorId.toString() !== vendorId.toString()) {
-          const room = `vendor_${otherVendorId.toString()}`;
-          console.log(`[AcceptBooking] Emitting booking_taken to room: ${room}`);
-          io.to(room).emit('booking_taken', {
-            bookingId: booking._id.toString(), // Ensure string for frontend comparison
+          io.to(`vendor_${otherVendorId.toString()}`).emit('booking_taken', {
+            bookingId: booking._id.toString(),
             message: 'This job has been accepted by someone else.'
           });
         }
       });
-    } else {
-      console.log('[AcceptBooking] No other vendors to notify or io not available');
     }
-
-    // Emit real-time updates to USER
     if (io) {
-      const message = 'Vendor has accepted your request. Your booking is confirmed!';
-
       io.to(`user_${booking.userId}`).emit('booking_accepted', {
         bookingId: booking._id,
         bookingNumber: booking.bookingNumber,
-        vendor: {
-          id: vendorId,
-          name: req.user.name,
-          businessName: req.user.businessName
-        },
-        message
+        vendor: { id: vendorId, name: req.user.name, businessName: req.user.businessName },
+        message: 'Vendor has accepted your request. Your booking is confirmed!'
       });
-
       io.to(`user_${booking.userId}`).emit('booking_updated', {
-        bookingId: booking._id,
-        status: booking.status,
-        message: 'Vendor has accepted your request'
+        bookingId: booking._id, status: booking.status, message: 'Vendor has accepted your request'
       });
     }
-
-    // Send notification to user
-    const notificationMessage = `Your booking ${booking.bookingNumber} is confirmed! ${req.user.businessName || req.user.name} will arrive at scheduled time.`;
 
     await createNotification({
       userId: booking.userId,
       type: 'booking_accepted',
       title: 'Booking Confirmed!',
-      message: notificationMessage,
+      message: `Your booking ${booking.bookingNumber} is confirmed! ${req.user.businessName || req.user.name} will arrive at scheduled time.`,
       relatedId: booking._id,
       relatedType: 'booking',
-      pushData: {
-        type: 'booking_accepted',
-        bookingId: booking._id.toString(),
-        link: `/user/booking/${booking._id}`
-        // dataOnly: true // Ensure user sees this
-      }
+      pushData: { type: 'booking_accepted', bookingId: booking._id.toString(), link: `/user/booking/${booking._id}` }
     });
 
-    // Send Push Notification to user (handled by createNotification)
-
-    res.status(200).json({
-      success: true,
-      message: 'Booking accepted successfully',
-      data: booking
-    });
+    res.status(200).json({ success: true, message: 'Booking accepted successfully', data: toProviderView(booking) });
   } catch (error) {
     console.error('Accept booking error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to accept booking. Please try again.'
-    });
+    res.status(500).json({ success: false, message: 'Failed to accept booking. Please try again.' });
   }
 };
 
@@ -370,175 +306,100 @@ const rejectBooking = async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation failed',
-        errors: errors.array()
-      });
+      return res.status(400).json({ success: false, message: 'Validation failed', errors: errors.array() });
     }
 
     const vendorId = req.user.id;
     const { id } = req.params;
     const { reason } = req.body;
+    const BookingRequest = require('../../models/BookingRequest');
 
-    // Find booking
-    let booking = await Booking.findOne({
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(404).json({ success: false, message: 'Booking not found or not available for rejection' });
+    }
+
+    const OPEN = [BOOKING_STATUS.PENDING, BOOKING_STATUS.REQUESTED, BOOKING_STATUS.SEARCHING];
+    const booking = await Booking.findOne({
       _id: id,
-      $or: [
-        { notifiedVendors: vendorId },
-        { vendorId: null, status: { $in: [BOOKING_STATUS.REQUESTED, BOOKING_STATUS.SEARCHING] } },
-        { vendorId: vendorId, status: { $in: [BOOKING_STATUS.REQUESTED, BOOKING_STATUS.SEARCHING, BOOKING_STATUS.PENDING] } }
-      ]
+      $or: [{ notifiedVendors: vendorId }, { vendorId }]
     });
 
     if (!booking) {
-      const existingBooking = await Booking.findById(id);
-      if (existingBooking) {
-        const closedStatuses = [
-          BOOKING_STATUS.REJECTED,
-          BOOKING_STATUS.CANCELLED,
-          BOOKING_STATUS.CONFIRMED,
-          BOOKING_STATUS.ACCEPTED,
-          BOOKING_STATUS.ASSIGNED,
-          BOOKING_STATUS.IN_PROGRESS,
-          BOOKING_STATUS.COMPLETED
-        ];
-        if (closedStatuses.includes(existingBooking.status)) {
-          return res.status(200).json({
-            success: true,
-            alreadyTaken: existingBooking.status !== BOOKING_STATUS.REJECTED && existingBooking.status !== BOOKING_STATUS.CANCELLED,
-            message: existingBooking.status === BOOKING_STATUS.REJECTED || existingBooking.status === BOOKING_STATUS.CANCELLED
-              ? 'Booking already rejected or cancelled'
-              : 'This booking was already accepted by another vendor',
-            data: { bookingId: id }
-          });
-        }
-      }
-      return res.status(404).json({
-        success: false,
-        message: 'Booking not found or not available for rejection'
-      });
+      return res.status(404).json({ success: false, message: 'Booking not found or not available for rejection' });
     }
 
-    // If booking is already in a terminal/taken state, gracefully return success so frontend closes modal
-    const alreadyClosedStatuses = [
-      BOOKING_STATUS.CONFIRMED,
-      BOOKING_STATUS.ACCEPTED,
-      BOOKING_STATUS.ASSIGNED,
-      BOOKING_STATUS.IN_PROGRESS,
-      BOOKING_STATUS.COMPLETED,
-      BOOKING_STATUS.REJECTED,
-      BOOKING_STATUS.CANCELLED
-    ];
-    if (alreadyClosedStatuses.includes(booking.status)) {
+    // Already settled one way or another: close the vendor's popup gracefully
+    if (!OPEN.includes(booking.status)) {
+      const takenByOther = booking.vendorId && booking.vendorId.toString() !== vendorId.toString();
+      const terminal = [BOOKING_STATUS.REJECTED, BOOKING_STATUS.CANCELLED].includes(booking.status);
       return res.status(200).json({
         success: true,
-        alreadyTaken: ![BOOKING_STATUS.REJECTED, BOOKING_STATUS.CANCELLED].includes(booking.status),
-        message: 'This booking was already accepted by another vendor',
+        alreadyTaken: !terminal && takenByOther,
+        message: terminal ? 'Booking already rejected or cancelled' : 'This booking was already accepted',
         data: { bookingId: id }
       });
     }
 
-    const validStatuses = [BOOKING_STATUS.PENDING, BOOKING_STATUS.REQUESTED, BOOKING_STATUS.SEARCHING];
-    if (!validStatuses.includes(booking.status)) {
-      return res.status(200).json({
-        success: true,
-        message: `Booking already in status: ${booking.status}`,
-        data: { bookingId: id }
-      });
-    }
-
-    // Update BookingRequest for this vendor
-    const BookingRequest = require('../../models/BookingRequest');
     await BookingRequest.findOneAndUpdate(
       { bookingId: id, vendorId },
-      {
-        status: 'REJECTED',
-        respondedAt: new Date(),
-        rejectReason: reason || 'Rejected by vendor'
-      }
+      { status: 'REJECTED', respondedAt: new Date(), rejectReason: reason || 'Rejected by vendor' }
     );
 
-    // Remove vendor from notifiedVendors (they've responded)
-    booking.notifiedVendors = booking.notifiedVendors.filter(
-      v => v.toString() !== vendorId.toString()
-    );
-
-    // Remove from potentialVendors too
-    if (booking.potentialVendors && Array.isArray(booking.potentialVendors)) {
-      booking.potentialVendors = booking.potentialVendors.filter(
-        v => v.vendorId?.toString() !== vendorId.toString()
-      );
-    } else {
-      booking.potentialVendors = [];
-    }
-
-    // Check if ALL vendors have rejected
-    const pendingRequests = await BookingRequest.countDocuments({
-      bookingId: id,
-      status: { $in: ['PENDING', 'VIEWED'] }
-    });
-
-    const remainingPotential = booking.potentialVendors.length;
-
+    const potential = (booking.potentialVendors || []).filter(v => v.vendorId?.toString() !== vendorId.toString());
+    const pendingRequests = await BookingRequest.countDocuments({ bookingId: id, status: { $in: ['PENDING', 'VIEWED'] } });
     const isSingleVendorTargeted = !!booking.vendorId;
+    const reasonText = reason || 'Vendor declined the request';
 
-    if (isSingleVendorTargeted || (pendingRequests === 0 && remainingPotential === 0)) {
-      // Vendor rejected or no vendors left - mark booking as rejected
-      booking.status = BOOKING_STATUS.REJECTED;
-      booking.rejectionReason = reason || 'Vendor declined the request';
-      booking.cancelledAt = new Date();
-      booking.cancelledBy = 'vendor';
-      booking.cancellationReason = reason || 'Vendor declined the request';
+    if (isSingleVendorTargeted || (pendingRequests === 0 && potential.length === 0)) {
+      // Conditional update: never overwrite a booking another request just moved on
+      const rejected = await Booking.findOneAndUpdate(
+        { _id: id, status: { $in: OPEN } },
+        {
+          $set: {
+            status: BOOKING_STATUS.REJECTED, rejectionReason: reasonText,
+            cancelledAt: new Date(), cancelledBy: 'vendor', cancellationReason: reasonText,
+            potentialVendors: potential
+          },
+          $pull: { notifiedVendors: vendorId }
+        },
+        { new: true }
+      );
+      if (!rejected) {
+        return res.status(200).json({ success: true, alreadyTaken: true, message: 'This booking was already accepted', data: { bookingId: id } });
+      }
+      await expireOpenRequests(id, 'EXPIRED');
 
       const io = req.app.get('io');
       if (io) {
-        io.to(`user_${booking.userId}`).emit('vendor_rejected', {
-          bookingId: booking._id,
-          bookingNumber: booking.bookingNumber,
-          vendorId,
-          reason: booking.rejectionReason,
-          canReselect: true,
+        io.to(`user_${rejected.userId}`).emit('vendor_rejected', {
+          bookingId: rejected._id, bookingNumber: rejected.bookingNumber, vendorId,
+          reason: reasonText, canReselect: true,
           message: 'The selected vendor declined your request. You can choose another available vendor.'
         });
-        io.to(`user_${booking.userId}`).emit('booking_updated', {
-          bookingId: booking._id,
-          status: BOOKING_STATUS.REJECTED,
-          rejectionReason: booking.rejectionReason,
-          canReselect: true
+        io.to(`user_${rejected.userId}`).emit('booking_updated', {
+          bookingId: rejected._id, status: BOOKING_STATUS.REJECTED, rejectionReason: reasonText, canReselect: true
         });
       }
-
-      // Notify user that vendor declined and they can choose another available vendor
       await createNotification({
-        userId: booking.userId,
+        userId: rejected.userId,
         type: 'booking_rejected',
         title: 'Vendor Declined Request',
-        message: `The selected vendor declined your booking request for ${booking.bookingNumber}. Tap to choose another available vendor.`,
-        relatedId: booking._id,
+        message: `The selected vendor declined your booking request for ${rejected.bookingNumber}. Tap to choose another available vendor, or cancel for a full refund.`,
+        relatedId: rejected._id,
         relatedType: 'booking',
-        pushData: {
-          type: 'vendor_rejected',
-          bookingId: booking._id.toString(),
-          canReselect: true,
-          link: `/user/booking/${booking._id}`
-        }
+        pushData: { type: 'vendor_rejected', bookingId: rejected._id.toString(), canReselect: true, link: `/user/booking/${rejected._id}` }
       });
+    } else {
+      await Booking.updateOne(
+        { _id: id, status: { $in: OPEN } },
+        { $pull: { notifiedVendors: vendorId }, $set: { potentialVendors: potential } }
+      );
     }
 
-    await booking.save();
-
-    res.status(200).json({
-      success: true,
-      message: 'Booking rejected successfully',
-      data: { bookingId: id }
-    });
+    res.status(200).json({ success: true, message: 'Booking rejected successfully', data: { bookingId: id } });
   } catch (error) {
     console.error('Reject booking error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to reject booking. Please try again.'
-    });
+    res.status(500).json({ success: false, message: 'Failed to reject booking. Please try again.' });
   }
 };
 
@@ -567,6 +428,11 @@ const assignWorker = async (req, res) => {
         success: false,
         message: 'Booking not found'
       });
+    }
+
+    const ASSIGNABLE = [BOOKING_STATUS.CONFIRMED, BOOKING_STATUS.ACCEPTED, BOOKING_STATUS.ASSIGNED];
+    if (!ASSIGNABLE.includes(booking.status)) {
+      return res.status(400).json({ success: false, message: `Cannot assign a worker while the booking is "${booking.status}"` });
     }
 
     // Handle "Assign to Self"
@@ -608,7 +474,7 @@ const assignWorker = async (req, res) => {
       return res.status(200).json({
         success: true,
         message: 'Assigned to yourself successfully',
-        data: booking
+        data: toProviderView(booking)
       });
     }
 
@@ -682,7 +548,7 @@ const assignWorker = async (req, res) => {
     res.status(200).json({
       success: true,
       message: 'Worker assigned successfully',
-      data: booking
+      data: toProviderView(booking)
     });
   } catch (error) {
     console.error('Assign worker error:', error);
@@ -700,169 +566,135 @@ const updateBookingStatus = async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation failed',
-        errors: errors.array()
-      });
+      return res.status(400).json({ success: false, message: 'Validation failed', errors: errors.array() });
     }
 
     const vendorId = req.user.id;
     const { id } = req.params;
-    const { status, workerPaymentStatus, finalSettlementStatus } = req.body;
+    const { status, reason } = req.body;
 
     const booking = await Booking.findOne({ _id: id, vendorId });
-
     if (!booking) {
-      return res.status(404).json({
-        success: false,
-        message: 'Booking not found'
-      });
+      return res.status(404).json({ success: false, message: 'Booking not found' });
     }
 
-    // Validate status transition if status is changing
-    if (status && status !== booking.status) {
-      const validTransitions = {
-        [BOOKING_STATUS.PENDING]: [BOOKING_STATUS.CONFIRMED, BOOKING_STATUS.REJECTED, BOOKING_STATUS.CANCELLED],
-        [BOOKING_STATUS.AWAITING_PAYMENT]: [BOOKING_STATUS.CONFIRMED, BOOKING_STATUS.CANCELLED, BOOKING_STATUS.REJECTED],
-        [BOOKING_STATUS.CONFIRMED]: [BOOKING_STATUS.ASSIGNED, BOOKING_STATUS.IN_PROGRESS, BOOKING_STATUS.CANCELLED],
-        [BOOKING_STATUS.ASSIGNED]: [BOOKING_STATUS.VISITED, BOOKING_STATUS.IN_PROGRESS, BOOKING_STATUS.CANCELLED],
-        [BOOKING_STATUS.VISITED]: [BOOKING_STATUS.WORK_DONE, BOOKING_STATUS.IN_PROGRESS, BOOKING_STATUS.CANCELLED],
-        [BOOKING_STATUS.IN_PROGRESS]: [BOOKING_STATUS.WORK_DONE, BOOKING_STATUS.COMPLETED, BOOKING_STATUS.CANCELLED],
-        [BOOKING_STATUS.WORK_DONE]: [BOOKING_STATUS.COMPLETED, BOOKING_STATUS.CANCELLED]
-      };
+    // Work/payment milestones are only reachable through their dedicated, verified endpoints
+    // (journey → visit OTP → trip start OTP → trip end → payment OTP). This route can only
+    // assign, cancel before work starts, or close an already-paid job.
+    if (['worker_payment_status', 'finalSettlementStatus'].some(k => k in req.body) && !status) {
+      return res.status(400).json({ success: false, message: 'Use the worker payment endpoint to settle worker payments.' });
+    }
+    if (!status || status === booking.status) {
+      return res.status(200).json({ success: true, message: 'No change', data: toProviderView(booking) });
+    }
 
-      if (!validTransitions[booking.status]?.includes(status)) {
+    const CANCELLABLE = [
+      BOOKING_STATUS.PENDING, BOOKING_STATUS.AWAITING_PAYMENT, BOOKING_STATUS.CONFIRMED,
+      BOOKING_STATUS.ACCEPTED, BOOKING_STATUS.ASSIGNED, BOOKING_STATUS.JOURNEY_STARTED, BOOKING_STATUS.VISITED
+    ];
+
+    if (status === BOOKING_STATUS.CANCELLED) {
+      if (!CANCELLABLE.includes(booking.status)) {
         return res.status(400).json({
           success: false,
-          message: `Invalid status transition from ${booking.status} to ${status}`
+          message: `A booking in status "${booking.status}" cannot be cancelled by the vendor. Raise a dispute instead.`
         });
       }
-
-      // Update booking status
-      booking.status = status;
-
-      if (status === BOOKING_STATUS.IN_PROGRESS && !booking.startedAt) {
-        booking.startedAt = new Date();
-      }
-
-      if (status === BOOKING_STATUS.WORK_DONE && !booking.completedAt) {
-        // Work done timestamp? Maybe reuse/add field? For now leave it.
-      }
-
-      if (status === BOOKING_STATUS.COMPLETED) {
-        booking.completedAt = new Date();
-      }
-    }
-
-    // Update other fields
-    if (workerPaymentStatus) {
-      booking.workerPaymentStatus = workerPaymentStatus;
-      if (workerPaymentStatus === 'PAID' || workerPaymentStatus === 'SUCCESS') {
-        booking.isWorkerPaid = true;
-        booking.workerPaidAt = booking.workerPaidAt || new Date();
-      }
-    }
-    if (finalSettlementStatus) booking.finalSettlementStatus = finalSettlementStatus;
-
-    await booking.save();
-
-    // Send notifications based on updated status
-    if (status === BOOKING_STATUS.COMPLETED) {
-      await createNotification({
-        userId: booking.userId,
-        type: 'booking_completed',
-        title: 'Booking Completed',
-        message: `Your booking ${booking.bookingNumber} has been completed. Please rate your experience.`,
-        relatedId: booking._id,
-        relatedType: 'booking',
-        pushData: {
-          type: 'booking_completed',
-          bookingId: booking._id.toString(),
-          link: `/user/booking/${booking._id}`
-        }
+      const { booking: cancelled, refunded } = await cancelBookingWithRefund(booking._id, {
+        allowedStatuses: CANCELLABLE, by: 'vendor', reason: reason || 'Cancelled by vendor', extraQuery: { vendorId }
       });
-
-      // SEND INVOICE EMAILS
-      try {
-        const { sendBookingCompletionEmails } = require('../../services/emailService');
-        const fullBooking = await Booking.findById(booking._id)
-          .populate('userId')
-          .populate('vendorId')
-          .populate('serviceId');
-
-        sendBookingCompletionEmails(fullBooking).catch(err => console.error(err));
-      } catch (emailErr) {
-        console.error('Failed to send completion emails:', emailErr);
+      if (!cancelled) {
+        return res.status(409).json({ success: false, message: 'Booking changed state, please refresh.' });
       }
-    } else if (status === BOOKING_STATUS.CANCELLED || status === 'cancelled') {
       await createNotification({
-        userId: booking.userId,
+        userId: cancelled.userId,
         type: 'booking_cancelled',
         title: 'Booking Cancelled by Vendor',
-        message: `Your booking ${booking.bookingNumber} was cancelled by the vendor. Any payments made have been refunded to your wallet.`,
-        relatedId: booking._id,
+        message: refunded > 0
+          ? `Your booking ${cancelled.bookingNumber} was cancelled by the vendor. ₹${refunded} has been refunded to your wallet.`
+          : `Your booking ${cancelled.bookingNumber} was cancelled by the vendor.`,
+        relatedId: cancelled._id,
         relatedType: 'booking',
         priority: 'high',
-        pushData: {
-          type: 'booking_cancelled',
-          bookingId: booking._id.toString(),
-          link: `/user/booking/${booking._id}`
-        }
+        pushData: { type: 'booking_cancelled', bookingId: cancelled._id.toString(), link: `/user/booking/${cancelled._id}` }
       });
-    } else if (status === BOOKING_STATUS.IN_PROGRESS || status === 'in_progress') {
-      await createNotification({
-        userId: booking.userId,
-        type: 'work_started',
-        title: 'Service In Progress',
-        message: `Your booking ${booking.bookingNumber} is now in progress.`,
-        relatedId: booking._id,
-        relatedType: 'booking',
-        priority: 'high',
-        pushData: {
-          type: 'in_progress',
-          bookingId: booking._id.toString(),
-          link: `/user/booking/${booking._id}`
-        }
-      });
-    } else if (status === BOOKING_STATUS.REJECTED || status === 'rejected') {
-      await createNotification({
-        userId: booking.userId,
-        type: 'booking_rejected',
-        title: 'Vendor Declined Request',
-        message: `The vendor declined booking ${booking.bookingNumber}. You can choose another available vendor.`,
-        relatedId: booking._id,
-        relatedType: 'booking',
-        priority: 'high',
-        pushData: {
-          type: 'booking_rejected',
-          bookingId: booking._id.toString(),
-          link: `/user/booking/${booking._id}`
-        }
-      });
+      const io = req.app.get('io');
+      if (io) io.to(`user_${cancelled.userId}`).emit('booking_updated', { bookingId: cancelled._id, status: cancelled.status, message: 'Booking cancelled by vendor' });
+      return res.status(200).json({ success: true, message: 'Booking cancelled', data: toProviderView(cancelled), refunded });
     }
 
-    // Emit socket event for real-time UI refresh
-    const io = req.app.get('io');
-    if (io) {
-      io.to(`user_${booking.userId}`).emit('booking_updated', {
-        bookingId: booking._id,
-        status: booking.status,
-        message: `Booking status updated to ${booking.status}`
-      });
+    if (booking.requestHeldForPayment) {
+      return res.status(409).json({ success: false, message: 'This request is not active yet: the customer has not completed the payment.' });
     }
 
-    res.status(200).json({
-      success: true,
-      message: 'Booking status updated successfully',
-      data: booking
+    if (status === BOOKING_STATUS.REJECTED && [BOOKING_STATUS.PENDING, BOOKING_STATUS.AWAITING_PAYMENT].includes(booking.status)) {
+      const rejected = await Booking.findOneAndUpdate(
+        { _id: booking._id, vendorId, status: { $in: [BOOKING_STATUS.PENDING, BOOKING_STATUS.AWAITING_PAYMENT] } },
+        { $set: { status: BOOKING_STATUS.REJECTED, cancelledBy: 'vendor', cancelledAt: new Date(), rejectionReason: reason || 'Vendor declined the request' } },
+        { new: true }
+      );
+      if (!rejected) return res.status(409).json({ success: false, message: 'Booking changed state, please refresh.' });
+      await createNotification({
+        userId: rejected.userId, type: 'booking_rejected', title: 'Vendor Declined Request',
+        message: `The vendor declined booking ${rejected.bookingNumber}. You can choose another available vendor.`,
+        relatedId: rejected._id, relatedType: 'booking', priority: 'high',
+        pushData: { type: 'booking_rejected', bookingId: rejected._id.toString(), link: `/user/booking/${rejected._id}` }
+      });
+      return res.status(200).json({ success: true, message: 'Booking rejected', data: toProviderView(rejected) });
+    }
+
+    if (status === BOOKING_STATUS.COMPLETED) {
+      const paid = [PAYMENT_STATUS.SUCCESS, PAYMENT_STATUS.COLLECTED_BY_VENDOR].includes(booking.paymentStatus) ||
+        booking.paymentMethod === 'plan_benefit';
+      if (booking.status !== BOOKING_STATUS.WORK_DONE || !paid) {
+        return res.status(400).json({
+          success: false,
+          message: 'A booking can only be completed after the work is done and payment has been received.'
+        });
+      }
+      const done = await Booking.findOneAndUpdate(
+        { _id: booking._id, vendorId, status: BOOKING_STATUS.WORK_DONE },
+        { $set: { status: BOOKING_STATUS.COMPLETED, completedAt: new Date() } },
+        { new: true }
+      );
+      if (!done) return res.status(409).json({ success: false, message: 'Booking changed state, please refresh.' });
+      await releaseVendorIfIdle(vendorId, done._id);
+      await createNotification({
+        userId: done.userId, type: 'booking_completed', title: 'Booking Completed',
+        message: `Your booking ${done.bookingNumber} has been completed. Please rate your experience.`,
+        relatedId: done._id, relatedType: 'booking',
+        pushData: { type: 'booking_completed', bookingId: done._id.toString(), link: `/user/booking/${done._id}` }
+      });
+      try {
+        const { sendBookingCompletionEmails } = require('../../services/emailService');
+        const full = await Booking.findById(done._id).populate('userId').populate('vendorId').populate('serviceId');
+        Promise.resolve(sendBookingCompletionEmails(full)).catch(err => console.error(err));
+      } catch (emailErr) { console.error('Failed to send completion emails:', emailErr); }
+      const io = req.app.get('io');
+      if (io) io.to(`user_${done.userId}`).emit('booking_updated', { bookingId: done._id, status: done.status, message: 'Booking completed' });
+      return res.status(200).json({ success: true, message: 'Booking status updated successfully', data: toProviderView(done) });
+    }
+
+    if (status === BOOKING_STATUS.ASSIGNED && [BOOKING_STATUS.CONFIRMED, BOOKING_STATUS.ACCEPTED].includes(booking.status)) {
+      booking.status = BOOKING_STATUS.ASSIGNED;
+      booking.assignedAt = new Date();
+      await booking.save();
+      return res.status(200).json({ success: true, message: 'Booking status updated successfully', data: toProviderView(booking) });
+    }
+
+    if (status === BOOKING_STATUS.CONFIRMED && [BOOKING_STATUS.PENDING, BOOKING_STATUS.AWAITING_PAYMENT].includes(booking.status)) {
+      booking.status = BOOKING_STATUS.CONFIRMED;
+      await booking.save();
+      return res.status(200).json({ success: true, message: 'Booking status updated successfully', data: toProviderView(booking) });
+    }
+
+    return res.status(400).json({
+      success: false,
+      message: `Invalid status transition from ${booking.status} to ${status}. Use the journey / visit / trip / payment steps.`
     });
   } catch (error) {
     console.error('Update booking status error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to update booking status. Please try again.'
-    });
+    res.status(500).json({ success: false, message: 'Failed to update booking status. Please try again.' });
   }
 };
 
@@ -894,14 +726,14 @@ const addVendorNotes = async (req, res) => {
     }
 
     // Update booking
-    booking.vendorNotes = notes;
+    booking.vendorNotes = String(notes).slice(0, 2000);
 
     await booking.save();
 
     res.status(200).json({
       success: true,
       message: 'Notes added successfully',
-      data: booking
+      data: toProviderView(booking)
     });
   } catch (error) {
     console.error('Add vendor notes error:', error);
@@ -920,45 +752,25 @@ const startSelfJob = async (req, res) => {
     const vendorId = req.user.id;
     const { id } = req.params;
 
-    const booking = await Booking.findOne({ _id: id, vendorId });
+    const otp = generateOtp();
+    const booking = await Booking.findOneAndUpdate(
+      {
+        _id: id, vendorId,
+        status: { $in: [BOOKING_STATUS.CONFIRMED, BOOKING_STATUS.ACCEPTED, BOOKING_STATUS.ASSIGNED] },
+        paymentStatus: { $ne: PAYMENT_STATUS.FAILED }
+      },
+      { $set: { status: BOOKING_STATUS.JOURNEY_STARTED, journeyStartedAt: new Date(), visitOtp: otp, assignedAt: new Date() } },
+      { new: true }
+    );
 
     if (!booking) {
-      return res.status(404).json({ success: false, message: 'Booking not found' });
+      const exists = await Booking.findOne({ _id: id, vendorId }).select('status');
+      if (!exists) return res.status(404).json({ success: false, message: 'Booking not found' });
+      return res.status(400).json({ success: false, message: `Cannot start the journey from status "${exists.status}"` });
     }
 
-    // Ensure no worker is assigned (or self-assigned flag?) implementation assumes workerId null means unassigned or self?
-    // User says: "if vendor didn't assignes to worker and do himself"
-    // Usually means workerId is null.
-    // Allow vendor to act on behalf of the assigned worker
-    // if (booking.workerId) {
-    //   return res.status(400).json({ success: false, message: 'Worker is assigned to this booking. You cannot start it yourself unless you unassign worker.' });
-    // }
+    await markVendorBusy(vendorId);
 
-    if (booking.status !== BOOKING_STATUS.CONFIRMED && booking.status !== BOOKING_STATUS.ASSIGNED) {
-      // Allow ASSIGNED if we consider "Self Assigned" as a state? 
-      // If workerId is null, status usually CONFIRMED.
-      // But lets allow generic flow.
-    }
-
-    // Status Check
-    const allowed = [BOOKING_STATUS.CONFIRMED, BOOKING_STATUS.ASSIGNED, BOOKING_STATUS.AWAITING_PAYMENT];
-    if (!allowed.includes(booking.status) && booking.status !== BOOKING_STATUS.ACCEPTED) { // flexible
-      // check strict
-    }
-
-    // Generate Visit OTP
-    const otp = Math.floor(1000 + Math.random() * 9000).toString();
-
-    // Update booking
-    booking.status = BOOKING_STATUS.JOURNEY_STARTED;
-    booking.journeyStartedAt = new Date();
-    booking.visitOtp = otp;
-    booking.assignedAt = new Date(); // Implicitly assigned to self now
-
-    await booking.save();
-
-    // Notify user
-    const { createNotification } = require('../notificationControllers/notificationController');
     await createNotification({
       userId: booking.userId,
       type: 'worker_started',
@@ -967,29 +779,15 @@ const startSelfJob = async (req, res) => {
       relatedId: booking._id,
       relatedType: 'booking',
       priority: 'high',
-      pushData: {
-        type: 'journey_started',
-        bookingId: booking._id.toString(),
-        visitOtp: otp,
-        link: `/user/booking/${booking._id}`
-      }
+      pushData: { type: 'journey_started', bookingId: booking._id.toString(), visitOtp: otp, link: `/user/booking/${booking._id}` }
     });
-
-    // Send FCM push notification to user
-    // Manual push removed - auto handled by createNotification
-    // sendNotificationToUser(booking.userId, { ... });
 
     const io = req.app.get('io');
     if (io) {
-      io.to(`user_${booking.userId}`).emit('booking_updated', {
-        bookingId: booking._id,
-        status: BOOKING_STATUS.JOURNEY_STARTED,
-        visitOtp: otp
-      });
-      // Socket notification removed - createNotification already handles this
+      io.to(`user_${booking.userId}`).emit('booking_updated', { bookingId: booking._id, status: BOOKING_STATUS.JOURNEY_STARTED, visitOtp: otp });
     }
 
-    res.status(200).json({ success: true, message: 'Journey started, OTP sent', data: booking });
+    res.status(200).json({ success: true, message: 'Journey started, OTP sent to the customer', data: toProviderView(booking) });
   } catch (error) {
     console.error('Start self job error:', error);
     res.status(500).json({ success: false, message: 'Failed to start job' });
@@ -1055,53 +853,40 @@ const verifySelfVisit = async (req, res) => {
     const { otp, location } = req.body;
 
     const booking = await Booking.findOne({ _id: id, vendorId }).select('+visitOtp');
-
     if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
-    if (booking.status !== BOOKING_STATUS.JOURNEY_STARTED) return res.status(400).json({ success: false, message: 'Journey not started' });
-    const expectedVisitOtp = booking.visitOtp || booking.driver_start_otp;
-    const submittedVisitOtp = otp ? otp.toString().trim() : '';
-    if (!expectedVisitOtp || !submittedVisitOtp || (submittedVisitOtp !== booking.visitOtp?.toString()?.trim() && submittedVisitOtp !== booking.driver_start_otp?.toString()?.trim())) {
-      return res.status(400).json({ success: false, message: 'Invalid Visit OTP. Please enter the correct code from the customer.' });
+    if (booking.status !== BOOKING_STATUS.JOURNEY_STARTED) {
+      return res.status(400).json({ success: false, message: 'Journey not started' });
     }
 
-    booking.status = BOOKING_STATUS.VISITED;
-    booking.visitedAt = new Date();
-    booking.startedAt = new Date();
-    booking.visitOtp = undefined;
-    if (location) {
-      booking.visitLocation = { ...location, verifiedAt: new Date() };
-    }
+    const check = await verifyBookingOtp(booking._id, 'visit', booking.visitOtp, otp);
+    if (!check.ok) return res.status(check.status).json({ success: false, message: check.message });
 
-    await booking.save();
+    const visited = await Booking.findOneAndUpdate(
+      { _id: booking._id, vendorId, status: BOOKING_STATUS.JOURNEY_STARTED },
+      {
+        $set: {
+          status: BOOKING_STATUS.VISITED, visitedAt: new Date(), startedAt: new Date(), visitOtp: null,
+          ...(location ? { visitLocation: { ...location, verifiedAt: new Date() } } : {})
+        }
+      },
+      { new: true }
+    );
+    if (!visited) return res.status(409).json({ success: false, message: 'Booking changed state, please refresh.' });
 
-    // Notify user
-    const { createNotification } = require('../notificationControllers/notificationController');
     await createNotification({
-      userId: booking.userId,
+      userId: visited.userId,
       type: 'visit_verified',
       title: 'Visit Verified',
-      message: `The professional has arrived and verified the visit. Service is now in progress.`,
-      relatedId: booking._id,
+      message: 'The professional has arrived and verified the visit. Service is now in progress.',
+      relatedId: visited._id,
       relatedType: 'booking',
-      priority: 'high', // Ensure high priority
-      pushData: {
-        type: 'visit_verified',
-        bookingId: booking._id.toString(),
-        link: `/user/booking/${booking._id}`
-      }
+      priority: 'high',
+      pushData: { type: 'visit_verified', bookingId: visited._id.toString(), link: `/user/booking/${visited._id}` }
     });
-
     const io = req.app.get('io');
-    if (io) {
-      io.to(`user_${booking.userId}`).emit('booking_updated', {
-        bookingId: booking._id,
-        status: BOOKING_STATUS.VISITED,
-        message: 'Visit verified successful'
-      });
-      // Socket notification removed - createNotification already handles this
-    }
+    if (io) io.to(`user_${visited.userId}`).emit('booking_updated', { bookingId: visited._id, status: BOOKING_STATUS.VISITED, message: 'Visit verified successful' });
 
-    res.status(200).json({ success: true, message: 'Visit verified', data: booking });
+    res.status(200).json({ success: true, message: 'Visit verified', data: toProviderView(visited) });
   } catch (error) {
     console.error('Verify self visit error:', error);
     res.status(500).json({ success: false, message: 'Failed to verify visit' });
@@ -1153,6 +938,16 @@ const completeSelfJob = async (req, res) => {
     let partsSplitPct = settings?.partsPayoutPercentage ?? 10;
     let serviceGstPct = settings?.serviceGstPercentage ?? 18;
     let partsGstPct = settings?.partsGstPercentage ?? 18;
+
+    // Reject nonsense line items (negative / NaN / absurd values) before they reach the bill
+    const badItem = [...(billDetails?.services || []), ...(billDetails?.parts || [])].find(it => {
+      const price = Number(it.price);
+      const qty = it.quantity === undefined ? 1 : Number(it.quantity);
+      return !Number.isFinite(price) || price < 0 || price > 1000000 || !Number.isInteger(qty) || qty < 1 || qty > 1000;
+    });
+    if (badItem) {
+      return res.status(400).json({ success: false, message: 'Bill items need a non-negative price and a whole-number quantity between 1 and 1000.' });
+    }
 
     // ═══════════════════════════════════════════
     // STEP 1: BUILD LINE ITEMS
@@ -1219,7 +1014,8 @@ const completeSelfJob = async (req, res) => {
     // ═══════════════════════════════════════════
 
     const visitingCharges = Number(booking.visitingCharges) || 0;
-    const grandTotal = parseFloat((totalServiceBase + totalPartsBase + totalGST + visitingCharges).toFixed(2));
+    const penaltyCharges = round2(booking.penalty || 0); // carried-over cancellation penalty: company revenue, not vendor earning
+    const grandTotal = parseFloat((totalServiceBase + totalPartsBase + totalGST + visitingCharges + penaltyCharges).toFixed(2));
 
     // ═══════════════════════════════════════════
     // STEP 5: REVENUE SPLIT (internal only)
@@ -1249,7 +1045,9 @@ const completeSelfJob = async (req, res) => {
       ...billServices
     ];
 
-    const bill = await VendorBill.create({
+    let bill;
+    try {
+      bill = await VendorBill.create({
       bookingId: booking._id,
       vendorId,
 
@@ -1263,6 +1061,7 @@ const completeSelfJob = async (req, res) => {
       totalServiceBase,
       totalPartsBase,
       visitingCharges,
+      penaltyCharges,
 
       // GST totals
       originalGST,
@@ -1289,26 +1088,19 @@ const completeSelfJob = async (req, res) => {
 
       status: 'generated',
       generatedAt: new Date()
-    });
+      });
+    } catch (e) {
+      if (e.code === 11000) return res.status(409).json({ success: false, message: 'Bill already generated for this booking' });
+      throw e;
+    }
 
     // ═══════════════════════════════════════════
     // STEP 7: UPDATE BOOKING (no earnings!)
     // ═══════════════════════════════════════════
 
-    booking.status = BOOKING_STATUS.WORK_DONE;
-    booking.finalAmount = grandTotal;
-    booking.userPayableAmount = grandTotal; // Ensure consistency
-    booking.vendorBillId = bill._id;
-
-    // Generate Payment OTP for cash collection
-    const payOtp = Math.floor(1000 + Math.random() * 9000).toString();
-    booking.paymentOtp = payOtp;
-
     if (workPhotos) booking.workPhotos = workPhotos;
-
-    // Store bill summary in workDoneDetails for frontend display
     booking.workDoneDetails = {
-      ...(typeof workDoneDetails === 'object' ? workDoneDetails : {}),
+      ...(workDoneDetails && typeof workDoneDetails === 'object' ? workDoneDetails : {}),
       billId: bill._id.toString(),
       items: [
         ...allServices.map(s => ({ title: s.name, qty: s.quantity, price: s.total })),
@@ -1317,7 +1109,16 @@ const completeSelfJob = async (req, res) => {
     };
     booking.markModified('workDoneDetails');
 
-    await booking.save();
+    // Reconcile with anything already paid: cash → WORK_DONE + payment OTP; prepaid → settle/refund/balance
+    let refunded = 0;
+    try {
+      refunded = await applyBillToBooking(booking, bill);
+    } catch (e) {
+      // don't leave an orphan bill that would block a retry
+      await VendorBill.deleteOne({ _id: bill._id, earningsCredited: { $ne: true } });
+      throw e;
+    }
+    const payOtp = booking.status === BOOKING_STATUS.WORK_DONE ? booking.paymentOtp : null;
 
     // ── Notify user ──
     const { createNotification } = require('../notificationControllers/notificationController');
@@ -1325,7 +1126,9 @@ const completeSelfJob = async (req, res) => {
       userId: booking.userId,
       type: 'work_completed',
       title: 'Work Completed & Bill Ready',
-      message: `Work completed for booking ${booking.bookingNumber}. Total bill: ₹${grandTotal}. Please review the invoice and complete payment.`,
+      message: payOtp
+        ? `Work completed for booking ${booking.bookingNumber}. Amount due: ₹${booking.balanceDue}. Payment OTP: ${payOtp}. Share it with the vendor ONLY after paying.`
+        : `Work completed for booking ${booking.bookingNumber}. Total bill ₹${grandTotal} was settled from your advance${refunded ? `; ₹${refunded} refunded to your wallet` : ''}.`,
       relatedId: booking._id,
       relatedType: 'booking',
       priority: 'high',
@@ -1346,8 +1149,9 @@ const completeSelfJob = async (req, res) => {
     if (io) {
       io.to(`user_${booking.userId}`).emit('booking_updated', {
         bookingId: booking._id,
-        status: BOOKING_STATUS.WORK_DONE,
-        finalAmount: grandTotal
+        status: booking.status,
+        finalAmount: grandTotal,
+        balanceDue: booking.balanceDue
       });
     }
 
@@ -1356,7 +1160,7 @@ const completeSelfJob = async (req, res) => {
       success: true,
       message: 'Work done, bill generated',
       data: {
-        booking,
+        booking: toProviderView(booking),
         bill: {
           id: bill._id,
           grandTotal,
@@ -1392,189 +1196,51 @@ const collectSelfCash = async (req, res) => {
 
     const booking = await Booking.findOne({ _id: id, vendorId }).select('+paymentOtp');
     if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
-    if (booking.status !== BOOKING_STATUS.WORK_DONE && booking.status !== BOOKING_STATUS.AWAITING_PAYMENT && !booking.cashCollected) {
+
+    if (booking.cashCollected || [PAYMENT_STATUS.SUCCESS, PAYMENT_STATUS.COLLECTED_BY_VENDOR].includes(booking.paymentStatus)) {
+      return res.status(409).json({ success: false, message: 'Payment for this booking has already been collected.' });
+    }
+    if (![BOOKING_STATUS.WORK_DONE, BOOKING_STATUS.AWAITING_PAYMENT].includes(booking.status)) {
       return res.status(400).json({ success: false, message: 'Work not done yet' });
     }
-    const validOtp = booking.paymentOtp || booking.customerConfirmationOTP || booking.driver_end_otp;
-    if (!validOtp) {
+
+    // Payment OTP only — the start/end OTPs can never confirm a payment.
+    const expected = booking.paymentOtp || booking.customerConfirmationOTP;
+    if (!expected) {
       return res.status(400).json({ success: false, message: 'No Payment OTP generated. Please request OTP from the customer.' });
     }
-    const submittedOtp = otp ? otp.toString().trim() : '';
-    if (!submittedOtp || submittedOtp !== validOtp.toString().trim()) {
-      return res.status(400).json({ success: false, message: 'Invalid Payment OTP. Please enter the correct code from the customer.' });
+    const check = await verifyBookingOtp(booking._id, 'payment', expected, otp);
+    if (!check.ok) return res.status(check.status).json({ success: false, message: check.message });
+
+    let result;
+    try {
+      result = await settleVendorCash(booking._id, { collectorRole: 'vendor', collectorId: vendorId });
+    } catch (e) {
+      if (e.status) return res.status(e.status).json({ success: false, message: e.message });
+      throw e;
     }
 
-    // ── Fetch the VendorBill (single source of truth) ──
-    const VendorBill = require('../../models/VendorBill');
-    let bill = await VendorBill.findOne({ bookingId: booking._id });
-    if (!bill) {
-      // Fallback: create VendorBill on the fly
-      const Settings = require('../../models/Settings');
-      const settings = await Settings.findOne({ type: 'global' });
-      const serviceSplitPct = settings?.rentalPayoutPercentage ?? 90;
-      const gstPct = settings?.rentalGstPercentage ?? 5;
-      const billAmount = booking.finalAmount || 500;
-      const baseAmount = Math.round(billAmount / (1 + gstPct / 100));
-      const gstAmount = parseFloat((billAmount - baseAmount).toFixed(2));
-      const fallbackEarning = parseFloat(((baseAmount * serviceSplitPct) / 100).toFixed(2));
-
-      bill = await VendorBill.create({
-        bookingId: booking._id,
-        vendorId: booking.vendorId,
-        services: [{
-          name: booking.serviceName || 'Equipment Service',
-          price: baseAmount,
-          gstPercentage: gstPct,
-          quantity: 1,
-          gstAmount: gstAmount,
-          total: billAmount,
-          isOriginal: true
-        }],
-        originalServiceBase: baseAmount,
-        originalGST: gstAmount,
-        totalServiceBase: baseAmount,
-        totalGST: gstAmount,
-        grandTotal: billAmount,
-        payoutConfig: {
-          serviceSplitPercentage: serviceSplitPct,
-          serviceGstPercentage: gstPct
-        },
-        vendorServiceEarning: fallbackEarning,
-        vendorTotalEarning: fallbackEarning,
-        companyRevenue: parseFloat((billAmount - fallbackEarning).toFixed(2)),
-        status: 'paid',
-        paidAt: new Date()
-      });
-      booking.vendorBillId = bill._id;
-    }
-
-    const grandTotal = bill.grandTotal || booking.finalAmount;
-    const vendorEarning = bill.vendorTotalEarning;
-
-    // ── Update Booking status ──
-    booking.status = BOOKING_STATUS.COMPLETED;
-    booking.paymentStatus = PAYMENT_STATUS.SUCCESS;
-    booking.paymentMethod = 'cash';
-    booking.cashCollected = true;
-    booking.cashCollectedBy = 'vendor';
-    booking.cashCollectorId = vendorId;
-    booking.cashCollectedAt = new Date();
-    booking.completedAt = new Date();
-    booking.paymentOtp = undefined;
-    await booking.save();
-
-    // ── Update VendorBill status ──
-    bill.status = 'paid';
-    bill.paidAt = new Date();
-    await bill.save();
-
-    // ── Update Vendor Wallet (Atomic with $inc) ──
-    const Vendor = require('../../models/Vendor');
-    const vendorDoc = await Vendor.findById(vendorId).select('wallet');
-
-    if (vendorDoc) {
-      const currentDues = (vendorDoc.wallet.dues || 0) + grandTotal;
-      const cashLimit = vendorDoc.wallet.cashLimit || 10000;
-      // Net owed = dues − earnings (vendor keeps their share from cash)
-      const netOwed = currentDues - ((vendorDoc.wallet.earnings || 0) + vendorEarning);
-      const isBlocked = netOwed > cashLimit;
-
-      const updateQuery = {
-        $inc: {
-          'wallet.dues': grandTotal,
-          'wallet.earnings': vendorEarning,
-          'wallet.totalCashCollected': grandTotal
-        }
-      };
-
-      if (isBlocked) {
-        updateQuery.$set = {
-          'wallet.isBlocked': true,
-          'wallet.blockedAt': new Date(),
-          'wallet.blockReason': `Cash limit exceeded. Net owed: ₹${netOwed.toFixed(2)}, Limit: ₹${cashLimit}`
-        };
-      }
-
-      await Vendor.findByIdAndUpdate(vendorId, updateQuery);
-
-      // ── Create Transaction Records ──
-      const Transaction = require('../../models/Transaction');
-
-      // Transaction 1: Cash Collected (Platform is owed this amount)
-      await Transaction.create({
-        vendorId,
-        bookingId: booking._id,
-        type: 'cash_collected',
-        amount: grandTotal,
-        status: 'completed',
-        paymentMethod: 'cash',
-        description: `Cash ₹${grandTotal} collected for booking #${booking.bookingNumber}. Dues increased.`,
-        metadata: {
-          type: 'dues_increase',
-          collectedBy: 'vendor',
-          billId: bill._id.toString(),
-          grandTotal,
-          vendorEarning,
-          companyRevenue: bill.companyRevenue
-        }
-      });
-
-      // Transaction 2: Earnings Credit (Vendor's rightful share)
-      if (vendorEarning > 0) {
-        await Transaction.create({
-          vendorId,
-          bookingId: booking._id,
-          type: 'earnings_credit',
-          amount: vendorEarning,
-          status: 'completed',
-          paymentMethod: 'wallet',
-          description: `Earnings ₹${vendorEarning} credited for booking #${booking.bookingNumber} (70% service + 10% parts)`,
-          metadata: {
-            type: 'earnings_increase',
-            billId: bill._id.toString(),
-            serviceEarning: bill.vendorServiceEarning,
-            partsEarning: bill.vendorPartsEarning
-          }
-        });
-      }
-    }
-
-    // ── Notify user ──
-    const { createNotification } = require('../notificationControllers/notificationController');
+    const done = await Booking.findById(booking._id);
     await createNotification({
-      userId: booking.userId,
+      userId: done.userId,
       type: 'payment_received',
       title: 'Payment Received (Cash)',
-      message: `Payment of ₹${grandTotal} received in cash for booking ${booking.bookingNumber}. Job Completed. Thanks!`,
-      relatedId: booking._id,
+      message: `Payment of ₹${result.cashAmount} received in cash for booking ${done.bookingNumber}. Job Completed. Thanks!`,
+      relatedId: done._id,
       relatedType: 'booking',
       priority: 'high',
-      data: {
-        bookingId: booking._id,
-        finalAmount: grandTotal,
-        paymentMethod: 'cash',
-        status: BOOKING_STATUS.COMPLETED
-      },
-      pushData: {
-        type: 'payment_received',
-        bookingId: booking._id.toString(),
-        link: `/user/booking/${booking._id}`
-      }
+      data: { bookingId: done._id, finalAmount: result.grandTotal, paymentMethod: 'cash', status: BOOKING_STATUS.COMPLETED },
+      pushData: { type: 'payment_received', bookingId: done._id.toString(), link: `/user/booking/${done._id}` }
     });
-
     const io = req.app.get('io') || global.io;
     if (io) {
-      io.to(`user_${booking.userId}`).emit('booking_updated', {
-        bookingId: booking._id,
-        status: BOOKING_STATUS.COMPLETED,
-        paymentStatus: PAYMENT_STATUS.SUCCESS,
-        paymentMethod: 'cash',
-        finalAmount: grandTotal,
-        message: 'Payment received in cash. Job completed!'
+      io.to(`user_${done.userId}`).emit('booking_updated', {
+        bookingId: done._id, status: BOOKING_STATUS.COMPLETED, paymentStatus: done.paymentStatus,
+        paymentMethod: done.paymentMethod, finalAmount: result.grandTotal, message: 'Payment received in cash. Job completed!'
       });
     }
 
-    res.status(200).json({ success: true, message: 'Cash collected, job completed', data: booking });
+    res.status(200).json({ success: true, message: 'Cash collected, job completed', data: toProviderView(done) });
   } catch (error) {
     console.error('Collect self cash error:', error);
     res.status(500).json({ success: false, message: 'Failed to process cash payment' });
@@ -1602,13 +1268,19 @@ const payWorker = async (req, res) => {
     if (booking.isWorkerPaid) {
       return res.status(400).json({ success: false, message: 'Worker already paid' });
     }
+    if (booking.status !== BOOKING_STATUS.COMPLETED) {
+      return res.status(400).json({ success: false, message: 'The worker can only be paid after the booking is completed' });
+    }
 
-    // Update booking payment status
+    // Atomic: two taps cannot both mark (and notify) the payment
+    const paid = await Booking.findOneAndUpdate(
+      { _id: booking._id, vendorId, isWorkerPaid: { $ne: true } },
+      { $set: { isWorkerPaid: true, workerPaymentStatus: 'SUCCESS', workerPaidAt: new Date() } },
+      { new: true }
+    );
+    if (!paid) return res.status(400).json({ success: false, message: 'Worker already paid' });
     booking.isWorkerPaid = true;
     booking.workerPaymentStatus = 'SUCCESS';
-    booking.workerPaidAt = new Date();
-
-    await booking.save();
 
     // Notify Worker
     const { createNotification } = require('../notificationControllers/notificationController');
@@ -1657,7 +1329,7 @@ const payWorker = async (req, res) => {
     res.status(200).json({
       success: true,
       message: 'Worker payment marked successfully',
-      data: booking
+      data: toProviderView(booking)
     });
 
   } catch (error) {
@@ -1733,54 +1405,47 @@ const getPendingBookings = async (req, res) => {
     const vendorId = req.user.id;
     const BookingRequest = require('../../models/BookingRequest');
 
-    // Get all pending booking requests for this vendor
     const pendingRequests = await BookingRequest.find({
       vendorId,
-      status: { $in: ['PENDING', 'VIEWED'] }
+      status: { $in: ['PENDING', 'VIEWED'] },
+      $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }]
     })
       .populate({
         path: 'bookingId',
-        match: { status: BOOKING_STATUS.SEARCHING, vendorId: null },
+        match: {
+          status: { $in: [BOOKING_STATUS.REQUESTED, BOOKING_STATUS.SEARCHING] },
+          $or: [{ vendorId: null }, { vendorId }]
+        },
         populate: [
-          { path: 'userId', select: 'name phone' },
+          { path: 'userId', select: 'name' },
           { path: 'serviceId', select: 'title iconUrl' }
         ]
       })
       .sort({ sentAt: -1 })
       .limit(20);
 
-    // Filter out null bookings (already accepted by others)
-    const validRequests = pendingRequests.filter(r => r.bookingId !== null);
-
-    // Format response
-    const bookings = validRequests.map(req => ({
-      requestId: req._id,
-      bookingId: req.bookingId._id,
-      bookingNumber: req.bookingId.bookingNumber,
-      serviceName: req.bookingId.serviceId?.title || req.bookingId.serviceName,
-      customerName: req.bookingId.userId?.name,
-      customerPhone: req.bookingId.userId?.phone,
-      scheduledDate: req.bookingId.scheduledDate,
-      scheduledTime: req.bookingId.scheduledTime,
-      address: req.bookingId.address,
-      price: req.bookingId.finalAmount,
-      distance: req.distance,
-      wave: req.wave,
-      sentAt: req.sentAt,
-      status: req.status
+    const valid = pendingRequests.filter(r => r.bookingId !== null);
+    const bookings = valid.map(r => ({
+      requestId: r._id,
+      bookingId: r.bookingId._id,
+      bookingNumber: r.bookingId.bookingNumber,
+      serviceName: r.bookingId.serviceId?.title || r.bookingId.serviceName,
+      customerName: r.bookingId.userId?.name,
+      scheduledDate: r.bookingId.scheduledDate,
+      scheduledTime: r.bookingId.scheduledTime,
+      address: maskAddress(r.bookingId.address),
+      price: r.bookingId.finalAmount,
+      distance: r.distance,
+      wave: r.wave,
+      sentAt: r.sentAt,
+      expiresAt: r.expiresAt,
+      status: r.status
     }));
 
-    res.status(200).json({
-      success: true,
-      data: bookings,
-      count: bookings.length
-    });
+    res.status(200).json({ success: true, data: bookings, count: bookings.length });
   } catch (error) {
     console.error('Get pending bookings error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch pending bookings'
-    });
+    res.status(500).json({ success: false, message: 'Failed to fetch pending bookings' });
   }
 };
 
@@ -1796,96 +1461,78 @@ const startTrip = async (req, res) => {
     const booking = await Booking.findOne({ _id: id, vendorId }).populate('categoryId');
     if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
 
-    // --- 1. VERIFY OTP ---
-    const expectedStartOtp = booking.driver_start_otp || booking.visitOtp;
-    const submittedStartOtp = driver_start_otp ? driver_start_otp.toString().trim() : '';
-    if (!expectedStartOtp || !submittedStartOtp || submittedStartOtp !== expectedStartOtp.toString().trim()) {
-      return res.status(400).json({ success: false, message: 'Invalid Start OTP. Please check the code with the farmer.' });
+    // Status first, so a wrong-state call does not burn OTP attempts
+    const requiresDriver = booking.categoryId?.requiresDriver !== false;
+    const validInitial = requiresDriver
+      ? [BOOKING_STATUS.VISITED, BOOKING_STATUS.ASSIGNED]
+      : [BOOKING_STATUS.CONFIRMED, BOOKING_STATUS.ACCEPTED, BOOKING_STATUS.ASSIGNED, BOOKING_STATUS.VISITED];
+    if (!validInitial.includes(booking.status)) {
+      return res.status(400).json({
+        success: false,
+        message: requiresDriver
+          ? 'You must mark "Reached Location" before starting the engine for this machinery.'
+          : 'Invalid booking status for handover.'
+      });
     }
 
-    // --- 2. VALIDATE STATUS BASED ON TYPE ---
-    const requiresDriver = booking.requiresDriver !== undefined ? booking.requiresDriver : (booking.categoryId?.requiresDriver !== false);
-    
-    if (requiresDriver) {
-      // Driver-led machinery MUST reach location first
-      if (booking.status !== BOOKING_STATUS.VISITED && booking.status !== BOOKING_STATUS.ASSIGNED) {
-        return res.status(400).json({ success: false, message: 'You must mark "Reached Location" before starting the engine for this machinery.' });
-      }
-    } else {
-      // Standalone machinery can start from confirmed/accepted
-      const validInitialStatuses = [BOOKING_STATUS.CONFIRMED, BOOKING_STATUS.ACCEPTED, BOOKING_STATUS.ASSIGNED, BOOKING_STATUS.VISITED];
-      if (!validInitialStatuses.includes(booking.status)) {
-        return res.status(400).json({ success: false, message: 'Invalid booking status for handover.' });
-      }
-    }
+    const check = await verifyBookingOtp(booking._id, 'start', booking.driver_start_otp, driver_start_otp);
+    if (!check.ok) return res.status(check.status).json({ success: false, message: check.message });
 
-    // --- 3. KILOMETER VALIDATION ---
-    booking.start_kilometer_photo = start_kilometer_photo || null;
-    // OTP already verified, we can save the provided one if needed but usually it stays the same
-    booking.status = BOOKING_STATUS.IN_PROGRESS;
-    booking.startedAt = new Date();
-    
-    // Auto-generate End/Return OTP once the trip starts (if not already exists)
-    if (!booking.driver_end_otp) {
-      booking.driver_end_otp = Math.floor(1000 + Math.random() * 9000).toString();
-    }
-
-    // Initialize & Start Service Timer for tractor / operator-led service
-    if (requiresDriver) {
-      if (!booking.serviceTimer) {
-        booking.serviceTimer = { status: 'NOT_STARTED', logs: [] };
-      }
-      if (booking.serviceTimer.status !== 'RUNNING') {
-        try {
-          const { resolveRates, broadcastTimerUpdate } = require('./serviceTimerController');
-          const { ratePerMinute, adminBaseCharge } = await resolveRates(booking);
-          booking.serviceTimer.ratePerMinute = ratePerMinute;
-          booking.serviceTimer.adminBaseCharge = adminBaseCharge;
-          booking.serviceTimer.status = 'RUNNING';
-          booking.serviceTimer.currentSessionStartedAt = booking.startedAt;
-          booking.serviceTimer.logs.push({
-            action: 'START',
-            performedBy: 'vendor',
-            performedById: vendorId,
-            performedByRole: 'Vendor',
-            timestamp: booking.startedAt,
-            activeSecondsSnapshot: 0,
-            pausedSecondsSnapshot: 0
-          });
-          broadcastTimerUpdate(booking, 'START', { performedBy: 'vendor' });
-        } catch (timerErr) {
-          console.error('[StartTrip] Could not initialize service timer:', timerErr);
+    const now = new Date();
+    const claimed = await Booking.findOneAndUpdate(
+      { _id: booking._id, vendorId, status: { $in: validInitial } },
+      {
+        $set: {
+          status: BOOKING_STATUS.IN_PROGRESS,
+          startedAt: now,
+          start_kilometer_photo: start_kilometer_photo || null,
+          driver_start_otp: null, // single use
+          // distinct from the start OTP; used ONLY to end the trip
+          driver_end_otp: generateDistinctOtp(booking.driver_start_otp)
         }
+      },
+      { new: true }
+    ).populate('categoryId');
+    if (!claimed) return res.status(409).json({ success: false, message: 'Booking changed state, please refresh.' });
+
+    await markVendorBusy(vendorId);
+
+    if (requiresDriver) {
+      try {
+        const { resolveRates, broadcastTimerUpdate } = require('./serviceTimerController');
+        if (!claimed.serviceTimer) claimed.serviceTimer = { status: 'NOT_STARTED', logs: [] };
+        if (claimed.serviceTimer.status !== 'RUNNING') {
+          const { ratePerMinute, adminBaseCharge } = await resolveRates(claimed);
+          claimed.serviceTimer.ratePerMinute = ratePerMinute;
+          claimed.serviceTimer.adminBaseCharge = adminBaseCharge;
+          claimed.serviceTimer.status = 'RUNNING';
+          claimed.serviceTimer.currentSessionStartedAt = now;
+          claimed.serviceTimer.logs.push({
+            action: 'START', performedBy: 'vendor', performedById: vendorId, performedByRole: 'Vendor',
+            timestamp: now, activeSecondsSnapshot: 0, pausedSecondsSnapshot: 0
+          });
+          await claimed.save();
+          broadcastTimerUpdate(claimed, 'START', { performedBy: 'vendor' });
+        }
+      } catch (timerErr) {
+        console.error('[StartTrip] Could not initialize service timer:', timerErr);
       }
     }
 
-    await booking.save();
-
-    // Notify farmer that machinery trip / service has started
     try {
-      const { createNotification } = require('../notificationControllers/notificationController');
-      const serviceName = booking.serviceName || booking.serviceId?.title || 'Machinery';
+      const serviceName = claimed.serviceName || 'Machinery';
       await createNotification({
-        userId: booking.userId,
+        userId: claimed.userId,
         type: 'trip_started',
         title: requiresDriver ? '🚜 Machinery Engine Started' : '📦 Equipment Handed Over',
         message: requiresDriver
           ? `The operator has started the engine for ${serviceName}. Work is now in progress.`
-          : `The equipment for booking ${booking.bookingNumber} has been handed over. Rental period is now active.`,
-        relatedId: booking._id,
+          : `The equipment for booking ${claimed.bookingNumber} has been handed over. Rental period is now active.`,
+        relatedId: claimed._id,
         relatedType: 'booking',
         priority: 'high',
-        data: {
-          bookingId: booking._id,
-          serviceName,
-          status: BOOKING_STATUS.IN_PROGRESS,
-          startedAt: booking.startedAt
-        },
-        pushData: {
-          type: 'trip_started',
-          bookingId: booking._id.toString(),
-          link: `/user/booking/${booking._id}`
-        }
+        data: { bookingId: claimed._id, serviceName, status: BOOKING_STATUS.IN_PROGRESS, startedAt: claimed.startedAt },
+        pushData: { type: 'trip_started', bookingId: claimed._id.toString(), link: `/user/booking/${claimed._id}` }
       });
     } catch (notifErr) {
       console.error('[StartTrip] Notification error:', notifErr.message);
@@ -1893,15 +1540,17 @@ const startTrip = async (req, res) => {
 
     const io = req.app.get('io') || global.io;
     if (io) {
-      io.to(`user_${booking.userId}`).emit('booking_updated', {
-        bookingId: booking._id,
-        status: BOOKING_STATUS.IN_PROGRESS,
-        startedAt: booking.startedAt,
+      io.to(`user_${claimed.userId}`).emit('booking_updated', {
+        bookingId: claimed._id, status: BOOKING_STATUS.IN_PROGRESS, startedAt: claimed.startedAt,
         message: requiresDriver ? 'Machinery engine started' : 'Equipment handed over'
       });
     }
 
-    res.status(200).json({ success: true, message: requiresDriver ? 'Engine started successfully' : 'Equipment handed over successfully', data: booking });
+    res.status(200).json({
+      success: true,
+      message: requiresDriver ? 'Engine started successfully' : 'Equipment handed over successfully',
+      data: toProviderView(claimed)
+    });
   } catch (error) {
     console.error('Start trip error:', error);
     res.status(500).json({ success: false, message: 'Failed to start trip' });
@@ -1911,246 +1560,145 @@ const startTrip = async (req, res) => {
 /**
  * End Trip (Agriculture flow) with Advance Billing & Settlement
  */
+const isEndable = (b) => b.status === BOOKING_STATUS.IN_PROGRESS || (b.status === BOOKING_STATUS.WORK_DONE && !b.vendorBillId);
 const endTrip = async (req, res) => {
   try {
     const vendorId = req.user.id;
     const { id } = req.params;
-    const { end_kilometer_photo, driver_end_otp, workUnits } = req.body;
+    const { end_kilometer_photo, driver_end_otp, workUnits, work_evidence_photo } = req.body;
 
     const booking = await Booking.findOne({ _id: id, vendorId }).populate('serviceId');
     if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
 
-    // VERIFY END OTP before proceeding with billing or completion
-    // This ensures the farmer has approved the end of work and quantity
-    const expectedEndOtp = booking.driver_end_otp || booking.customerConfirmationOTP || booking.paymentOtp;
-    if (!expectedEndOtp) {
-      return res.status(400).json({
-        success: false,
-        message: 'No Completion/End OTP found on this booking. Please check with the farmer.'
-      });
+    if (!isEndable(booking)) {
+      return res.status(400).json({ success: false, message: `Cannot end a trip that is "${booking.status}"` });
     }
-    const submittedEndOtp = driver_end_otp ? driver_end_otp.toString().trim() : '';
-    if (!submittedEndOtp || submittedEndOtp !== expectedEndOtp.toString().trim()) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Invalid End OTP. Please verify the 4-digit code with the farmer.' 
-      });
+    if (!booking.driver_end_otp) {
+      return res.status(400).json({ success: false, message: 'No Completion/End OTP found on this booking. Please check with the farmer.' });
     }
 
-    // 1. BILLING CALCULATION
-    const service = booking.serviceId;
-    let baseAmount = 0;
-    const now = new Date();
-    
-    // Check if live Service Timer was used (actual field active minutes, subtracting breakdown pauses)
-    const hasServiceTimer = booking.serviceTimer && (booking.serviceTimer.accumulatedActiveSeconds > 0 || booking.serviceTimer.status === 'RUNNING' || booking.serviceTimer.status === 'PAUSED');
+    // End OTP only — it is never accepted as a payment OTP.
+    const check = await verifyBookingOtp(booking._id, 'end', booking.driver_end_otp, driver_end_otp);
+    if (!check.ok) return res.status(check.status).json({ success: false, message: check.message });
 
-    if (hasServiceTimer) {
-      // Flush running or paused open intervals
-      if (booking.serviceTimer.status === 'RUNNING' && booking.serviceTimer.currentSessionStartedAt) {
-        const deltaSec = Math.max(0, Math.floor((now.getTime() - new Date(booking.serviceTimer.currentSessionStartedAt).getTime()) / 1000));
-        booking.serviceTimer.accumulatedActiveSeconds = (booking.serviceTimer.accumulatedActiveSeconds || 0) + deltaSec;
-        booking.serviceTimer.currentSessionStartedAt = null;
-      } else if (booking.serviceTimer.status === 'PAUSED' && booking.serviceTimer.currentPauseStartedAt) {
-        const deltaSec = Math.max(0, Math.floor((now.getTime() - new Date(booking.serviceTimer.currentPauseStartedAt).getTime()) / 1000));
-        booking.serviceTimer.accumulatedPausedSeconds = (booking.serviceTimer.accumulatedPausedSeconds || 0) + deltaSec;
-        booking.serviceTimer.currentPauseStartedAt = null;
-      }
-
-      booking.serviceTimer.status = 'COMPLETED';
-      const activeSeconds = booking.serviceTimer.accumulatedActiveSeconds || 0;
-      const pausedSeconds = booking.serviceTimer.accumulatedPausedSeconds || 0;
-      const totalActiveMinutes = Math.max(activeSeconds > 0 ? 1 : 0, Math.ceil(activeSeconds / 60));
-      const totalPausedMinutes = Math.floor(pausedSeconds / 60);
-
-      const ratePerMinute = booking.serviceTimer.ratePerMinute || 15;
-      const adminBase = booking.serviceTimer.adminBaseCharge || booking.visitingCharges || 0;
-      const timeCharge = totalActiveMinutes * ratePerMinute;
-      baseAmount = adminBase + timeCharge;
-
-      booking.serviceTimer.billingSummary = {
-        totalActiveMinutes,
-        totalPausedMinutes,
-        adminBaseCharge: adminBase,
-        timeCharge,
-        subtotal: baseAmount,
-        discount: booking.discount || 0,
-        finalPayable: Math.max(0, baseAmount - (booking.discount || 0)),
-        isPartialEnd: false,
-        calculatedAt: now
-      };
-
-      try {
-        const { broadcastTimerUpdate } = require('./serviceTimerController');
-        broadcastTimerUpdate(booking, 'END', { performedBy: 'vendor', billingSummary: booking.serviceTimer.billingSummary });
-      } catch (err) {
-        console.error('[EndTrip] broadcast error:', err);
-      }
-    } else {
-      // Fallback: standard duration calculation
-      const durationMs = now - (booking.startedAt || now);
-      const durationHours = Math.max(1, Math.ceil(durationMs / (1000 * 60 * 60)));
-
-      if (booking.rental_type === 'hourly') {
-        baseAmount = (service?.hourly_price || booking.basePrice || 0) * durationHours;
-      } else if (booking.rental_type === 'land_based') {
-        baseAmount = (service?.land_price || booking.basePrice || 0) * (parseFloat(workUnits) || 1);
-      } else if (booking.rental_type === 'monthly') {
-        baseAmount = service?.monthly_price || booking.basePrice || 0;
-      } else {
-        baseAmount = booking.basePrice || 0;
-      }
-    }
-
-    // 2. FETCH SPLIT CONFIG
-    const settings = await Settings.findOne({ type: 'global' });
-    const serviceSplitPct = settings?.rentalPayoutPercentage ?? 90;
-    const gstPct = settings?.serviceGstPercentage ?? 18;
-
-    const gstAmount = parseFloat(((baseAmount * gstPct) / 100).toFixed(2));
-    const finalAmount = parseFloat((baseAmount + gstAmount).toFixed(2));
-    const vendorEarning = parseFloat(((baseAmount * serviceSplitPct) / 100).toFixed(2));
-
-    // 3. GENERATE VENDOR BILL (Idempotent: prevents E11000 duplicate error on retries)
-    const billData = {
-      bookingId: booking._id,
-      vendorId: vendorId,
-      services: [{
-        name: hasServiceTimer
-          ? `${service?.title || booking.serviceName || 'Tractor Service'} (${booking.serviceTimer?.billingSummary?.totalActiveMinutes || 1} Mins Work, ${booking.serviceTimer?.billingSummary?.totalPausedMinutes || 0} Mins Downtime Free)`
-          : `${service?.title || booking.serviceName || 'Equipment Rental'} (${booking.rental_type})`,
-        price: baseAmount,
-        gstPercentage: gstPct,
-        quantity: 1,
-        gstAmount: gstAmount,
-        total: finalAmount,
-        isOriginal: true
-      }],
-      originalServiceBase: baseAmount,
-      originalGST: gstAmount,
-      totalServiceBase: baseAmount,
-      totalGST: gstAmount,
-      grandTotal: finalAmount,
-      payoutConfig: {
-        serviceSplitPercentage: serviceSplitPct,
-        serviceGstPercentage: gstPct
-      },
-      vendorServiceEarning: vendorEarning,
-      vendorTotalEarning: vendorEarning,
-      companyRevenue: parseFloat((finalAmount - vendorEarning).toFixed(2)),
-      status: BILL_STATUS.GENERATED
-    };
-
-    // Use findOneAndUpdate with upsert to avoid duplicate key errors on retry
-    const vendorBill = await VendorBill.findOneAndUpdate(
-      { bookingId: booking._id },
-      { $set: billData },
-      { upsert: true, new: true, runValidators: true }
-    );
-
-    // 4. AUTOMATIC WALLET SETTLEMENT (Only for online/prepaid/plan benefit, cash is settled during collectSelfCash)
-    const Vendor = require('../../models/Vendor');
-    const Transaction = require('../../models/Transaction');
-    const vendorDoc = await Vendor.findById(vendorId);
-
-    if (vendorDoc) {
-      if (!vendorDoc.wallet) vendorDoc.wallet = {};
-      const isCashPayment = booking.paymentMethod === 'cash' || booking.paymentMethod === 'pay_at_home';
-      const isPrepaid = booking.paymentStatus === 'SUCCESS' || booking.paymentStatus === 'success' || booking.paymentStatus === 'paid' || booking.paymentStatus === 'PAID' || booking.paymentMethod === 'plan_benefit';
-
-      if (isPrepaid && !isCashPayment) {
-        // For online/prepaid, credit earnings directly
-        await Vendor.findByIdAndUpdate(vendorId, {
-          $inc: { 'wallet.earnings': vendorEarning }
-        });
-
-        await Transaction.create({
-          vendorId,
-          bookingId: booking._id,
-          type: 'earnings_credit',
-          amount: vendorEarning,
-          status: 'completed',
-          paymentMethod: 'wallet',
-          description: `Earnings ₹${vendorEarning} credited for trip #${booking.bookingNumber || booking._id}.`,
-          metadata: { type: 'agriculture_trip', billId: vendorBill._id.toString() }
-        });
-      }
-    }
-
-    // 5. UPDATE BOOKING
-    booking.end_kilometer_photo = end_kilometer_photo;
-    booking.driver_end_otp = driver_end_otp;
-    const isCashPayment = booking.paymentMethod === 'cash' || booking.paymentMethod === 'pay_at_home';
-    const isPrepaid = booking.paymentStatus === 'SUCCESS' || booking.paymentStatus === 'success' || booking.paymentStatus === 'paid' || booking.paymentStatus === 'PAID' || booking.paymentMethod === 'plan_benefit';
-    
-    if (isPrepaid) {
-      booking.status = BOOKING_STATUS.COMPLETED;
-      booking.cashCollected = false;
-      booking.completedAt = now;
-    } else {
-      booking.status = BOOKING_STATUS.WORK_DONE;
-      booking.paymentStatus = PAYMENT_STATUS.PENDING;
-      booking.cashCollected = false;
-      
-      if (isCashPayment) {
-        // Generate Payment OTP for manual cash collection step
-        const payOtp = Math.floor(1000 + Math.random() * 9000).toString();
-        booking.paymentOtp = payOtp;
-        booking.customerConfirmationOTP = payOtp;
-      }
-    }
-    
-    booking.finalAmount = finalAmount;
-    booking.userPayableAmount = finalAmount;
-    booking.vendorBillId = vendorBill._id;
-
-    await booking.save();
-
-    // 6. NOTIFY USER
-    const isCashBooking = booking.paymentMethod === 'cash' || booking.paymentMethod === 'pay_at_home';
-    await createNotification({
-      userId: booking.userId,
-      type: 'work_completed',
-      title: 'Work Completed & Bill Generated',
-      message: isCashBooking && booking.customerConfirmationOTP
-        ? `Your equipment trip has ended. Total Bill: \u20b9${finalAmount}. Payment OTP: ${booking.customerConfirmationOTP}. Share this OTP with the operator to confirm cash payment.`
-        : `Your equipment trip for ${service?.title || booking.serviceName} has ended. Total Bill: \u20b9${finalAmount}.`,
-      relatedId: booking._id,
-      relatedType: 'booking',
-      priority: 'high',
-      pushData: {
-        type: 'work_done',
-        bookingId: booking._id.toString(),
-        paymentOtp: booking.customerConfirmationOTP || undefined,
-        link: `/user/booking/${booking._id}`
-      }
-    });
-
-    // 7. SOCKET: Real-time update to user — includes OTP for cash bookings
-    const io = req.app.get('io');
-    if (io) {
-      io.to(`user_${booking.userId}`).emit('booking_updated', {
-        bookingId: booking._id,
-        status: booking.status,
-        finalAmount,
-        customerConfirmationOTP: booking.customerConfirmationOTP || undefined,
-        paymentOtp: booking.customerConfirmationOTP || undefined,
-        workDoneDetails: booking.workDoneDetails
-      });
-    }
-
+    const result = await completeMachineryTrip(req, booking, { end_kilometer_photo, workUnits, work_evidence_photo, endOtpUsed: true });
     res.status(200).json({
       success: true,
-      message: 'Trip ended and settled successfully',
-      data: { finalAmount, vendorEarning, billId: vendorBill._id }
+      message: 'Trip ended and billed successfully',
+      data: { finalAmount: result.grandTotal, vendorEarning: result.vendorEarning, billId: result.bill._id, status: result.booking.status, balanceDue: result.booking.balanceDue }
     });
   } catch (error) {
-    console.error('End trip billing error EXTREME LOG:', {
-      error: error.message,
-      stack: error.stack,
-      bookingId: req.params.id
+    console.error('End trip billing error:', { error: error.message, stack: error.stack, bookingId: req.params.id });
+    res.status(error.status || 500).json({ success: false, message: error.status ? error.message : 'Failed to complete trip and billing' });
+  }
+};
+
+/**
+ * Shared by /trip/end and the machinery "complete work" endpoint:
+ * closes the timer, bills once, reconciles advance payments and notifies the farmer.
+ */
+const completeMachineryTrip = async (req, booking, { end_kilometer_photo, workUnits, work_evidence_photo, endOtpUsed }) => {
+  const now = new Date();
+  const wu = workUnits !== undefined && workUnits !== null && workUnits !== '' ? Number(workUnits) : null;
+  if (wu !== null && (!Number.isFinite(wu) || wu <= 0 || wu > 100000)) {
+    const e = new Error('workUnits must be a positive number'); e.status = 400; throw e;
+  }
+
+  // Claim the booking so two concurrent "end" calls cannot both bill
+  const claimed = await Booking.findOneAndUpdate(
+    {
+      _id: booking._id,
+      $or: [
+        { status: BOOKING_STATUS.IN_PROGRESS },
+        { status: BOOKING_STATUS.WORK_DONE, vendorBillId: null } // retry after a failed billing attempt
+      ]
+    },
+    { $set: {
+        status: BOOKING_STATUS.WORK_DONE,
+        end_kilometer_photo: end_kilometer_photo || null,
+        work_evidence_photo: work_evidence_photo || null,
+        ...(wu !== null ? { workUnits: wu } : {})
+    } },
+    { new: true }
+  ).populate('serviceId');
+  if (!claimed) {
+    const e = new Error('Booking changed state, please refresh.'); e.status = 409; throw e;
+  }
+
+  claimed.driver_end_otp = null; // single use; persisted by the billing save below
+  closeServiceTimer(claimed, now, 'COMPLETED');
+  const VendorEquipment = require('../../models/VendorEquipment');
+  const equipment = claimed.equipmentId ? await VendorEquipment.findById(claimed.equipmentId) : null;
+
+  const result = await finalizeMachineryBilling(claimed, { service: claimed.serviceId, equipment, workUnits: wu, now });
+  const b = result.booking;
+
+  if (b.serviceTimer && result.calc?.hasTimer) {
+    b.serviceTimer.billingSummary = {
+      totalActiveMinutes: result.calc.totalActiveMinutes,
+      totalPausedMinutes: Math.floor((b.serviceTimer.accumulatedPausedSeconds || 0) / 60),
+      adminBaseCharge: result.calc.adminBase,
+      timeCharge: result.calc.timeCharge,
+      subtotal: result.calc.base,
+      discount: b.discount || 0,
+      finalPayable: result.grandTotal,
+      isPartialEnd: false,
+      calculatedAt: now
+    };
+    await b.save();
+    try { require('./serviceTimerController').broadcastTimerUpdate(b, 'END', { performedBy: 'vendor', billingSummary: b.serviceTimer.billingSummary }); } catch (e) { /* non-fatal */ }
+  }
+
+  const needsPayment = b.status === BOOKING_STATUS.WORK_DONE;
+  await createNotification({
+    userId: b.userId,
+    type: 'work_completed',
+    title: 'Work Completed & Bill Generated',
+    message: needsPayment
+      ? `Your service has ended. Amount due: ₹${b.balanceDue}. Payment OTP: ${b.paymentOtp}. Share this OTP with the operator ONLY after you have paid in cash.`
+      : `Your service has ended. Total bill ₹${result.grandTotal} was settled from your advance${result.refunded ? `; ₹${result.refunded} refunded to your wallet` : ''}.`,
+    relatedId: b._id,
+    relatedType: 'booking',
+    priority: 'high',
+    pushData: { type: 'work_done', bookingId: b._id.toString(), paymentOtp: needsPayment ? b.paymentOtp : undefined, link: `/user/booking/${b._id}` }
+  });
+
+  const io = req.app.get('io');
+  if (io) {
+    io.to(`user_${b.userId}`).emit('booking_updated', {
+      bookingId: b._id, status: b.status, finalAmount: result.grandTotal, balanceDue: b.balanceDue,
+      customerConfirmationOTP: needsPayment ? b.customerConfirmationOTP : undefined,
+      paymentOtp: needsPayment ? b.paymentOtp : undefined
     });
-    res.status(500).json({ success: false, message: error.message || 'Failed to complete trip and billing' });
+  }
+  return result;
+};
+
+/** Machinery "start work" used by the vendor app: same rules as /trip/start. */
+const machineryStart = (req, res) => {
+  req.body = { start_kilometer_photo: req.body.startKmPhoto || req.body.conditionPhoto || null, driver_start_otp: req.body.otp };
+  return startTrip(req, res);
+};
+
+/** Machinery "complete work" used by the vendor app: bills and moves to payment (farmer pays with a payment OTP). */
+const machineryComplete = async (req, res) => {
+  try {
+    const vendorId = req.user.id;
+    const booking = await Booking.findOne({ _id: req.params.id || req.params.bookingId, vendorId }).populate('serviceId');
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+    if (!isEndable(booking)) {
+      return res.status(400).json({ success: false, message: `Cannot complete work that is "${booking.status}"` });
+    }
+    const { endKmPhoto, workUnits, evidencePhoto } = req.body;
+    const result = await completeMachineryTrip(req, booking, { end_kilometer_photo: endKmPhoto, workUnits, work_evidence_photo: evidencePhoto, endOtpUsed: false });
+    res.status(200).json({
+      success: true,
+      message: result.booking.status === BOOKING_STATUS.WORK_DONE ? 'Work marked as done. Payment OTP sent to farmer.' : 'Work completed and settled.',
+      data: toProviderView(result.booking)
+    });
+  } catch (error) {
+    console.error('Machinery complete error:', error);
+    res.status(error.status || 500).json({ success: false, message: error.status ? error.message : 'Completion failed' });
   }
 };
 
@@ -2165,7 +1713,6 @@ const approveExtension = async (req, res) => {
 
     const booking = await Booking.findOne({ _id: id, vendorId });
     if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
-    
     if (booking.status !== BOOKING_STATUS.IN_PROGRESS) {
       return res.status(400).json({ success: false, message: 'Can only approve extensions for bookings in progress' });
     }
@@ -2174,11 +1721,13 @@ const approveExtension = async (req, res) => {
     if (!request || request.status !== 'pending') {
       return res.status(400).json({ success: false, message: 'Invalid or already processed extension request' });
     }
+    if (!(request.requestedHours > 0 && request.requestedHours <= 24)) {
+      return res.status(400).json({ success: false, message: 'Invalid extension duration' });
+    }
 
     const VendorEquipment = require('../../models/VendorEquipment');
-    const eq = await VendorEquipment.findById(booking.equipmentId);
+    const eq = booking.equipmentId ? await VendorEquipment.findById(booking.equipmentId) : null;
     let charge = 0;
-    
     if (eq && eq.pricing?.hourly?.isEnabled) {
       charge = eq.pricing.hourly.price * request.requestedHours;
     } else if (booking.basePrice > 0 && booking.estimatedDuration > 0) {
@@ -2190,12 +1739,17 @@ const approveExtension = async (req, res) => {
     request.status = 'approved';
     request.chargeAmount = charge;
     request.respondedAt = new Date();
-    
     booking.extensionChargesTotal += charge;
-    booking.basePrice += charge; 
-
+    booking.basePrice += charge;
     await booking.save();
-    res.status(200).json({ success: true, message: 'Extension approved successfully', data: booking });
+
+    await createNotification({
+      userId: booking.userId, type: 'extension_approved', title: 'Extension Approved',
+      message: `Your request for ${request.requestedHours} more hour(s) was approved (₹${Math.round(charge)} extra).`,
+      relatedId: booking._id, relatedType: 'booking', priority: 'high',
+      pushData: { type: 'extension_approved', bookingId: booking._id.toString(), link: `/user/booking/${booking._id}` }
+    });
+    res.status(200).json({ success: true, message: 'Extension approved successfully', data: toProviderView(booking) });
   } catch (error) {
     console.error('Approve extension error:', error);
     res.status(500).json({ success: false, message: 'Failed to approve extension' });
@@ -2217,12 +1771,17 @@ const rejectExtension = async (req, res) => {
     if (!request || request.status !== 'pending') {
       return res.status(400).json({ success: false, message: 'Invalid or already processed extension request' });
     }
-
     request.status = 'rejected';
     request.respondedAt = new Date();
-    
     await booking.save();
-    res.status(200).json({ success: true, message: 'Extension rejected successfully', data: booking });
+
+    await createNotification({
+      userId: booking.userId, type: 'extension_rejected', title: 'Extension Declined',
+      message: `The vendor declined your request for ${request.requestedHours} more hour(s).`,
+      relatedId: booking._id, relatedType: 'booking',
+      pushData: { type: 'extension_rejected', bookingId: booking._id.toString(), link: `/user/booking/${booking._id}` }
+    });
+    res.status(200).json({ success: true, message: 'Extension rejected successfully', data: toProviderView(booking) });
   } catch (error) {
     console.error('Reject extension error:', error);
     res.status(500).json({ success: false, message: 'Failed to reject extension' });
@@ -2248,5 +1807,7 @@ module.exports = {
   startTrip,
   endTrip,
   approveExtension,
-  rejectExtension
+  rejectExtension,
+  machineryStart,
+  machineryComplete
 };

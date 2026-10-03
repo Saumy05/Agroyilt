@@ -303,191 +303,23 @@ exports.deleteEquipment = async (req, res) => {
 
 // 1. Accept/Reject Booking
 exports.respondToRentalBooking = async (req, res) => {
-  try {
-    const vendorId = req.user.id;
-    const { bookingId } = req.params;
-    const { status } = req.body; // 'accepted' or 'rejected'
-
-    const Booking = require('../../models/Booking');
-    const { BOOKING_STATUS } = require('../../utils/constants');
-    const { createNotification } = require('../notificationControllers/notificationController');
-
-    const booking = await Booking.findOne({ _id: bookingId, vendorId });
-    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
-
-    if (status === 'accepted') {
-      booking.status = BOOKING_STATUS.CONFIRMED;
-      // Generate Start OTP for farmer
-      const startOtp = Math.floor(1000 + Math.random() * 9000).toString();
-      booking.driver_start_otp = startOtp;
-      
-      await booking.save();
-
-      // Notify Farmer
-      await createNotification({
-        userId: booking.userId,
-        type: 'worker_accepted',
-        title: 'Machinery Booking Confirmed!',
-        message: `Your booking #${booking.bookingNumber} is confirmed. Share OTP ${startOtp} with the driver only when they arrive at your farm.`,
-        relatedId: booking._id,
-        relatedType: 'booking',
-        priority: 'high'
-      });
-
-    } else {
-      booking.status = BOOKING_STATUS.CANCELLED;
-      booking.cancellationReason = 'Rejected by Vendor';
-      await booking.save();
-
-      await createNotification({
-        userId: booking.userId,
-        type: 'booking_cancelled',
-        title: 'Machinery Booking Rejected',
-        message: `Vendor has rejected your machinery booking #${booking.bookingNumber}.`,
-        relatedId: booking._id,
-        relatedType: 'booking'
-      });
-    }
-
-    res.status(200).json({ success: true, message: `Booking ${status} successfully`, data: booking });
-  } catch (err) {
-    console.error('Respond to rental error:', err);
-    res.status(500).json({ success: false, message: 'Process failed' });
-  }
+  // Same rules as the main vendor endpoints: delegate so there is exactly one accept/reject implementation.
+  const vendorBooking = require('../bookingControllers/vendorBookingController');
+  const { status } = req.body;
+  req.params.id = req.params.bookingId;
+  if (status === 'accepted') return vendorBooking.acceptBooking(req, res);
+  if (status === 'rejected') return vendorBooking.rejectBooking(req, res);
+  return res.status(400).json({ success: false, message: "status must be 'accepted' or 'rejected'" });
 };
 
-// 2. Start Work (Vendor/Driver inputs Farmer OTP)
-// For 'service' (Tractor): requires KM/Odometer photo
-// For 'rental' (Tool/Pump): requires condition photo only
-exports.startMachineryWork = async (req, res) => {
-  try {
-    const vendorId = req.user.id;
-    const { bookingId } = req.params;
-    const { otp, startKmPhoto, conditionPhoto } = req.body;
-
-    const Booking = require('../../models/Booking');
-    const { BOOKING_STATUS } = require('../../utils/constants');
-
-    const booking = await Booking.findOne({ _id: bookingId, vendorId }).select('+driver_start_otp');
-    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
-
-    const expectedStartOtp = booking.driver_start_otp || booking.visitOtp;
-    const submittedStartOtp = otp ? otp.toString().trim() : '';
-    if (!expectedStartOtp || !submittedStartOtp || submittedStartOtp !== expectedStartOtp.toString().trim()) {
-      return res.status(400).json({ success: false, message: 'Invalid Start OTP from Farmer' });
-    }
-
-    // Adaptive tracking: check listingType from the SPECIFIC equipment linked to this booking
-    const equipment = await VendorEquipment.findById(booking.serviceId).select('listingType');
-    const isRentalType = equipment?.listingType === 'rental';
-
-    if (isRentalType) {
-      // Tool/Pump: condition photo is optional
-      booking.start_kilometer_photo = conditionPhoto || startKmPhoto || null; // reuse existing field
-    } else {
-      // Machine Service (Tractor): KM photo is optional
-      booking.start_kilometer_photo = startKmPhoto || null;
-    }
-
-    booking.status = BOOKING_STATUS.IN_PROGRESS;
-    booking.startedAt = new Date();
-    booking.driver_start_otp = undefined;
-    await booking.save();
-
-    const { createNotification } = require('../notificationControllers/notificationController');
-    await createNotification({
-      userId: booking.userId,
-      type: 'work_started',
-      title: isRentalType ? 'Equipment Handover Confirmed' : 'Machine Work In-Progress',
-      message: isRentalType
-        ? `Equipment for booking #${booking.bookingNumber} has been handed over. Happy farming!`
-        : `Equipment work has started for booking #${booking.bookingNumber}.`,
-      relatedId: booking._id,
-      relatedType: 'booking'
-    });
-
-    res.status(200).json({ success: true, message: 'Work started', data: booking });
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'Start work failed' });
-  }
+// Start / complete work now share the verified trip flow (start OTP, timer, single billing, payment OTP).
+exports.startMachineryWork = (req, res) => {
+  req.params.id = req.params.bookingId;
+  return require('../bookingControllers/vendorBookingController').machineryStart(req, res);
 };
 
-// 3. Complete Work (Vendor inputs Final KM - Sends End OTP to Farmer)
-exports.completeMachineryWork = async (req, res) => {
-  try {
-    const vendorId = req.user.id;
-    const { bookingId } = req.params;
-    const { endKmPhoto, workUnits, evidencePhoto } = req.body;
-
-    const Booking = require('../../models/Booking');
-    const { BOOKING_STATUS } = require('../../utils/constants');
-
-    const booking = await Booking.findOne({ _id: bookingId, vendorId }).populate('serviceId');
-    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
-
-    // Calculate dynamic base price for the Trip
-    const service = booking.serviceId || {};
-    let baseAmount = booking.basePrice || 0;
-    const now = new Date();
-    const durationMs = now - (booking.startedAt || now);
-    const durationHours = Math.max(1, Math.ceil(durationMs / (1000 * 60 * 60))); // Round up to nearest hour
-
-    const durationDays = Math.max(1, Math.ceil(durationMs / (1000 * 60 * 60 * 24)));
-
-    if (booking.rental_type === 'hourly') {
-      baseAmount = (service.hourly_price || booking.basePrice || 0) * durationHours;
-    } else if (booking.rental_type === 'land_based') {
-      baseAmount = (service.land_price || booking.basePrice || 0) * (workUnits || 1);
-    } else if (booking.rental_type === 'daily') {
-      baseAmount = (service.daily_price || booking.basePrice || 0) * durationDays;
-    }
-
-    // Add per-implement charges (ONLY for those selected during booking)
-    if (booking.selectedImplements && booking.selectedImplements.length > 0) {
-      for (const impl of booking.selectedImplements) {
-        const implPricing = impl.pricing;
-        if (booking.rental_type === 'hourly' && implPricing?.hourly?.isEnabled) {
-          baseAmount += (implPricing.hourly.price || 0) * durationHours;
-        } else if (booking.rental_type === 'land_based' && implPricing?.land_based?.isEnabled) {
-          baseAmount += (implPricing.land_based.price || 0) * (workUnits || 1);
-        } else if (booking.rental_type === 'daily' && implPricing?.daily?.isEnabled) {
-          baseAmount += (implPricing.daily.price || 0) * durationDays;
-        }
-      }
-    }
-
-    const endOtp = Math.floor(1000 + Math.random() * 9000).toString();
-    booking.status = BOOKING_STATUS.WORK_DONE;
-    booking.end_kilometer_photo = endKmPhoto;
-    
-    // Track dynamic billing updates
-    if (baseAmount > 0) {
-      booking.basePrice = baseAmount;
-    }
-    
-    // Store evidence and working units temporarily if needed on details panel
-    if (evidencePhoto) booking.work_evidence_photo = evidencePhoto;
-    if (workUnits) booking.workUnits = workUnits;
-    
-    booking.driver_end_otp = endOtp;
-    booking.customerConfirmationOTP = endOtp;
-    booking.paymentOtp = endOtp;
-    await booking.save();
-
-    const { createNotification } = require('../notificationControllers/notificationController');
-    await createNotification({
-      userId: booking.userId,
-      type: 'work_completed',
-      title: 'Machine Work Completed!',
-      message: `Work finished for #${booking.bookingNumber}. Please share OTP ${endOtp} with the driver only if you are satisfied.`,
-      relatedId: booking._id,
-      relatedType: 'booking',
-      priority: 'high'
-    });
-
-    res.status(200).json({ success: true, message: 'Work marked as done. OTP sent to farmer.', data: booking });
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'Completion failed' });
-  }
+exports.completeMachineryWork = (req, res) => {
+  req.params.id = req.params.bookingId;
+  return require('../bookingControllers/vendorBookingController').machineryComplete(req, res);
 };
 

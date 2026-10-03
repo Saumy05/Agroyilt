@@ -5,90 +5,27 @@ const mongoose = require('mongoose');
 const { BOOKING_STATUS, PAYMENT_STATUS } = require('../../utils/constants');
 
 const farmerBookingController = {
-  // Create Booking
+  // Create Booking — thin adapter over the main booking engine so there is ONE set of rules
+  // (vendor eligibility, server-side pricing, slot conflicts, 15-minute vendor alert, penalties).
   createBooking: async (req, res) => {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-    try {
-      const { machineryId, date, timeSlot, location, area, cropType } = req.body;
-      const userId = req.user.id;
-
-      const equipment = await VendorEquipment.findById(machineryId).session(session);
-      if (!equipment || !equipment.isActive) {
-        throw new Error('Equipment is not available');
-      }
-
-      const service = await Service.findById(equipment.categoryId).session(session);
-
-      // Check if slot is already booked (simplified lock check)
-      const existingBooking = await Booking.findOne({
-        equipmentId: machineryId,
-        scheduledDate: date,
-        'timeSlot.start': timeSlot.start,
-        status: { $nin: ['cancelled', 'completed'] }
-      }).session(session);
-
-      if (existingBooking) {
-        throw new Error('Time slot is already booked');
-      }
-
-      // Calculate server-side price (e.g. hourly * hours)
-      let basePrice = equipment.pricing?.hourly?.price || equipment.pricing?.fixed?.price || 500;
-      let finalAmount = basePrice;
-      let calculatedDurationMinutes = null;
-
-      if (area && equipment.pricing?.land_based?.price) {
-         const parsedArea = parseFloat(String(area).replace(/[^\d.]/g, ''));
-         const safeArea = isNaN(parsedArea) ? 1 : Math.max(0.5, parsedArea);
-         basePrice = equipment.pricing.land_based.price * safeArea;
-         finalAmount = basePrice;
-      } else if (timeSlot && timeSlot.start && timeSlot.end) {
-         const [startHours, startMinutes] = timeSlot.start.split(':').map(Number);
-         const [endHours, endMinutes] = timeSlot.end.split(':').map(Number);
-         calculatedDurationMinutes = (endHours * 60 + endMinutes) - (startHours * 60 + startMinutes);
-         if (calculatedDurationMinutes <= 0) {
-            throw new Error('End time must be after start time');
-         }
-         if (calculatedDurationMinutes < 30) {
-            throw new Error('Hourly booking must be at least 30 minutes.');
-         }
-         if (calculatedDurationMinutes % 30 !== 0) {
-            throw new Error('Hourly booking duration must be in 30-minute increments.');
-         }
-         basePrice = (equipment.pricing?.hourly?.price || 500) * (calculatedDurationMinutes / 60);
-         finalAmount = basePrice;
-      }
-
-      const newBooking = new Booking({
-        userId,
-        vendorId: equipment.vendorId,
-        serviceId: equipment.categoryId,
-        equipmentId: machineryId,
-        serviceName: equipment.name,
-        serviceCategory: service ? service.name : 'Agriculture',
-        basePrice,
-        finalAmount,
-        scheduledDate: date,
-        scheduledTime: timeSlot.start,
-        timeSlot,
-        address: location,
-        cropType,
-        landSize: area ? `${area} Acres` : null,
-        durationMinutes: typeof calculatedDurationMinutes !== 'undefined' ? calculatedDurationMinutes : null,
-        status: BOOKING_STATUS.PENDING
-      });
-
-      await newBooking.save({ session });
-      await session.commitTransaction();
-
-      res.status(201).json({ success: true, message: 'Booking created successfully', data: newBooking });
-    } catch (error) {
-      await session.abortTransaction();
-      console.error('Error creating booking:', error);
-      res.status(400).json({ success: false, message: error.message || 'Server Error' });
-    } finally {
-      session.endSession();
+    const { machineryId, date, timeSlot, location, area, cropType } = req.body;
+    if (!machineryId || !date || !timeSlot || !location) {
+      return res.status(400).json({ success: false, message: 'machineryId, date, timeSlot and location are required' });
     }
+    req.body = {
+      serviceId: machineryId,
+      equipmentId: machineryId,
+      rental_type: area ? 'land_based' : 'hourly',
+      landSize: area ? String(area) : undefined,
+      cropType,
+      scheduledDate: date,
+      scheduledTime: timeSlot.start,
+      timeSlot,
+      address: location,
+      serviceCategory: 'Agriculture',
+      paymentMethod: req.body.paymentMethod || 'pay_at_home'
+    };
+    return require('../bookingControllers/userBookingController').createBooking(req, res);
   },
 
   // Get Booking History
@@ -124,32 +61,10 @@ const farmerBookingController = {
     }
   },
 
-  // Cancel Booking
+  // Cancel Booking — same refund / fee / state rules as the main endpoint
   cancelBooking: async (req, res) => {
-    try {
-      const bookingId = req.params.id;
-      const { reason } = req.body;
-
-      const booking = await Booking.findOne({ _id: bookingId, userId: req.user.id });
-      if (!booking) {
-        return res.status(404).json({ success: false, message: 'Booking not found' });
-      }
-
-      if (['in-progress', 'completed', 'cancelled'].includes(booking.status)) {
-        return res.status(400).json({ success: false, message: `Cannot cancel a booking that is ${booking.status}` });
-      }
-
-      booking.status = BOOKING_STATUS.CANCELLED;
-      booking.cancelledAt = new Date();
-      booking.cancellationReason = reason || 'Cancelled by farmer';
-      booking.cancelledBy = 'farmer';
-
-      await booking.save();
-      res.status(200).json({ success: true, message: 'Booking cancelled successfully', data: booking });
-    } catch (error) {
-      console.error('Error cancelling booking:', error);
-      res.status(500).json({ success: false, message: 'Server Error' });
-    }
+    req.body = { cancellationReason: req.body.reason || req.body.cancellationReason };
+    return require('../bookingControllers/userBookingController').cancelBooking(req, res);
   },
 
   // Request Extension
@@ -167,11 +82,18 @@ const farmerBookingController = {
         return res.status(400).json({ success: false, message: 'Can only extend in-progress bookings' });
       }
 
-      // Assume standard hourly rate
-      const chargeAmount = requestedHours * (booking.basePrice / (booking.estimatedDuration || 1)); // crude estimation
+      const hours = Number(requestedHours);
+      if (!Number.isFinite(hours) || hours <= 0 || hours > 24) {
+        return res.status(400).json({ success: false, message: 'requestedHours must be between 0 and 24' });
+      }
+      if (booking.extensionRequests.some(r => r.status === 'pending')) {
+        return res.status(400).json({ success: false, message: 'You already have a pending extension request' });
+      }
+      // Indicative only: the vendor's approval recomputes the charge from the rate card.
+      const chargeAmount = hours * (booking.basePrice / (booking.estimatedDuration || 1));
 
       booking.extensionRequests.push({
-        requestedHours,
+        requestedHours: hours,
         chargeAmount,
         reason,
         status: 'pending'
@@ -185,26 +107,23 @@ const farmerBookingController = {
     }
   },
 
-  // Approve Work Completion
+  // Approve Work Completion — the farmer's sign-off. It can never skip billing or payment:
+  // completion happens only through the vendor's end-of-work and the payment steps.
   approveWorkCompletion: async (req, res) => {
     try {
-      const bookingId = req.params.id;
-      
-      const booking = await Booking.findOne({ _id: bookingId, userId: req.user.id });
+      const booking = await Booking.findOne({ _id: req.params.id, userId: req.user.id });
       if (!booking) {
         return res.status(404).json({ success: false, message: 'Booking not found' });
       }
-
-      if (booking.status !== BOOKING_STATUS.IN_PROGRESS) {
-        return res.status(400).json({ success: false, message: 'Booking is not in progress' });
+      if (booking.status === BOOKING_STATUS.IN_PROGRESS) {
+        return res.status(400).json({ success: false, message: 'The work is still in progress. The vendor must end the work and generate the bill first.' });
       }
-
+      if (![BOOKING_STATUS.WORK_DONE, BOOKING_STATUS.COMPLETED].includes(booking.status)) {
+        return res.status(400).json({ success: false, message: `Nothing to approve while the booking is ${booking.status}` });
+      }
       booking.customerConfirmed = true;
-      booking.status = BOOKING_STATUS.COMPLETED;
-      booking.completedAt = new Date();
-
       await booking.save();
-      res.status(200).json({ success: true, message: 'Work completion approved', data: booking });
+      res.status(200).json({ success: true, message: 'Work completion approved. Please complete the payment to close the booking.', data: { status: booking.status, balanceDue: booking.balanceDue } });
     } catch (error) {
       console.error('Error approving completion:', error);
       res.status(500).json({ success: false, message: 'Server Error' });
