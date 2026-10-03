@@ -100,6 +100,11 @@ const verifyPaymentWebhook = async (req, res) => {
     if (!found) {
       return res.status(404).json({ success: false, message: 'Booking not found' });
     }
+    // Independent-worker bookings are paid and settled through the worker booking flow only; letting this route
+    // "complete" one would pay the worker a second time.
+    if (found.workerRequestId) {
+      return res.status(409).json({ success: false, message: 'This booking is paid through the worker booking flow.' });
+    }
 
     // Idempotency: the client verify call, the gateway webhook and any retry all land here.
     // Only the request that claims this payment id may move money.

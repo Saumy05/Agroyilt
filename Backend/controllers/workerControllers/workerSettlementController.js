@@ -9,6 +9,15 @@ const Transaction = require('../../models/Transaction');
 const { getWorkerFinancialSettings, addWorkerDues } = require('../../services/workerFinancialService');
 
 exports.processWorkerSettlement = async (req, res) => {
+  // A booking backed by an IndWorkerAssignment is settled ONLY through the assignment lifecycle (atomic, ledger-keyed).
+  // This legacy farmer-triggered path would pay the same job a second time, so it is closed for such bookings.
+  try {
+    const IndWorkerAssignment = require('../../models/IndWorkerAssignment');
+    if (mongoose.Types.ObjectId.isValid(req.params.id) && await IndWorkerAssignment.exists({ legacyBookingId: req.params.id })) {
+      return res.status(409).json({ success: false, message: 'This booking is settled through the worker assignment flow.' });
+    }
+  } catch (e) { /* fall through to the legacy checks */ }
+
   const session = await mongoose.startSession();
   session.startTransaction();
   

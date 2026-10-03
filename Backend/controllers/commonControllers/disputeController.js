@@ -879,69 +879,27 @@ async function _handleCompletionOverride(dispute, adminId, adminName) {
     const assignments = await IndWorkerAssignment.find(assignmentFilter);
     if (!assignments.length) throw new Error('No active assignments found for completion override');
 
+    const settlementSvc = require('../../services/workerSettlementService');
+    const IndAssign = require('../../models/IndWorkerAssignment');
     for (const asgn of assignments) {
-      if (asgn.completionStatus !== 'OTP_VERIFIED') {
-        asgn.completionStatus         = 'OTP_VERIFIED';
-        asgn.completionOtpVerifiedAt  = new Date();
-        asgn.workCompletedAt          = new Date();
-        asgn.adminCompletionOverride  = true;
-        asgn.adminOverrideNote        = `Admin override — Dispute #${dispute._id}`;
-
-        // Trigger settlement for this assignment
-        if (asgn.settlementStatus !== 'SETTLED') {
-          try {
-            const Worker = require('../../models/Worker');
-            const Wallet = require('../../models/Wallet');
-            const Transaction = require('../../models/Transaction');
-            const netEarning  = asgn.netEarning || 0;
-
-            await Worker.findByIdAndUpdate(asgn.workerId, {
-              $inc: { 'wallet.balance': netEarning },
-              status: 'ONLINE'
-            });
-
-            let workerWallet = await Wallet.findOne({ userId: asgn.workerId });
-            if (!workerWallet) {
-              workerWallet = await Wallet.create({ userId: asgn.workerId, userModel: 'Worker', balance: netEarning });
-            } else {
-              workerWallet.balance = (workerWallet.balance || 0) + netEarning;
-              await workerWallet.save();
-            }
-
-            await Transaction.create({
-              workerId: asgn.workerId,
-              type:     'earnings_credit',
-              amount:   netEarning,
-              status:   'completed',
-              paymentMethod: 'wallet',
-              description: `Admin Override Settlement — Dispute #${dispute._id}`,
-              referenceId: `admin_override_settle_${asgn._id}`
-            });
-
-            asgn.settlementStatus = 'SETTLED';
-            asgn.settledAt        = new Date();
-            asgn.settlementTransactionId = `admin_override_settle_${asgn._id}`;
-          } catch (settleErr) {
-            console.error('[completionOverride settlement]', settleErr.message);
-            asgn.settlementStatus = 'FAILED';
-          }
-        }
-        await asgn.save();
-      }
+      // Atomic claim: only an open assignment can be force-completed, and only once.
+      const claimed = await IndAssign.findOneAndUpdate(
+        { _id: asgn._id, assignmentStatus: 'CONFIRMED', completionStatus: { $ne: 'OTP_VERIFIED' } },
+        {
+          $set: { completionStatus: 'OTP_VERIFIED', completionOtpVerifiedAt: new Date(), workCompletedAt: new Date() },
+          $push: { auditLog: { at: new Date(), actor: 'admin', actorId: adminId || null, event: 'admin_completion_override', meta: { disputeId: dispute._id, note: `Admin override — Dispute #${dispute._id}` } } }
+        },
+        { new: true }
+      );
+      if (!claimed) continue; // already completed / settled / cancelled — nothing to override
+      const r = await settlementSvc.settleAssignment(asgn._id);
+      if (r.error) console.error('[completionOverride settlement]', r.error.message);
     }
 
-    // Check if all assignments settled → complete parent + refund
+    // advance the parent (and pay the reserve refund) exactly once, via the shared path
     try {
-      const allAssignments = await IndWorkerAssignment.find({
-        parentRequestId: dispute.workerRequestId,
-        assignmentStatus: { $ne: 'CANCELLED' }
-      });
-      const allSettled = allAssignments.length > 0 && allAssignments.every(a => a.settlementStatus === 'SETTLED');
-      if (allSettled) {
-        await WorkerBookingRequest.findByIdAndUpdate(dispute.workerRequestId, { status: 'completed' });
-        await processFarmerBookingRefund(dispute.workerRequestId);
-      }
-    } catch (e) { /* non-fatal */ }
+      await settlementSvc.finishParent(dispute.workerRequestId);
+    } catch (e) { console.warn('[completionOverride finishParent]', e.message); }
   }
 }
 

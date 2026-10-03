@@ -220,74 +220,47 @@ exports.confirmCashCollection = async (req, res) => {
 
     {
           // Independent Worker Cash Collection Logic
-          const Worker = require('../../models/Worker');
           const IndWorkerAssignment = require('../../models/IndWorkerAssignment');
-          const WorkerBookingRequest = require('../../models/WorkerBookingRequest');
+          const settlementSvc = require('../../services/workerSettlementService');
+          const ledger = require('../../services/ledgerService');
           const workerId = booking.workerId;
-          
+
           const commissionRate = booking.commissionRate ?? 10;
           const commissionAmount = booking.commissionAmount ?? Math.round((grandTotal * commissionRate) / 100);
           const workerNetEarning = grandTotal - commissionAmount;
-    
-          const workerDoc = await Worker.findById(workerId);
-          if (workerDoc) {
-            // Worker collected grandTotal in physical cash in hand.
-            // Platform commission is deducted from wallet balance if positive, or added to dues.
-            let walletBalance = workerDoc.wallet?.balance || 0;
-            if (walletBalance >= commissionAmount) {
-              workerDoc.wallet.balance = walletBalance - commissionAmount;
-            } else {
-              const remainingDue = commissionAmount - walletBalance;
-              workerDoc.wallet.balance = 0;
-              workerDoc.outstandingDues = (workerDoc.outstandingDues || 0) + remainingDue;
-            }
-            await workerDoc.save();
-          }
-    
-          await Transaction.create({
-            workerId: workerId,
-            bookingId: booking._id,
-            amount: grandTotal,
-            type: 'cash_collected',
-            paymentMethod: 'cash',
-            status: 'completed',
-            description: `Cash ₹${grandTotal} collected directly from farmer for booking #${booking.bookingNumber || booking._id.toString().slice(-6)}. Platform commission ₹${commissionAmount} applied.`,
-            metadata: {
-              type: 'cash_collection',
-              bookingNumber: booking.bookingNumber,
-              grandTotal,
-              commissionAmount,
-              workerNetEarning
-            }
+
+          const assignment = await IndWorkerAssignment.findOne({
+            $or: [{ legacyBookingId: booking._id }, { parentRequestId: booking.workerRequestId, workerId }]
           });
-    
-          // Atomically settle linked IndWorkerAssignment
-          try {
-            const assignment = await IndWorkerAssignment.findOne({
-              $or: [{ legacyBookingId: booking._id }, { parentRequestId: booking.workerRequestId, workerId }]
-            });
-            if (assignment) {
-              assignment.settlementStatus = 'SETTLED';
-              assignment.completionStatus = 'OTP_VERIFIED';
-              assignment.workStatus = 'COMPLETED';
-              assignment.settledAt = new Date();
-              assignment.workCompletedAt = new Date();
-              await assignment.save();
-    
-              if (assignment.parentRequestId) {
-                const allAssignments = await IndWorkerAssignment.find({
-                  parentRequestId: assignment.parentRequestId,
-                  assignmentStatus: { $ne: 'CANCELLED' }
-                });
-                const allSettled = allAssignments.length > 0 && allAssignments.every(a => a.settlementStatus === 'SETTLED');
-                if (allSettled) {
-                  await WorkerBookingRequest.findByIdAndUpdate(assignment.parentRequestId, { status: 'completed' });
+
+          if (assignment) {
+            // The job lives in the assignment lifecycle: settle it THERE (atomic claim, ledger-keyed commission,
+            // parent progress, refund). Charging commission here as well would deduct it twice.
+            const claimed = await IndWorkerAssignment.findOneAndUpdate(
+              { _id: assignment._id, assignmentStatus: 'CONFIRMED', settlementStatus: { $in: ['PENDING', 'FAILED'] } },
+              {
+                $set: {
+                  completionStatus: 'OTP_VERIFIED', workStatus: 'SUBMITTED', isCashBooking: true, paymentMethod: 'cash',
+                  grossAmount: grandTotal, commissionAmount, netEarning: workerNetEarning, workCompletedAt: new Date()
                 }
-              }
+              },
+              { new: true }
+            );
+            if (claimed) {
+              const outcome = await settlementSvc.settleAssignment(assignment._id, { useStoredAmounts: true });
+              if (outcome.error) console.warn('[Cash Collection Assignment Settle]', outcome.error.message);
+              await settlementSvc.finishParent(assignment.parentRequestId);
             }
-          } catch (assignErr) {
-            console.warn('[Cash Collection Assignment Settle]', assignErr.message);
+          } else {
+            // Pure legacy independent-worker booking (no assignment): commission straight from the wallet, once.
+            await settlementSvc.deductCashCommissionOnce({ workerId, amount: commissionAmount, key: `cash_commission_booking_${booking._id}`, referenceId: booking._id });
           }
+
+          await ledger.recordPassbookOnce(`cash_collected_booking_${booking._id}`, {
+            workerId, bookingId: booking._id, amount: grandTotal, type: 'cash_collected', paymentMethod: 'cash', status: 'completed',
+            description: `Cash ₹${grandTotal} collected directly from farmer for booking #${booking.bookingNumber || booking._id.toString().slice(-6)}. Platform commission ₹${commissionAmount} applied.`,
+            metadata: { type: 'cash_collection', bookingNumber: booking.bookingNumber, grandTotal, commissionAmount, workerNetEarning }
+          });
         }
 
         recordBookingEarning({

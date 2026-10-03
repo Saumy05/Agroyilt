@@ -104,6 +104,20 @@ exports.razorpayWebhook = async (req, res) => {
       }
     }
 
+    // ── Independent-worker bookings / extensions: same single-shot path as POST .../verify-payment ──
+    // (covers the app dying after the farmer paid; whichever of verify / webhook arrives first wins)
+    if (paymentEntity.order_id) {
+      const workerOutcome = await require('../../services/workerPaymentWebhook').handleCapturedPayment({
+        orderId: paymentEntity.order_id, paymentId: gatewayTransactionId, amountPaise: Number(paymentEntity.amount) || 0
+      });
+      if (workerOutcome.handled) {
+        logEntry.processedStatus = workerOutcome.retry ? 'failed' : 'processed';
+        if (workerOutcome.note) logEntry.errorDetails = workerOutcome.note;
+        await logEntry.save();
+        return res.status(workerOutcome.retry ? 500 : 200).send(workerOutcome.retry ? 'Retry' : 'OK');
+      }
+    }
+
     const bookingId = paymentEntity.notes?.bookingId; 
     
     if (!bookingId || !mongoose.Types.ObjectId.isValid(bookingId)) {

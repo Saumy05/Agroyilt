@@ -329,10 +329,13 @@ exports.confirmAdminQrPayment = async (req, res) => {
     // FLOW A: INDIVIDUAL WORKER ASSIGNMENT
     // ─────────────────────────────────────────────────────────────────────────
     if (assignment) {
-      if (assignment.settlementStatus === 'SETTLED' && assignment.paymentMethod === 'qr_online') {
-        return res.status(200).json({
-          success: true,
-          message: 'Payment already confirmed and settled via Admin QR',
+      if (assignment.assignmentStatus === 'COMPLETED' || assignment.settlementStatus === 'SETTLED') {
+        // Already paid out. Never pay a second time because a QR is confirmed after the job was settled another way.
+        return res.status(assignment.paymentMethod === 'qr_online' ? 200 : 409).json({
+          success: assignment.paymentMethod === 'qr_online',
+          message: assignment.paymentMethod === 'qr_online'
+            ? 'Payment already confirmed and settled via Admin QR'
+            : 'This assignment was already settled; the QR payment cannot be applied.',
           data: { assignmentId: assignment._id, settled: true }
         });
       }
@@ -340,117 +343,54 @@ exports.confirmAdminQrPayment = async (req, res) => {
       const grossAmount = (amount !== undefined && Number(amount) > 0)
         ? Number(amount)
         : (assignment.grossAmount || (assignment.agreedRate * (assignment.workedDays || 1)) || 0);
+      if (!Number.isFinite(grossAmount) || grossAmount <= 0) {
+        return res.status(400).json({ success: false, message: 'A valid payment amount is required.' });
+      }
 
-      const commissionRate = assignment.commissionRate || settings?.workerCommissionPercentage || 10;
+      const commissionRate = assignment.commissionRate ?? settings?.workerCommissionPercentage ?? 10;
       const commissionAmount = Math.round((grossAmount * commissionRate) / 100);
       const workerNetEarning = grossAmount - commissionAmount;
 
       const workerId = assignment.workerId;
       const farmerId = assignment.farmerId;
-      const idempotencyKey = `qr_settle_assign_${assignment._id}_${Date.now()}`;
+      const idempotencyKey = `qr_settle_assign_${assignment._id}`;
 
-      // 1. Credit Worker in Worker Model (Net Earnings)
-      await Worker.findByIdAndUpdate(workerId, {
-        $inc: { 'wallet.balance': workerNetEarning },
-        status: 'ONLINE'
-      });
-
-      // 2. Ensure Wallet document exists & credit
-      let workerWallet = await Wallet.findOne({ workerId, userModel: 'Worker' });
-      if (!workerWallet) {
-        workerWallet = await Wallet.findOne({ userId: workerId });
-      }
-      if (workerWallet) {
-        workerWallet.balance = (workerWallet.balance || 0) + workerNetEarning;
-        await workerWallet.save();
-      } else {
-        await Wallet.create({ userId: workerId, userModel: 'Worker', balance: workerNetEarning });
+      // The provider cannot be paid for a job that never started (their UTR is not verified against the bank here).
+      if (assignment.visitOtpStatus !== 'VERIFIED' && !(assignment.workedDays > 0)) {
+        return res.status(409).json({ success: false, message: 'A QR payment can only be confirmed after the work has started.' });
       }
 
-      // 3. Create Transaction Records (Earnings Credit to Worker)
-      await Transaction.create({
-        workerId,
-        userId: farmerId,
-        bookingId: assignment.legacyBookingId || null,
-        type: 'earnings_credit',
-        amount: workerNetEarning,
-        status: 'completed',
-        paymentMethod: 'qr_online',
-        description: `Admin UPI QR payment ₹${grossAmount} confirmed. Worker net earnings ₹${workerNetEarning} credited (10% platform commission ₹${commissionAmount} retained).`,
-        referenceId: idempotencyKey,
-        metadata: {
-          type: 'admin_qr_settlement',
-          grossAmount,
-          commissionAmount,
-          workerNetEarning,
-          utr: utr || null,
-          adminUpiId
-        }
-      });
+      // 1. Atomically claim the settlement: exactly one confirmation can ever win for this assignment.
+      const claimed = await IndWorkerAssignment.findOneAndUpdate(
+        { _id: assignment._id, assignmentStatus: 'CONFIRMED', settlementStatus: { $in: ['PENDING', 'FAILED'] } },
+        {
+          $set: {
+            completionStatus: 'OTP_VERIFIED', workStatus: 'SUBMITTED', paymentMethod: 'qr_online', isCashBooking: false,
+            grossAmount, commissionAmount, netEarning: workerNetEarning, workCompletedAt: new Date(),
+            qrPayment: {
+              refId: assignment.qrPayment?.refId || idempotencyKey, amount: grossAmount, adminUpiId, status: 'COMPLETED',
+              utr: cleanUtr, confirmedAt: new Date()
+            }
+          }
+        },
+        { new: true }
+      );
+      if (!claimed) {
+        return res.status(409).json({ success: false, message: 'This assignment is already settled or being settled.' });
+      }
 
-      // 4. Update IndWorkerAssignment doc
-      assignment.settlementStatus = 'SETTLED';
-      assignment.completionStatus = 'OTP_VERIFIED';
-      assignment.workStatus = 'SUBMITTED';
-      assignment.paymentMethod = 'qr_online';
-      assignment.isCashBooking = false;
-      assignment.grossAmount = grossAmount;
-      assignment.commissionAmount = commissionAmount;
-      assignment.netEarning = workerNetEarning;
-      assignment.settledAt = new Date();
-      assignment.workCompletedAt = new Date();
-      assignment.settlementTransactionId = idempotencyKey;
-      assignment.qrPayment = {
-        refId: assignment.qrPayment?.refId || idempotencyKey,
-        amount: grossAmount,
-        adminUpiId,
-        status: 'COMPLETED',
-        utr: utr || null,
-        confirmedAt: new Date()
-      };
-      await assignment.save();
-
-      // 5. If legacy Booking is linked, update it
+      // 2. Settle through the shared, idempotent ledger path (credit exactly once, retry-safe).
+      const settlementSvc = require('../../services/workerSettlementService');
+      const outcome = await settlementSvc.settleAssignment(assignment._id, { useStoredAmounts: true });
+      if (outcome.error) {
+        return res.status(500).json({ success: false, message: 'Payment was recorded but settlement failed; it will be retried automatically.' });
+      }
       if (assignment.legacyBookingId) {
         await Booking.findByIdAndUpdate(assignment.legacyBookingId, {
-          status: 'completed',
-          paymentStatus: PAYMENT_STATUS.SUCCESS,
-          paymentMethod: 'qr_online',
-          cashCollected: false,
-          finalAmount: grossAmount,
-          workDoneAt: new Date(),
-          completedAt: new Date()
+          paymentStatus: PAYMENT_STATUS.SUCCESS, paymentMethod: 'qr_online', cashCollected: false, finalAmount: grossAmount
         });
       }
-
-      // 6. Check if all assignments for parent request are settled -> complete parent & refund unused escrow
-      if (assignment.parentRequestId) {
-        try {
-          const allAssignments = await IndWorkerAssignment.find({
-            parentRequestId: assignment.parentRequestId,
-            assignmentStatus: { $ne: 'CANCELLED' }
-          });
-          const allSettled = allAssignments.length > 0 && allAssignments.every(a => a.settlementStatus === 'SETTLED');
-          if (allSettled) {
-            await WorkerBookingRequest.findByIdAndUpdate(assignment.parentRequestId, {
-              status: 'completed',
-              paymentStatus: 'success',
-              paymentMethod: 'qr_online'
-            });
-
-            emitSafe(`booking_req:${assignment.parentRequestId}`, 'booking_completed', {
-              requestId: assignment.parentRequestId,
-              status: 'completed',
-              serverTimestamp: new Date()
-            });
-
-            const { processDailyFarmerRefund } = require('../../services/workerFinancialService');
-            await processDailyFarmerRefund(assignment.parentRequestId);
-          }
-        } catch (parentErr) {
-          console.warn('[QR Settlement Parent Check]', parentErr.message);
-        }
-      }
+      await settlementSvc.finishParent(assignment.parentRequestId);
 
       // 7. Socket Events
       const eventData = {
