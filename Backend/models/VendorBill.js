@@ -143,6 +143,14 @@ const vendorBillSchema = new mongoose.Schema({
     default: null
   },
 
+  // Penalty carried over from a previous cancellation, charged on this bill (company revenue, not vendor earning)
+  penaltyCharges: { type: Number, default: 0 },
+  extensionCharges: { type: Number, default: 0 },
+
+  // Idempotency flags: each ledger effect may happen exactly once per bill
+  earningsCredited: { type: Boolean, default: false },
+  cashSettled: { type: Boolean, default: false },
+
   note: { type: String, default: null }
 
 }, {

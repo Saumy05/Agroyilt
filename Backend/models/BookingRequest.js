@@ -82,6 +82,8 @@ const bookingRequestSchema = new mongoose.Schema({
 bookingRequestSchema.index({ bookingId: 1, vendorId: 1 }, { unique: true });
 bookingRequestSchema.index({ vendorId: 1, status: 1 });
 bookingRequestSchema.index({ bookingId: 1, status: 1 });
-bookingRequestSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 }); // TTL index for auto-expiry
+// NOTE: deliberately NOT a TTL index. Requests are kept for analytics/audit; expiry is enforced by
+// the booking scheduler and by the expiresAt check in acceptBooking.
+bookingRequestSchema.index({ expiresAt: 1 });
 
 module.exports = mongoose.model('BookingRequest', bookingRequestSchema);

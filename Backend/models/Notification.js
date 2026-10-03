@@ -44,6 +44,8 @@ const notificationSchema = new mongoose.Schema({
       'booking_completed',
       'booking_rejected',
       'booking_rescheduled',
+      'extension_approved',   // Vendor approved an extension request
+      'extension_rejected',   // Vendor declined an extension request
       'job_accepted',
       'job_rejected',
       'job_cancelled',

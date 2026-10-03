@@ -448,6 +448,42 @@ const bookingSchema = new mongoose.Schema({
   // Note: Detailed billing (items/parts) is now handled by VendorBill model
   // workDoneDetails and extraCharges are deprecated in favor of VendorBill
 
+  // Bill / work evidence snapshots (previously written by controllers but dropped by strict mode)
+  workDoneDetails: { type: mongoose.Schema.Types.Mixed, default: null },
+  workUnits: { type: Number, default: null },
+  work_evidence_photo: { type: String, default: null },
+  workerAcceptedAt: { type: Date, default: null },
+  qrPayment: { type: mongoose.Schema.Types.Mixed, default: null },
+
+  // ==========================================
+  // OTP BRUTE-FORCE PROTECTION
+  // ==========================================
+  otpAttempts: {
+    visit: { type: Number, default: 0 },
+    start: { type: Number, default: 0 },
+    end: { type: Number, default: 0 },
+    payment: { type: Number, default: 0 },
+    resume: { type: Number, default: 0 }
+  },
+  otpLockedUntil: { type: Date, default: null },
+
+  // ==========================================
+  // PAYMENT RECONCILIATION
+  // ==========================================
+  // Amount already collected online/wallet before the final bill existed
+  advancePaidAmount: { type: Number, default: 0, min: 0 },
+  // Amount still owed after the final bill is generated (prepaid estimate < final bill)
+  balanceDue: { type: Number, default: 0, min: 0 },
+  refundedAmount: { type: Number, default: 0, min: 0 },
+  // Every Razorpay order created for this booking (so late payments on older orders are still matched)
+  razorpayOrderIds: [{ type: String }],
+  razorpayOrderAmounts: { type: mongoose.Schema.Types.Mixed, default: {} }, // orderId → rupees
+  // Online-pay bookings: the vendor is alerted only after the payment is verified
+  requestHeldForPayment: { type: Boolean, default: false },
+  paymentLockAt: { type: Date, default: null }, // short lock so one wallet payment runs at a time
+  processedPaymentIds: [{ type: String }], // gateway payment ids already applied (idempotency)
+  providerType: { type: String, enum: ['VENDOR', 'WORKER'], default: 'VENDOR' },
+
   // ==========================================
   // 10. CANCELLATION
   // ==========================================
@@ -521,7 +557,7 @@ const bookingSchema = new mongoose.Schema({
     // Most recent pause state
     lastPausedBy: {
       type: String,
-      enum: ['farmer', 'vendor', null],
+      enum: ['farmer', 'vendor', 'worker', null],
       default: null
     },
     lastPauseReason: {
@@ -530,6 +566,7 @@ const bookingSchema = new mongoose.Schema({
     },
     lastPauseNotes: { type: String, default: null },
     resumeOtp: { type: String, default: null },
+    stoppedAt: { type: Date, default: null },
 
     // Audit logs for all actions
     logs: [{
@@ -540,7 +577,7 @@ const bookingSchema = new mongoose.Schema({
       },
       performedBy: {
         type: String,
-        enum: ['farmer', 'vendor', 'system'],
+        enum: ['farmer', 'vendor', 'worker', 'system'],
         required: true
       },
       performedById: {
@@ -549,7 +586,7 @@ const bookingSchema = new mongoose.Schema({
       },
       performedByRole: {
         type: String,
-        enum: ['User', 'Vendor'],
+        enum: ['User', 'Vendor', 'Worker'],
         default: 'User'
       },
       reason: { type: String, default: null },
