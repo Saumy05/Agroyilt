@@ -94,10 +94,18 @@ const boot = async ({ replSet = false } = {}) => {
   app.use('/api/bookings', require(path.join(root, 'routes/booking-routes/userBooking.routes')));
   app.use('/api/payments', require(path.join(root, 'routes/payment-routes/payment.routes')));
   app.use('/api/farmer', require(path.join(root, 'routes/farmer-routes/index')));
+  // independent-worker hiring flow (farmer ⇄ worker)
+  app.use('/api/users', require(path.join(root, 'routes/user-routes/workerBooking.routes')));
+  app.use('/api/workers', require(path.join(root, 'routes/worker-routes/workerRequests.routes')));
+  app.use('/api/workers', require(path.join(root, 'routes/worker-routes/job.routes')));
+  app.use('/api/workers/assignments', require(path.join(root, 'routes/worker-routes/assignment.routes')));
   app.use('/api/webhooks', require(path.join(root, 'routes/common-routes/webhook.routes')));
   // the real user booking router (create/cancel/reschedule/review/reselect)
   app.use('/api/user/bookings', require(path.join(root, 'routes/user-routes/booking.routes')));
   app.use((err, _req, res, _next) => res.status(err.status || 500).json({ success: false, message: err.message }));
+
+  // Build every unique/partial index before the first test (idempotency guarantees depend on them)
+  await Promise.all(mongoose.modelNames().map(n => mongoose.model(n).init().catch(() => {})));
 
   // One persistent listener (supertest's per-request ephemeral servers cause sporadic ECONNRESET on newer Node)
   server = app.listen(0, '127.0.0.1');
