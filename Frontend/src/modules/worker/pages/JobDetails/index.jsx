@@ -15,6 +15,7 @@ import { toastManager } from '../../../../utils/toastManager';
 import { useAppNotifications } from '../../../../hooks/useAppNotifications';
 import { useLocationTracking } from '../../../../hooks/useLocationTracking';
 import authStorage from '../../../../utils/authStorage';
+import flutterBridge from '../../../../utils/flutterBridge';
 
 // Real-time Active Work Stopwatch component
 const ActiveWorkStopwatch = ({ job }) => {
@@ -676,7 +677,7 @@ const JobDetails = () => {
         {/* View Timeline Button & Top Action Banner */}
         <div className="mb-6">
           <button
-            onClick={() => navigate(`/worker/job/${id}/timeline`)}
+            onClick={() => flutterBridge.navigateTo(`/worker/job/${id}/timeline`, navigate)}
             className="w-full bg-white border border-gray-200 py-3.5 rounded-2xl font-bold text-gray-700 flex items-center justify-center gap-2 shadow-sm active:scale-95 transition-all text-base mb-4"
           >
             <FiClock className="w-5 h-5 text-gray-500" />

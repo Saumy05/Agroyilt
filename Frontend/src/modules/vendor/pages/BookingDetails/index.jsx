@@ -574,7 +574,7 @@ export default function BookingDetails() {
   };
 
   const handleViewTimeline = () => {
-    navigate(`/vendor/booking/${booking.id}/timeline`);
+    flutterBridge.navigateTo(`/vendor/booking/${booking.id}/timeline`, navigate);
   };
 
 

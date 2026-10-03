@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Production-Ready Flutter JS Bridge
  * Handles secure and optimized communication with native mobile features.
  */
@@ -182,6 +182,44 @@ class FlutterBridge {
       } catch (err) {
         return { success: false, error: 'Sharing not supported' };
       }
+    }
+  }
+
+  /* ================================
+        IN-WEBVIEW NAVIGATION
+  ================================== */
+  /**
+   * Navigates to an internal SPA path without letting Flutter intercept it
+   * as a native route. Calls the 'navigateWebView' Flutter handler so the
+   * Flutter app knows to stay in the WebView. Falls back to pushState/href
+   * when not inside Flutter.
+   *
+   * @param {string} path  - e.g. '/worker/job/abc123/timeline'
+   * @param {Function} reactNavigate - React Router navigate() fn (optional)
+   */
+  async navigateTo(path, reactNavigate = null) {
+    if (this.isFlutter) {
+      // Try to call a Flutter handler that whitelists WebView-internal navigation.
+      // If the handler doesn't exist yet the bridge silently no-ops and we fall through.
+      try {
+        await window.flutter_inappwebview.callHandler('navigateWebView', { path });
+        return;
+      } catch (_) {
+        // Handler not registered in Flutter yet — fall through to pushState.
+      }
+      // Fallback: use pushState so Flutter's shouldOverrideUrlLoading is NOT triggered
+      // (pushState doesn't fire a full navigation event that Flutter intercepts).
+      window.history.pushState({}, '', path);
+      // Dispatch a popstate so React Router picks up the change.
+      window.dispatchEvent(new PopStateEvent('popstate', { state: {} }));
+      return;
+    }
+
+    // Not in Flutter — use React Router if provided, otherwise location.
+    if (reactNavigate) {
+      reactNavigate(path);
+    } else {
+      window.location.href = path;
     }
   }
 }

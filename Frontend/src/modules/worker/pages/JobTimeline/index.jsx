@@ -223,7 +223,7 @@ const JobTimeline = () => {
       title: isPending ? 'Job Assigned' : 'Job Accepted',
       icon: isPending ? FiUser : FiCheck,
       action: isPending
-        ? () => navigate(`/worker/jobs/${id}`)
+        ? () => navigate(`/worker/job/${id}`)
         : (currentStage === 1 ? () => handleAction('start') : null),
       actionLabel: isPending ? 'View & Respond' : 'Start Journey',
       description: isPending ? 'New job assigned. Waiting for response.' : 'You have accepted the job. Ready to start.',
