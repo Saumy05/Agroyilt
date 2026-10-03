@@ -15,9 +15,11 @@ import {
   FiArrowLeft,
   FiBell,
   FiXCircle,
-  FiRefreshCw
+  FiRefreshCw,
+  FiCreditCard
 } from 'react-icons/fi';
 import { bookingService } from '../../../../services/bookingService';
+import { paymentService } from '../../../../services/paymentService';
 import { useSocket } from '../../../../context/SocketContext';
 import NotificationBell from '../../components/common/NotificationBell';
 import ConfirmDialog from '../../../../components/common/ConfirmDialog';
@@ -103,6 +105,80 @@ const BookingConfirmation = () => {
   const [isSearching, setIsSearching] = useState(!location.state?.noVendorsFound);
   const [confirmDialog, setConfirmDialog] = useState(false);
   const [showReselectModal, setShowReselectModal] = useState(false);
+  const [paying, setPaying] = useState(false);
+
+  const handleOnlinePayment = async () => {
+    if (paying || !booking) return;
+
+    try {
+      setPaying(true);
+      toastManager.info('Initializing Razorpay payment...');
+      const orderResponse = await paymentService.createOrder(booking._id || booking.id);
+
+      if (!orderResponse.success) {
+        toastManager.error(orderResponse.message || 'Failed to create payment order');
+        setPaying(false);
+        return;
+      }
+
+      const razorpayKey = orderResponse.data?.key || import.meta.env.VITE_RAZORPAY_KEY_ID;
+      const options = {
+        key: razorpayKey,
+        amount: Math.round(orderResponse.data.amount * 100),
+        currency: orderResponse.data.currency || 'INR',
+        order_id: orderResponse.data.orderId,
+        name: 'Agroyilt',
+        description: `Payment for ${booking.serviceName || 'Booking'}`,
+        handler: async function (response) {
+          try {
+            toastManager.info('Verifying payment...');
+            const verifyResponse = await paymentService.verifyPayment({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature
+            });
+
+            if (verifyResponse.success) {
+              toastManager.success('Payment successful!');
+              // Reload booking
+              const refetch = await bookingService.getById(id);
+              if (refetch.success) {
+                setBooking(refetch.data);
+              }
+            } else {
+              toastManager.error('Payment verification failed');
+            }
+          } catch (e) {
+            toastManager.error('Failed to verify payment');
+          } finally {
+            setPaying(false);
+          }
+        },
+        modal: {
+          ondismiss: function () {
+            setPaying(false);
+          }
+        },
+        prefill: {
+          name: booking.userId?.name || 'Farmer',
+          contact: booking.userId?.phone || ''
+        },
+        theme: {
+          color: themeColors.button
+        }
+      };
+
+      const razorpay = new window.Razorpay(options);
+      razorpay.on('payment.failed', function (resp) {
+        toastManager.error(`Payment failed: ${resp.error?.description || 'Transaction unsuccessful'}`);
+        setPaying(false);
+      });
+      razorpay.open();
+    } catch (error) {
+      toastManager.error('Failed to initialize payment');
+      setPaying(false);
+    }
+  };
 
   useEffect(() => {
     const loadBooking = async () => {
@@ -633,7 +709,9 @@ const BookingConfirmation = () => {
               {/* Total */}
               <div className="border-t border-slate-200 pt-4 mt-2">
                 <div className="flex justify-between items-center">
-                  <span className="text-base font-bold text-slate-900">Total Paid</span>
+                  <span className="text-base font-bold text-slate-900">
+                    {booking.paymentStatus === 'success' || booking.paymentMethod === 'plan_benefit' ? 'Total Paid' : 'Total Payable'}
+                  </span>
                   <span className="text-xl font-black text-slate-900">
                     ₹{(booking.paymentMethod === 'plan_benefit' ? 0 : (booking.finalAmount || booking.totalAmount || 0)).toLocaleString('en-IN')}
                   </span>
@@ -641,8 +719,31 @@ const BookingConfirmation = () => {
               </div>
             </div>
 
+            {/* Payment Pending Banner + Pay Online with Razorpay Button */}
+            {booking.paymentStatus !== 'success' && booking.paymentMethod === 'online' && (
+              <div className="mt-4 pt-3 border-t border-dashed border-slate-200">
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-3 flex items-start gap-3">
+                  <FiClock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-black text-amber-900 uppercase tracking-wide">Advance Payment Pending</p>
+                    <p className="text-[11px] text-amber-700 mt-0.5 font-medium leading-relaxed">
+                      Complete payment securely via Razorpay to lock in your machinery reservation.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleOnlinePayment}
+                  disabled={paying}
+                  className="w-full py-3.5 bg-gradient-to-r from-emerald-600 via-emerald-700 to-green-800 hover:from-emerald-700 hover:to-green-900 text-white rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-emerald-700/20 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <FiCreditCard className="w-4 h-4" />
+                  {paying ? 'Connecting to Razorpay...' : `Pay ₹${(booking.finalAmount || booking.totalAmount || 0).toLocaleString('en-IN')} Online with Razorpay`}
+                </button>
+              </div>
+            )}
+
             {/* Payment Success Badge */}
-            {(booking.paymentId || booking.paymentMethod === 'plan_benefit') && (
+            {(booking.paymentId || booking.paymentStatus === 'success' || booking.paymentMethod === 'plan_benefit') && (
               <div className={`mt-4 pt-3 border-t border-dashed ${booking.paymentMethod === 'plan_benefit' ? 'border-amber-200' : 'border-slate-200'}`}>
                 <div className={`flex items-center gap-2 border rounded-lg p-3 ${booking.paymentMethod === 'plan_benefit' ? 'bg-amber-50 border-amber-100' : 'bg-green-50 border-green-200'}`}>
                   <FiCheckCircle className={`w-5 h-5 shrink-0 ${booking.paymentMethod === 'plan_benefit' ? 'text-amber-600' : 'text-green-600'}`} />

@@ -8,7 +8,20 @@ import {
 import { motion } from 'framer-motion';
 import { toastManager } from '../../../../utils/toastManager';
 import { bookingService } from '../../../../services/bookingService';
+import { paymentService } from '../../../../services/paymentService';
+import authStorage from '../../../../utils/authStorage';
 import AddressSelectionModal from '../Checkout/components/AddressSelectionModal';
+
+const loadRazorpay = () => {
+    return new Promise((resolve) => {
+        if (window.Razorpay) return resolve(true);
+        const script = document.createElement('script');
+        script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+        script.onload = () => resolve(true);
+        script.onerror = () => resolve(false);
+        document.body.appendChild(script);
+    });
+};
 
 const MachineryCheckout = () => {
     const location = useLocation();
@@ -117,6 +130,16 @@ const MachineryCheckout = () => {
 
         try {
             setSubmitting(true);
+
+            if (paymentMethod === 'online') {
+                const isLoaded = await loadRazorpay();
+                if (!isLoaded) {
+                    toastManager.error('Razorpay SDK failed to load. Please check your internet connection.');
+                    setSubmitting(false);
+                    return;
+                }
+            }
+
             const payload = {
                 equipmentId: equipment._id || equipment.id,
                 serviceId: equipment.serviceId?._id || equipment.serviceId || equipment._id,
@@ -171,15 +194,94 @@ const MachineryCheckout = () => {
             };
 
             const res = await bookingService.create(payload);
-            if (res.success) {
-                toastManager.success('Booking Dispatched to Vendor!');
-                sessionStorage.removeItem(`machinery_booking_${equipment._id}`);
-                const newBookingId = res.booking?._id || res.data?._id || res.data?.booking?._id || res._id || res.booking?.id || res.data?.id;
-                if (newBookingId) {
+            if (!res.success) {
+                toastManager.error(res.message || 'Booking failed');
+                setSubmitting(false);
+                return;
+            }
+
+            const newBookingId = res.booking?._id || res.data?._id || res.data?.booking?._id || res._id || res.booking?.id || res.data?.id;
+
+            if (paymentMethod === 'online' && newBookingId) {
+                try {
+                    toastManager.info('Initializing Razorpay payment...');
+                    const orderRes = await paymentService.createOrder(newBookingId);
+
+                    if (!orderRes.success) {
+                        toastManager.error(orderRes.message || 'Failed to initialize payment');
+                        sessionStorage.removeItem(`machinery_booking_${equipment._id}`);
+                        navigate(`/user/booking-confirmation/${newBookingId}`, { replace: true });
+                        return;
+                    }
+
+                    const razorpayKey = orderRes.data?.key || import.meta.env.VITE_RAZORPAY_KEY_ID;
+                    const options = {
+                        key: razorpayKey,
+                        amount: Math.round((orderRes.data.amount || total) * 100),
+                        currency: orderRes.data.currency || 'INR',
+                        order_id: orderRes.data.orderId,
+                        name: 'Agroyilt',
+                        description: `Payment for ${equipment.name || 'Machinery Booking'}`,
+                        handler: async function (response) {
+                            try {
+                                toastManager.info('Verifying payment...');
+                                const verifyRes = await paymentService.verifyPayment({
+                                    razorpay_order_id: response.razorpay_order_id,
+                                    razorpay_payment_id: response.razorpay_payment_id,
+                                    razorpay_signature: response.razorpay_signature
+                                });
+
+                                if (verifyRes.success) {
+                                    toastManager.success('Payment successful! Booking Confirmed.');
+                                } else {
+                                    toastManager.error(verifyRes.message || 'Payment verification failed');
+                                }
+                            } catch (vErr) {
+                                toastManager.error('Payment verification failed');
+                            } finally {
+                                sessionStorage.removeItem(`machinery_booking_${equipment._id}`);
+                                navigate(`/user/booking-confirmation/${newBookingId}`, { replace: true });
+                            }
+                        },
+                        prefill: {
+                            name: authStorage.getUserData('user')?.name || 'Farmer',
+                            contact: authStorage.getUserData('user')?.phone || ''
+                        },
+                        theme: {
+                            color: '#047857'
+                        },
+                        modal: {
+                            ondismiss: function () {
+                                toastManager.warning('Payment was not completed. You can pay anytime from Booking Details.');
+                                sessionStorage.removeItem(`machinery_booking_${equipment._id}`);
+                                navigate(`/user/booking-confirmation/${newBookingId}`, { replace: true });
+                            }
+                        }
+                    };
+
+                    const rzp = new window.Razorpay(options);
+                    rzp.on('payment.failed', function (resp) {
+                        toastManager.error(`Payment failed: ${resp.error?.description || 'Transaction unsuccessful'}`);
+                        sessionStorage.removeItem(`machinery_booking_${equipment._id}`);
+                        navigate(`/user/booking-confirmation/${newBookingId}`, { replace: true });
+                    });
+                    rzp.open();
+                    return;
+                } catch (payErr) {
+                    console.error('Online payment error:', payErr);
+                    toastManager.error('Could not open payment window. Redirecting to confirmation.');
+                    sessionStorage.removeItem(`machinery_booking_${equipment._id}`);
                     navigate(`/user/booking-confirmation/${newBookingId}`, { replace: true });
-                } else {
-                    navigate('/user/my-bookings', { replace: true });
+                    return;
                 }
+            }
+
+            toastManager.success('Booking Dispatched to Vendor!');
+            sessionStorage.removeItem(`machinery_booking_${equipment._id}`);
+            if (newBookingId) {
+                navigate(`/user/booking-confirmation/${newBookingId}`, { replace: true });
+            } else {
+                navigate('/user/my-bookings', { replace: true });
             }
         } catch (err) {
             const errorMsg = err.response?.data?.errors?.[0]?.msg || err.response?.data?.message || 'Booking failed';

@@ -43,10 +43,13 @@ const createPaymentOrder = async (req, res) => {
       });
     }
 
+    // Robustly determine payable amount
+    const payableAmount = Math.max(1, Number(booking.finalAmount || booking.userPayableAmount || booking.totalAmount || booking.basePrice || 1));
+
     // Create Razorpay order
-    console.log('Creating Razorpay order with amount:', booking.finalAmount);
+    console.log('Creating Razorpay order with amount:', payableAmount);
     const orderResult = await createOrder(
-      booking.finalAmount,
+      payableAmount,
       'INR',
       booking.bookingNumber,
       {
@@ -67,8 +70,11 @@ const createPaymentOrder = async (req, res) => {
       });
     }
 
-    // Update booking with Razorpay order ID
+    // Update booking with Razorpay order ID and ensure finalAmount is set
     booking.razorpayOrderId = orderResult.orderId;
+    if (!booking.finalAmount || booking.finalAmount <= 0) {
+      booking.finalAmount = payableAmount;
+    }
     await booking.save();
 
     res.status(200).json({
@@ -132,6 +138,10 @@ const verifyPaymentWebhook = async (req, res) => {
     // Update booking status based on current state
     if ([BOOKING_STATUS.PENDING, BOOKING_STATUS.SEARCHING, BOOKING_STATUS.AWAITING_PAYMENT].includes(booking.status)) {
       booking.status = BOOKING_STATUS.CONFIRMED;
+    } else if (booking.status === BOOKING_STATUS.REQUESTED) {
+      if (!booking.vendorId) {
+        booking.status = BOOKING_STATUS.CONFIRMED;
+      }
     } else if (booking.status === BOOKING_STATUS.WORK_DONE) {
       booking.status = BOOKING_STATUS.COMPLETED;
       booking.completedAt = new Date();

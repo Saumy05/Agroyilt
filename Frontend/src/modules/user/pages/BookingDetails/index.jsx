@@ -2122,8 +2122,12 @@ const BookingDetails = () => {
             </div>
           </section>
 
-          {/* Action Card for Payment — shows for work_done (independent worker) or awaiting_payment (all) */}
-          {false && /* Hidden: Farmer already paid at time of worker booking, no need for post-payment prompt */ (booking.status === 'awaiting_payment' || (booking.status === 'work_done' && !booking.vendorId && booking.workerId)) && (
+          {/* Action Card for Payment — shows when online payment is pending or bill is awaiting payment */}
+          {booking.paymentStatus !== 'success' && booking.paymentMethod !== 'plan_benefit' && !['cancelled', 'rejected'].includes(booking.status) && (
+            booking.status === 'awaiting_payment' || 
+            (booking.status === 'work_done' && !booking.isCashBooking && booking.paymentMethod !== 'cash') ||
+            ['online', 'razorpay'].includes(booking.paymentMethod)
+          ) && (
             <div className="bg-white rounded-3xl shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-gray-100 p-6 space-y-4">
               <div className="text-center mb-4">
                 <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-3">
