@@ -191,6 +191,8 @@ const getServiceTimerStatus = async (req, res) => {
       data: {
         bookingId: booking._id,
         status: status || 'NOT_STARTED',
+        accumulatedActiveSeconds,
+        accumulatedPausedSeconds,
         liveActiveSeconds,
         livePausedSeconds,
         billableMinutes,

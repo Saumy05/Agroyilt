@@ -100,6 +100,8 @@ export const LiveServiceTimer = ({
   // Local synchronized timer state
   const [timerData, setTimerData] = useState({
     status: booking?.serviceTimer?.status || 'NOT_STARTED',
+    accumulatedActiveSeconds: booking?.serviceTimer?.accumulatedActiveSeconds || 0,
+    accumulatedPausedSeconds: booking?.serviceTimer?.accumulatedPausedSeconds || 0,
     liveActiveSeconds: booking?.serviceTimer?.accumulatedActiveSeconds || 0,
     livePausedSeconds: booking?.serviceTimer?.accumulatedPausedSeconds || 0,
     currentSessionStartedAt: booking?.serviceTimer?.currentSessionStartedAt || null,
@@ -124,6 +126,27 @@ export const LiveServiceTimer = ({
   const [isPartialEnd, setIsPartialEnd] = useState(false);
   const [partialReasonText, setPartialReasonText] = useState('');
 
+  // 0. Synchronize with parent booking prop updates
+  useEffect(() => {
+    if (booking?.serviceTimer) {
+      setTimerData(prev => ({
+        ...prev,
+        status: booking.serviceTimer.status || prev.status,
+        accumulatedActiveSeconds: booking.serviceTimer.accumulatedActiveSeconds ?? prev.accumulatedActiveSeconds ?? 0,
+        accumulatedPausedSeconds: booking.serviceTimer.accumulatedPausedSeconds ?? prev.accumulatedPausedSeconds ?? 0,
+        currentSessionStartedAt: booking.serviceTimer.currentSessionStartedAt ?? prev.currentSessionStartedAt,
+        currentPauseStartedAt: booking.serviceTimer.currentPauseStartedAt ?? prev.currentPauseStartedAt,
+        lastPausedBy: booking.serviceTimer.lastPausedBy ?? prev.lastPausedBy,
+        lastPauseReason: booking.serviceTimer.lastPauseReason ?? prev.lastPauseReason,
+        lastPauseNotes: booking.serviceTimer.lastPauseNotes ?? prev.lastPauseNotes,
+        resumeOtp: booking.serviceTimer.resumeOtp ?? booking.resumeOtp ?? prev.resumeOtp,
+        ratePerMinute: booking.serviceTimer.ratePerMinute || prev.ratePerMinute,
+        adminBaseCharge: booking.serviceTimer.adminBaseCharge ?? prev.adminBaseCharge,
+        billingSummary: booking.serviceTimer.billingSummary || prev.billingSummary
+      }));
+    }
+  }, [booking?.serviceTimer, booking?.resumeOtp]);
+
   // 1. Fetch authoritative status from backend on mount
   useEffect(() => {
     if (!bookingId) return;
@@ -135,7 +158,9 @@ export const LiveServiceTimer = ({
         if (res?.success && res.data && isMounted) {
           setTimerData(prev => ({
             ...prev,
-            ...res.data
+            ...res.data,
+            accumulatedActiveSeconds: res.data.accumulatedActiveSeconds ?? prev.accumulatedActiveSeconds ?? 0,
+            accumulatedPausedSeconds: res.data.accumulatedPausedSeconds ?? prev.accumulatedPausedSeconds ?? 0,
           }));
         }
       } catch (err) {
@@ -166,8 +191,10 @@ export const LiveServiceTimer = ({
         setTimerData(prev => ({
           ...prev,
           status: payload.status,
-          liveActiveSeconds: payload.accumulatedActiveSeconds,
-          livePausedSeconds: payload.accumulatedPausedSeconds,
+          accumulatedActiveSeconds: payload.accumulatedActiveSeconds ?? prev.accumulatedActiveSeconds ?? 0,
+          accumulatedPausedSeconds: payload.accumulatedPausedSeconds ?? prev.accumulatedPausedSeconds ?? 0,
+          liveActiveSeconds: payload.accumulatedActiveSeconds ?? prev.liveActiveSeconds,
+          livePausedSeconds: payload.accumulatedPausedSeconds ?? prev.livePausedSeconds,
           currentSessionStartedAt: payload.currentSessionStartedAt,
           currentPauseStartedAt: payload.currentPauseStartedAt,
           lastPausedBy: payload.lastPausedBy,
@@ -257,8 +284,18 @@ export const LiveServiceTimer = ({
       setLoadingAction(true);
       const res = await serviceTimerService.start(bookingId);
       if (res?.success) {
+        if (res.data) {
+          setTimerData(prev => ({
+            ...prev,
+            ...res.data,
+            accumulatedActiveSeconds: res.data.accumulatedActiveSeconds ?? 0,
+            accumulatedPausedSeconds: res.data.accumulatedPausedSeconds ?? 0,
+            liveActiveSeconds: res.data.accumulatedActiveSeconds ?? 0,
+            livePausedSeconds: res.data.accumulatedPausedSeconds ?? 0
+          }));
+        }
         toastManager.success('Service Timer Started!');
-        onStatusChange();
+        if (onStatusChange) onStatusChange();
       }
     } catch (err) {
       toastManager.error(err.response?.data?.message || 'Failed to start service timer');
@@ -275,9 +312,20 @@ export const LiveServiceTimer = ({
         notes: pauseNotes
       });
       if (res?.success) {
+        if (res.data) {
+          setTimerData(prev => ({
+            ...prev,
+            ...res.data,
+            accumulatedActiveSeconds: res.data.accumulatedActiveSeconds ?? prev.accumulatedActiveSeconds ?? 0,
+            accumulatedPausedSeconds: res.data.accumulatedPausedSeconds ?? prev.accumulatedPausedSeconds ?? 0,
+            liveActiveSeconds: res.data.accumulatedActiveSeconds ?? prev.liveActiveSeconds,
+            livePausedSeconds: res.data.accumulatedPausedSeconds ?? prev.livePausedSeconds
+          }));
+        }
         setShowPauseModal(false);
         setPauseNotes('');
         toastManager.info('Service timer paused. Downtime will NOT be charged.');
+        if (onStatusChange) onStatusChange();
       }
     } catch (err) {
       toastManager.error(err.response?.data?.message || 'Failed to pause service');
@@ -307,9 +355,20 @@ export const LiveServiceTimer = ({
 
       const res = await serviceTimerService.resume(bookingId, { otp: otpToSend });
       if (res?.success) {
+        if (res.data) {
+          setTimerData(prev => ({
+            ...prev,
+            ...res.data,
+            accumulatedActiveSeconds: res.data.accumulatedActiveSeconds ?? prev.accumulatedActiveSeconds ?? 0,
+            accumulatedPausedSeconds: res.data.accumulatedPausedSeconds ?? prev.accumulatedPausedSeconds ?? 0,
+            liveActiveSeconds: res.data.accumulatedActiveSeconds ?? prev.liveActiveSeconds,
+            livePausedSeconds: res.data.accumulatedPausedSeconds ?? prev.livePausedSeconds
+          }));
+        }
         setShowResumeModal(false);
         setResumeOtpInput('');
         toastManager.success('Service work resumed successfully!');
+        if (onStatusChange) onStatusChange();
       }
     } catch (err) {
       toastManager.error(err.response?.data?.message || 'Failed to resume service. Invalid OTP.');
