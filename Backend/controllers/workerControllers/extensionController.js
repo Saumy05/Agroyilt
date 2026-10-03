@@ -140,103 +140,99 @@ const notify = async ({ recipientType, recipientId, type, title, message, relate
   }
 };
 
-/**
- * Check and auto-expire pending worker extensions past expiry
- */
-const evaluateExtensionExpiry = async (extension) => {
-  if (extension.status !== 'WORKER_EVALUATION' && extension.status !== 'REQUESTED') {
-    return extension;
-  }
+const extSvc = require('../../services/workerExtensionService');
+const { hasTimeConflict, hasDailyConflict } = require('./farmerWorkerRequestController');
 
-  if (new Date() > new Date(extension.expiresAt)) {
-    let hasChanges = false;
-    let anyAccepted = false;
+const oidOk = (v) => mongoose.Types.ObjectId.isValid(String(v)) && String(new mongoose.Types.ObjectId(String(v))) === String(v);
+const MAX_EXT_DAYS = 30;
+const MAX_EXT_MINUTES = 8 * 60;
 
-    extension.workerExtensions.forEach(w => {
-      if (w.status === 'REQUESTED') {
-        w.status = 'EXPIRED'; // Distinct from REJECTED
-        w.respondedAt = new Date();
-        hasChanges = true;
-      } else if (w.status === 'ACCEPTED') {
-        anyAccepted = true;
-      }
-    });
-
-    if (anyAccepted) {
-      extension.status = 'PAYMENT_PENDING';
-      hasChanges = true;
-    } else {
-      extension.status = 'EXPIRED';
-      hasChanges = true;
-    }
-
-    if (hasChanges) {
-      await extension.save();
-    }
-  }
-
-  return extension;
+/** Worker + farmer notifications once an extension has been applied to an assignment. */
+exports._notifyExtensionApplied = async ({ ext, worker, assignment }) => {
+  const isDaily = ext.bookingType === 'DAILY';
+  const extDesc = isDaily ? `${ext.additionalDays} extra day(s)` : `${ext.extensionMinutes} extra minutes`;
+  await notify({
+    recipientType: 'worker', recipientId: worker.workerId, type: 'extension_confirmed',
+    title: 'Extension Confirmed!', message: `Your booking has been extended by ${extDesc}. Extra earning: ₹${worker.extensionNetAmount}.`,
+    relatedId: ext._id, relatedType: 'IndWorkerExtension', data: { assignmentId: assignment._id, extensionId: ext._id }
+  });
+  emitSafe(`worker_${worker.workerId}`, 'extension_confirmed', {
+    extensionId: ext._id, assignmentId: assignment._id, grossAmount: worker.extensionGrossAmount, netAmount: worker.extensionNetAmount, serverTimestamp: new Date()
+  });
 };
+
+const announceExtensionConfirmed = async (ext) => {
+  const isDaily = ext.bookingType === 'DAILY';
+  const extDesc = isDaily ? `${ext.additionalDays} extra day(s)` : `${ext.extensionMinutes} extra minutes`;
+  const accepted = ext.workerExtensions.filter(w => w.status === 'ACCEPTED');
+  await notify({
+    recipientType: 'user', recipientId: ext.farmerId, type: 'extension_confirmed',
+    title: ext.paymentMode === 'cash' ? '🎉 Extension Confirmed!' : '🎉 Extension Confirmed & Paid!',
+    message: `Your extension of ${extDesc} has been confirmed for ${accepted.length} worker(s).`,
+    relatedId: ext._id, relatedType: 'IndWorkerExtension',
+    data: { extensionId: ext._id, requestId: ext.parentRequestId, link: `/user/farmer-worker-request/${ext.parentRequestId}/track` }
+  });
+  emitSafe(`booking_req:${ext.parentRequestId}`, 'extension_confirmed', {
+    extensionId: ext._id, status: 'CONFIRMED', acceptedWorkers: accepted.map(w => w.workerId), serverTimestamp: new Date()
+  });
+};
+
+exports._announceExtensionConfirmed = announceExtensionConfirmed;
 
 /**
  * POST /api/user/farmer-worker-request/:id/extension
- * Farmer creates an extension request for currently active workers
  * Body: { selectedWorkerIds: [], extensionMinutes: 30, additionalDays: 1 }
  */
 exports.createExtension = async (req, res) => {
   try {
     const farmerId = req.user._id;
     const { id } = req.params;
-    const { selectedWorkerIds, extensionMinutes, additionalDays } = req.body;
+    const { selectedWorkerIds } = req.body || {};
+    if (!oidOk(id)) return res.status(404).json({ success: false, message: 'Worker booking request not found' });
 
     const request = await WorkerBookingRequest.findOne({ _id: id, farmerId });
     if (!request) {
       return res.status(404).json({ success: false, message: 'Worker booking request not found' });
     }
+    if (!['confirmed', 'in_progress', 'partially_completed'].includes(request.status)) {
+      return res.status(409).json({ success: false, message: `Extensions are only possible on active bookings (status: ${request.status}).` });
+    }
 
     const isDaily = request.bookingType === 'DAILY';
-
-    // Validate extension parameters
+    let additionalDays = null; let extensionMinutes = null;
     if (isDaily) {
-      if (!additionalDays || Number(additionalDays) < 1) {
-        return res.status(400).json({ success: false, message: 'additionalDays must be at least 1 for DAILY extension' });
+      additionalDays = Number(req.body.additionalDays);
+      if (!Number.isInteger(additionalDays) || additionalDays < 1 || additionalDays > MAX_EXT_DAYS) {
+        return res.status(400).json({ success: false, message: `additionalDays must be a whole number between 1 and ${MAX_EXT_DAYS}.` });
       }
     } else {
-      if (!extensionMinutes || Number(extensionMinutes) < 5) {
-        return res.status(400).json({ success: false, message: 'extensionMinutes must be at least 5 minutes for HOURLY extension' });
+      extensionMinutes = Number(req.body.extensionMinutes);
+      if (!Number.isInteger(extensionMinutes) || extensionMinutes < 5 || extensionMinutes > MAX_EXT_MINUTES) {
+        return res.status(400).json({ success: false, message: `extensionMinutes must be a whole number between 5 and ${MAX_EXT_MINUTES}.` });
       }
     }
 
-    // Check for existing active extensions (concurrency rule: no overlapping evaluation or payment pending)
-    const existingActiveExtension = await IndWorkerExtension.findOne({
-      parentRequestId: request._id,
-      status: { $in: ['REQUESTED', 'WORKER_EVALUATION', 'PAYMENT_PENDING'] }
-    });
+    if (!Array.isArray(selectedWorkerIds) || selectedWorkerIds.length === 0 || !selectedWorkerIds.every(oidOk)) {
+      return res.status(400).json({ success: false, message: 'Please select at least one valid worker to extend' });
+    }
 
-    if (existingActiveExtension) {
-      // Check if it should expire
-      await evaluateExtensionExpiry(existingActiveExtension);
-      if (['REQUESTED', 'WORKER_EVALUATION', 'PAYMENT_PENDING'].includes(existingActiveExtension.status)) {
-        return res.status(409).json({
-          success: false,
-          message: 'An active extension request is already in progress. Please complete or wait for it to finish.'
-        });
+    // an open extension that has timed out must not block a new one
+    const open = await IndWorkerExtension.findOne({ parentRequestId: request._id, isActive: true });
+    if (open) {
+      const settled = await extSvc.closeEvaluationIfDone(open._id);
+      if (settled && settled.isActive) {
+        return res.status(409).json({ success: false, message: 'An active extension request is already in progress. Please complete or wait for it to finish.' });
       }
     }
 
-    // Validate selected workers
-    if (!selectedWorkerIds || !Array.isArray(selectedWorkerIds) || selectedWorkerIds.length === 0) {
-      return res.status(400).json({ success: false, message: 'Please select at least one worker to extend' });
-    }
-
-    // Fetch assignments
     const assignments = await IndWorkerAssignment.find({
       parentRequestId: request._id,
       workerId: { $in: selectedWorkerIds },
       assignmentStatus: 'CONFIRMED',
-      settlementStatus: { $ne: 'SETTLED' }
+      settlementStatus: 'PENDING',
+      completionStatus: 'PENDING',
+      isDecreased: { $ne: true }
     });
-
     if (assignments.length === 0) {
       return res.status(400).json({ success: false, message: 'No valid active assignments found for selected workers' });
     }
@@ -244,108 +240,61 @@ exports.createExtension = async (req, res) => {
     const settings = await getWorkerFinancialSettings();
     const expiryMinutes = settings.extensionExpiryMinutes || 30;
     const expiresAt = new Date(Date.now() + expiryMinutes * 60 * 1000);
-    const commissionRate = settings.workerCommissionPercentage || 10;
+    const commissionRate = settings.workerCommissionPercentage ?? 10;
 
-    const workerExtensions = [];
-
-    for (const assign of assignments) {
+    const workerExtensions = assignments.map(assign => {
       const agreedRate = Number(assign.agreedRate || 0);
-      let grossPaise = 0;
-
-      if (isDaily) {
-        grossPaise = toP(agreedRate) * Number(additionalDays);
-      } else {
-        const hours = Number(extensionMinutes) / 60;
-        grossPaise = Math.round(toP(agreedRate) * hours);
-      }
-
+      const grossPaise = isDaily ? toP(agreedRate) * additionalDays : Math.round(toP(agreedRate) * (extensionMinutes / 60));
       const commissionPaise = Math.floor((grossPaise * commissionRate) / 100);
-      const netPaise = grossPaise - commissionPaise;
-
-      workerExtensions.push({
-        assignmentId: assign._id,
-        workerId: assign.workerId,
-        status: 'REQUESTED',
-        agreedRate,
-        rateUnit: isDaily ? 'daily' : 'hourly',
-        extensionMinutes: isDaily ? null : Number(extensionMinutes),
-        additionalDays: isDaily ? Number(additionalDays) : null,
-        extensionGrossAmount: toINR(grossPaise),
-        extensionCommissionAmount: toINR(commissionPaise),
-        extensionNetAmount: toINR(netPaise)
-      });
-    }
-
-    const extension = await IndWorkerExtension.create({
-      parentRequestId: request._id,
-      bookingType: isDaily ? 'DAILY' : 'HOURLY',
-      farmerId,
-      extensionMinutes: isDaily ? null : Number(extensionMinutes),
-      additionalDays: isDaily ? Number(additionalDays) : null,
-      status: 'WORKER_EVALUATION',
-      expiresAt,
-      workerExtensions,
-      idempotencyKey: `ext_${request._id}_${Date.now()}`
+      return {
+        assignmentId: assign._id, workerId: assign.workerId, status: 'REQUESTED', agreedRate,
+        rateUnit: isDaily ? 'daily' : 'hourly', extensionMinutes: isDaily ? null : extensionMinutes, additionalDays: isDaily ? additionalDays : null,
+        extensionGrossAmount: toINR(grossPaise), extensionCommissionAmount: toINR(commissionPaise), extensionNetAmount: toINR(grossPaise - commissionPaise)
+      };
     });
 
-    // Link extension to request and assignments
-    await WorkerBookingRequest.findByIdAndUpdate(request._id, {
-      $push: { extensionIds: extension._id }
-    });
-    for (const assign of assignments) {
-      await IndWorkerAssignment.findByIdAndUpdate(assign._id, {
-        $push: { extensionIds: extension._id }
+    let extension;
+    try {
+      extension = await IndWorkerExtension.create({
+        parentRequestId: request._id,
+        bookingType: isDaily ? 'DAILY' : 'HOURLY',
+        farmerId,
+        extensionMinutes, additionalDays,
+        status: 'WORKER_EVALUATION',
+        isActive: true,
+        paymentMode: request.paymentMethod === 'cash' ? 'cash' : 'online',
+        expiresAt,
+        workerExtensions,
+        financialSnapshot: { commissionRate, platformChargeRate: Number(settings.workerPlatformChargePercentage) || 0, extensionExpiryMinutes: expiryMinutes, createdAt: new Date() },
+        idempotencyKey: `ext_${request._id}_${new mongoose.Types.ObjectId()}`
       });
+    } catch (err) {
+      if (err && err.code === 11000) {
+        return res.status(409).json({ success: false, message: 'An active extension request is already in progress. Please complete or wait for it to finish.' });
+      }
+      throw err;
     }
 
-    // Notify each worker
+    await WorkerBookingRequest.updateOne({ _id: request._id }, { $push: { extensionIds: extension._id } });
+    await IndWorkerAssignment.updateMany({ _id: { $in: assignments.map(a => a._id) } }, { $push: { extensionIds: extension._id } });
+
     for (const w of workerExtensions) {
-      const desc = isDaily
-        ? `${additionalDays} extra day(s) for ₹${w.extensionGrossAmount}`
-        : `${extensionMinutes} extra minutes for ₹${w.extensionGrossAmount}`;
-
+      const desc = isDaily ? `${additionalDays} extra day(s) for ₹${w.extensionGrossAmount}` : `${extensionMinutes} extra minutes for ₹${w.extensionGrossAmount}`;
       await notify({
-        recipientType: 'worker',
-        recipientId: w.workerId,
-        type: 'extension_requested',
-        title: 'Time Extension Request',
+        recipientType: 'worker', recipientId: w.workerId, type: 'extension_requested', title: 'Time Extension Request',
         message: `Farmer has requested a time extension of ${desc}. Please accept or reject within ${expiryMinutes} minutes.`,
-        relatedId: extension._id,
-        relatedType: 'IndWorkerExtension',
-        data: {
-          extensionId: extension._id,
-          assignmentId: w.assignmentId,
-          requestId: request._id,
-          expiresAt
-        }
+        relatedId: extension._id, relatedType: 'IndWorkerExtension',
+        data: { extensionId: extension._id, assignmentId: w.assignmentId, requestId: request._id, expiresAt }
       });
-
       emitSafe(`worker_${w.workerId}`, 'extension_requested', {
-        extensionId: extension._id,
-        assignmentId: w.assignmentId,
-        requestId: request._id,
-        bookingType: extension.bookingType,
-        extensionMinutes: extension.extensionMinutes,
-        additionalDays: extension.additionalDays,
-        grossAmount: w.extensionGrossAmount,
-        netAmount: w.extensionNetAmount,
-        expiresAt
+        extensionId: extension._id, assignmentId: w.assignmentId, requestId: request._id, bookingType: extension.bookingType,
+        extensionMinutes: extension.extensionMinutes, additionalDays: extension.additionalDays,
+        grossAmount: w.extensionGrossAmount, netAmount: w.extensionNetAmount, expiresAt
       });
     }
+    emitSafe(`booking_req:${request._id}`, 'extension_created', { requestId: request._id, extensionId: extension._id, status: extension.status, expiresAt });
 
-    emitSafe(`booking_req:${request._id}`, 'extension_created', {
-      requestId: request._id,
-      extensionId: extension._id,
-      status: extension.status,
-      expiresAt
-    });
-
-    return res.json({
-      success: true,
-      message: `Extension request sent to ${workerExtensions.length} worker(s). Awaiting their responses.`,
-      data: extension
-    });
-
+    return res.json({ success: true, message: `Extension request sent to ${workerExtensions.length} worker(s). Awaiting their responses.`, data: extension });
   } catch (err) {
     console.error('[createExtension]', err);
     return res.status(500).json({ success: false, message: 'Failed to create extension: ' + err.message });
@@ -353,189 +302,148 @@ exports.createExtension = async (req, res) => {
 };
 
 /**
- * POST /api/worker/assignments/extension/:extensionId/respond
- * Worker accepts or rejects an extension request
- * Body: { response: 'accept' | 'reject' }
+ * POST /api/worker/assignments/extension/:extensionId/respond   Body: { response: 'accept' | 'reject' }
  */
 exports.respondToExtension = async (req, res) => {
   try {
     const workerId = req.user._id;
     const { extensionId } = req.params;
-    const { response } = req.body;
+    const { response } = req.body || {};
 
     if (!['accept', 'reject'].includes(response)) {
       return res.status(400).json({ success: false, message: 'Response must be either "accept" or "reject"' });
     }
+    if (!oidOk(extensionId)) return res.status(404).json({ success: false, message: 'Extension not found' });
 
-    let extension = await IndWorkerExtension.findById(extensionId);
-    if (!extension) {
-      return res.status(404).json({ success: false, message: 'Extension not found' });
+    const found = await IndWorkerExtension.findById(extensionId);
+    if (!found) return res.status(404).json({ success: false, message: 'Extension not found' });
+    const mine = found.workerExtensions.find(w => String(w.workerId) === String(workerId));
+    if (!mine) return res.status(403).json({ success: false, message: 'You are not a requested worker for this extension' });
+
+    // time-box the evaluation before answering (also finalises a timed-out extension)
+    const current = await extSvc.closeEvaluationIfDone(extensionId);
+    if (!extSvc.OPEN.includes(current.status)) {
+      return res.status(400).json({ success: false, message: `Extension evaluation is closed (status: ${current.status})` });
+    }
+    const myNow = current.workerExtensions.find(w => String(w.workerId) === String(workerId));
+    if (myNow.status !== 'REQUESTED') {
+      return res.status(400).json({ success: false, message: `You have already responded to this extension (${myNow.status})` });
     }
 
-    // Auto-expire check
-    extension = await evaluateExtensionExpiry(extension);
-
-    if (['CONFIRMED', 'CANCELLED', 'EXPIRED', 'REJECTED'].includes(extension.status)) {
-      return res.status(400).json({ success: false, message: `Extension evaluation is closed (status: ${extension.status})` });
-    }
-
-    const workerEntry = extension.workerExtensions.find(w => w.workerId.toString() === workerId.toString());
-    if (!workerEntry) {
-      return res.status(403).json({ success: false, message: 'You are not a requested worker for this extension' });
-    }
-
-    if (workerEntry.status !== 'REQUESTED') {
-      return res.status(400).json({ success: false, message: `You have already responded to this extension (${workerEntry.status})` });
-    }
-
-    // Check expiry
-    if (new Date() > new Date(extension.expiresAt)) {
-      workerEntry.status = 'EXPIRED'; // Worker didn't respond in time
-      workerEntry.respondedAt = new Date();
-      await extension.save();
-      return res.status(410).json({ success: false, message: 'Extension request has expired' });
-    }
-
-    // Set worker response
-    workerEntry.status = response === 'accept' ? 'ACCEPTED' : 'REJECTED';
-    workerEntry.respondedAt = new Date();
-
-    // Check overall extension status
-    const allResponded = extension.workerExtensions.every(w => w.status !== 'REQUESTED');
-    const acceptedCount = extension.workerExtensions.filter(w => w.status === 'ACCEPTED').length;
-
-    if (allResponded) {
-      if (acceptedCount > 0) {
-        extension.status = 'PAYMENT_PENDING';
-      } else {
-        extension.status = 'REJECTED';
+    // a worker may only take on extra time they are actually free for
+    if (response === 'accept') {
+      const parent = await WorkerBookingRequest.findById(current.parentRequestId);
+      if (parent) {
+        const busy = current.bookingType === 'DAILY'
+          ? await hasDailyConflict(workerId, new Date(new Date(parent.endDate).getTime() + 86400000), new Date(new Date(parent.endDate).getTime() + current.additionalDays * 86400000), parent._id)
+          : await hasTimeConflict(workerId, parent.scheduledDate, parent.endTime, extSvcAddMinutes(parent.endTime, current.extensionMinutes), parent._id);
+        if (busy) return res.status(409).json({ success: false, message: 'You have a conflicting booking for the extended time. Cannot accept.' });
       }
-    } else {
-      extension.status = 'WORKER_EVALUATION';
     }
 
-    // Calculate snapshot totals for accepted workers
-    const settings = await getWorkerFinancialSettings();
-    const platformRate = Number(settings.workerPlatformChargePercentage) || 0;
+    // atomic per-worker answer: only while open, unexpired and still unanswered (parallel answers cannot clobber each other)
+    const answered = await IndWorkerExtension.findOneAndUpdate(
+      { _id: extensionId, status: { $in: extSvc.OPEN }, expiresAt: { $gt: new Date() }, workerExtensions: { $elemMatch: { workerId, status: 'REQUESTED' } } },
+      { $set: { 'workerExtensions.$.status': response === 'accept' ? 'ACCEPTED' : 'REJECTED', 'workerExtensions.$.respondedAt': new Date() } },
+      { new: true }
+    );
+    if (!answered) {
+      return res.status(409).json({ success: false, message: 'This extension can no longer be answered.' });
+    }
 
-    const acceptedPaise = extension.workerExtensions
-      .filter(w => w.status === 'ACCEPTED')
-      .reduce((sum, w) => sum + toP(w.extensionGrossAmount), 0);
+    const closed = await extSvc.closeEvaluationIfDone(extensionId);
+    const acceptedCount = closed.workerExtensions.filter(w => w.status === 'ACCEPTED').length;
+    const workerEntry = closed.workerExtensions.find(w => String(w.workerId) === String(workerId));
 
-    const platformPaise = Math.round((acceptedPaise * platformRate) / 100);
-    const totalPayablePaise = acceptedPaise + platformPaise;
-
-    extension.totalServiceAmount = toINR(acceptedPaise);
-    extension.platformFeeRate = platformRate;
-    extension.platformFeeAmount = toINR(platformPaise);
-    extension.totalPayable = toINR(totalPayablePaise);
-    extension.totalPayableAmount = toINR(totalPayablePaise);
-    extension.farmerTotalAmount = toINR(totalPayablePaise);
-    extension.acceptedWorkerCount = acceptedCount;
-
-    await extension.save();
-
-    // Socket notification to farmer
-    emitSafe(`booking_req:${extension.parentRequestId}`, 'extension_worker_responded', {
-      extensionId: extension._id,
-      workerId,
-      workerStatus: workerEntry.status,
-      extensionStatus: extension.status,
-      acceptedCount,
-      totalPayableAmount: extension.totalPayableAmount,
-      serverTimestamp: new Date()
+    emitSafe(`booking_req:${closed.parentRequestId}`, 'extension_worker_responded', {
+      extensionId: closed._id, workerId, workerStatus: workerEntry.status, extensionStatus: closed.status,
+      acceptedCount, totalPayableAmount: closed.totalPayableAmount, serverTimestamp: new Date()
     });
-
-    // Notify farmer
     const workerDoc = await Worker.findById(workerId).select('name');
     await notify({
-      recipientType: 'user',
-      recipientId: extension.farmerId,
-      type: 'extension_worker_response',
+      recipientType: 'user', recipientId: closed.farmerId, type: 'extension_worker_response',
       title: response === 'accept' ? 'Worker Accepted Extension!' : 'Worker Declined Extension',
       message: `${workerDoc?.name || 'Worker'} has ${response === 'accept' ? 'ACCEPTED' : 'DECLINED'} the extension request.`,
-      relatedId: extension._id,
-      relatedType: 'IndWorkerExtension',
-      data: { extensionId: extension._id, status: extension.status }
+      relatedId: closed._id, relatedType: 'IndWorkerExtension', data: { extensionId: closed._id, status: closed.status }
     });
+    if (closed.status === 'CONFIRMED') await announceExtensionConfirmed(closed);
 
-    return res.json({
-      success: true,
-      message: `Extension ${response === 'accept' ? 'accepted' : 'declined'} successfully.`,
-      data: extension
-    });
-
+    return res.json({ success: true, message: `Extension ${response === 'accept' ? 'accepted' : 'declined'} successfully.`, data: closed });
   } catch (err) {
     console.error('[respondToExtension]', err);
     return res.status(500).json({ success: false, message: 'Failed to respond to extension: ' + err.message });
   }
 };
+const extSvcAddMinutes = (hhmm, minutes) => {
+  const [h, m] = String(hhmm || '00:00').split(':').map(Number);
+  const total = Math.min(23 * 60 + 59, h * 60 + (m || 0) + (Number(minutes) || 0));
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+};
 
 /**
  * POST /api/user/farmer-worker-request/:id/extension/:extensionId/create-payment
- * Farmer initiates payment for accepted extension workers
  */
 exports.createExtensionPayment = async (req, res) => {
   try {
     const farmerId = req.user._id;
     const { id, extensionId } = req.params;
+    if (!oidOk(id) || !oidOk(extensionId)) return res.status(404).json({ success: false, message: 'Extension not found' });
 
-    let extension = await IndWorkerExtension.findOne({
-      _id: extensionId,
-      parentRequestId: id,
-      farmerId
-    });
+    let extension = await IndWorkerExtension.findOne({ _id: extensionId, parentRequestId: id, farmerId });
+    if (!extension) return res.status(404).json({ success: false, message: 'Extension not found' });
 
-    if (!extension) {
-      return res.status(404).json({ success: false, message: 'Extension not found' });
+    extension = await extSvc.closeEvaluationIfDone(extension._id);
+    if (extension.paymentMode === 'cash') {
+      return res.status(400).json({ success: false, message: 'This extension is part of a cash booking and has no online payment.' });
+    }
+    if (extension.status !== 'PAYMENT_PENDING') {
+      const stillWaiting = extSvc.OPEN.includes(extension.status);
+      return res.status(stillWaiting ? 409 : 400).json({
+        success: false,
+        message: stillWaiting ? 'Workers are still responding to this extension.' : `This extension cannot be paid (status: ${extension.status}).`
+      });
+    }
+    if (['success', 'processing'].includes(extension.paymentStatus)) {
+      return res.status(409).json({ success: false, message: 'This extension is already paid or being processed.' });
     }
 
-    extension = await evaluateExtensionExpiry(extension);
+    // totals were frozen when evaluation closed; nothing can change them any more
+    const totalPaise = toP(extension.totalPayable);
+    if (!(totalPaise > 0)) return res.status(400).json({ success: false, message: 'No workers have accepted this extension' });
 
-    const acceptedWorkers = extension.workerExtensions.filter(w => w.status === 'ACCEPTED');
-    if (acceptedWorkers.length === 0) {
-      return res.status(400).json({ success: false, message: 'No workers have accepted this extension' });
+    const existing = (extension.paymentOrders || []).find(o => o.orderId === extension.razorpayOrderId && o.amountPaise === totalPaise);
+    if (existing) {
+      return res.json({
+        success: true,
+        data: {
+          orderId: existing.orderId, razorpayOrderId: existing.orderId, amount: totalPaise, currency: 'INR', key: process.env.RAZORPAY_KEY_ID || '',
+          totalPayable: extension.totalPayableAmount, acceptedWorkerCount: extension.acceptedWorkerCount, platformFee: extension.platformFeeAmount
+        }
+      });
     }
 
-    // Recalculate amount authoritatively on backend
-    const settings = await getWorkerFinancialSettings();
-    const platformRate = Number(settings.workerPlatformChargePercentage) || 0;
-
-    const acceptedPaise = acceptedWorkers.reduce((sum, w) => sum + toP(w.extensionGrossAmount), 0);
-    const platformPaise = Math.round((acceptedPaise * platformRate) / 100);
-    const totalPayablePaise = acceptedPaise + platformPaise;
-    const totalPayable = toINR(totalPayablePaise);
-
-    extension.totalServiceAmount = toINR(acceptedPaise);
-    extension.platformFeeRate = platformRate;
-    extension.platformFeeAmount = toINR(platformPaise);
-    extension.totalPayable = totalPayable;
-    extension.totalPayableAmount = totalPayable;
-    extension.farmerTotalAmount = totalPayable;
-    extension.status = 'PAYMENT_PENDING';
-
-    const orderRes = await createOrder(totalPayable, 'INR', `ext_${extension._id}`);
+    const orderRes = await createOrder(extension.totalPayable, 'INR', `ext_${extension._id}`);
     if (!orderRes.success) {
       return res.status(500).json({ success: false, message: 'Failed to create payment order' });
     }
-
-    extension.razorpayOrderId = orderRes.orderId;
-    await extension.save();
+    const attached = await IndWorkerExtension.findOneAndUpdate(
+      { _id: extension._id, status: 'PAYMENT_PENDING', paymentStatus: { $in: ['not_started', 'pending', 'failed'] } },
+      {
+        $set: { razorpayOrderId: orderRes.orderId, paymentStatus: 'pending' },
+        $push: { paymentOrders: { orderId: orderRes.orderId, amountPaise: Math.round(Number(orderRes.amount) || totalPaise), createdAt: new Date() } }
+      },
+      { new: true }
+    );
+    if (!attached) return res.status(409).json({ success: false, message: 'The extension changed while creating the order. Please retry.' });
 
     return res.json({
       success: true,
       data: {
-        orderId: orderRes.orderId,
-        razorpayOrderId: orderRes.orderId,
-        amount: orderRes.amount,
-        currency: orderRes.currency,
-        key: process.env.RAZORPAY_KEY_ID || '',
-        totalPayable: extension.totalPayableAmount,
-        acceptedWorkerCount: acceptedWorkers.length,
-        platformFee: extension.platformFeeAmount
+        orderId: orderRes.orderId, razorpayOrderId: orderRes.orderId, amount: orderRes.amount, currency: orderRes.currency,
+        key: process.env.RAZORPAY_KEY_ID || '', totalPayable: extension.totalPayableAmount,
+        acceptedWorkerCount: extension.acceptedWorkerCount, platformFee: extension.platformFeeAmount
       }
     });
-
   } catch (err) {
     console.error('[createExtensionPayment]', err);
     return res.status(500).json({ success: false, message: 'Failed to initiate extension payment: ' + err.message });
@@ -544,115 +452,33 @@ exports.createExtensionPayment = async (req, res) => {
 
 /**
  * POST /api/user/farmer-worker-request/:id/extension/:extensionId/verify-payment
- * Farmer verifies payment signature for extension
  */
 exports.verifyExtensionPayment = async (req, res) => {
   try {
     const farmerId = req.user._id;
     const { id, extensionId } = req.params;
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
-
-    const extension = await IndWorkerExtension.findOne({
-      _id: extensionId,
-      parentRequestId: id,
-      farmerId,
-      razorpayOrderId: razorpay_order_id
-    });
-
-    if (!extension) {
-      return res.status(404).json({ success: false, message: 'Extension not found or order mismatch' });
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body || {};
+    if (!oidOk(id) || !oidOk(extensionId)) return res.status(404).json({ success: false, message: 'Extension not found or order mismatch' });
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return res.status(400).json({ success: false, message: 'Payment details are required.' });
     }
-
-    if (extension.paymentStatus === 'success' && extension.status === 'CONFIRMED') {
-      return res.json({ success: true, message: 'Extension payment already verified', data: extension });
-    }
-
-    const isValid = verifyPayment(razorpay_order_id, razorpay_payment_id, razorpay_signature);
-    if (!isValid) {
-      extension.paymentStatus = 'failed';
-      await extension.save();
+    if (!verifyPayment(razorpay_order_id, razorpay_payment_id, razorpay_signature)) {
       return res.status(400).json({ success: false, message: 'Invalid payment signature' });
     }
 
-    extension.paymentStatus = 'success';
-    extension.razorpayPaymentId = razorpay_payment_id;
-    extension.status = 'CONFIRMED';
-    extension.paidAt = new Date();
-    await extension.save();
+    const owned = await IndWorkerExtension.exists({ _id: extensionId, parentRequestId: id, farmerId });
+    if (!owned) return res.status(404).json({ success: false, message: 'Extension not found or order mismatch' });
 
-    const isDaily = extension.bookingType === 'DAILY';
-    const acceptedWorkers = extension.workerExtensions.filter(w => w.status === 'ACCEPTED');
-
-    // Apply extension to accepted worker assignments
-    for (const w of acceptedWorkers) {
-      const assign = await IndWorkerAssignment.findById(w.assignmentId);
-      if (assign) {
-        if (isDaily) {
-          assign.bookedDays = (assign.bookedDays || 1) + Number(extension.additionalDays);
-        }
-
-        const toP = (inr) => Math.round(Number(inr) * 100);
-        const toINR = (p) => p / 100;
-
-        assign.grossAmount = toINR(toP(assign.grossAmount) + toP(w.extensionGrossAmount));
-        assign.commissionAmount = toINR(toP(assign.commissionAmount) + toP(w.extensionCommissionAmount));
-        assign.netEarning = toINR(toP(assign.netEarning) + toP(w.extensionNetAmount));
-
-        await assign.save();
-
-        // Notify worker
-        const extDesc = isDaily ? `${extension.additionalDays} extra day(s)` : `${extension.extensionMinutes} extra minutes`;
-        await notify({
-          recipientType: 'worker',
-          recipientId: w.workerId,
-          type: 'extension_confirmed',
-          title: 'Extension Confirmed & Paid!',
-          message: `Your booking has been extended by ${extDesc}. Extra earning: ₹${w.extensionNetAmount}.`,
-          relatedId: extension._id,
-          relatedType: 'IndWorkerExtension',
-          data: { assignmentId: assign._id, extensionId: extension._id }
-        });
-
-        emitSafe(`worker_${w.workerId}`, 'extension_confirmed', {
-          extensionId: extension._id,
-          assignmentId: assign._id,
-          grossAmount: w.extensionGrossAmount,
-          netAmount: w.extensionNetAmount,
-          serverTimestamp: new Date()
-        });
-      }
+    const result = await extSvc.confirmExtensionPayment({ extensionId, farmerId, orderId: razorpay_order_id, paymentId: razorpay_payment_id });
+    if (!result.ok) {
+      return res.status(result.code || 400).json({ success: false, message: result.reason, refunded: !!result.refunded });
     }
-
-    // Notify farmer of confirmed extension
-    const extDesc = isDaily ? `${extension.additionalDays} extra day(s)` : `${extension.extensionMinutes} extra minutes`;
-    await notify({
-      recipientType: 'user',
-      recipientId:   extension.farmerId,
-      type:          'extension_confirmed',
-      title:         '🎉 Extension Confirmed & Paid!',
-      message:       `Your extension of ${extDesc} has been confirmed for ${acceptedWorkers.length} worker(s).`,
-      relatedId:     extension._id,
-      relatedType:   'IndWorkerExtension',
-      data: {
-        extensionId: extension._id,
-        requestId:   id,
-        link:        `/user/farmer-worker-request/${id}/track`
-      }
-    });
-
-    emitSafe(`booking_req:${id}`, 'extension_confirmed', {
-      extensionId: extension._id,
-      status: 'CONFIRMED',
-      acceptedWorkers: acceptedWorkers.map(w => w.workerId),
-      serverTimestamp: new Date()
-    });
-
+    if (!result.already) await announceExtensionConfirmed(result.extension);
     return res.json({
       success: true,
-      message: 'Extension payment verified and applied successfully.',
-      data: extension
+      message: result.already ? 'Extension payment already verified' : 'Extension payment verified and applied successfully.',
+      data: result.extension
     });
-
   } catch (err) {
     console.error('[verifyExtensionPayment]', err);
     return res.status(500).json({ success: false, message: 'Failed to verify extension payment: ' + err.message });
@@ -660,25 +486,24 @@ exports.verifyExtensionPayment = async (req, res) => {
 };
 
 /**
- * GET /api/user/farmer-worker-request/:id/extensions
- * Fetch all extensions for a booking request
+ * GET /api/user/farmer-worker-request/:id/extensions  — the booking's own farmer only.
  */
 exports.getExtensions = async (req, res) => {
   try {
     const { id } = req.params;
-    const extensions = await IndWorkerExtension.find({ parentRequestId: id })
+    if (!oidOk(id)) return res.status(404).json({ success: false, message: 'Worker booking request not found' });
+
+    const owned = await WorkerBookingRequest.exists({ _id: id, farmerId: req.user._id });
+    if (!owned) return res.status(404).json({ success: false, message: 'Worker booking request not found' });
+
+    const open = await IndWorkerExtension.find({ parentRequestId: id, isActive: true }).select('_id');
+    for (const e of open) await extSvc.closeEvaluationIfDone(e._id);
+
+    const extensions = await IndWorkerExtension.find({ parentRequestId: id, farmerId: req.user._id })
       .populate('workerExtensions.workerId', 'name phone profilePicture')
       .sort({ createdAt: -1 });
 
-    // Check expiry on all pending
-    for (let ext of extensions) {
-      await evaluateExtensionExpiry(ext);
-    }
-
-    return res.json({
-      success: true,
-      data: extensions
-    });
+    return res.json({ success: true, data: extensions });
   } catch (err) {
     console.error('[getExtensions]', err);
     return res.status(500).json({ success: false, message: 'Failed to fetch extensions: ' + err.message });

@@ -131,15 +131,64 @@ const notify = async ({ recipientType, recipientId, type, title, message, relate
   }
 };
 
+// ── helpers ─────────────────────────────────────────────────────────────────────────────────────────
+const { verifyOtp, stampOtp } = require('../../services/assignmentOtpService');
+const settlement = require('../../services/workerSettlementService');
+const { issueOtp } = require('../../utils/otpUtil');
+
+const VISIT_OTP_TTL_MS = 6 * 60 * 60 * 1000;
+const TZ_MIN = () => Number(process.env.APP_TZ_OFFSET_MINUTES ?? 330);
+/** Midnight (app time zone) of the calendar day containing `d`. */
+const dayStart = (d) => new Date(Math.floor((new Date(d).getTime() + TZ_MIN() * 60000) / 86400000) * 86400000 - TZ_MIN() * 60000);
+
+/** True once the calendar day this assignment/day is scheduled for has begun. */
+const workDayReached = async (assignment, dayIdx) => {
+  const parent = await WorkerBookingRequest.findById(assignment.parentRequestId).select('scheduledDate startDate bookingType');
+  if (!parent) return false;
+  const base = assignment.bookingType === 'DAILY' ? parent.startDate : parent.scheduledDate;
+  if (!base) return true; // nothing to enforce against
+  const scheduled = assignment.bookingType === 'DAILY'
+    ? new Date(dayStart(base).getTime() + (Math.max(1, dayIdx) - 1) * 86400000)
+    : dayStart(base);
+  return Date.now() >= scheduled.getTime();
+};
+
+const nextDayLog = (dayNumber) => {
+  const v = issueOtp(48 * 60 * 60 * 1000);
+  return {
+    dayNumber, date: new Date(), journeyStatus: 'NOT_STARTED',
+    visitOtpCode: v.code, visitOtpHash: v.hash, visitOtpStatus: 'PENDING', visitOtpExpiresAt: v.expiresAt, visitOtpAttempts: 0,
+    workStatus: 'NOT_STARTED'
+  };
+};
+
+const audit = settlement.audit;
+
+const OTP_ERRORS = {
+  locked:     [429, 'Too many invalid attempts. Ask the farmer to generate a new OTP.'],
+  expired:    [410, 'This OTP has expired. Ask the farmer to generate a new one.'],
+  not_found:  [404, 'Assignment not found.'],
+  bad_format: [400, 'OTP must be a 4-digit code.']
+};
+const sendOtpFailure = (res, r, label) => {
+  if (r.status === 'invalid') return res.status(400).json({ success: false, message: `Invalid ${label}. Attempts left: ${r.attemptsLeft}` });
+  const [code, message] = OTP_ERRORS[r.status] || [400, 'OTP verification failed.'];
+  return res.status(code).json({ success: false, message });
+};
+
 /**
  * GET /api/worker/assignments/:id
- * Get single assignment details
+ * Single assignment. Authorization is role-aware; the model's default-deny serializer strips OTP secrets.
  */
 exports.getAssignmentDetails = async (req, res) => {
   try {
     const assignmentId = req.params.id;
-    const workerId = req.user._id;
+    const callerId = String(req.user._id);
+    const role = String(req.userRole || '').toUpperCase();
 
+    if (!mongoose.Types.ObjectId.isValid(assignmentId)) {
+      return res.status(404).json({ success: false, message: 'Assignment not found.' });
+    }
     const assignment = await IndWorkerAssignment.findById(assignmentId)
       .populate('farmerId', 'name phone profilePicture address')
       .populate('parentRequestId');
@@ -148,34 +197,34 @@ exports.getAssignmentDetails = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Assignment not found.' });
     }
 
-    // Worker or Farmer access check
-    const isAssignedWorker = assignment.workerId.toString() === workerId.toString();
-    const isTeamLeader = assignment.teamLeaderId && assignment.teamLeaderId.toString() === workerId.toString();
-    const isFarmer = assignment.farmerId._id ? assignment.farmerId._id.toString() === workerId.toString() : assignment.farmerId.toString() === workerId.toString();
+    const farmerRef = assignment.farmerId && assignment.farmerId._id ? assignment.farmerId._id : assignment.farmerId;
+    const isAssignedWorker = role === 'WORKER' && String(assignment.workerId) === callerId;
+    const isTeamLeader = role === 'WORKER' && assignment.teamLeaderId && String(assignment.teamLeaderId) === callerId;
+    const isFarmer = role === 'USER' && String(farmerRef) === callerId;
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN'].includes(role);
 
-    if (!isAssignedWorker && !isTeamLeader && !isFarmer) {
+    if (!isAssignedWorker && !isTeamLeader && !isFarmer && !isAdmin) {
       return res.status(403).json({ success: false, message: 'Unauthorized access to assignment.' });
     }
 
-    const assignmentData = assignment.toObject ? assignment.toObject() : { ...assignment };
+    const assignmentData = assignment.toObject();
     const { buildWorkerPaymentSummary } = require('../../services/workerFinancialService');
     assignmentData.paymentSummary = buildWorkerPaymentSummary(assignment);
 
-    // If Worker or TeamLeader, ensure they cannot see parent request total paid, platform fees, or other workers' financials
     if (isAssignedWorker || isTeamLeader) {
+      // workers never see what the farmer paid in total, platform fees or other workers' offers
       if (assignmentData.parentRequestId && typeof assignmentData.parentRequestId === 'object') {
-        delete assignmentData.parentRequestId.financialSnapshot;
-        delete assignmentData.parentRequestId.razorpayOrderId;
-        delete assignmentData.parentRequestId.razorpayPaymentId;
-        delete assignmentData.parentRequestId.workerOffers;
-        delete assignmentData.parentRequestId.refundAmount;
+        ['financialSnapshot', 'razorpayOrderId', 'razorpayPaymentId', 'paymentOrders', 'workerOffers', 'refundAmount', 'auditLog']
+          .forEach(k => delete assignmentData.parentRequestId[k]);
       }
     }
+    if (isFarmer) {
+      // the farmer does not see the worker's commission / net earning
+      ['commissionRate', 'commissionAmount', 'netEarning', 'settlementTransactionId'].forEach(k => delete assignmentData[k]);
+      delete assignmentData.paymentSummary;
+    }
 
-    return res.json({
-      success: true,
-      data: assignmentData
-    });
+    return res.json({ success: true, data: assignmentData });
   } catch (err) {
     console.error('[getAssignmentDetails]', err);
     return res.status(500).json({ success: false, message: 'Failed to fetch assignment details.' });
@@ -184,7 +233,6 @@ exports.getAssignmentDetails = async (req, res) => {
 
 /**
  * GET /api/worker/assignments/my-assignments
- * List all assignments for currently logged in worker
  */
 exports.getMyAssignments = async (req, res) => {
   try {
@@ -193,7 +241,7 @@ exports.getMyAssignments = async (req, res) => {
 
     const filter = { workerId };
     if (status) {
-      filter.assignmentStatus = status;
+      filter.assignmentStatus = String(status);
     }
 
     const assignments = await IndWorkerAssignment.find(filter)
@@ -201,10 +249,7 @@ exports.getMyAssignments = async (req, res) => {
       .populate('parentRequestId', 'workTitle workDescription scheduledDate startTime endTime location rateUnit minRate maxRate')
       .sort({ createdAt: -1 });
 
-    return res.json({
-      success: true,
-      data: assignments
-    });
+    return res.json({ success: true, data: assignments });
   } catch (err) {
     console.error('[getMyAssignments]', err);
     return res.status(500).json({ success: false, message: 'Failed to fetch assignments.' });
@@ -212,83 +257,77 @@ exports.getMyAssignments = async (req, res) => {
 };
 
 /**
- * POST /api/worker/assignments/:id/start-journey
- * Worker starts travelling to the farm
+ * POST /api/worker/assignments/:id/start-journey   (also DAILY start-day)
  */
 exports.startJourney = async (req, res) => {
   try {
     const assignmentId = req.params.id;
     const workerId = req.user._id;
 
-    const assignment = await IndWorkerAssignment.findOne({
-      _id: assignmentId,
-      workerId,
-      assignmentStatus: 'CONFIRMED'
-    });
-
-    if (!assignment) {
+    const current = await IndWorkerAssignment.findOne({ _id: assignmentId, workerId, assignmentStatus: 'CONFIRMED' });
+    if (!current) {
       return res.status(404).json({ success: false, message: 'Assignment not found or not in confirmed state.' });
     }
-
-    if (assignment.journeyStatus === 'JOURNEY_STARTED' || assignment.journeyStatus === 'ARRIVED') {
-      return res.json({ success: true, message: 'Journey already started.', data: assignment });
+    if (current.journeyStatus === 'JOURNEY_STARTED' || current.journeyStatus === 'ARRIVED') {
+      return res.json({ success: true, message: 'Journey already started.', data: current });
     }
 
-    assignment.journeyStatus = 'JOURNEY_STARTED';
-    assignment.journeyStartedAt = new Date();
+    const now = new Date();
+    // The visit OTP the farmer will read out is issued NOW (journey start), not at booking time: an OTP minted at
+    // confirmation would have expired long before the worker arrives.
+    const visit = issueOtp(VISIT_OTP_TTL_MS);
+    const assignment = await IndWorkerAssignment.findOneAndUpdate(
+      { _id: assignmentId, workerId, assignmentStatus: 'CONFIRMED', journeyStatus: 'NOT_STARTED' },
+      {
+        $set: {
+          journeyStatus: 'JOURNEY_STARTED', journeyStartedAt: now,
+          visitOtpCode: visit.code, visitOtpHash: visit.hash, visitOtpExpiresAt: visit.expiresAt, visitOtpAttempts: 0
+        }
+      },
+      { new: true }
+    );
+    if (!assignment) {
+      const again = await IndWorkerAssignment.findById(assignmentId);
+      return res.json({ success: true, message: 'Journey already started.', data: again });
+    }
 
     if (assignment.bookingType === 'DAILY') {
       const dayIdx = assignment.currentDayIndex || 1;
-      let log = assignment.dailyLogs?.find(l => l.dayNumber === dayIdx);
-      if (!log) {
-        const rawVisitOtp = Math.floor(1000 + Math.random() * 9000).toString();
-        const visitOtpHash = crypto.createHash('sha256').update(rawVisitOtp).digest('hex');
-        assignment.dailyLogs.push({
-          dayNumber: dayIdx,
-          date: new Date(),
-          journeyStatus: 'JOURNEY_STARTED',
-          journeyStartedAt: new Date(),
-          visitOtpCode: rawVisitOtp,
-          visitOtpHash,
-          visitOtpStatus: 'PENDING',
-          visitOtpExpiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
-          workStatus: 'NOT_STARTED'
-        });
-      } else {
-        log.journeyStatus = 'JOURNEY_STARTED';
-        log.journeyStartedAt = new Date();
+      const upd = await IndWorkerAssignment.updateOne(
+        { _id: assignmentId, dailyLogs: { $elemMatch: { dayNumber: dayIdx, visitOtpStatus: 'PENDING' } } },
+        {
+          $set: {
+            'dailyLogs.$.journeyStatus': 'JOURNEY_STARTED', 'dailyLogs.$.journeyStartedAt': now,
+            'dailyLogs.$.visitOtpCode': visit.code, 'dailyLogs.$.visitOtpHash': visit.hash,
+            'dailyLogs.$.visitOtpExpiresAt': visit.expiresAt, 'dailyLogs.$.visitOtpAttempts': 0
+          }
+        }
+      );
+      if (upd.matchedCount === 0) {
+        const exists = await IndWorkerAssignment.exists({ _id: assignmentId, 'dailyLogs.dayNumber': dayIdx });
+        if (!exists) {
+          const log = nextDayLog(dayIdx);
+          log.journeyStatus = 'JOURNEY_STARTED'; log.journeyStartedAt = now;
+          log.visitOtpCode = visit.code; log.visitOtpHash = visit.hash; log.visitOtpExpiresAt = visit.expiresAt;
+          await IndWorkerAssignment.updateOne({ _id: assignmentId, 'dailyLogs.dayNumber': { $ne: dayIdx } }, { $push: { dailyLogs: log } });
+        }
       }
     }
+    await settlement.syncParentProgress(assignment.parentRequestId);
 
-    await assignment.save();
-
-    // Socket update to parent request room
     emitSafe(`booking_req:${assignment.parentRequestId}`, 'assignment_journey_started', {
-      requestId: assignment.parentRequestId,
-      assignmentId: assignment._id,
-      workerId: assignment.workerId,
-      journeyStatus: 'JOURNEY_STARTED',
-      dayNumber: assignment.bookingType === 'DAILY' ? (assignment.currentDayIndex || 1) : null,
+      requestId: assignment.parentRequestId, assignmentId: assignment._id, workerId: assignment.workerId,
+      journeyStatus: 'JOURNEY_STARTED', dayNumber: assignment.bookingType === 'DAILY' ? (assignment.currentDayIndex || 1) : null,
       serverTimestamp: new Date()
     });
 
-    // Notify farmer
     await notify({
-      recipientType: 'user',
-      recipientId: assignment.farmerId,
-      type: 'worker_journey_started',
-      title: 'Worker is on the way!',
-      message: 'Worker has started journey towards your farm.',
-      relatedId: assignment.parentRequestId,
-      relatedType: 'WorkerBookingRequest',
-      data: { assignmentId: assignment._id }
+      recipientType: 'user', recipientId: assignment.farmerId, type: 'worker_journey_started',
+      title: 'Worker is on the way!', message: 'Worker has started journey towards your farm.',
+      relatedId: assignment.parentRequestId, relatedType: 'WorkerBookingRequest', data: { assignmentId: assignment._id }
     });
 
-    return res.json({
-      success: true,
-      message: 'Journey started successfully.',
-      data: assignment
-    });
+    return res.json({ success: true, message: 'Journey started successfully.', data: assignment });
   } catch (err) {
     console.error('[startJourney]', err);
     return res.status(500).json({ success: false, message: 'Failed to start journey.' });
@@ -297,258 +336,162 @@ exports.startJourney = async (req, res) => {
 
 /**
  * POST /api/worker/assignments/:id/arrived
- * Worker marks that they have arrived at the farm
  */
 exports.markArrived = async (req, res) => {
   try {
     const assignmentId = req.params.id;
     const workerId = req.user._id;
 
-    const assignment = await IndWorkerAssignment.findOne({
-      _id: assignmentId,
-      workerId,
-      assignmentStatus: 'CONFIRMED'
-    });
-
-    if (!assignment) {
+    const current = await IndWorkerAssignment.findOne({ _id: assignmentId, workerId, assignmentStatus: 'CONFIRMED' });
+    if (!current) {
       return res.status(404).json({ success: false, message: 'Assignment not found or not in confirmed state.' });
     }
-
-    assignment.journeyStatus = 'ARRIVED';
-    assignment.arrivedAt = new Date();
-
-    if (assignment.bookingType === 'DAILY') {
-      const dayIdx = assignment.currentDayIndex || 1;
-      let log = assignment.dailyLogs?.find(l => l.dayNumber === dayIdx);
-      if (log) {
-        log.journeyStatus = 'ARRIVED';
-        log.arrivedAt = new Date();
-      }
+    if (current.journeyStatus === 'ARRIVED') {
+      return res.json({ success: true, message: 'Already marked as arrived.', data: current });
+    }
+    if (current.journeyStatus !== 'JOURNEY_STARTED') {
+      return res.status(409).json({ success: false, message: 'Start your journey before marking arrival.' });
     }
 
-    await assignment.save();
+    const now = new Date();
+    const assignment = await IndWorkerAssignment.findOneAndUpdate(
+      { _id: assignmentId, workerId, assignmentStatus: 'CONFIRMED', journeyStatus: 'JOURNEY_STARTED' },
+      { $set: { journeyStatus: 'ARRIVED', arrivedAt: now } },
+      { new: true }
+    );
+    if (!assignment) {
+      return res.json({ success: true, message: 'Already marked as arrived.', data: await IndWorkerAssignment.findById(assignmentId) });
+    }
+    if (assignment.bookingType === 'DAILY') {
+      await IndWorkerAssignment.updateOne(
+        { _id: assignmentId, 'dailyLogs.dayNumber': assignment.currentDayIndex || 1 },
+        { $set: { 'dailyLogs.$.journeyStatus': 'ARRIVED', 'dailyLogs.$.arrivedAt': now } }
+      );
+    }
 
-    // Socket update
     emitSafe(`booking_req:${assignment.parentRequestId}`, 'assignment_arrived', {
-      requestId: assignment.parentRequestId,
-      assignmentId: assignment._id,
-      workerId: assignment.workerId,
-      journeyStatus: 'ARRIVED',
-      dayNumber: assignment.bookingType === 'DAILY' ? (assignment.currentDayIndex || 1) : null,
+      requestId: assignment.parentRequestId, assignmentId: assignment._id, workerId: assignment.workerId,
+      journeyStatus: 'ARRIVED', dayNumber: assignment.bookingType === 'DAILY' ? (assignment.currentDayIndex || 1) : null,
       serverTimestamp: new Date()
     });
-
-    // Notify farmer
     await notify({
-      recipientType: 'user',
-      recipientId: assignment.farmerId,
-      type: 'worker_arrived',
-      title: 'Worker has arrived!',
-      message: 'Worker has arrived at your farm. Please provide the Visit OTP to begin work.',
-      relatedId: assignment.parentRequestId,
-      relatedType: 'WorkerBookingRequest',
-      data: { assignmentId: assignment._id }
+      recipientType: 'user', recipientId: assignment.farmerId, type: 'worker_arrived',
+      title: 'Worker has arrived!', message: 'Worker has arrived at your farm. Please provide the Visit OTP to begin work.',
+      relatedId: assignment.parentRequestId, relatedType: 'WorkerBookingRequest', data: { assignmentId: assignment._id }
     });
 
-    return res.json({
-      success: true,
-      message: 'Marked arrived at farm. Please ask farmer for Visit OTP.',
-      data: assignment
-    });
+    return res.json({ success: true, message: 'Marked arrived at farm. Please ask farmer for Visit OTP.', data: assignment });
   } catch (err) {
     console.error('[markArrived]', err);
     return res.status(500).json({ success: false, message: 'Failed to mark arrival.' });
   }
 };
 
+/** Late-arrival penalty for HOURLY visits. One mechanism only: the wallet/dues penalty (never also netEarning). */
+const applyLatePenalty = async (assignment) => {
+  try {
+    const { getWorkerFinancialSettings, applyWorkerPenalty } = require('../../services/workerFinancialService');
+    const settings = await getWorkerFinancialSettings();
+    if (!settings.workerPenaltyEnabled) return;
+    const parent = await WorkerBookingRequest.findById(assignment.parentRequestId).select('scheduledDate startTime');
+    if (!parent || !parent.scheduledDate || !parent.startTime) return;
+    const [sHour, sMin] = parent.startTime.split(':').map(Number);
+    if (isNaN(sHour)) return;
+
+    const scheduled = dayStart(parent.scheduledDate).getTime() + ((sHour * 60) + (sMin || 0)) * 60000;
+    const diffMins = Math.floor((assignment.visitOtpVerifiedAt.getTime() - scheduled) / 60000);
+    const freeMins = Number(settings.workerPenaltyFreeMinutes) || 0;
+    if (diffMins <= freeMins) return;
+
+    const lateMins = diffMins - freeMins;
+    let amount = 0;
+    if (settings.workerPenaltyType === 'per_minute') {
+      amount = Math.min(Number(settings.workerPenaltyMaxAmount) || 500, lateMins * (Number(settings.workerPenaltyPerMinute) || 5));
+    } else if (settings.workerPenaltyType === 'percentage') {
+      amount = Math.round(((Number(assignment.grossAmount) || 0) * (Number(settings.workerPenaltyPercentage) || 5)) / 100);
+    } else {
+      amount = Number(settings.workerPenaltyAmount) || 50;
+    }
+    if (!(amount > 0)) return;
+
+    const claimed = await IndWorkerAssignment.findOneAndUpdate(
+      { _id: assignment._id, 'latePenalty.applied': { $ne: true } },
+      { $set: { latePenalty: { applied: true, amount, minutesLate: diffMins, ruleType: settings.workerPenaltyType, appliedAt: new Date() } } },
+      { new: true }
+    );
+    if (!claimed) return; // somebody already applied it
+    await applyWorkerPenalty(assignment.workerId, assignment.legacyBookingId, `late_pen_${assignment._id}`, 'late_arrival',
+      `Late arrival by ${diffMins} minutes (grace: ${freeMins}m)`, { amount });
+  } catch (penErr) {
+    console.warn('[Late penalty check error - non-fatal]:', penErr.message);
+  }
+};
+
 /**
- * POST /api/worker/assignments/:id/verify-visit-otp
- * Worker enters the Visit OTP provided by the farmer
+ * POST /api/worker/assignments/:id/verify-visit-otp   (also DAILY)
  */
 exports.verifyVisitOtp = async (req, res) => {
   try {
     const assignmentId = req.params.id;
     const workerId = req.user._id;
-    const { otp } = req.body;
+    const { otp } = req.body || {};
 
     if (!otp) {
       return res.status(400).json({ success: false, message: 'OTP is required.' });
     }
 
-    const assignment = await IndWorkerAssignment.findOne({
-      _id: assignmentId,
-      workerId,
-      assignmentStatus: 'CONFIRMED'
-    }).select('+visitOtpHash');
-
+    const assignment = await IndWorkerAssignment.findOne({ _id: assignmentId, workerId, assignmentStatus: 'CONFIRMED' });
     if (!assignment) {
       return res.status(404).json({ success: false, message: 'Assignment not found.' });
     }
 
-    if (assignment.bookingType === 'DAILY') {
-      const dayIdx = assignment.currentDayIndex || 1;
-      let log = assignment.dailyLogs?.find(l => l.dayNumber === dayIdx);
-
-      if (!log) {
-        return res.status(400).json({ success: false, message: `Day ${dayIdx} attendance has not started yet.` });
-      }
-
-      if (log.visitOtpStatus === 'VERIFIED') {
-        return res.json({ success: true, message: `Day ${dayIdx} Visit OTP already verified.`, data: assignment });
-      }
-
-      if ((log.visitOtpAttempts || 0) >= 5) {
-        log.visitOtpStatus = 'EXPIRED';
-        await assignment.save();
-        return res.status(429).json({ success: false, message: 'Too many invalid attempts. Ask farmer to generate a new OTP.' });
-      }
-
-      const inputHash = crypto.createHash('sha256').update(otp.toString().trim()).digest('hex');
-      const directMatch = log.visitOtpCode && log.visitOtpCode === otp.toString().trim();
-      const hashMatch = log.visitOtpHash && log.visitOtpHash === inputHash;
-
-      if (!directMatch && !hashMatch) {
-        log.visitOtpAttempts = (log.visitOtpAttempts || 0) + 1;
-        await assignment.save();
-        return res.status(400).json({
-          success: false,
-          message: `Invalid OTP. Attempts left: ${5 - log.visitOtpAttempts}`
-        });
-      }
-
-      log.visitOtpStatus = 'VERIFIED';
-      log.visitOtpVerifiedAt = new Date();
-      log.workStatus = 'IN_PROGRESS';
-      log.workStartedAt = new Date();
-      log.journeyStatus = 'ARRIVED';
-
-      assignment.visitOtpStatus = 'VERIFIED';
-      assignment.visitOtpVerifiedAt = new Date();
-      assignment.workStatus = 'IN_PROGRESS';
-      assignment.workStartedAt = new Date();
-      assignment.journeyStatus = 'ARRIVED';
-      await assignment.save();
-
-      emitSafe(`booking_req:${assignment.parentRequestId}`, 'assignment_visit_otp_verified', {
-        requestId: assignment.parentRequestId,
-        assignmentId: assignment._id,
-        workerId: assignment.workerId,
-        dayNumber: dayIdx,
-        visitOtpStatus: 'VERIFIED',
-        workStatus: 'IN_PROGRESS',
-        serverTimestamp: new Date()
-      });
-
-      return res.json({
-        success: true,
-        message: `Day ${dayIdx} Visit OTP verified! Work is in progress.`,
-        data: assignment
-      });
+    const isDaily = assignment.bookingType === 'DAILY';
+    const dayIdx = assignment.currentDayIndex || 1;
+    const log = isDaily ? assignment.dailyLogs?.find(l => l.dayNumber === dayIdx) : null;
+    if (isDaily && !log) {
+      return res.status(400).json({ success: false, message: `Day ${dayIdx} attendance has not started yet.` });
     }
 
-    // --- HOURLY VISIT OTP FLOW ---
-    if (assignment.visitOtpStatus === 'VERIFIED') {
-      return res.json({ success: true, message: 'Visit OTP already verified.', data: assignment });
+    const alreadyVerified = isDaily ? log.visitOtpStatus === 'VERIFIED' : assignment.visitOtpStatus === 'VERIFIED';
+    if (alreadyVerified) {
+      return res.json({ success: true, message: isDaily ? `Day ${dayIdx} Visit OTP already verified.` : 'Visit OTP already verified.', data: assignment });
     }
 
-    // Check attempts limit
-    if (assignment.visitOtpAttempts >= 5) {
-      assignment.visitOtpStatus = 'LOCKED';
-      await assignment.save();
-      return res.status(429).json({ success: false, message: 'Too many invalid attempts. Please ask farmer to regenerate OTP.' });
+    // sequence + schedule: must be travelling/arrived, and the scheduled day must have begun
+    if (!['JOURNEY_STARTED', 'ARRIVED'].includes(assignment.journeyStatus)) {
+      return res.status(409).json({ success: false, message: 'Start your journey before verifying the visit OTP.' });
+    }
+    if (!(await workDayReached(assignment, isDaily ? dayIdx : 1))) {
+      return res.status(409).json({ success: false, message: 'Work cannot be started before the scheduled day.' });
     }
 
-    const inputHash = crypto.createHash('sha256').update(otp.toString().trim()).digest('hex');
-    const directMatch = assignment.visitOtpCode && assignment.visitOtpCode === otp.toString().trim();
-    const hashMatch = assignment.visitOtpHash && assignment.visitOtpHash === inputHash;
-
-    if (!directMatch && !hashMatch) {
-      assignment.visitOtpAttempts = (assignment.visitOtpAttempts || 0) + 1;
-      await assignment.save();
-      return res.status(400).json({
-        success: false,
-        message: `Invalid OTP. Attempts left: ${5 - assignment.visitOtpAttempts}`
-      });
-    }
-
-    // OTP Valid
-    assignment.visitOtpStatus = 'VERIFIED';
-    assignment.visitOtpVerifiedAt = new Date();
-    assignment.workStatus = 'IN_PROGRESS';
-    assignment.workStartedAt = new Date();
-    assignment.journeyStatus = 'ARRIVED';
-
-    // ── HOURLY LATE PENALTY CHECK (Authoritative from Admin Settings) ──
-    try {
-      const { getWorkerFinancialSettings, applyWorkerPenalty } = require('../../services/workerFinancialService');
-      const settings = await getWorkerFinancialSettings();
-
-      if (settings.workerPenaltyEnabled) {
-        const parentRequest = await WorkerBookingRequest.findById(assignment.parentRequestId);
-        if (parentRequest && parentRequest.scheduledDate && parentRequest.startTime) {
-          const [sHour, sMin] = parentRequest.startTime.split(':').map(Number);
-          const schedDate = new Date(parentRequest.scheduledDate);
-          schedDate.setHours(sHour, sMin, 0, 0);
-
-          const diffMins = Math.floor((assignment.visitOtpVerifiedAt - schedDate) / (1000 * 60));
-          const freeMins = Number(settings.workerPenaltyFreeMinutes) || 0;
-
-          if (diffMins > freeMins) {
-            const lateMins = diffMins - freeMins;
-            let penaltyAmount = 0;
-
-            if (settings.workerPenaltyType === 'per_minute') {
-              const perMin = Number(settings.workerPenaltyPerMinute) || 5;
-              const maxPen = Number(settings.workerPenaltyMaxAmount) || 500;
-              penaltyAmount = Math.min(maxPen, lateMins * perMin);
-            } else if (settings.workerPenaltyType === 'percentage') {
-              const pct = Number(settings.workerPenaltyPercentage) || 5;
-              penaltyAmount = Math.round(((Number(assignment.grossAmount) || 0) * pct) / 100);
-            } else {
-              penaltyAmount = Number(settings.workerPenaltyAmount) || 50;
-            }
-
-            if (penaltyAmount > 0 && !assignment.latePenalty?.applied) {
-              assignment.latePenalty = {
-                applied: true,
-                amount: penaltyAmount,
-                minutesLate: diffMins,
-                ruleType: settings.workerPenaltyType,
-                appliedAt: new Date()
-              };
-              assignment.netEarning = Math.max(0, (Number(assignment.netEarning) || 0) - penaltyAmount);
-
-              await applyWorkerPenalty(
-                workerId,
-                assignment.legacyBookingId,
-                `late_pen_${assignment._id}`,
-                settings.workerPenaltyType,
-                `Late arrival by ${diffMins} minutes (grace: ${freeMins}m)`
-              );
-            }
-          }
+    const now = new Date();
+    const verifiedSet = isDaily
+      ? {
+          visitOtpStatus: 'VERIFIED', visitOtpVerifiedAt: now, workStatus: 'IN_PROGRESS', workStartedAt: now, journeyStatus: 'ARRIVED',
+          'dailyLogs.$.workStatus': 'IN_PROGRESS', 'dailyLogs.$.workStartedAt': now, 'dailyLogs.$.journeyStatus': 'ARRIVED'
         }
-      }
-    } catch (penErr) {
-      console.warn('[Late penalty check error - non-fatal]:', penErr.message);
+      : { workStatus: 'IN_PROGRESS', workStartedAt: now, journeyStatus: 'ARRIVED' };
+
+    const result = await verifyOtp({ assignmentId, workerId, kind: 'visit', dayNumber: isDaily ? dayIdx : null, otp, verifiedSet });
+    if (result.status === 'already') {
+      return res.json({ success: true, message: 'Visit OTP already verified.', data: await IndWorkerAssignment.findById(assignmentId) });
     }
+    if (result.status !== 'verified') return sendOtpFailure(res, result, 'OTP');
 
-    await assignment.save();
+    const verified = result.assignment;
+    if (!isDaily) await applyLatePenalty(verified);
+    await settlement.syncParentProgress(verified.parentRequestId);
 
-    // Socket update
-    emitSafe(`booking_req:${assignment.parentRequestId}`, 'assignment_visit_otp_verified', {
-      requestId: assignment.parentRequestId,
-      assignmentId: assignment._id,
-      workerId: assignment.workerId,
-      visitOtpStatus: 'VERIFIED',
-      workStatus: 'IN_PROGRESS',
-      serverTimestamp: new Date()
+    emitSafe(`booking_req:${verified.parentRequestId}`, 'assignment_visit_otp_verified', {
+      requestId: verified.parentRequestId, assignmentId: verified._id, workerId: verified.workerId,
+      ...(isDaily ? { dayNumber: dayIdx } : {}), visitOtpStatus: 'VERIFIED', workStatus: 'IN_PROGRESS', serverTimestamp: new Date()
     });
 
     return res.json({
       success: true,
-      message: 'Visit OTP verified! Work is now in progress.',
-      data: assignment
+      message: isDaily ? `Day ${dayIdx} Visit OTP verified! Work is in progress.` : 'Visit OTP verified! Work is now in progress.',
+      data: await IndWorkerAssignment.findById(assignmentId)
     });
   } catch (err) {
     console.error('[verifyVisitOtp]', err);
@@ -558,635 +501,310 @@ exports.verifyVisitOtp = async (req, res) => {
 
 /**
  * POST /api/worker/assignments/:id/submit-proof
- * Worker submits proof of completion (photo URL / notes)
  */
 exports.submitProof = async (req, res) => {
   try {
     const assignmentId = req.params.id;
     const workerId = req.user._id;
-    const { fileUrl, publicId, notes } = req.body;
+    const { fileUrl, publicId, notes } = req.body || {};
 
-    const assignment = await IndWorkerAssignment.findOne({
-      _id: assignmentId,
-      workerId,
-      assignmentStatus: 'CONFIRMED'
-    });
-
-    if (!assignment) {
-      return res.status(404).json({ success: false, message: 'Assignment not found.' });
+    if (fileUrl !== undefined && fileUrl !== null && (typeof fileUrl !== 'string' || fileUrl.length > 2048 || !/^https?:\/\//i.test(fileUrl))) {
+      return res.status(400).json({ success: false, message: 'fileUrl must be an http(s) URL.' });
     }
 
-    if (assignment.visitOtpStatus !== 'VERIFIED') {
+    const existing = await IndWorkerAssignment.findOne({ _id: assignmentId, workerId, assignmentStatus: 'CONFIRMED' });
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Assignment not found.' });
+    }
+    if (existing.visitOtpStatus !== 'VERIFIED') {
       return res.status(400).json({ success: false, message: 'Visit OTP must be verified before submitting work proof.' });
     }
 
-    assignment.workStatus = 'SUBMITTED';
-    assignment.workSubmittedAt = new Date();
-    assignment.completionProof = {
-      fileUrl: fileUrl || assignment.completionProof?.fileUrl || null,
-      publicId: publicId || null,
-      notes: notes || '',
-      uploadedAt: new Date()
-    };
-    await assignment.save();
+    // only while the work is open: never after completion / settlement
+    const assignment = await IndWorkerAssignment.findOneAndUpdate(
+      {
+        _id: assignmentId, workerId, assignmentStatus: 'CONFIRMED', visitOtpStatus: 'VERIFIED',
+        completionStatus: 'PENDING', settlementStatus: 'PENDING', workStatus: { $in: ['IN_PROGRESS', 'SUBMITTED'] }
+      },
+      {
+        $set: {
+          workStatus: 'SUBMITTED', workSubmittedAt: new Date(),
+          completionProof: {
+            fileUrl: fileUrl || existing.completionProof?.fileUrl || null,
+            publicId: publicId || null, notes: typeof notes === 'string' ? notes.slice(0, 1000) : '', uploadedAt: new Date()
+          }
+        }
+      },
+      { new: true }
+    );
+    if (!assignment) {
+      return res.status(409).json({ success: false, message: 'Work can no longer be submitted for this assignment.' });
+    }
 
-    // Socket update
     emitSafe(`booking_req:${assignment.parentRequestId}`, 'assignment_work_submitted', {
-      requestId: assignment.parentRequestId,
-      assignmentId: assignment._id,
-      workerId: assignment.workerId,
-      workStatus: 'SUBMITTED',
-      proof: assignment.completionProof,
-      serverTimestamp: new Date()
+      requestId: assignment.parentRequestId, assignmentId: assignment._id, workerId: assignment.workerId,
+      workStatus: 'SUBMITTED', proof: assignment.completionProof, serverTimestamp: new Date()
     });
-
-    // Notify farmer to generate/give Completion OTP
     await notify({
-      recipientType: 'user',
-      recipientId: assignment.farmerId,
-      type: 'worker_work_submitted',
-      title: 'Work Proof Submitted!',
-      message: 'Worker has submitted completion proof. Please verify work and share Completion OTP to release payment.',
-      relatedId: assignment.parentRequestId,
-      relatedType: 'WorkerBookingRequest',
-      data: { assignmentId: assignment._id }
+      recipientType: 'user', recipientId: assignment.farmerId, type: 'worker_work_submitted',
+      title: 'Work Proof Submitted!', message: 'Worker has submitted completion proof. Please verify work and share Completion OTP to release payment.',
+      relatedId: assignment.parentRequestId, relatedType: 'WorkerBookingRequest', data: { assignmentId: assignment._id }
     });
 
-    return res.json({
-      success: true,
-      message: 'Work proof submitted. Please ask farmer for Completion OTP.',
-      data: assignment
-    });
+    return res.json({ success: true, message: 'Work proof submitted. Please ask farmer for Completion OTP.', data: assignment });
   } catch (err) {
     console.error('[submitProof]', err);
     return res.status(500).json({ success: false, message: 'Failed to submit proof.' });
   }
 };
 
+/** Settle (idempotent), advance the parent, refund once — shared tail of every completion path. */
+const settleAndFinish = async (assignmentId) => {
+  const r = await settlement.settleAssignment(assignmentId);
+  let assignment = r.assignment;
+  if (r.claimed && !r.error) {
+    assignment = await IndWorkerAssignment.findById(assignmentId);
+    if (assignment.isDecreased) await settlement.refundUnusedDays(assignmentId);
+    await settlement.finishParent(assignment.parentRequestId);
+  }
+  return { ...r, assignment };
+};
+exports._settleAndFinish = settleAndFinish;
+
 /**
- * POST /api/worker/assignments/:id/verify-completion-otp
- * Worker enters Completion OTP provided by farmer -> triggers settlement
+ * POST /api/worker/assignments/:id/verify-completion-otp   (also DAILY)
+ * Worker enters the Completion OTP the farmer shows -> settlement.
  */
 exports.verifyCompletionOtp = async (req, res) => {
   try {
     const assignmentId = req.params.id;
     const workerId = req.user._id;
-    const { otp } = req.body;
+    const { otp } = req.body || {};
 
     if (!otp) {
       return res.status(400).json({ success: false, message: 'Completion OTP is required.' });
     }
 
-    const assignment = await IndWorkerAssignment.findOne({
-      _id: assignmentId,
-      workerId,
-      assignmentStatus: 'CONFIRMED'
-    }).select('+completionOtpHash');
-
+    const assignment = await IndWorkerAssignment.findOne({ _id: assignmentId, workerId, assignmentStatus: { $in: ['CONFIRMED', 'COMPLETED'] } });
     if (!assignment) {
       return res.status(404).json({ success: false, message: 'Assignment not found.' });
     }
-
-    if (assignment.completionStatus === 'OTP_VERIFIED' && assignment.settlementStatus === 'SETTLED') {
+    if (assignment.assignmentStatus === 'COMPLETED' || (assignment.completionStatus === 'OTP_VERIFIED' && assignment.settlementStatus === 'SETTLED')) {
       return res.json({ success: true, message: 'Completion already verified and settled.', data: assignment });
     }
 
     const isDaily = assignment.bookingType === 'DAILY';
+    const dayIdx = assignment.currentDayIndex || 1;
+    const log = isDaily ? assignment.dailyLogs?.find(l => l.dayNumber === dayIdx) : null;
 
     if (isDaily) {
-      const dayIdx = assignment.currentDayIndex || 1;
-      let log = assignment.dailyLogs?.find(l => l.dayNumber === dayIdx);
-
-      if (!log) {
-        return res.status(400).json({ success: false, message: `Day ${dayIdx} attendance record not found.` });
-      }
-
+      if (!log) return res.status(400).json({ success: false, message: `Day ${dayIdx} attendance record not found.` });
       if (log.workStatus === 'COMPLETED') {
         return res.json({ success: true, message: `Day ${dayIdx} already verified and completed.`, data: assignment });
       }
-
-      if ((log.completionOtpAttempts || 0) >= 5) {
-        return res.status(429).json({ success: false, message: 'Too many invalid attempts. Ask farmer to generate a new Completion OTP.' });
+      if (log.visitOtpStatus !== 'VERIFIED') {
+        return res.status(409).json({ success: false, message: `Day ${dayIdx} visit must be verified before completion.` });
       }
+    } else if (assignment.completionStatus !== 'OTP_VERIFIED' && assignment.visitOtpStatus !== 'VERIFIED') {
+      return res.status(409).json({ success: false, message: 'Visit OTP must be verified before completing the work.' });
+    }
 
-      const inputHash = crypto.createHash('sha256').update(otp.toString().trim()).digest('hex');
-      const directMatch = (log.completionOtpCode && log.completionOtpCode === otp.toString().trim()) ||
-                          (assignment.completionOtpCode && assignment.completionOtpCode === otp.toString().trim());
-      const hashMatch = (log.completionOtpHash && log.completionOtpHash === inputHash) ||
-                        (assignment.completionOtpHash && assignment.completionOtpHash === inputHash);
+    // HOURLY retry of a settlement that previously failed (OTP was already accepted)
+    if (!isDaily && assignment.completionStatus === 'OTP_VERIFIED') {
+      const r = await settleAndFinish(assignmentId);
+      return respondCompletion(res, r.assignment, r);
+    }
 
-      if (!directMatch && !hashMatch) {
-        log.completionOtpAttempts = (log.completionOtpAttempts || 0) + 1;
-        await assignment.save();
-        return res.status(400).json({
-          success: false,
-          message: `Invalid Completion OTP. Attempts left: ${5 - log.completionOtpAttempts}`
+    const now = new Date();
+    const result = await verifyOtp({
+      assignmentId, workerId, kind: 'completion', dayNumber: isDaily ? dayIdx : null, otp,
+      verifiedSet: isDaily ? {} : { workCompletedAt: now }
+    });
+    if (result.status === 'already') {
+      return res.json({ success: true, message: 'Completion already verified.', data: await IndWorkerAssignment.findById(assignmentId) });
+    }
+    if (result.status !== 'verified') return sendOtpFailure(res, result, 'Completion OTP');
+
+    // ── DAILY: advance the day counter atomically ──
+    if (isDaily) {
+      const after = await IndWorkerAssignment.findOneAndUpdate({ _id: assignmentId }, { $inc: { workedDays: 1 } }, { new: true });
+      const totalBookedDays = Number(after.bookedDays) || 1;
+      const terminal = after.isDecreased || after.workedDays >= totalBookedDays;
+
+      if (!terminal) {
+        const next = after.workedDays + 1;
+        await IndWorkerAssignment.updateOne(
+          { _id: assignmentId },
+          {
+            $set: { currentDayIndex: next, journeyStatus: 'NOT_STARTED', visitOtpStatus: 'PENDING', workStatus: 'NOT_STARTED', completionStatus: 'PENDING' },
+            $push: { dailyLogs: nextDayLog(next), auditLog: audit('day_completed', 'worker', workerId, { day: after.workedDays }) }
+          }
+        );
+        // a decrease that landed while we were advancing must still stop the worker
+        const post = await IndWorkerAssignment.findById(assignmentId);
+        if (post.isDecreased) {
+          const fin = await finalizeDecreasedBetweenDays(assignmentId);
+          return respondCompletion(res, fin.assignment, fin);
+        }
+
+        emitSafe(`booking_req:${after.parentRequestId}`, 'assignment_day_completed', {
+          requestId: after.parentRequestId, assignmentId: after._id, workerId: after.workerId,
+          completedDay: after.workedDays, nextDay: next, totalDays: totalBookedDays, serverTimestamp: new Date()
         });
-      }
-
-      // Day verified!
-      log.workStatus = 'COMPLETED';
-      log.completedAt = new Date();
-      assignment.workedDays = (assignment.workedDays || 0) + 1;
-
-      const isDecreased = Boolean(assignment.isDecreased);
-      const totalBookedDays = Number(assignment.bookedDays) || 1;
-      const isTerminal = isDecreased || (assignment.workedDays >= totalBookedDays);
-
-      if (!isTerminal) {
-        // More days remaining -> advance to next day
-        assignment.currentDayIndex = assignment.workedDays + 1;
-        assignment.journeyStatus = 'NOT_STARTED';
-        assignment.visitOtpStatus = 'PENDING';
-        assignment.workStatus = 'NOT_STARTED';
-        assignment.completionStatus = 'PENDING';
-
-        // Pre-generate next day's fresh visit OTP
-        const nextVisitOtp = Math.floor(1000 + Math.random() * 9000).toString();
-        const nextVisitOtpHash = crypto.createHash('sha256').update(nextVisitOtp).digest('hex');
-        assignment.dailyLogs.push({
-          dayNumber: assignment.currentDayIndex,
-          date: new Date(),
-          journeyStatus: 'NOT_STARTED',
-          visitOtpCode: nextVisitOtp,
-          visitOtpHash: nextVisitOtpHash,
-          visitOtpStatus: 'PENDING',
-          visitOtpExpiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
-          workStatus: 'NOT_STARTED'
-        });
-
-        await assignment.save();
-
-        emitSafe(`booking_req:${assignment.parentRequestId}`, 'assignment_day_completed', {
-          requestId: assignment.parentRequestId,
-          assignmentId: assignment._id,
-          workerId: assignment.workerId,
-          completedDay: assignment.workedDays,
-          nextDay: assignment.currentDayIndex,
-          totalDays: totalBookedDays,
-          serverTimestamp: new Date()
-        });
-
         await notify({
-          recipientType: 'user',
-          recipientId: assignment.farmerId,
-          type: 'day_completed',
-          title: `Day ${assignment.workedDays} Work Completed!`,
-          message: `Worker completed Day ${assignment.workedDays} of ${totalBookedDays}. Day ${assignment.currentDayIndex} is scheduled next.`,
-          relatedId: assignment.parentRequestId,
-          relatedType: 'WorkerBookingRequest',
-          data: { assignmentId: assignment._id }
+          recipientType: 'user', recipientId: after.farmerId, type: 'day_completed',
+          title: `Day ${after.workedDays} Work Completed!`,
+          message: `Worker completed Day ${after.workedDays} of ${totalBookedDays}. Day ${next} is scheduled next.`,
+          relatedId: after.parentRequestId, relatedType: 'WorkerBookingRequest', data: { assignmentId: after._id }
         });
-
         return res.json({
           success: true,
-          message: `Day ${assignment.workedDays} completed successfully! Next working day is Day ${assignment.currentDayIndex}.`,
-          data: assignment
+          message: `Day ${after.workedDays} completed successfully! Next working day is Day ${next}.`,
+          data: await IndWorkerAssignment.findById(assignmentId)
         });
       }
 
-      // WORKER HAS REACHED TERMINAL STATE (All days done OR decreased)
-      // Execute final settlement for this worker
-      const { calculateDailyWorkerSettlement, processDailyFarmerRefund } = require('../../services/workerFinancialService');
-      const settlement = calculateDailyWorkerSettlement(assignment);
-
-      assignment.completionStatus = 'OTP_VERIFIED';
-      assignment.completionOtpVerifiedAt = new Date();
-      assignment.workCompletedAt = new Date();
-      assignment.grossAmount = settlement.grossAmount;
-      assignment.commissionAmount = settlement.commissionAmount;
-      assignment.netEarning = settlement.netEarning;
-
-      const idempotencyKey = `settle_daily_assign_${assignment._id}_${Date.now()}`;
-      if (assignment.settlementStatus !== 'SETTLED') {
-        try {
-          assignment.settlementStatus = 'PROCESSING';
-          await assignment.save();
-
-          const parentReq = await WorkerBookingRequest.findById(assignment.parentRequestId);
-          const isCash = Boolean(assignment.isCashBooking) || assignment.paymentMethod === 'cash' || (parentReq && parentReq.paymentMethod === 'cash');
-
-          if (isCash) {
-            // Worker collected physical cash on farm directly from customer
-            const commission = settlement.commissionAmount || 0;
-            const workerDoc = await Worker.findById(workerId);
-            if (workerDoc) {
-              let walletBal = workerDoc.wallet?.balance || 0;
-              if (walletBal >= commission) {
-                workerDoc.wallet.balance = walletBal - commission;
-              } else {
-                const remainingDue = commission - walletBal;
-                workerDoc.wallet.balance = 0;
-                workerDoc.outstandingDues = (workerDoc.outstandingDues || 0) + remainingDue;
-              }
-              workerDoc.status = 'ONLINE';
-              await workerDoc.save();
-
-              let workerWallet = await Wallet.findOne({ workerId, userModel: 'Worker' }) || await Wallet.findOne({ userId: workerId });
-              if (workerWallet) {
-                workerWallet.balance = workerDoc.wallet.balance;
-                await workerWallet.save();
-              }
-            } else {
-              await Worker.findByIdAndUpdate(workerId, { status: 'ONLINE' });
-            }
-
-            await Transaction.create({
-              workerId,
-              type: 'commission_deduction',
-              amount: commission,
-              status: 'completed',
-              paymentMethod: 'cash',
-              description: `DAILY Cash Commission ₹${commission} for ${assignment.workedDays} days (Assignment ${assignment._id})`,
-              referenceId: idempotencyKey,
-              metadata: {
-                type: 'cash_collection_commission',
-                grossAmount: settlement.grossAmount,
-                commissionAmount: commission,
-                netEarning: settlement.netEarning
-              }
-            });
-          } else {
-            await Worker.findByIdAndUpdate(workerId, {
-              $inc: { 'wallet.balance': settlement.netEarning },
-              status: 'ONLINE'
-            });
-
-            let workerWallet = await Wallet.findOne({ workerId, userModel: 'Worker' });
-            if (!workerWallet) workerWallet = await Wallet.findOne({ userId: workerId });
-            if (workerWallet) {
-              workerWallet.balance = (workerWallet.balance || 0) + settlement.netEarning;
-              await workerWallet.save();
-            } else {
-              await Wallet.create({ userId: workerId, userModel: 'Worker', balance: settlement.netEarning });
-            }
-
-            await Transaction.create({
-              workerId,
-              type: 'earnings_credit',
-              amount: settlement.netEarning,
-              status: 'completed',
-              paymentMethod: 'wallet',
-              description: `DAILY Earnings for ${assignment.workedDays} days (Assignment ${assignment._id})`,
-              referenceId: idempotencyKey
-            });
-          }
-
-          assignment.settlementStatus = 'SETTLED';
-          assignment.settledAt = new Date();
-          assignment.settlementTransactionId = idempotencyKey;
-          await assignment.save();
-
-          // If this worker was decreased early, immediately refund unused escrow to farmer (if paid online)
-          if (assignment.isDecreased && assignment.bookedDays > assignment.workedDays) {
-            try {
-              const parentReq = await WorkerBookingRequest.findById(assignment.parentRequestId);
-              const isPaidOnline = ['success', 'paid', 'PAID', 'SUCCESS'].includes(parentReq?.paymentStatus) && parentReq?.paymentMethod !== 'cash';
-
-              if (isPaidOnline) {
-                const unusedDays = assignment.bookedDays - assignment.workedDays;
-                const agreedDailyRate = Number(assignment.agreedRate || 0);
-                const partialRefundAmount = unusedDays * agreedDailyRate;
-
-                if (partialRefundAmount > 0) {
-                  const refundIdempotencyKey = `early_decrease_refund_${assignment._id}`;
-                  const existingRefund = await WalletTransaction.findOne({ idempotencyKey: refundIdempotencyKey });
-
-                  if (!existingRefund) {
-                    let farmerWallet = await Wallet.findOne({ userId: assignment.farmerId, userModel: 'User' });
-                    if (!farmerWallet) {
-                      farmerWallet = await Wallet.create({ userId: assignment.farmerId, userModel: 'User', balance: 0 });
-                    }
-                    farmerWallet.balance = (farmerWallet.balance || 0) + partialRefundAmount;
-                    await farmerWallet.save();
-                    await User.findByIdAndUpdate(assignment.farmerId, { 'wallet.balance': farmerWallet.balance });
-
-                    await WalletTransaction.create({
-                      walletId: farmerWallet._id,
-                      type: 'credit',
-                      amount: partialRefundAmount,
-                      reason: 'refund',
-                      referenceId: assignment.parentRequestId.toString(),
-                      idempotencyKey: refundIdempotencyKey,
-                      status: 'completed'
-                    });
-
-                    await Transaction.create({
-                      userId: assignment.farmerId,
-                      bookingId: assignment.legacyBookingId || null,
-                      type: 'refund',
-                      amount: partialRefundAmount,
-                      status: 'completed',
-                      paymentMethod: 'wallet',
-                      description: `Refund ₹${partialRefundAmount} for ${unusedDays} unused day(s) (Worker schedule concluded early)`,
-                      referenceId: refundIdempotencyKey,
-                      metadata: {
-                        type: 'early_decrease_refund',
-                        assignmentId: assignment._id.toString(),
-                        workerId: assignment.workerId.toString(),
-                        unusedDays,
-                        ratePerDay: agreedDailyRate
-                      }
-                    });
-
-                    // Update parent booking refund tracker
-                    parentReq.refundAmount = (parentReq.refundAmount || 0) + partialRefundAmount;
-                    await parentReq.save();
-
-                    emitSafe(`user_${assignment.farmerId}`, 'wallet_updated', {
-                      newBalance: farmerWallet.balance,
-                      refundAmount: partialRefundAmount,
-                      message: `₹${partialRefundAmount} refunded for ${unusedDays} unworked day(s).`
-                    });
-
-                    await notify({
-                      recipientType: 'user',
-                      recipientId: assignment.farmerId,
-                      type: 'worker_decrease_refund',
-                      title: 'Wallet Refund Credited',
-                      message: `₹${partialRefundAmount} has been refunded to your wallet for ${unusedDays} unused day(s) following schedule conclusion.`,
-                      relatedId: assignment.parentRequestId,
-                      relatedType: 'WorkerBookingRequest'
-                    });
-                  }
-                }
-              }
-            } catch (earlyRefErr) {
-              console.warn('[Early Decrease Refund Error - non-fatal]:', earlyRefErr.message);
-            }
-          }
-
-        } catch (settleErr) {
-          console.error('[DAILY SETTLEMENT ERROR]', settleErr);
-          assignment.settlementStatus = 'FAILED';
-          await assignment.save();
-        }
-      }
-
-      // Check if all assignments for parent booking are settled
-      try {
-        const allAssignments = await IndWorkerAssignment.find({
-          parentRequestId: assignment.parentRequestId,
-          assignmentStatus: { $ne: 'CANCELLED' }
-        });
-        const allSettled = allAssignments.length > 0 && allAssignments.every(a => a.settlementStatus === 'SETTLED');
-        if (allSettled) {
-          await WorkerBookingRequest.findByIdAndUpdate(assignment.parentRequestId, { status: 'completed' });
-          await processDailyFarmerRefund(assignment.parentRequestId);
-          emitSafe(`booking_req:${assignment.parentRequestId}`, 'booking_completed', {
-            requestId: assignment.parentRequestId,
-            status: 'completed',
-            serverTimestamp: new Date()
-          });
-        }
-      } catch (parentErr) {
-        console.warn('[Parent DAILY Settlement Check]', parentErr.message);
-      }
-
-      emitSafe(`booking_req:${assignment.parentRequestId}`, 'assignment_settled', {
-        requestId: assignment.parentRequestId,
-        assignmentId: assignment._id,
-        workerId: assignment.workerId,
-        completionStatus: 'OTP_VERIFIED',
-        settlementStatus: assignment.settlementStatus,
-        netEarning: assignment.netEarning,
-        workedDays: assignment.workedDays,
-        serverTimestamp: new Date()
-      });
-
-      return res.json({
-        success: true,
-        message: `DAILY assignment finished and settled! ₹${assignment.netEarning} credited to wallet for ${assignment.workedDays} days.`,
-        data: assignment
-      });
+      await IndWorkerAssignment.updateOne(
+        { _id: assignmentId },
+        { $set: { completionStatus: 'OTP_VERIFIED', completionOtpVerifiedAt: now, workCompletedAt: now }, $push: { auditLog: audit('completion_verified', 'worker', workerId, { workedDays: after.workedDays }) } }
+      );
     }
 
-    // --- HOURLY COMPLETION OTP FLOW ---
-    const inputHash = crypto.createHash('sha256').update(otp.toString().trim()).digest('hex');
-    const directMatch = assignment.completionOtpCode && assignment.completionOtpCode === otp.toString().trim();
-    const hashMatch = assignment.completionOtpHash && assignment.completionOtpHash === inputHash;
-
-    if (!directMatch && !hashMatch) {
-      assignment.completionOtpAttempts = (assignment.completionOtpAttempts || 0) + 1;
-      await assignment.save();
-      return res.status(400).json({
-        success: false,
-        message: `Invalid Completion OTP. Attempts left: ${5 - assignment.completionOtpAttempts}`
-      });
-    }
-
-    // OTP Verified!
-    assignment.completionStatus = 'OTP_VERIFIED';
-    assignment.completionOtpVerifiedAt = new Date();
-    assignment.workCompletedAt = new Date();
-
-    // -------------------------------------------------------------------------
-    // SETTLEMENT: Credit Worker Wallet
-    // -------------------------------------------------------------------------
-    const idempotencyKey = `settle_assign_${assignment._id}`;
-
-    if (assignment.settlementStatus !== 'SETTLED') {
-      try {
-        assignment.settlementStatus = 'PROCESSING';
-        await assignment.save();
-
-        const parentReq = await WorkerBookingRequest.findById(assignment.parentRequestId);
-        const isCash = Boolean(assignment.isCashBooking) || assignment.paymentMethod === 'cash' || (parentReq && parentReq.paymentMethod === 'cash');
-
-        if (isCash) {
-          // Cash on Service flow
-          const commission = assignment.commissionAmount || 0;
-          const workerDoc = await Worker.findById(workerId);
-          if (workerDoc) {
-            let walletBal = workerDoc.wallet?.balance || 0;
-            if (walletBal >= commission) {
-              workerDoc.wallet.balance = walletBal - commission;
-            } else {
-              const remainingDue = commission - walletBal;
-              workerDoc.wallet.balance = 0;
-              workerDoc.outstandingDues = (workerDoc.outstandingDues || 0) + remainingDue;
-            }
-            workerDoc.status = 'ONLINE';
-            await workerDoc.save();
-
-            let workerWallet = await Wallet.findOne({ workerId, userModel: 'Worker' }) || await Wallet.findOne({ userId: workerId });
-            if (workerWallet) {
-              workerWallet.balance = workerDoc.wallet.balance;
-              await workerWallet.save();
-            }
-          } else {
-            await Worker.findByIdAndUpdate(workerId, { status: 'ONLINE' });
-          }
-
-          await Transaction.create({
-            workerId,
-            type: 'commission_deduction',
-            amount: commission,
-            status: 'completed',
-            paymentMethod: 'cash',
-            description: `Cash Commission ₹${commission} for assignment ${assignment._id}`,
-            referenceId: idempotencyKey,
-            metadata: {
-              type: 'cash_collection_commission',
-              grossAmount: assignment.grossAmount,
-              commissionAmount: commission,
-              netEarning: assignment.netEarning
-            }
-          });
-        } else {
-          const netEarning = assignment.netEarning;
-
-          // 1. Credit Worker in Worker Model
-          await Worker.findByIdAndUpdate(workerId, {
-            $inc: { 'wallet.balance': netEarning },
-            status: 'ONLINE'
-          });
-
-          // 2. Also ensure Wallet doc exists & credit
-          let workerWallet = await Wallet.findOne({ workerId, userModel: 'Worker' });
-          if (!workerWallet) {
-            workerWallet = await Wallet.findOne({ userId: workerId });
-          }
-          if (workerWallet) {
-            workerWallet.balance = (workerWallet.balance || 0) + netEarning;
-            await workerWallet.save();
-          } else {
-            await Wallet.create({ userId: workerId, userModel: 'Worker', balance: netEarning });
-          }
-
-          // 3. Create Transaction records
-          await Transaction.create({
-            workerId,
-            type: 'earnings_credit',
-            amount: netEarning,
-            status: 'completed',
-            paymentMethod: 'wallet',
-            description: `Earnings for assignment ${assignment._id}`,
-            referenceId: idempotencyKey
-          });
-        }
-
-        assignment.settlementStatus = 'SETTLED';
-        assignment.settledAt = new Date();
-        assignment.settlementTransactionId = idempotencyKey;
-        await assignment.save();
-
-        // Also update legacy Booking doc if linked
-        if (assignment.legacyBookingId) {
-          await Booking.findByIdAndUpdate(assignment.legacyBookingId, {
-            status: 'completed',
-            settlementStatus: 'completed',
-            workDoneAt: new Date(),
-            completedAt: new Date()
-          });
-        }
-      } catch (settleErr) {
-        console.error('[SETTLEMENT ERROR]', settleErr);
-        assignment.settlementStatus = 'FAILED';
-        await assignment.save();
-      }
-    } else {
-      await Worker.findByIdAndUpdate(workerId, { status: 'ONLINE' });
-    }
-
-    // 1. Notify Farmer that this individual worker completed work
-    await notify({
-      recipientType: 'user',
-      recipientId: assignment.farmerId,
-      type: 'work_completed',
-      title: 'Work Completed!',
-      message: 'Worker has completed the work on your farm and payment has been settled.',
-      relatedId: assignment._id,
-      relatedType: 'IndWorkerAssignment',
-      data: { assignmentId: assignment._id, requestId: assignment.parentRequestId }
-    });
-
-    // 2. Check if ALL assignments for this parent request are settled -> complete parent and process refund
-    try {
-      const allAssignments = await IndWorkerAssignment.find({
-        parentRequestId: assignment.parentRequestId,
-        assignmentStatus: { $ne: 'CANCELLED' }
-      });
-      const allSettled = allAssignments.length > 0 && allAssignments.every(a => a.settlementStatus === 'SETTLED');
-      if (allSettled) {
-        await WorkerBookingRequest.findByIdAndUpdate(assignment.parentRequestId, {
-          status: 'completed'
-        });
-
-        emitSafe(`booking_req:${assignment.parentRequestId}`, 'booking_completed', {
-          requestId: assignment.parentRequestId,
-          status: 'completed',
-          serverTimestamp: new Date()
-        });
-        emitSafe(`booking_req_${assignment.parentRequestId}`, 'booking_completed', {
-          requestId: assignment.parentRequestId,
-          status: 'completed',
-          serverTimestamp: new Date()
-        });
-        emitSafe(`user_${assignment.farmerId}`, 'booking_completed', {
-          bookingId: assignment.parentRequestId.toString(),
-          requestId: assignment.parentRequestId.toString(),
-          status: 'completed',
-          serverTimestamp: new Date()
-        });
-
-        // Notify farmer of full completion
-        await notify({
-          recipientType: 'user',
-          recipientId: assignment.farmerId,
-          type: 'booking_completed',
-          title: 'Booking Completed Successfully!',
-          message: 'All workers have completed their work. Unused payment reserve has been refunded to your wallet.',
-          relatedId: assignment.parentRequestId,
-          relatedType: 'WorkerBookingRequest',
-          data: { requestId: assignment.parentRequestId }
-        });
-
-        // Process refund after completion notification
-        const { processFarmerBookingRefund } = require('../../services/workerFinancialService');
-        await processFarmerBookingRefund(assignment.parentRequestId);
-      }
-    } catch (parentErr) {
-      console.warn('[Parent Status Update & Refund]', parentErr.message);
-    }
-
-    // Socket update
-    const eventData = {
-      requestId: assignment.parentRequestId,
-      assignmentId: assignment._id,
-      workerId: assignment.workerId,
-      completionStatus: 'OTP_VERIFIED',
-      settlementStatus: assignment.settlementStatus,
-      netEarning: assignment.netEarning,
-      serverTimestamp: new Date()
-    };
-
-    emitSafe(`booking_req:${assignment.parentRequestId}`, 'assignment_completion_otp_verified', eventData);
-    emitSafe(`booking_req_${assignment.parentRequestId}`, 'assignment_completion_otp_verified', eventData);
-
-    emitSafe(`booking_req:${assignment.parentRequestId}`, 'assignment_settled', eventData);
-    emitSafe(`booking_req_${assignment.parentRequestId}`, 'assignment_settled', eventData);
-
-    // Notify worker
-    await notify({
-      recipientType: 'worker',
-      recipientId: workerId,
-      type: 'assignment_settled',
-      title: 'Payment Credited to Wallet!',
-      message: `₹${assignment.netEarning} has been added to your AgroYilt wallet for completing this job.`,
-      relatedId: assignment.parentRequestId,
-      relatedType: 'WorkerBookingRequest',
-      data: { assignmentId: assignment._id, netEarning: assignment.netEarning }
-    });
-
-    return res.json({
-      success: true,
-      message: 'Completion OTP verified! Payment of ?' + assignment.netEarning + ' credited to your wallet.',
-      data: assignment
-    });
+    const r = await settleAndFinish(assignmentId);
+    return respondCompletion(res, r.assignment, r);
   } catch (err) {
     console.error('[verifyCompletionOtp]', err);
     return res.status(500).json({ success: false, message: 'Failed to verify completion OTP.' });
+  }
+};
+
+const respondCompletion = async (res, assignment, r) => {
+  const a = assignment;
+  if (r && r.error) {
+    return res.status(202).json({
+      success: true, settlementPending: true,
+      message: 'Completion verified. Payment is being processed and will be retried automatically.',
+      data: a
+    });
+  }
+  if (a) {
+    await notify({
+      recipientType: 'user', recipientId: a.farmerId, type: 'work_completed', title: 'Work Completed!',
+      message: 'Worker has completed the work on your farm and payment has been settled.',
+      relatedId: a._id, relatedType: 'IndWorkerAssignment', data: { assignmentId: a._id, requestId: a.parentRequestId }
+    });
+    const eventData = {
+      requestId: a.parentRequestId, assignmentId: a._id, workerId: a.workerId, completionStatus: 'OTP_VERIFIED',
+      settlementStatus: a.settlementStatus, netEarning: a.netEarning, workedDays: a.workedDays, serverTimestamp: new Date()
+    };
+    for (const room of [`booking_req:${a.parentRequestId}`, `booking_req_${a.parentRequestId}`]) {
+      emitSafe(room, 'assignment_completion_otp_verified', eventData);
+      emitSafe(room, 'assignment_settled', eventData);
+    }
+    await notify({
+      recipientType: 'worker', recipientId: a.workerId, type: 'assignment_settled', title: 'Payment Credited to Wallet!',
+      message: `₹${a.netEarning} has been added to your AgroYilt wallet for completing this job.`,
+      relatedId: a.parentRequestId, relatedType: 'WorkerBookingRequest', data: { assignmentId: a._id, netEarning: a.netEarning }
+    });
+  }
+  return res.json({
+    success: true,
+    message: a && a.bookingType === 'DAILY'
+      ? `DAILY assignment finished and settled! ₹${a.netEarning} for ${a.workedDays} days.`
+      : `Completion OTP verified! Payment of ₹${a ? a.netEarning : 0} processed.`,
+    data: a
+  });
+};
+
+/**
+ * A DAILY worker was decreased while between days (the next day's log already exists but nothing has started):
+ * stop now — drop the empty day, mark complete for the days actually worked, and settle.
+ */
+const finalizeDecreasedBetweenDays = async (assignmentId) => {
+  const claimed = await IndWorkerAssignment.findOneAndUpdate(
+    { _id: assignmentId, assignmentStatus: 'CONFIRMED', isDecreased: true, completionStatus: 'PENDING', visitOtpStatus: { $ne: 'VERIFIED' }, workedDays: { $gt: 0 } },
+    {
+      $set: { completionStatus: 'OTP_VERIFIED', completionOtpVerifiedAt: new Date(), workCompletedAt: new Date() },
+      $pull: { dailyLogs: { workStatus: 'NOT_STARTED', visitOtpStatus: 'PENDING' } },
+      $push: { auditLog: audit('decreased_between_days', 'system', null, null) }
+    },
+    { new: true }
+  );
+  if (!claimed) return { assignment: await IndWorkerAssignment.findById(assignmentId), claimed: false };
+  return settleAndFinish(assignmentId);
+};
+exports._finalizeDecreasedBetweenDays = finalizeDecreasedBetweenDays;
+
+/**
+ * POST /api/worker/assignments/:id/cancel   Body: { reason }
+ * A worker withdraws from a job BEFORE any work started. The farmer's money for that worker is returned
+ * (the whole booking is cancelled + fully refunded if this was the last worker), the worker is penalised per the
+ * admin settings, and the farmer can request a replacement with "add workers".
+ */
+exports.workerWithdraw = async (req, res) => {
+  try {
+    const assignmentId = req.params.id;
+    const workerId = req.user._id;
+    const reason = typeof (req.body || {}).reason === 'string' ? req.body.reason.trim().slice(0, 500) : '';
+    if (!mongoose.Types.ObjectId.isValid(assignmentId)) return res.status(404).json({ success: false, message: 'Assignment not found.' });
+
+    const assignment = await IndWorkerAssignment.findOne({ _id: assignmentId, workerId, assignmentStatus: 'CONFIRMED' });
+    if (!assignment) {
+      return res.status(404).json({ success: false, message: 'Assignment not found or no longer active.' });
+    }
+    if (settlement.hasStarted(assignment) || assignment.settlementStatus !== 'PENDING' || assignment.completionStatus !== 'PENDING') {
+      return res.status(409).json({ success: false, message: 'You cannot withdraw after the work has started. Please contact support.' });
+    }
+
+    const cancelSvc = require('../../services/workerBookingCancelService');
+    const farmerCtl = require('./farmerWorkerRequestController');
+    const open = await IndWorkerAssignment.countDocuments({ parentRequestId: assignment.parentRequestId, assignmentStatus: 'CONFIRMED' });
+    let refundAmount = 0;
+    let bookingCancelled = false;
+
+    if (open <= 1) {
+      const result = await cancelSvc.cancelWorkerBooking({ requestId: assignment.parentRequestId, actor: 'worker', actorId: workerId, reason: reason || 'Worker withdrew' });
+      if (!result.ok) return res.status(result.code).json({ success: false, message: result.reason });
+      bookingCancelled = true; refundAmount = result.refundAmount;
+      await farmerCtl.announceCancellation({ request: result.request, workerIds: [], refundAmount, wasConfirmed: true, by: 'worker' });
+    } else {
+      const cancelled = await IndWorkerAssignment.findOneAndUpdate(
+        { _id: assignment._id, workerId, assignmentStatus: 'CONFIRMED', settlementStatus: 'PENDING', completionStatus: 'PENDING', visitOtpStatus: { $ne: 'VERIFIED' }, workedDays: { $in: [0, null] }, journeyStatus: 'NOT_STARTED' },
+        {
+          $set: { assignmentStatus: 'CANCELLED', cancelledAt: new Date(), cancellationReason: reason || 'Worker withdrew', cancelledBy: 'worker' },
+          $push: { auditLog: audit('worker_withdrew', 'worker', workerId, { reason }) }
+        },
+        { new: true }
+      );
+      if (!cancelled) {
+        return res.status(409).json({ success: false, message: 'The job has just started and can no longer be withdrawn from.' });
+      }
+      if (cancelled.legacyBookingId) await Booking.updateOne({ _id: cancelled.legacyBookingId, status: { $nin: ['completed', 'cancelled'] } }, { $set: { status: 'cancelled', cancellationReason: reason || 'Worker withdrew' } });
+      refundAmount = (await settlement.refundWorkerReserveShare(cancelled._id, { actor: 'worker', actorId: workerId })).refundAmount || 0;
+    }
+
+    // penalty per admin settings (idempotent by event id; never blocks the withdrawal)
+    try {
+      const { getWorkerFinancialSettings, applyWorkerPenalty } = require('../../services/workerFinancialService');
+      const settings = await getWorkerFinancialSettings();
+      if (settings.workerPenaltyEnabled) {
+        await applyWorkerPenalty(workerId, assignment.legacyBookingId, `cancel_pen_${assignment._id}`, 'cancellation', `Withdrew from assignment ${assignment._id}`);
+      }
+    } catch (penErr) { console.warn('[workerWithdraw penalty - non-fatal]', penErr.message); }
+
+    emitSafe(`booking_req:${assignment.parentRequestId}`, 'assignment_cancelled', { requestId: assignment.parentRequestId, assignmentId: assignment._id, workerId, by: 'worker', serverTimestamp: new Date() });
+    await notify({
+      recipientType: 'user', recipientId: assignment.farmerId, type: 'worker_withdrew', title: 'A worker withdrew',
+      message: bookingCancelled
+        ? 'Your only worker withdrew, so the booking was cancelled and refunded. You can book again.'
+        : `A worker withdrew from your booking${refundAmount > 0 ? ` and ₹${refundAmount} was refunded to your wallet` : ''}. You can add a replacement worker.`,
+      relatedId: assignment.parentRequestId, relatedType: 'WorkerBookingRequest', data: { assignmentId: assignment._id, refundAmount }
+    });
+
+    return res.json({ success: true, message: 'You have withdrawn from this job.', data: { bookingCancelled, refundAmount } });
+  } catch (err) {
+    console.error('[workerWithdraw]', err);
+    return res.status(500).json({ success: false, message: 'Failed to withdraw from the job.' });
   }
 };
 

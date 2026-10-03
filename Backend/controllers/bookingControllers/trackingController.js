@@ -1,4 +1,6 @@
 'use strict';
+const mongoose = require('mongoose');
+const { issueOtp } = require('../../utils/otpUtil');
 
 /**
  * trackingController.js
@@ -297,6 +299,12 @@ exports.getTrackingSnapshot = async (req, res) => {
         ['JOURNEY_STARTED', 'ARRIVED'].includes(canonical) &&
         !['IN_PROGRESS', 'WORK_SUBMITTED', 'COMPLETED', 'CANCELLED'].includes(canonical);
 
+      if (isVisitOtpEligible && b.save && b.visitOtpStatus === 'PENDING' && b.visitOtpExpiresAt && b.visitOtpExpiresAt <= new Date() && (b.visitOtpAttempts || 0) < 5 && b.bookingType !== 'DAILY') {
+        // expired (not locked): hand the farmer a fresh code to read out. A brute-force LOCK needs the explicit regenerate endpoint.
+        const o = issueOtp(6 * 60 * 60 * 1000);
+        b.visitOtpCode = o.code; b.visitOtpHash = o.hash; b.visitOtpExpiresAt = o.expiresAt; b.visitOtpAttempts = 0;
+        b.save().catch(e => console.warn('[Auto-refresh visit OTP save warn]', e.message));
+      }
       const visitOtp = isVisitOtpEligible ? (b.visitOtpCode || b.visitOtp || null) : null;
 
       // Completion OTP: exposed to Farmer whenever work is in progress or submitted
@@ -307,12 +315,14 @@ exports.getTrackingSnapshot = async (req, res) => {
 
       let completionOtp = null;
       if (isCompletionOtpEligible) {
-        if (!b.completionOtpCode && b.save) {
-          const rawCompletionOtp = Math.floor(1000 + Math.random() * 9000).toString();
-          const completionOtpHash = crypto.createHash('sha256').update(rawCompletionOtp).digest('hex');
-          b.completionOtpCode = rawCompletionOtp;
-          b.completionOtpHash = completionOtpHash;
-          b.completionOtpExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        const stale = b.completionOtpExpiresAt && b.completionOtpExpiresAt <= new Date();
+        if ((!b.completionOtpCode || stale) && b.save) {
+          // issued fresh for the farmer to read out; expires, and the attempt counter restarts with the new code
+          const o = issueOtp(4 * 60 * 60 * 1000);
+          b.completionOtpCode = o.code;
+          b.completionOtpHash = o.hash;
+          b.completionOtpExpiresAt = o.expiresAt;
+          b.completionOtpAttempts = 0;
           b.save().catch(e => console.warn('[Auto-gen completion OTP save warn]', e.message));
         }
         completionOtp = b.completionOtpCode || null;
@@ -333,11 +343,13 @@ exports.getTrackingSnapshot = async (req, res) => {
           finalVisitOtp = currentDayLog.visitOtpCode || null;
         }
         if (currentDayLog && currentDayLog.workStatus === 'IN_PROGRESS') {
-          if (!currentDayLog.completionOtpCode && b.save) {
-            const rawCompletionOtp = Math.floor(1000 + Math.random() * 9000).toString();
-            currentDayLog.completionOtpCode = rawCompletionOtp;
-            currentDayLog.completionOtpHash = crypto.createHash('sha256').update(rawCompletionOtp).digest('hex');
-            currentDayLog.completionOtpExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+          const staleDay = currentDayLog.completionOtpExpiresAt && currentDayLog.completionOtpExpiresAt <= new Date();
+          if ((!currentDayLog.completionOtpCode || staleDay) && b.save) {
+            const o = issueOtp(4 * 60 * 60 * 1000);
+            currentDayLog.completionOtpCode = o.code;
+            currentDayLog.completionOtpHash = o.hash;
+            currentDayLog.completionOtpExpiresAt = o.expiresAt;
+            currentDayLog.completionOtpAttempts = 0;
             b.save().catch(e => console.warn('[Auto-gen daily completion OTP save warn]', e.message));
           }
           finalCompletionOtp = currentDayLog.completionOtpCode || null;
@@ -448,6 +460,23 @@ exports.getTrackingSnapshot = async (req, res) => {
   }
 };
 
+
+/**
+ * Worker-side job endpoints accept either a Booking id or an IndWorkerAssignment id. Anything backed by an
+ * assignment MUST run through the assignment lifecycle controller (atomic OTP checks, sequencing, settlement):
+ * these legacy handlers used to re-implement OTP/settlement logic with plaintext comparisons and non-atomic counters.
+ */
+const resolveAssignmentForJob = async (id, workerId) => {
+  const or = [{ legacyBookingId: id }];
+  if (mongoose.Types.ObjectId.isValid(String(id))) or.push({ _id: id });
+  return IndWorkerAssignment.findOne({ workerId, $or: or }).select('_id');
+};
+const delegateToAssignment = async (handlerName, assignment, req, res) => {
+  const wac = require('../workerControllers/workerAssignmentController');
+  req.params.id = assignment._id.toString();
+  return wac[handlerName](req, res);
+};
+
 /**
  * POST /api/workers/jobs/:id/start-journey (or /api/workers/jobs/:id/start)
  * Worker initiates travel to the farm.
@@ -458,6 +487,9 @@ exports.workerStartJourney = async (req, res) => {
   try {
     const workerId = req.user._id || req.user.id;
     const { id } = req.params;
+
+    const delegated = await resolveAssignmentForJob(id, workerId);
+    if (delegated) return delegateToAssignment('startJourney', delegated, req, res);
 
     let booking = await Booking.findOne({
       _id: id,
@@ -634,6 +666,9 @@ exports.workerReachedLocation = async (req, res) => {
     const workerId = req.user._id || req.user.id;
     const { id } = req.params;
 
+    const delegated = await resolveAssignmentForJob(id, workerId);
+    if (delegated) return delegateToAssignment('markArrived', delegated, req, res);
+
     const booking = await Booking.findOne({
       _id: id,
       workerId: workerId
@@ -733,6 +768,9 @@ exports.workerVerifyVisitOtp = async (req, res) => {
       return res.status(400).json({ success: false, message: 'OTP is required.' });
     }
 
+    const delegated = await resolveAssignmentForJob(id, workerId);
+    if (delegated) return delegateToAssignment('verifyVisitOtp', delegated, req, res);
+
     const booking = await Booking.findOne({
       _id: id,
       workerId: workerId
@@ -750,7 +788,8 @@ exports.workerVerifyVisitOtp = async (req, res) => {
       $or: [{ legacyBookingId: booking._id }, { parentRequestId: booking.workerRequestId, workerId }]
     }).select('+visitOtpHash');
 
-    if (indAssign && indAssign.bookingType === 'DAILY') {
+    if (indAssign) {
+      // single audited path: atomic attempt reservation, expiry, sequencing (never a plaintext compare)
       const workerAssignmentController = require('../workerControllers/workerAssignmentController');
       req.params.id = indAssign._id.toString();
       return workerAssignmentController.verifyVisitOtp(req, res);
@@ -912,34 +951,12 @@ exports.workerCompleteJob = async (req, res) => {
       $or: [{ legacyBookingId: booking._id }, { parentRequestId: booking.workerRequestId, workerId }]
     }).select('+completionOtpHash');
 
-    if (assignment && assignment.bookingType === 'DAILY') {
+    // Any booking backed by an IndWorkerAssignment completes through the ONE audited path
+    // (OTP verification + atomic settlement); this legacy handler must never settle money itself.
+    if (assignment) {
       const workerAssignmentController = require('../workerControllers/workerAssignmentController');
       req.params.id = assignment._id.toString();
       return workerAssignmentController.verifyCompletionOtp(req, res);
-    }
-
-    // Securely verify Completion OTP if assignment requires it
-    if (assignment && assignment.completionOtpCode) {
-      if (!otp) {
-        return res.status(400).json({
-          success: false,
-          message: 'Completion OTP is required. Please ask the farmer for your 4-digit completion code.'
-        });
-      }
-
-      const inputOtpTrimmed = String(otp).trim();
-      const inputHash = crypto.createHash('sha256').update(inputOtpTrimmed).digest('hex');
-      const isMatch = (assignment.completionOtpCode && assignment.completionOtpCode === inputOtpTrimmed) ||
-                      (assignment.completionOtpHash && assignment.completionOtpHash === inputHash);
-
-      if (!isMatch) {
-        assignment.completionOtpAttempts = (assignment.completionOtpAttempts || 0) + 1;
-        await assignment.save();
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid Completion OTP. Please ask the farmer for the correct 4-digit code.'
-        });
-      }
     }
 
     booking.status = BOOKING_STATUS.COMPLETED;
@@ -951,185 +968,6 @@ exports.workerCompleteJob = async (req, res) => {
 
     // Reset worker status to ONLINE
     await Worker.findByIdAndUpdate(workerId, { status: 'ONLINE' });
-
-    if (assignment) {
-      assignment.workStatus = 'SUBMITTED';
-      assignment.completionStatus = 'OTP_VERIFIED';
-      assignment.completionOtpVerifiedAt = new Date();
-      assignment.workCompletedAt = booking.completedAt;
-      if (Array.isArray(workPhotos) && workPhotos.length > 0) {
-        assignment.completionProof = {
-          fileUrl: workPhotos[0],
-          notes: notes || '',
-          uploadedAt: new Date()
-        };
-      }
-
-      // Process settlement for this worker assignment idempotently
-      const idempotencyKey = `settle_assign_${assignment._id}`;
-      if (assignment.settlementStatus !== 'SETTLED') {
-        assignment.settlementStatus = 'PROCESSING';
-        await assignment.save();
-
-        try {
-          const isCash = Boolean(assignment.isCashBooking) || assignment.paymentMethod === 'cash' || (booking && booking.paymentMethod === 'cash');
-
-          if (isCash) {
-            const commission = assignment.commissionAmount || 0;
-            const workerDoc = await Worker.findById(workerId);
-            if (workerDoc) {
-              let walletBal = workerDoc.wallet?.balance || 0;
-              if (walletBal >= commission) {
-                workerDoc.wallet.balance = walletBal - commission;
-              } else {
-                const remainingDue = commission - walletBal;
-                workerDoc.wallet.balance = 0;
-                workerDoc.outstandingDues = (workerDoc.outstandingDues || 0) + remainingDue;
-              }
-              workerDoc.status = 'ONLINE';
-              await workerDoc.save();
-
-              let workerWallet = await Wallet.findOne({ workerId, userModel: 'Worker' }) || await Wallet.findOne({ userId: workerId });
-              if (workerWallet) {
-                workerWallet.balance = workerDoc.wallet.balance;
-                await workerWallet.save();
-              }
-            } else {
-              await Worker.findByIdAndUpdate(workerId, { status: 'ONLINE' });
-            }
-
-            await Transaction.create({
-              workerId,
-              type: 'commission_deduction',
-              amount: commission,
-              status: 'completed',
-              paymentMethod: 'cash',
-              description: `Cash Commission ₹${commission} for assignment ${assignment._id}`,
-              referenceId: idempotencyKey,
-              metadata: {
-                type: 'cash_collection_commission',
-                grossAmount: assignment.grossAmount,
-                commissionAmount: commission,
-                netEarning: assignment.netEarning
-              }
-            });
-          } else {
-            const netEarning = assignment.netEarning;
-            await Worker.findByIdAndUpdate(workerId, {
-              $inc: { 'wallet.balance': netEarning }
-            });
-
-            let workerWallet = await Wallet.findOne({ workerId, userModel: 'Worker' }) || await Wallet.findOne({ userId: workerId });
-            if (!workerWallet) {
-              workerWallet = await Wallet.create({ userId: workerId, userModel: 'Worker', balance: netEarning });
-            } else {
-              workerWallet.balance = (workerWallet.balance || 0) + netEarning;
-              await workerWallet.save();
-            }
-
-            await Transaction.create({
-              workerId,
-              type: 'earnings_credit',
-              amount: netEarning,
-              status: 'completed',
-              paymentMethod: 'wallet',
-              description: `Earnings for assignment ${assignment._id}`,
-              referenceId: idempotencyKey
-            });
-          }
-
-          assignment.settlementStatus = 'SETTLED';
-          assignment.settledAt = new Date();
-          assignment.settlementTransactionId = idempotencyKey;
-          await assignment.save();
-        } catch (settleErr) {
-          console.error('[workerCompleteJob settlement err]', settleErr);
-          assignment.settlementStatus = 'FAILED';
-          await assignment.save();
-        }
-      }
-
-      // 1. Notify farmer that this specific worker completed work
-      await createNotification({
-        userId: booking.userId,
-        type: 'work_completed',
-        title: 'Work Completed!',
-        message: 'Worker has completed the work on your farm and payment has been settled.',
-        relatedId: booking._id,
-        relatedType: 'booking',
-        priority: 'high',
-        pushData: {
-          type: 'completed',
-          bookingId: booking._id.toString(),
-          link: `/user/booking/${booking._id}`
-        }
-      });
-
-      // 2. Check if all assignments for this parent request are settled -> complete parent and process refund
-      if (assignment.parentRequestId) {
-        try {
-          const allAssignments = await IndWorkerAssignment.find({
-            parentRequestId: assignment.parentRequestId,
-            assignmentStatus: { $ne: 'CANCELLED' }
-          });
-          const allSettled = allAssignments.length > 0 && allAssignments.every(a => a.settlementStatus === 'SETTLED');
-          if (allSettled) {
-            await WorkerBookingRequest.findByIdAndUpdate(assignment.parentRequestId, { status: 'completed' });
-
-            emitSafe(`booking_req:${assignment.parentRequestId}`, 'booking_completed', {
-              requestId: assignment.parentRequestId,
-              status: 'completed',
-              serverTimestamp: new Date()
-            });
-            emitSafe(`booking_req_${assignment.parentRequestId}`, 'booking_completed', {
-              requestId: assignment.parentRequestId,
-              status: 'completed',
-              serverTimestamp: new Date()
-            });
-
-            // Notify farmer of full completion
-            await createNotification({
-              userId: booking.userId,
-              type: 'booking_completed',
-              title: 'Booking Completed Successfully!',
-              message: 'All workers have completed their work. Unused payment reserve has been refunded to your wallet.',
-              relatedId: assignment.parentRequestId,
-              relatedType: 'WorkerBookingRequest',
-              priority: 'high',
-              pushData: {
-                type: 'completed',
-                requestId: assignment.parentRequestId.toString(),
-                link: `/user`
-              }
-            });
-
-            // Process refund after completion notification
-            const { processFarmerBookingRefund } = require('../../services/workerFinancialService');
-            await processFarmerBookingRefund(assignment.parentRequestId);
-          }
-        } catch (parentErr) {
-          console.warn('[workerCompleteJob Parent check error]', parentErr.message);
-        }
-      }
-
-      emitSafe(`booking_req:${assignment.parentRequestId}`, 'assignment_completion_otp_verified', {
-        requestId: assignment.parentRequestId,
-        assignmentId: assignment._id,
-        workerId: workerId.toString(),
-        completionStatus: 'OTP_VERIFIED',
-        settlementStatus: assignment.settlementStatus,
-        netEarning: assignment.netEarning,
-        serverTimestamp: new Date()
-      });
-
-      emitSafe(`booking_req:${assignment.parentRequestId}`, 'assignment_settled', {
-        requestId: assignment.parentRequestId,
-        assignmentId: assignment._id,
-        workerId: workerId.toString(),
-        netEarning: assignment.netEarning,
-        serverTimestamp: new Date()
-      });
-    }
 
     const eventPayload = {
       bookingId: booking._id.toString(),

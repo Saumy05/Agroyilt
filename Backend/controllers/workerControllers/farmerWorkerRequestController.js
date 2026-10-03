@@ -380,11 +380,12 @@ const notify = async ({
  * @param {string|ObjectId} [excludeRequestId=null] - Request ID to exclude from conflict check
  * @returns {Promise<boolean>} - true if conflict exists, false if available
  */
-const hasTimeConflict = async (workerId, scheduledDate, startTime, endTime, excludeRequestId = null) => {
+const hasTimeConflict = async (workerId, scheduledDate, startTime, endTime, excludeRequestId = null, opts = {}) => {
   try {
+    // Fail CLOSED: if we cannot prove the worker is free we must not report them as available.
     if (!workerId || !scheduledDate || !startTime || !endTime) {
       console.warn(`[hasTimeConflict] Incomplete parameters: workerId=${workerId}, date=${scheduledDate}, start=${startTime}, end=${endTime}`);
-      return false;
+      return true;
     }
 
     const reqStartMins = parseTimeToMinutes(startTime);
@@ -392,13 +393,13 @@ const hasTimeConflict = async (workerId, scheduledDate, startTime, endTime, excl
 
     if (reqStartMins === null || reqEndMins === null) {
       console.warn(`[hasTimeConflict] Invalid time format for requested slot: start=${startTime}, end=${endTime}`);
-      return false;
+      return true;
     }
 
     const targetDate = (scheduledDate instanceof Date) ? scheduledDate : new Date(scheduledDate);
     if (isNaN(targetDate.getTime())) {
       console.warn(`[hasTimeConflict] Invalid scheduledDate: ${scheduledDate}`);
-      return false;
+      return true;
     }
 
     // 48h search window in MongoDB to ensure timezone shifts (UTC vs IST) are captured
@@ -458,19 +459,23 @@ const hasTimeConflict = async (workerId, scheduledDate, startTime, endTime, excl
     }
 
     // ── 2. Check Active WorkerBookingRequests ────────────────────────────────
-    const activeReqStatuses = [
-      'accepted', 'awaiting_farmer_confirmation', 'confirmed', 'in_progress', 'partially_completed'
-    ];
+    // committedOnly: used at confirm time, where only paid/confirmed commitments are binding (two farmers
+    // racing for the same worker must not block each other merely for being "selected").
+    const activeReqStatuses = opts.committedOnly
+      ? ['confirmed', 'in_progress', 'partially_completed']
+      : ['accepted', 'awaiting_farmer_confirmation', 'confirmed', 'in_progress', 'partially_completed'];
 
     const reqQuery = {
       scheduledDate: { $gte: windowStart, $lte: windowEnd },
       status: { $in: activeReqStatuses },
-      $or: [
-        { workerId: workerObjId },
-        { selectedWorkerIds: workerObjId },
-        { finalWorkers: workerObjId },
-        { 'dispatchedTo': { $elemMatch: { workerId: workerObjId, status: 'accepted' } } }
-      ]
+      $or: opts.committedOnly
+        ? [{ finalWorkers: workerObjId }]
+        : [
+            { workerId: workerObjId },
+            { selectedWorkerIds: workerObjId },
+            { finalWorkers: workerObjId },
+            { 'dispatchedTo': { $elemMatch: { workerId: workerObjId, status: 'accepted' } } }
+          ]
     };
 
     if (excludeObjId) {
@@ -498,7 +503,7 @@ const hasTimeConflict = async (workerId, scheduledDate, startTime, endTime, excl
     const groupRequests = await WorkerGroupRequest.find({
       selectedWorkers: workerObjId,
       scheduledDate: { $gte: windowStart, $lte: windowEnd },
-      status: { $in: ['confirmed', 'selection_pending', 'collecting_members'] }
+      status: { $in: opts.committedOnly ? ['confirmed'] : ['confirmed', 'selection_pending', 'collecting_members'] }
     }).select('_id scheduledDate startTime endTime status workTitle').lean();
 
     for (const g of groupRequests) {
@@ -546,18 +551,19 @@ const loadAdminSettings = async () => {
  * @param {string|ObjectId} [excludeRequestId=null]
  * @returns {Promise<boolean>}
  */
-const hasDailyConflict = async (workerId, requestedStartDate, requestedEndDate, excludeRequestId = null) => {
+const hasDailyConflict = async (workerId, requestedStartDate, requestedEndDate, excludeRequestId = null, opts = {}) => {
   try {
+    // Fail CLOSED (see hasTimeConflict)
     if (!workerId || !requestedStartDate || !requestedEndDate) {
       console.warn(`[hasDailyConflict] Incomplete parameters`);
-      return false;
+      return true;
     }
 
     const rStart = new Date(requestedStartDate);
     const rEnd   = new Date(requestedEndDate);
     if (isNaN(rStart.getTime()) || isNaN(rEnd.getTime())) {
       console.warn(`[hasDailyConflict] Invalid date range`);
-      return false;
+      return true;
     }
 
     const workerObjId = (typeof workerId === 'string' && mongoose.Types.ObjectId.isValid(workerId))
@@ -569,7 +575,10 @@ const hasDailyConflict = async (workerId, requestedStartDate, requestedEndDate, 
       : excludeRequestId;
 
     // Active DAILY statuses that block new bookings
-    const activeStatuses = ['accepted', 'awaiting_farmer_confirmation', 'confirmed', 'matching', 'pending'];
+    // (in_progress / partially_completed MUST block: a worker mid-way through a multi-day job is not free)
+    const activeStatuses = opts.committedOnly
+      ? ['confirmed', 'in_progress', 'partially_completed']
+      : ['accepted', 'awaiting_farmer_confirmation', 'confirmed', 'in_progress', 'partially_completed', 'matching', 'pending'];
 
     // Check WorkerBookingRequest (DAILY) for date-range overlap
     const reqQuery = {
@@ -577,11 +586,13 @@ const hasDailyConflict = async (workerId, requestedStartDate, requestedEndDate, 
       status:       { $in: activeStatuses },
       startDate:    { $lte: rEnd },    // existingStart <= requestedEnd
       endDate:      { $gte: rStart },  // existingEnd   >= requestedStart
-      $or: [
-        { selectedWorkerIds: workerObjId },
-        { finalWorkers:      workerObjId },
-        { 'dispatchedTo':    { $elemMatch: { workerId: workerObjId, status: 'accepted' } } }
-      ]
+      $or: opts.committedOnly
+        ? [{ finalWorkers: workerObjId }]
+        : [
+            { selectedWorkerIds: workerObjId },
+            { finalWorkers:      workerObjId },
+            { 'dispatchedTo':    { $elemMatch: { workerId: workerObjId, status: 'accepted' } } }
+          ]
     };
     if (excludeObjId) reqQuery._id = { $ne: excludeObjId };
 
@@ -593,23 +604,25 @@ const hasDailyConflict = async (workerId, requestedStartDate, requestedEndDate, 
     }
 
     // Check IndWorkerAssignment (DAILY confirmed) for date-range overlap
-    const parentRequests = await WorkerBookingRequest.find({
+    const parentQuery = {
       bookingType: 'DAILY',
-      status:      { $in: ['confirmed', 'completed'] },
+      status:      { $in: ['confirmed', 'in_progress', 'partially_completed'] },
       startDate:   { $lte: rEnd },
       endDate:     { $gte: rStart }
-    }).select('_id').lean();
+    };
+    if (excludeObjId) parentQuery._id = { $ne: excludeObjId };
+    const parentRequests = await WorkerBookingRequest.find(parentQuery).select('_id').lean();
 
     if (parentRequests.length > 0) {
       const parentIds = parentRequests.map(r => r._id);
       const conflictingAssignment = await IndWorkerAssignment.findOne({
         workerId:         workerObjId,
         bookingType:      'DAILY',
-        assignmentStatus: { $ne: 'CANCELLED' },
+        assignmentStatus: 'CONFIRMED',
         parentRequestId:  { $in: parentIds }
       }).select('_id').lean();
 
-      if (conflictingAssignment && (!excludeObjId || !parentIds.some(id => id.toString() === excludeObjId?.toString()))) {
+      if (conflictingAssignment) {
         console.log(`[DAILY CONFLICT] Worker ${workerId} has overlapping DAILY assignment ${conflictingAssignment._id}`);
         return true;
       }
@@ -819,6 +832,28 @@ exports.createFarmerRequest = async (req, res) => {
 
     const workerQty    = parseInt(requiredWorkers, 10);
     const normalSkills = normalizeSkills(requiredSkills);
+
+    // Sanity bounds (the validators only check "positive"): no absurd crews, rates or durations.
+    const MAX_CREW = 200, MAX_RATE = 100000, MAX_DAYS = 90;
+    if (workerQty > MAX_CREW) {
+      return res.status(400).json({ success: false, message: `Required workers cannot exceed ${MAX_CREW}.` });
+    }
+    const rateInputs = isDaily ? [minDailyRate, maxDailyRate] : [minRate, maxRate];
+    if (rateInputs.some(r => r !== undefined && r !== null && r !== '' && Number(r) > MAX_RATE)) {
+      return res.status(400).json({ success: false, message: `Rates cannot exceed ₹${MAX_RATE}.` });
+    }
+    if (isDaily && parseInt(numberOfDays, 10) > MAX_DAYS) {
+      return res.status(400).json({ success: false, message: `A booking cannot exceed ${MAX_DAYS} days.` });
+    }
+    const wantedWorkerId = req.body.targetedWorkerId || req.body.workerId;
+    if (wantedWorkerId) {
+      const target = OID(wantedWorkerId)
+        ? await Worker.findById(wantedWorkerId).select('isActive isRestricted approvalStatus')
+        : null;
+      if (!target || target.isActive === false || target.isRestricted === true || ['rejected', 'suspended'].includes(target.approvalStatus)) {
+        return res.status(400).json({ success: false, message: 'The selected worker is not available.' });
+      }
+    }
 
     // ── Load Admin settings ────────────────────────────────────────────────
     const adminSettings = await loadAdminSettings();
@@ -1958,7 +1993,7 @@ exports.memberRespondToRequest = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Action must be "accept" or "reject".' });
     }
 
-    const workerDoc = await Worker.findById(workerId).select('name phone skills rating profilePicture profilePhoto');
+    const workerDoc = await Worker.findById(workerId).select('name phone skills rating profilePicture profilePhoto isActive isRestricted approvalStatus');
     if (!workerDoc) {
       return res.status(404).json({ success: false, message: 'Worker profile not found.' });
     }
@@ -2005,16 +2040,21 @@ exports.memberRespondToRequest = async (req, res) => {
         });
       }
 
-      if (bookingReq.paymentStatus === 'success' || bookingReq.status === 'confirmed') {
-        return res.status(409).json({ success: false, message: 'Farmer has already completed payment. Invitation expired.' });
+      // Only while the request is still being filled (confirmed / in-progress / completed bookings are closed).
+      if (!['pending', 'matching', 'awaiting_farmer_confirmation'].includes(bookingReq.status) ||
+          ['success', 'processing'].includes(bookingReq.paymentStatus)) {
+        return res.status(409).json({ success: false, message: 'This job is no longer accepting team members.' });
       }
 
-      const invite = bookingReq.memberInvitations.find(m => m.workerId.toString() === workerId);
+      let invite = bookingReq.memberInvitations.find(m => m.workerId.toString() === workerId);
       if (!invite) {
         return res.status(404).json({ success: false, message: 'Invitation not found for this worker.' });
       }
       if (invite.status === 'member_accepted' && action === 'accept') {
         return res.json({ success: true, message: 'You have already accepted this invitation.', data: bookingReq });
+      }
+      if (invite.status === 'member_accepted' && action === 'reject') {
+        return res.status(409).json({ success: false, message: 'You have already accepted this invitation.' });
       }
       if (invite.status === 'member_rejected') {
         if (action === 'reject') {
@@ -2029,55 +2069,64 @@ exports.memberRespondToRequest = async (req, res) => {
         return res.status(410).json({ success: false, message: 'This invitation has expired.' });
       }
 
-      // Conflict re-check upon accepting
+      // Eligibility + conflict are decided BEFORE anything is written.
       if (action === 'accept') {
+        if (workerDoc.isActive === false || workerDoc.isRestricted === true || ['rejected', 'suspended'].includes(workerDoc.approvalStatus)) {
+          return res.status(403).json({ success: false, message: 'Your account is not eligible to accept requests.' });
+        }
         const conflict = bookingReq.bookingType === 'DAILY'
           ? await hasDailyConflict(workerId, bookingReq.startDate, bookingReq.endDate, bookingReq._id)
           : await hasTimeConflict(workerId, bookingReq.scheduledDate, bookingReq.startTime, bookingReq.endTime, bookingReq._id);
 
         if (conflict) {
-          invite.status = 'member_rejected';
-          invite.respondedAt = respondedAt;
-          await bookingReq.save();
+          await WorkerBookingRequest.updateOne(
+            { _id: bookingReq._id, memberInvitations: { $elemMatch: { workerId, status: 'member_pending' } } },
+            { $set: { 'memberInvitations.$.status': 'member_rejected', 'memberInvitations.$.respondedAt': respondedAt } }
+          );
           return res.status(409).json({ success: false, message: 'You have a conflicting booking for this time slot.' });
         }
       }
 
-      // Atomically update invitation status
-      invite.status = newStatus;
-      invite.respondedAt = respondedAt;
+      // Atomic answer (exactly one transition member_pending → accepted/rejected, only while the request is open).
+      const answered = await WorkerBookingRequest.findOneAndUpdate(
+        {
+          _id: bookingReq._id,
+          status: { $in: ['pending', 'matching', 'awaiting_farmer_confirmation'] },
+          paymentStatus: { $nin: ['processing', 'success'] },
+          memberInvitations: { $elemMatch: { workerId, status: 'member_pending' } }
+        },
+        { $set: { 'memberInvitations.$.status': newStatus, 'memberInvitations.$.respondedAt': respondedAt } },
+        { new: true }
+      );
+      if (!answered) {
+        return res.status(409).json({ success: false, message: 'This invitation can no longer be answered.' });
+      }
+      invite = answered.memberInvitations.find(m => m.workerId.toString() === workerId);
 
-      // Also sync to workerOffers so Farmer selection sees accepted worker
-      let existingOffer = bookingReq.workerOffers.find(o => o.workerId.toString() === workerId);
+      // Keep the farmer-facing offer in sync (one offer per worker).
       if (action === 'accept') {
-        if (existingOffer) {
-          existingOffer.status = 'accepted';
-          existingOffer.offeredRate = invite.offeredRate;
-          existingOffer.submittedAt = respondedAt;
-        } else {
-          bookingReq.workerOffers.push({
-            workerId: workerId,
-            offeredRate: invite.offeredRate,
-            status: 'accepted',
-            submittedAt: respondedAt
-          });
+        const upd = await WorkerBookingRequest.updateOne(
+          { _id: bookingReq._id, 'workerOffers.workerId': workerId },
+          { $set: { 'workerOffers.$.status': 'accepted', 'workerOffers.$.offeredRate': invite.offeredRate, 'workerOffers.$.submittedAt': respondedAt } }
+        );
+        if (upd.matchedCount === 0) {
+          await WorkerBookingRequest.updateOne(
+            { _id: bookingReq._id, 'workerOffers.workerId': { $ne: workerId } },
+            { $push: { workerOffers: { workerId, offeredRate: invite.offeredRate, status: 'accepted', submittedAt: respondedAt } } }
+          );
         }
       } else {
-        if (existingOffer) {
-          existingOffer.status = 'rejected';
-        }
+        await WorkerBookingRequest.updateOne({ _id: bookingReq._id }, { $set: { 'workerOffers.$[o].status': 'rejected' } }, { arrayFilters: [{ 'o.workerId': workerId }] });
       }
 
-      // Check if all needed workers have now accepted
-      const acceptedMembersCount = (bookingReq.memberInvitations || []).filter(m => m.status === 'member_accepted').length;
+      // Everyone needed has accepted? Count from fresh state and move the request forward (only while still open).
+      const fresh = await WorkerBookingRequest.findById(bookingReq._id);
+      const acceptedMembersCount = (fresh.memberInvitations || []).filter(m => m.status === 'member_accepted').length;
       const totalAccepted = 1 + acceptedMembersCount; // Leader + accepted members
-      bookingReq.acceptedWorkersCount = totalAccepted;
-
-      if (totalAccepted >= bookingReq.requiredWorkers) {
-        bookingReq.status = 'awaiting_farmer_confirmation';
-      }
-
-      await bookingReq.save();
+      await WorkerBookingRequest.updateOne(
+        { _id: fresh._id, status: { $in: ['pending', 'matching', 'awaiting_farmer_confirmation'] } },
+        { $set: { acceptedWorkersCount: totalAccepted, ...(totalAccepted >= fresh.requiredWorkers ? { status: 'awaiting_farmer_confirmation' } : {}) } }
+      );
 
       const rawLeaderId = invite.leaderId || bookingReq.teamLeaderId;
       const leaderId = (rawLeaderId?._id || rawLeaderId)?.toString();
@@ -2241,49 +2290,43 @@ exports.workerRespondToFarmerRequest = async (req, res) => {
       return res.status(400).json({ success: false, message: 'action must be "accept" or "reject".' });
     }
 
-    const request = await WorkerBookingRequest.findById(req.params.id);
+    let request = await WorkerBookingRequest.findById(req.params.id);
 
     if (!request) {
       return res.status(404).json({ success: false, message: 'Request not found.' });
     }
 
-    // Authoritative Server-Side Expiry Check:
-    // Check both scheduled window completion and database expiry status
+    // Authoritative state check. A response is only meaningful while the request is still being filled.
+    const RESPONDABLE = ['pending', 'matching', 'awaiting_farmer_confirmation'];
     const expiryEval = isBookingExpired(request);
-    const isTerminal = ['cancelled', 'expired', 'completed'].includes(request.status);
+    const isTerminal = !RESPONDABLE.includes(request.status);
 
     if (expiryEval.isExpired || isTerminal) {
-      // Ensure backend status is transitioned to expired
-      if (!isTerminal) {
+      // Only requests still being filled may be expired here; a confirmed / in-progress booking is NEVER
+      // expired or touched by a worker's response (that used to cancel paid, running jobs).
+      if (!isTerminal && expiryEval.isExpired) {
         await expireWorkerBookingRequest(request, expiryEval.reason);
       }
 
       if (action === 'reject') {
-        // Worker clicked Decline on an expired or stale card.
-        // Idempotently mark this worker's dispatch entry as rejected/expired and return success
-        // so the frontend alert modal cleanly dismisses, stops the alarm sound, and updates jobs.
+        // Decline on a stale card: idempotently dismiss it for THIS worker only.
         await WorkerBookingRequest.updateOne(
           { _id: request._id, 'dispatchedTo.workerId': workerId },
-          {
-            $set: {
-              'dispatchedTo.$.status': 'rejected',
-              'dispatchedTo.$.respondedAt': new Date()
-            }
-          }
+          { $set: { 'dispatchedTo.$.status': 'rejected', 'dispatchedTo.$.respondedAt': new Date() } }
         );
-
         return res.json({
           success: true,
-          message: 'Booking request has expired and has been dismissed from your alerts.',
+          message: 'Booking request is no longer active and has been dismissed from your alerts.',
           isExpired: true
         });
       }
 
-      // If trying to accept an expired request:
-      return res.status(410).json({
+      return res.status(isTerminal && !expiryEval.isExpired ? 409 : 410).json({
         success: false,
-        message: 'Booking request has expired and can no longer be accepted.',
-        isExpired: true
+        message: isTerminal && !expiryEval.isExpired
+          ? `This request is no longer accepting responses (status: ${request.status}).`
+          : 'Booking request has expired and can no longer be accepted.',
+        isExpired: expiryEval.isExpired
       });
     }
 
@@ -2292,14 +2335,31 @@ exports.workerRespondToFarmerRequest = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid request type for this endpoint.' });
     }
 
-    // Verify this worker was dispatched to, or auto-register if open broadcast
-    let entry = request.dispatchedTo.find(
-      d => d.workerId.toString() === workerId.toString()
-    );
+    // Only an eligible worker may respond (active, approved, unrestricted) — role is enforced by the route guard.
+    const respondingWorker = await Worker.findById(workerId).select('isActive isRestricted approvalStatus skills serviceCategories');
+    if (!respondingWorker) {
+      return res.status(404).json({ success: false, message: 'Worker profile not found.' });
+    }
+    if (action === 'accept' && (respondingWorker.isActive === false || respondingWorker.isRestricted === true ||
+        ['rejected', 'suspended'].includes(respondingWorker.approvalStatus))) {
+      return res.status(403).json({ success: false, message: 'Your account is not eligible to accept requests.' });
+    }
+
+    // Verify this worker was dispatched to; an open-broadcast self-registration must also match the skills.
+    let entry = request.dispatchedTo.find(d => d.workerId.toString() === workerId.toString());
+    if (!entry && action === 'reject') {
+      return res.json({ success: true, message: 'Nothing to decline.', isExpired: false });
+    }
     if (!entry) {
-      entry = { workerId, status: 'pending', respondedAt: null };
-      request.dispatchedTo.push(entry);
-      await request.save();
+      if (!isWorkerSkillMatch(respondingWorker.skills, request.requiredSkills, respondingWorker.serviceCategories)) {
+        return res.status(403).json({ success: false, message: 'This request does not match your skills.' });
+      }
+      await WorkerBookingRequest.updateOne(
+        { _id: request._id, 'dispatchedTo.workerId': { $ne: workerId } },
+        { $push: { dispatchedTo: { workerId, status: 'pending', respondedAt: null } } }
+      );
+      request = await WorkerBookingRequest.findById(request._id);
+      entry = request.dispatchedTo.find(d => d.workerId.toString() === workerId.toString());
     }
 
     // Idempotent check: if worker already accepted, return success
@@ -2332,8 +2392,19 @@ exports.workerRespondToFarmerRequest = async (req, res) => {
         offeredRate = Number(req.body.offeredRate);
         const maxBudget = Number(request.maxRate || request.farmerOfferedRate || request.minRate || 0);
 
-        if (!offeredRate || isNaN(offeredRate)) {
+        if (req.body.offeredRate === undefined || req.body.offeredRate === null || req.body.offeredRate === '') {
             offeredRate = maxBudget;
+        }
+        if (!Number.isFinite(offeredRate) || offeredRate <= 0) {
+            return res.status(400).json({ success: false, message: 'Your rate offer must be a positive number.' });
+        }
+
+        // Availability is decided BEFORE anything is written (no half-applied acceptance to roll back).
+        const busy = request.bookingType === 'DAILY'
+          ? await hasDailyConflict(workerId, request.startDate, request.endDate, request._id)
+          : await hasTimeConflict(workerId, request.scheduledDate, request.startTime, request.endTime, request._id);
+        if (busy) {
+          return res.status(409).json({ success: false, message: 'You have a conflicting booking for this time slot. Cannot accept.' });
         }
 
         // STRICT VALIDATION: Worker cannot exceed Farmer's maximum budget
@@ -2345,13 +2416,20 @@ exports.workerRespondToFarmerRequest = async (req, res) => {
         }
 
         const isTeamLeaderReq = request.requestType === 'team_leader' || request.bookingMode === 'TEAM_LEADER';
-        if (isTeamLeaderReq && request.teamLeaderId && request.teamLeaderId.toString() !== workerId.toString()) {
-            return res.status(409).json({
-                success: false,
-                message: 'This group booking has already been claimed by another Team Leader.'
-            });
-        }
         acceptingWorker = await Worker.findById(workerId);
+        if (isTeamLeaderReq) {
+            // Atomic claim: exactly one leader can win the group booking, however many accept at once.
+            const claim = await WorkerBookingRequest.updateOne(
+                { _id: request._id, status: { $in: RESPONDABLE }, $or: [{ teamLeaderId: null }, { teamLeaderId: workerId }] },
+                { $set: { teamLeaderId: workerId } }
+            );
+            if (claim.matchedCount === 0) {
+                return res.status(409).json({
+                    success: false,
+                    message: 'This group booking has already been claimed by another Team Leader.'
+                });
+            }
+        }
 
         if (isTeamLeaderReq && acceptingWorker && acceptingWorker.workerType === 'TEAM_LEADER' && acceptingWorker.teamId) {
             // Include Leader himself in workerOffers as accepted
@@ -2448,13 +2526,47 @@ exports.workerRespondToFarmerRequest = async (req, res) => {
         }
     }
 
-    await WorkerBookingRequest.updateOne(
+    // One offer per worker (never pushed blindly): upsert on accept, mark rejected on decline.
+    if (updateObj.$push) {
+      delete updateObj.$push.workerOffers;
+      if (Object.keys(updateObj.$push).length === 0) delete updateObj.$push;
+    }
+    if (action === 'accept') {
+      for (const o of offersToAdd) {
+        const upd = await WorkerBookingRequest.updateOne(
+          { _id: request._id, 'workerOffers.workerId': workerId },
+          { $set: { 'workerOffers.$.offeredRate': o.offeredRate, 'workerOffers.$.status': o.status, 'workerOffers.$.submittedAt': new Date() } }
+        );
+        if (upd.matchedCount === 0) {
+          await WorkerBookingRequest.updateOne(
+            { _id: request._id, 'workerOffers.workerId': { $ne: workerId } },
+            { $push: { workerOffers: { workerId: o.workerId, offeredRate: o.offeredRate, status: o.status, submittedAt: new Date() } } }
+          );
+        }
+      }
+    } else {
+      await WorkerBookingRequest.updateOne(
+        { _id: request._id },
+        { $set: { 'workerOffers.$[o].status': 'rejected' } },
+        { arrayFilters: [{ 'o.workerId': workerId }] }
+      );
+    }
+
+    const applied = await WorkerBookingRequest.updateOne(
       {
         _id: request._id,
+        status: { $in: RESPONDABLE },
         'dispatchedTo.workerId': workerId
       },
       updateObj
     );
+    if (applied.matchedCount === 0) {
+      // the request moved on (cancelled / confirmed / expired) while we were working: undo a leader claim
+      if (action === 'accept') {
+        await WorkerBookingRequest.updateOne({ _id: request._id, teamLeaderId: workerId, status: { $in: RESPONDABLE } }, { $set: { teamLeaderId: null } });
+      }
+      return res.status(409).json({ success: false, message: 'This request is no longer accepting responses.' });
+    }
 
     // If team leader dispatched member invitations, send notifications and sockets NOW
     if (action === 'accept' && invitationsToCreate && invitationsToCreate.length > 0) {
@@ -2577,122 +2689,65 @@ exports.workerRespondToFarmerRequest = async (req, res) => {
     let pendingCount = 0;
 
     if (isTeamLeader) {
-      const acceptedMembers = (updated.memberInvitations || []).filter(m => m.status === 'member_accepted').length;
-      acceptedCount = 1 + acceptedMembers; // Leader + accepted members
-      rejectedCount = (updated.memberInvitations || []).filter(m => m.status === 'member_rejected').length;
-      pendingCount  = (updated.memberInvitations || []).filter(m => m.status === 'member_pending').length;
+      const claimed = !!updated.teamLeaderId;
+      const invs = updated.memberInvitations || [];
+      acceptedCount = claimed ? 1 + invs.filter(m => m.status === 'member_accepted').length : 0; // leader + accepted members
+      rejectedCount = invs.filter(m => m.status === 'member_rejected').length;
+      pendingCount  = claimed
+        ? invs.filter(m => m.status === 'member_pending').length
+        : updated.dispatchedTo.filter(d => d.status === 'pending').length; // other leaders still deciding
     } else {
       acceptedCount = updated.dispatchedTo.filter(d => d.status === 'accepted').length;
       rejectedCount = updated.dispatchedTo.filter(d => d.status === 'rejected').length;
       pendingCount  = updated.dispatchedTo.filter(d => d.status === 'pending').length;
     }
 
-    // Update aggregated counts
-    updated.acceptedWorkersCount = acceptedCount;
-    updated.rejectedWorkersCount = rejectedCount;
-
-    // ── Check if we have enough acceptances ────────────────────────────────
+    // Decide the next status from fresh state, then apply it ONLY if the request is still being filled.
+    let nextStatus = updated.status;
+    let kind = null;
     if (action === 'accept') {
-      // Final availability re-check for this worker (branch by booking type)
-      let conflict = false;
-      if (updated.bookingType === 'DAILY') {
-        conflict = await hasDailyConflict(workerId, updated.startDate, updated.endDate, request._id);
-      } else {
-        conflict = await hasTimeConflict(workerId, updated.scheduledDate, updated.startTime, updated.endTime, request._id);
-      }
-      if (conflict) {
-        // Rollback this worker's acceptance
-        await WorkerBookingRequest.updateOne(
-          { _id: request._id, 'dispatchedTo.workerId': workerId },
-          { $set: { 'dispatchedTo.$.status': 'rejected', 'dispatchedTo.$.respondedAt': new Date() } }
-        );
-        return res.status(409).json({
-          success: false,
-          message: 'You have a conflicting booking for this time slot. Cannot accept.'
-        });
-      }
+      if (acceptedCount >= updated.requiredWorkers) { nextStatus = 'awaiting_farmer_confirmation'; kind = 'full'; }
+      else if (pendingCount === 0 && !isTeamLeader) { nextStatus = 'awaiting_farmer_confirmation'; kind = 'partial'; }
+    } else if (pendingCount === 0) {
+      if (acceptedCount > 0) { nextStatus = 'awaiting_farmer_confirmation'; kind = 'partial'; }
+      else { nextStatus = 'rejected'; kind = 'none'; }
+    }
 
-      if (acceptedCount >= updated.requiredWorkers) {
-        // Full required count reached — notify farmer
-        updated.status = 'awaiting_farmer_confirmation';
-        await updated.save();
+    const moved = await WorkerBookingRequest.findOneAndUpdate(
+      { _id: updated._id, status: { $in: RESPONDABLE } },
+      { $set: { acceptedWorkersCount: acceptedCount, rejectedWorkersCount: rejectedCount, ...(nextStatus !== updated.status ? { status: nextStatus } : {}) } },
+      { new: true }
+    );
+    const statusChanged = !!moved && nextStatus !== updated.status;
 
-        await notify({
-          recipientType: 'user',
-          recipientId:   updated.farmerId,
-          type:          'worker_booking_accepted',
-          title:         '✅ Workers Available!',
-          message:       `${acceptedCount} worker(s) accepted your request for ${updated.workTitle}`,
-          relatedId:     updated._id,
-          relatedType:   'WorkerBookingRequest',
-          data: { requestId: updated._id, acceptedCount, requiredWorkers: updated.requiredWorkers }
-        });
-      } else if (pendingCount === 0 && !isTeamLeader) {
-        // All workers responded, but fewer than required accepted
-        updated.status = 'awaiting_farmer_confirmation';
-        await updated.save();
-
-        await notify({
-          recipientType: 'user',
-          recipientId:   updated.farmerId,
-          type:          'worker_booking_partial',
-          title:         '⚠️ Partial Worker Availability',
-          message:       `Only ${acceptedCount} of ${updated.requiredWorkers} requested workers are available for ${updated.workTitle}`,
-          relatedId:     updated._id,
-          relatedType:   'WorkerBookingRequest',
-          data: { requestId: updated._id, acceptedCount, requiredWorkers: updated.requiredWorkers }
-        });
-      } else {
-        // Still waiting for more workers — save & emit live progress to farmer
-        await updated.save();
-        try {
-          const io = getIO();
-          const farmerRoom = `user_${updated.farmerId}`;
-          io.to(farmerRoom).emit('worker_request_progress', {
-            requestId:       updated._id,
-            acceptedCount,
-            rejectedCount,
-            pendingCount,
-            requiredWorkers: updated.requiredWorkers,
-            status:          updated.status
-          });
-        } catch (_) { /* socket not critical */ }
-      }
+    if (statusChanged && kind === 'full') {
+      await notify({
+        recipientType: 'user', recipientId: updated.farmerId, type: 'worker_booking_accepted',
+        title: '✅ Workers Available!', message: `${acceptedCount} worker(s) accepted your request for ${updated.workTitle}`,
+        relatedId: updated._id, relatedType: 'WorkerBookingRequest',
+        data: { requestId: updated._id, acceptedCount, requiredWorkers: updated.requiredWorkers }
+      });
+    } else if (statusChanged && kind === 'partial') {
+      await notify({
+        recipientType: 'user', recipientId: updated.farmerId, type: 'worker_booking_partial',
+        title: '⚠️ Partial Worker Availability',
+        message: `Only ${acceptedCount} of ${updated.requiredWorkers} requested workers are available for ${updated.workTitle}`,
+        relatedId: updated._id, relatedType: 'WorkerBookingRequest',
+        data: { requestId: updated._id, acceptedCount, requiredWorkers: updated.requiredWorkers }
+      });
+    } else if (statusChanged && kind === 'none') {
+      await notify({
+        recipientType: 'user', recipientId: updated.farmerId, type: 'worker_request_no_match',
+        title: '❌ No Workers Available', message: `No workers accepted your request for ${updated.workTitle}. Please try again later.`,
+        relatedId: updated._id, relatedType: 'WorkerBookingRequest', data: { requestId: updated._id }
+      });
     } else {
-      // Worker rejected
-      if (pendingCount === 0) {
-        // All responded, check if we have enough
-        if (acceptedCount > 0) {
-          updated.status = 'awaiting_farmer_confirmation';
-          await updated.save();
-          await notify({
-            recipientType: 'user',
-            recipientId:   updated.farmerId,
-            type:          'worker_booking_partial',
-            title:         '⚠️ Partial Worker Availability',
-            message:       `Only ${acceptedCount} of ${updated.requiredWorkers} workers accepted for ${updated.workTitle}`,
-            relatedId:     updated._id,
-            relatedType:   'WorkerBookingRequest',
-            data: { requestId: updated._id, acceptedCount, requiredWorkers: updated.requiredWorkers }
-          });
-        } else {
-          // No one accepted
-          updated.status = 'rejected';
-          await updated.save();
-          await notify({
-            recipientType: 'user',
-            recipientId:   updated.farmerId,
-            type:          'worker_request_no_match',
-            title:         '❌ No Workers Available',
-            message:       `No workers accepted your request for ${updated.workTitle}. Please try again later.`,
-            relatedId:     updated._id,
-            relatedType:   'WorkerBookingRequest',
-            data: { requestId: updated._id }
-          });
-        }
-      } else {
-        await updated.save();
-      }
+      try {
+        getIO().to(`user_${updated.farmerId}`).emit('worker_request_progress', {
+          requestId: updated._id, acceptedCount, rejectedCount, pendingCount,
+          requiredWorkers: updated.requiredWorkers, status: moved ? moved.status : updated.status
+        });
+      } catch (_) { /* socket not critical */ }
     }
 
     return res.json({
@@ -2889,259 +2944,86 @@ exports.legacyFarmerConfirmRequest = async (req, res) => {
 
 // ─── Controller: cancelFarmerRequest ──────────────────────────────────────
 
+const cancelSvc = require('../../services/workerBookingCancelService');
+
+/** Notifications + socket fan-out after a cancellation (shared by the farmer endpoint and the no-show sweeper). */
+const announceCancellation = async ({ request, workerIds, refundAmount, wasConfirmed, by = 'farmer' }) => {
+  const farmerId = request.farmerId;
+  const who = by === 'system' ? 'automatically (the worker did not show up)' : by === 'worker' ? 'because the worker withdrew' : 'by the farmer';
+
+  if (wasConfirmed) {
+    await notify({
+      recipientType: 'user',
+      recipientId: farmerId,
+      type: 'booking_cancelled',
+      title: refundAmount > 0 ? 'Booking Cancelled & Refunded' : 'Booking Cancelled',
+      message: refundAmount > 0
+        ? `Your booking for ${request.workTitle} has been cancelled. ₹${refundAmount} has been credited back to your AgroYilt Wallet.`
+        : `Your booking for ${request.workTitle} has been cancelled.`,
+      relatedId: request._id,
+      relatedType: 'WorkerBookingRequest',
+      data: { requestId: request._id, refundAmount }
+    });
+  }
+
+  for (const wId of workerIds) {
+    const bookingRef = request.bookingNumber || `WRK-${request._id.toString().slice(-6).toUpperCase()}`;
+    await notify({
+      recipientType: 'worker',
+      recipientId: wId,
+      type: wasConfirmed ? 'worker_booking_cancelled' : 'worker_request_cancelled',
+      title: wasConfirmed ? '❌ Booking Cancelled' : '❌ Request Cancelled',
+      message: wasConfirmed
+        ? `Booking for ${request.workTitle || 'Worker Service'} has been cancelled ${who}.`
+        : `Work request for ${request.workTitle || 'Farm Work'} has been cancelled ${who}.`,
+      relatedId: request._id,
+      relatedType: 'WorkerBookingRequest',
+      data: { requestId: request._id, bookingNumber: bookingRef, workTitle: request.workTitle }
+    });
+
+    const cancelPayload = {
+      requestId: request._id, bookingId: request._id, workTitle: request.workTitle,
+      message: `Booking for "${request.workTitle || 'Worker Service'}" has been cancelled ${who}.`
+    };
+    for (const room of [`worker_${wId}`, `worker:${wId}`]) {
+      if (wasConfirmed) {
+        ['worker_booking_cancelled', 'job_cancelled', 'booking_cancelled'].forEach(ev => emitSafe(room, ev, cancelPayload));
+      } else {
+        ['worker_request_cancelled', 'worker_booking_cancelled'].forEach(ev => emitSafe(room, ev, cancelPayload));
+      }
+      emitSafe(room, 'worker_booking_update', { requestId: request._id, type: wasConfirmed ? 'worker_booking_cancelled' : 'worker_request_cancelled' });
+    }
+  }
+
+  const evt = wasConfirmed ? 'worker_booking_cancelled' : 'worker_request_cancelled';
+  emitSafe(`booking_req:${request._id}`, evt, { requestId: request._id });
+  emitSafe(`farmer_worker_request_${request._id}`, evt, { requestId: request._id });
+  emitSafe(`user_${farmerId}`, 'userBookingsUpdated', {});
+};
+exports.announceCancellation = announceCancellation;
+
 /**
- * DELETE /api/user/farmer-worker-request/:id
+ * DELETE|POST /api/users/farmer-worker-request/:id[/cancel]
+ * State change, work-started guard and refund live in workerBookingCancelService (atomic + idempotent).
  */
 exports.cancelFarmerRequest = async (req, res) => {
   try {
-    const farmerId = req.user._id;
-    const request = await WorkerBookingRequest.findOne({
-      _id: req.params.id,
-      farmerId,
-      requestType: { $in: ['independent_broadcast', 'team_leader'] }
+    const result = await cancelSvc.cancelWorkerBooking({
+      requestId: req.params.id, farmerId: req.user._id, actor: 'farmer', actorId: req.user._id, reason: 'Farmer cancelled booking'
     });
-
-    if (!request) {
-      return res.status(404).json({ success: false, message: 'Request not found.' });
+    if (!result.ok) {
+      return res.status(result.code).json({ success: false, message: result.reason });
     }
+    await announceCancellation({ request: result.request, workerIds: result.workerIds, refundAmount: result.refundAmount, wasConfirmed: result.wasConfirmed });
 
-    if (['completed', 'cancelled', 'expired'].includes(request.status)) {
-      return res.status(409).json({
-        success: false,
-        message: `Cannot cancel a request with status "${request.status}".`
-      });
-    }
-
-    // ── If Request was Confirmed & Paid: Process Automated Wallet Refund ──
-    if (request.status === 'confirmed' || request.paymentStatus === 'success') {
-      const assignments = await IndWorkerAssignment.find({
-        parentRequestId: request._id,
-        assignmentStatus: { $ne: 'CANCELLED' }
-      });
-
-      const anyWorkStarted = assignments.some(a => a.journeyStatus === 'IN_PROGRESS' || a.journeyStatus === 'COMPLETED' || a.visitOtpStatus === 'VERIFIED');
-      if (anyWorkStarted) {
-        return res.status(400).json({
-          success: false,
-          message: 'Cannot cancel booking after work has already started. Please contact support.'
-        });
-      }
-
-      // 1. Cancel all worker assignments and legacy bookings
-      await IndWorkerAssignment.updateMany(
-        { parentRequestId: request._id },
-        { assignmentStatus: 'CANCELLED', workStatus: 'CANCELLED' }
-      );
-      if (request.finalBookingIds?.length > 0) {
-        await Booking.updateMany(
-          { _id: { $in: request.finalBookingIds } },
-          { status: 'cancelled', cancellationReason: 'Farmer cancelled booking' }
-        );
-      }
-
-      // 2. Free assigned workers — Gather all worker IDs across finalWorkers, selectedWorkerIds, and assignments
-      const allAssignedWorkerIds = new Set();
-      if (Array.isArray(request.finalWorkers)) {
-        request.finalWorkers.forEach(id => id && allAssignedWorkerIds.add(id.toString()));
-      }
-      if (Array.isArray(request.selectedWorkerIds)) {
-        request.selectedWorkerIds.forEach(id => id && allAssignedWorkerIds.add(id.toString()));
-      }
-      assignments.forEach(a => {
-        if (a.workerId) allAssignedWorkerIds.add(a.workerId.toString());
-      });
-      const workerIdList = Array.from(allAssignedWorkerIds);
-
-      if (workerIdList.length > 0) {
-        await Worker.updateMany(
-          { _id: { $in: workerIdList } },
-          { status: 'ONLINE' }
-        );
-      }
-
-      // 3. Process Wallet Refund (Only if farmer paid online upfront)
-      const isPaidOnline = request.paymentStatus === 'success' && request.paymentMethod !== 'cash';
-      const snap = request.financialSnapshot || {};
-      const refundAmount = isPaidOnline ? Number(snap.totalPayable || snap.maximumWorkerAmount || 0) : 0;
-
-      if (isPaidOnline && refundAmount > 0 && !request.refundCredited) {
-        let farmerWallet = await Wallet.findOne({ userId: farmerId, userModel: 'User' });
-        if (!farmerWallet) {
-          farmerWallet = await Wallet.create({ userId: farmerId, userModel: 'User', balance: 0 });
-        }
-
-        const prevBalance = farmerWallet.balance || 0;
-        farmerWallet.balance = prevBalance + refundAmount;
-        await farmerWallet.save();
-
-        // Sync User model
-        await User.findByIdAndUpdate(farmerId, { 'wallet.balance': farmerWallet.balance });
-
-        const bookingRef = request.bookingNumber || `WRK-${request._id.toString().slice(-6).toUpperCase()}`;
-        const refundKey = `cancel_refund_${request._id.toString()}`;
-
-        // Log WalletTransaction
-        await WalletTransaction.create({
-          walletId: farmerWallet._id,
-          type: 'credit',
-          amount: refundAmount,
-          reason: 'refund',
-          referenceId: request._id.toString(),
-          gatewayTransactionId: request.razorpayPaymentId || null,
-          idempotencyKey: refundKey,
-          status: 'completed'
-        });
-
-        // Log unified Transaction
-        await Transaction.create({
-          userId: farmerId,
-          type: 'refund',
-          amount: refundAmount,
-          status: 'completed',
-          paymentMethod: 'wallet',
-          description: `Full Refund for Cancelled ${request.workTitle || 'Worker'} Booking (#${bookingRef})`,
-          balanceBefore: prevBalance,
-          balanceAfter: farmerWallet.balance,
-          referenceId: request._id.toString()
-        });
-
-        request.refundAmount = refundAmount;
-        request.refundCredited = true;
-        request.refundCreditedAt = new Date();
-
-        // Emit real-time wallet balance update
-        emitSafe(`user_${farmerId}`, 'wallet_balance_updated', {
-          balance: farmerWallet.balance,
-          refundAmount,
-          type: 'credit',
-          message: `₹${refundAmount} refunded for cancelled booking`
-        });
-        emitSafe(`user:${farmerId}`, 'wallet_balance_updated', {
-          balance: farmerWallet.balance,
-          refundAmount,
-          type: 'credit',
-          message: `₹${refundAmount} refunded for cancelled booking`
-        });
-      }
-
-      request.status = 'cancelled';
-      await request.save();
-
-      // Notify Farmer of cancellation & refund
-      await notify({
-        recipientType: 'user',
-        recipientId: farmerId,
-        type: 'booking_cancelled',
-        title: isPaidOnline && refundAmount > 0 ? 'Booking Cancelled & Refunded' : 'Booking Cancelled',
-        message: isPaidOnline && refundAmount > 0
-          ? `Your booking for ${request.workTitle} has been cancelled. ₹${refundAmount} has been credited back to your AgroYilt Wallet.`
-          : `Your booking for ${request.workTitle} has been cancelled.`,
-        relatedId: request._id,
-        relatedType: 'WorkerBookingRequest',
-        data: { requestId: request._id, refundAmount }
-      });
-
-      // Notify and emit cancellation to all assigned workers
-      for (const wId of workerIdList) {
-        await notify({
-          recipientType: 'worker',
-          recipientId: wId,
-          type: 'worker_booking_cancelled',
-          title: '❌ Booking Cancelled',
-          message: `Booking for ${request.workTitle || 'Worker Service'} has been cancelled by the farmer.`,
-          relatedId: request._id,
-          relatedType: 'WorkerBookingRequest',
-          data: {
-            requestId: request._id,
-            bookingNumber: request.bookingNumber || `WRK-${request._id.toString().slice(-6).toUpperCase()}`,
-            workTitle: request.workTitle
-          }
-        });
-
-        const cancelPayload = {
-          requestId: request._id,
-          bookingId: request._id,
-          workTitle: request.workTitle,
-          message: `Booking for "${request.workTitle || 'Worker Service'}" has been cancelled by the farmer.`
-        };
-
-        emitSafe(`worker_${wId}`, 'worker_booking_cancelled', cancelPayload);
-        emitSafe(`worker:${wId}`, 'worker_booking_cancelled', cancelPayload);
-        emitSafe(`worker_${wId}`, 'job_cancelled', cancelPayload);
-        emitSafe(`worker:${wId}`, 'job_cancelled', cancelPayload);
-        emitSafe(`worker_${wId}`, 'booking_cancelled', cancelPayload);
-        emitSafe(`worker:${wId}`, 'booking_cancelled', cancelPayload);
-        emitSafe(`worker_${wId}`, 'worker_booking_update', { requestId: request._id, type: 'worker_booking_cancelled' });
-        emitSafe(`worker:${wId}`, 'worker_booking_update', { requestId: request._id, type: 'worker_booking_cancelled' });
-      }
-
-      // Broadcast to request and live tracking rooms
-      emitSafe(`booking_req:${request._id}`, 'worker_booking_cancelled', { requestId: request._id });
-      emitSafe(`farmer_worker_request_${request._id}`, 'worker_booking_cancelled', { requestId: request._id });
-
+    if (result.wasConfirmed) {
       return res.json({
         success: true,
-        message: isPaidOnline && refundAmount > 0
-          ? `Booking cancelled. ₹${refundAmount} has been refunded to your wallet.`
+        message: result.refundAmount > 0
+          ? `Booking cancelled. ₹${result.refundAmount} has been refunded to your wallet.`
           : 'Booking cancelled successfully.'
       });
     }
-
-    // ── If Request was Pending / Matching (Unpaid) ──
-    await WorkerBookingRequest.findByIdAndUpdate(request._id, { status: 'cancelled' });
-
-    // Collect ALL workers who were dispatched to, or accepted, or submitted offers
-    const targetWorkerIds = new Set();
-    if (Array.isArray(request.dispatchedTo)) {
-      request.dispatchedTo.forEach(d => {
-        if (d.workerId) targetWorkerIds.add(d.workerId.toString());
-      });
-    }
-    if (Array.isArray(request.workerOffers)) {
-      request.workerOffers.forEach(o => {
-        if (o.workerId) targetWorkerIds.add(o.workerId.toString());
-      });
-    }
-    if (Array.isArray(request.selectedWorkerIds)) {
-      request.selectedWorkerIds.forEach(id => {
-        if (id) targetWorkerIds.add(id.toString());
-      });
-    }
-
-    // Notify all targeted workers and emit real-time cancellation events
-    for (const wId of targetWorkerIds) {
-      await notify({
-        recipientType: 'worker',
-        recipientId: wId,
-        type: 'worker_request_cancelled',
-        title: '❌ Request Cancelled',
-        message: `Work request for ${request.workTitle || 'Farm Work'} has been cancelled by the farmer.`,
-        relatedId: request._id,
-        relatedType: 'WorkerBookingRequest',
-        data: {
-          requestId: request._id,
-          workTitle: request.workTitle
-        }
-      });
-
-      const cancelPayload = {
-        requestId: request._id,
-        workTitle: request.workTitle,
-        message: `Work request for "${request.workTitle || 'Farm Work'}" has been cancelled by the farmer.`
-      };
-
-      emitSafe(`worker_${wId}`, 'worker_request_cancelled', cancelPayload);
-      emitSafe(`worker:${wId}`, 'worker_request_cancelled', cancelPayload);
-      emitSafe(`worker_${wId}`, 'worker_booking_cancelled', cancelPayload);
-      emitSafe(`worker:${wId}`, 'worker_booking_cancelled', cancelPayload);
-      emitSafe(`worker_${wId}`, 'worker_booking_update', { requestId: request._id, type: 'worker_request_cancelled' });
-      emitSafe(`worker:${wId}`, 'worker_booking_update', { requestId: request._id, type: 'worker_request_cancelled' });
-    }
-
-    // Broadcast to room
-    emitSafe(`booking_req:${request._id}`, 'worker_request_cancelled', { requestId: request._id });
-    emitSafe(`farmer_worker_request_${request._id}`, 'worker_request_cancelled', { requestId: request._id });
-
     return res.json({ success: true, message: 'Request cancelled successfully.' });
   } catch (err) {
     console.error('[cancelFarmerRequest]', err);
@@ -3151,19 +3033,31 @@ exports.cancelFarmerRequest = async (req, res) => {
 
 
 // ============================================================================
-// NEW INDEPENDENT WORKER PAYMENT FLOW
+// INDEPENDENT WORKER PAYMENT FLOW
+//   select-workers  →  create-payment  →  verify-payment   (or confirm-cash)
+// All state changes are atomic (findOneAndUpdate guards); confirmation itself lives in
+// services/workerBookingConfirmService.js so verify / cash / webhook share ONE single-shot path.
 // ============================================================================
 const { createOrder, verifyPayment } = require('../../services/razorpayService');
 const { getWorkerFinancialSettings } = require('../../services/workerFinancialService');
+const confirmSvc = require('../../services/workerBookingConfirmService');
+
+const OID = (v) => mongoose.Types.ObjectId.isValid(String(v)) && String(new mongoose.Types.ObjectId(String(v))) === String(v);
+const rupeesToPaise = (inr) => Math.round(Number(inr) * 100);
+const paiseToRupees = (p) => p / 100;
 
 exports.farmerSelectWorkers = async (req, res) => {
   try {
     const farmerId = req.user._id;
-    const { selectedWorkerIds } = req.body; 
+    const raw = req.body.selectedWorkerIds;
 
-    if (!selectedWorkerIds || !Array.isArray(selectedWorkerIds) || selectedWorkerIds.length === 0) {
+    if (!Array.isArray(raw) || raw.length === 0) {
       return res.status(400).json({ success: false, message: 'Please select at least one worker.' });
     }
+    if (!raw.every(OID)) {
+      return res.status(400).json({ success: false, message: 'selectedWorkerIds must be valid worker ids.' });
+    }
+    const selectedWorkerIds = [...new Set(raw.map(String))]; // a worker can only be hired once per request
 
     const request = await WorkerBookingRequest.findOne({
       _id: req.params.id,
@@ -3177,51 +3071,55 @@ exports.farmerSelectWorkers = async (req, res) => {
     if (request.expiresAt < new Date()) {
       return res.status(410).json({ success: false, message: 'This request has expired.' });
     }
+    if (['processing', 'success'].includes(request.paymentStatus)) {
+      return res.status(409).json({ success: false, message: 'Payment for this request is already in progress or completed.' });
+    }
+    if (selectedWorkerIds.length > request.requiredWorkers) {
+      return res.status(400).json({ success: false, message: `You can select at most ${request.requiredWorkers} worker(s).` });
+    }
 
-    // Validate selected workers (Section 23: only leader and member_accepted workers are selectable)
+    // Only workers whose CURRENT response is a live acceptance are selectable.
     const isTeamLeader = request.bookingMode === 'TEAM_LEADER' || request.requestType === 'team_leader';
     const leaderIdStr = request.teamLeaderId ? request.teamLeaderId.toString() : null;
-    const acceptedMemberIdStrs = Array.isArray(request.memberInvitations)
-      ? request.memberInvitations
-          .filter(inv => inv.status === 'member_accepted')
-          .map(inv => inv.workerId.toString())
-      : [];
+    const acceptedMemberIdStrs = (request.memberInvitations || []).filter(inv => inv.status === 'member_accepted').map(inv => inv.workerId.toString());
+    const dispatchAccepted = new Set((request.dispatchedTo || []).filter(d => d.status === 'accepted').map(d => d.workerId.toString()));
 
-    const validWorkerIds = request.workerOffers
-      .filter(offer => {
-        if (!['pending', 'selected', 'accepted'].includes(offer.status)) return false;
-        if (isTeamLeader) {
+    const validWorkerIds = new Set(
+      (request.workerOffers || [])
+        .filter(offer => {
+          if (!['pending', 'selected', 'accepted'].includes(offer.status)) return false;
           const oId = offer.workerId.toString();
-          return (leaderIdStr && oId === leaderIdStr) || acceptedMemberIdStrs.includes(oId) || offer.status === 'accepted';
-        }
-        return true;
-      })
-      .map(offer => offer.workerId.toString());
-
+          if (isTeamLeader) {
+            return (leaderIdStr && oId === leaderIdStr && dispatchAccepted.has(oId)) || acceptedMemberIdStrs.includes(oId);
+          }
+          return dispatchAccepted.has(oId);
+        })
+        .map(offer => offer.workerId.toString())
+    );
     for (const wId of selectedWorkerIds) {
-      if (!validWorkerIds.includes(wId.toString())) {
+      if (!validWorkerIds.has(wId)) {
         return res.status(400).json({ success: false, message: 'One or more selected workers are invalid, pending acceptance, or not confirmed.' });
       }
     }
 
+    // Selected workers must still be eligible right now.
+    const unavailable = await confirmSvc.validateSelectedWorkers({
+      selectedWorkerIds, bookingType: request.bookingType, startDate: request.startDate, endDate: request.endDate,
+      scheduledDate: request.scheduledDate, startTime: request.startTime, endTime: request.endTime, _id: request._id
+    });
+    if (unavailable.length) {
+      return res.status(409).json({ success: false, message: 'One or more selected workers are no longer available.', unavailable });
+    }
+
     const settings = await getWorkerFinancialSettings();
     const isDaily = request.bookingType === 'DAILY';
-
-    // Formula per specification:
-    // HOURLY: (maxRate || minRate) * workers * (durationMinutes / 60) + platformFees
-    // DAILY:  (maxDailyRate || minDailyRate || maxRate || minRate) * workers * numberOfDays + platformFees
-    // If maxRate is not given by farmer, fallback to minRate.
     let baseRate = 0;
-    let maxWorkerAmount = 0;
-
-    const toP = (inr) => Math.round(Number(inr) * 100);
-    const toINR = (p) => p / 100;
+    let maxWorkerPaise = 0;
 
     if (isDaily) {
       baseRate = Number(request.maxDailyRate || request.minDailyRate || request.maxRate || request.minRate || 0);
       const days = Number(request.numberOfDays) || 1;
-      const totalWorkerPaise = toP(baseRate) * selectedWorkerIds.length * days;
-      maxWorkerAmount = toINR(totalWorkerPaise);
+      maxWorkerPaise = rupeesToPaise(baseRate) * selectedWorkerIds.length * days;
     } else {
       baseRate = Number(request.maxRate || request.minRate || 0);
       let durationHours = 1;
@@ -3236,24 +3134,18 @@ exports.farmerSelectWorkers = async (req, res) => {
           if (diffMinutes > 0) durationHours = diffMinutes / 60;
         }
       }
-      const totalWorkerPaise = Math.round(toP(baseRate) * selectedWorkerIds.length * durationHours);
-      maxWorkerAmount = toINR(totalWorkerPaise);
+      maxWorkerPaise = Math.round(rupeesToPaise(baseRate) * selectedWorkerIds.length * durationHours);
     }
 
     const platformRate = Number(settings.workerPlatformChargePercentage) || 0;
-    const platformPaise = Math.round((toP(maxWorkerAmount) * platformRate) / 100);
-    const platformCharge = toINR(platformPaise);
-    const totalPayable = toINR(toP(maxWorkerAmount) + platformPaise);
-
-    request.selectedWorkerIds = selectedWorkerIds;
-    request.paymentStatus = 'pending';
-    request.financialSnapshot = {
+    const platformPaise = Math.round((maxWorkerPaise * platformRate) / 100);
+    const snapshot = {
       maximumBudget: baseRate,
       selectedWorkerCount: selectedWorkerIds.length,
-      maximumWorkerAmount: maxWorkerAmount,
+      maximumWorkerAmount: paiseToRupees(maxWorkerPaise),
       platformChargeRate: platformRate,
-      platformChargeAmount: platformCharge,
-      totalPayable: totalPayable,
+      platformChargeAmount: paiseToRupees(platformPaise),
+      totalPayable: paiseToRupees(maxWorkerPaise + platformPaise),
       commissionRate: settings.workerCommissionPercentage,
       currency: 'INR',
       bookingType: request.bookingType || 'HOURLY',
@@ -3261,22 +3153,41 @@ exports.farmerSelectWorkers = async (req, res) => {
       durationMinutes: !isDaily ? (Number(request.durationMinutes) || 60) : null,
       createdAt: new Date()
     };
-    
-    request.workerOffers.forEach(offer => {
-       if (selectedWorkerIds.includes(offer.workerId.toString())) {
-         offer.status = 'selected';
-       }
-    });
 
-    await request.save();
+    // Atomic: only while still selectable and not paying/paid. Any previously created order is detached (a later
+    // payment on it is matched by paymentOrders and refunded, never silently accepted at the old price).
+    const updated = await WorkerBookingRequest.findOneAndUpdate(
+      {
+        _id: request._id, farmerId,
+        status: { $in: ['matching', 'awaiting_farmer_confirmation', 'pending'] },
+        paymentStatus: { $nin: ['processing', 'success'] }
+      },
+      {
+        $set: {
+          selectedWorkerIds,
+          paymentStatus: 'pending',
+          razorpayOrderId: null,
+          financialSnapshot: snapshot,
+          'workerOffers.$[sel].status': 'selected',
+          'workerOffers.$[other].status': 'accepted'
+        }
+      },
+      {
+        new: true,
+        arrayFilters: [
+          { 'sel.workerId': { $in: selectedWorkerIds.map(id => new mongoose.Types.ObjectId(id)) } },
+          { 'other.workerId': { $nin: selectedWorkerIds.map(id => new mongoose.Types.ObjectId(id)) }, 'other.status': 'selected' }
+        ]
+      }
+    );
+    if (!updated) {
+      return res.status(409).json({ success: false, message: 'The request changed while selecting workers. Please retry.' });
+    }
 
     return res.json({
       success: true,
       message: 'Workers selected. Please proceed to payment.',
-      data: {
-        financials: request.financialSnapshot,
-        paymentStatus: request.paymentStatus
-      }
+      data: { financials: updated.financialSnapshot, paymentStatus: updated.paymentStatus }
     });
   } catch (err) {
     console.error('[farmerSelectWorkers]', err);
@@ -3290,27 +3201,49 @@ exports.createWorkerBookingPayment = async (req, res) => {
     const request = await WorkerBookingRequest.findOne({
       _id: req.params.id,
       farmerId,
+      status: { $in: confirmSvc.SELECTABLE },
       paymentStatus: { $in: ['pending', 'not_started', 'failed'] }
     });
 
     if (!request) {
-      return res.status(404).json({ success: false, message: 'Request not found or workers not selected yet.' });
+      return res.status(404).json({ success: false, message: 'Request not found, not payable, or workers not selected yet.' });
     }
-
-    if (!request.financialSnapshot || !request.financialSnapshot.totalPayable) {
+    if (request.expiresAt < new Date()) {
+      return res.status(410).json({ success: false, message: 'This request has expired.' });
+    }
+    if (!Array.isArray(request.selectedWorkerIds) || request.selectedWorkerIds.length === 0 ||
+        !request.financialSnapshot || !request.financialSnapshot.totalPayable) {
       return res.status(400).json({ success: false, message: 'Financial snapshot is missing. Please select workers again.' });
     }
 
     const { totalPayable, currency } = request.financialSnapshot;
+    const amountPaise = rupeesToPaise(totalPayable);
+
+    // Reuse the live order for this exact price instead of piling up payable orders.
+    const existing = (request.paymentOrders || []).find(o => o.orderId === request.razorpayOrderId && o.amountPaise === amountPaise);
+    if (existing) {
+      return res.json({
+        success: true,
+        data: { orderId: existing.orderId, amount: amountPaise, currency: currency || 'INR', key: process.env.RAZORPAY_KEY_ID, financials: request.financialSnapshot }
+      });
+    }
 
     const orderRes = await createOrder(totalPayable, currency || 'INR', `req_${request._id}`);
     if (!orderRes.success) {
       return res.status(500).json({ success: false, message: 'Failed to create payment order: ' + (orderRes.error || '') });
     }
 
-    request.razorpayOrderId = orderRes.orderId;
-    request.paymentStatus = 'pending';
-    await request.save();
+    const attached = await WorkerBookingRequest.findOneAndUpdate(
+      { _id: request._id, status: { $in: confirmSvc.SELECTABLE }, paymentStatus: { $in: ['pending', 'not_started', 'failed'] } },
+      {
+        $set: { razorpayOrderId: orderRes.orderId, paymentStatus: 'pending' },
+        $push: { paymentOrders: { orderId: orderRes.orderId, amountPaise: Math.round(Number(orderRes.amount) || amountPaise), createdAt: new Date() } }
+      },
+      { new: true }
+    );
+    if (!attached) {
+      return res.status(409).json({ success: false, message: 'The request changed while creating the order. Please retry.' });
+    }
 
     return res.json({
       success: true,
@@ -3328,302 +3261,106 @@ exports.createWorkerBookingPayment = async (req, res) => {
   }
 };
 
+/** Notifications that follow a successful confirmation (shared by online + cash). */
+const announceConfirmation = async ({ request, assignments, bookings, method }) => {
+  const farmerId = request.farmerId;
+  const isCash = method === 'cash';
+  const isDaily = request.bookingType === 'DAILY';
+
+  for (const a of assignments) {
+    await notify({
+      recipientType: 'worker',
+      recipientId: a.workerId,
+      type: 'worker_booking_confirmed',
+      title: isCash ? '🎉 Booking Confirmed (Cash on Service)!' : '🎉 Booking Confirmed & Paid!',
+      message: isCash
+        ? `You have been booked for ${request.workTitle}. Payment will be collected in cash directly from customer upon completion.`
+        : `Your booking for ${request.workTitle} has been confirmed. You will earn ₹${a.netEarning}.`,
+      relatedId: isCash ? a._id : request._id,
+      relatedType: isCash ? 'IndWorkerAssignment' : 'WorkerBookingRequest',
+      data: {
+        assignmentId: a._id, requestId: request._id, bookingType: request.bookingType,
+        paymentMethod: isCash ? 'cash' : 'online',
+        scheduledDate: isDaily ? request.startDate : request.scheduledDate, startTime: request.startTime,
+        link: `/worker/job/${a._id}`
+      }
+    });
+    if (isCash) {
+      emitSafe(`worker_${a.workerId}`, 'assignment_confirmed', {
+        assignmentId: a._id, requestId: request._id, bookingType: request.bookingType, paymentMethod: 'cash', serverTimestamp: new Date()
+      });
+      emitSafe(`worker_${a.workerId}`, 'workerJobsUpdated', {});
+    }
+  }
+
+  await notify({
+    recipientType: 'user',
+    recipientId: farmerId,
+    type: 'worker_booking_confirmed',
+    title: isCash ? '🎉 Worker Booking Confirmed (Cash on Service)!' : '🎉 Worker Booking Confirmed & Paid!',
+    message: isCash
+      ? `Booking confirmed with ${assignments.length} worker(s) for "${request.workTitle}". Payment will be collected in cash upon work completion.`
+      : `Payment successful! ${assignments.length} worker(s) confirmed for "${request.workTitle}".`,
+    relatedId: request._id,
+    relatedType: 'WorkerBookingRequest',
+    data: { requestId: request._id, workTitle: request.workTitle, workerCount: assignments.length, paymentMethod: isCash ? 'cash' : 'online', link: `/user/farmer-worker-request/${request._id}` }
+  });
+
+  emitSafe(`booking_req:${request._id}`, 'booking_confirmed', {
+    requestId: request._id, assignmentIds: assignments.map(a => a._id), totalWorkers: assignments.length, serverTimestamp: new Date()
+  });
+  emitSafe(`user_${farmerId}`, 'booking_confirmed', {
+    requestId: request._id, assignmentIds: assignments.map(a => a._id), bookingIds: bookings.map(b => b._id),
+    status: 'confirmed', paymentMethod: isCash ? 'cash' : 'online', serverTimestamp: new Date()
+  });
+  emitSafe(`user_${farmerId}`, 'userBookingsUpdated', {});
+};
+exports.announceConfirmation = announceConfirmation;
+
+const sendConfirmResult = (res, result, method) => {
+  if (!result.ok) {
+    return res.status(result.code || 400).json({ success: false, message: result.reason, refunded: !!result.refunded, ...(result.unavailable ? { unavailable: result.unavailable } : {}) });
+  }
+  const r = result.request;
+  if (result.already) {
+    return res.json({
+      success: true,
+      message: method === 'cash' ? 'Booking already confirmed.' : 'Payment already verified.',
+      data: { requestId: r._id, assignmentIds: r.assignmentIds, bookingIds: r.finalBookingIds }
+    });
+  }
+  return res.json({
+    success: true,
+    message: method === 'cash' ? 'Booking confirmed with Cash on Service.' : 'Payment verified and worker assignments created.',
+    data: {
+      requestId: r._id,
+      assignmentIds: result.assignments.map(a => a._id),
+      bookingIds: result.bookings.map(b => b._id),
+      ...(method === 'cash' ? { paymentMethod: 'cash', paymentStatus: 'pending', confirmedWorkersCount: result.assignments.length } : {})
+    }
+  });
+};
+
 exports.verifyWorkerBookingPayment = async (req, res) => {
   try {
     const farmerId = req.user._id;
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
-
-    let request = await WorkerBookingRequest.findOne({
-      _id: req.params.id,
-      farmerId,
-      razorpayOrderId: razorpay_order_id,
-      paymentStatus: { $in: ['pending', 'failed'] }
-    });
-
-    if (!request) {
-      const alreadySuccess = await WorkerBookingRequest.findOne({
-        _id: req.params.id,
-        farmerId,
-        razorpayOrderId: razorpay_order_id,
-        paymentStatus: 'success'
-      });
-      if (alreadySuccess) {
-        return res.json({
-          success: true,
-          message: 'Payment already verified.',
-          data: {
-            requestId: alreadySuccess._id,
-            assignmentIds: alreadySuccess.assignmentIds,
-            bookingIds: alreadySuccess.finalBookingIds
-          }
-        });
-      }
-      return res.status(404).json({ success: false, message: 'Invalid payment verification request.' });
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body || {};
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return res.status(400).json({ success: false, message: 'Payment details are required.' });
     }
 
-    const isValid = verifyPayment(razorpay_order_id, razorpay_payment_id, razorpay_signature);
-    if (!isValid) {
-      request.paymentStatus = 'failed';
-      await request.save();
+    // Authenticity first; an invalid signature never touches booking state.
+    if (!verifyPayment(razorpay_order_id, razorpay_payment_id, razorpay_signature)) {
       return res.status(400).json({ success: false, message: 'Payment verification failed.' });
     }
 
-    request.paymentStatus = 'success';
-    request.paymentMethod = 'online';
-    request.razorpayPaymentId = razorpay_payment_id;
-    request.status = 'confirmed';
-    request.farmerAcceptedPartial = request.selectedWorkerIds.length < request.requiredWorkers;
-    request.acceptedWorkersCount = request.selectedWorkerIds.length;
-    request.finalWorkers = request.selectedWorkerIds;
-    
-    request.workerOffers.forEach(offer => {
-       if (!request.selectedWorkerIds.some(wId => wId.toString() === offer.workerId.toString())) {
-         offer.status = 'rejected';
-       } else {
-         offer.status = 'selected';
-       }
+    const result = await confirmSvc.confirmRequest({
+      requestId: req.params.id, farmerId, method: 'online', orderId: razorpay_order_id, paymentId: razorpay_payment_id
     });
-
-    const assignmentDocs = [];
-    const bookingDocs = [];
-    const otpExpiryDate = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-    const isDaily = request.bookingType === 'DAILY';
-
-    for (const [idx, wId] of request.selectedWorkerIds.entries()) {
-      const offer = request.workerOffers.find(o => o.workerId.toString() === wId.toString());
-      const offeredRate = offer 
-        ? offer.offeredRate 
-        : (isDaily ? (request.minDailyRate || request.minRate || 0) : (request.minRate || 0));
-      
-      // ── Paise-based financial calculation (integer math, no floating-point) ──
-      const toP   = (inr) => Math.round(Number(inr) * 100);
-      const toINR = (p)   => p / 100;
-
-      const commissionRate  = request.financialSnapshot?.commissionRate || 10;
-      let grossPaise = 0;
-      let rateUnit = isDaily ? 'daily' : (request.rateUnit || 'hourly');
-      let bookedDays = null;
-
-      if (isDaily) {
-        bookedDays = Number(request.numberOfDays) || 1;
-        grossPaise = toP(offeredRate) * bookedDays;
-      } else {
-        const durationHours = (Number(request.durationMinutes) || 60) / 60;
-        grossPaise = Math.round(toP(offeredRate) * durationHours);
-      }
-
-      const commissionPaise = Math.floor((grossPaise * commissionRate) / 100); // floor protects worker
-      const netPaise        = grossPaise - commissionPaise;
-
-      const commissionAmount = toINR(commissionPaise);
-      const netEarning       = toINR(netPaise);
-
-      // 4-digit visit OTP for this worker assignment
-      const rawVisitOtp = Math.floor(1000 + Math.random() * 9000).toString();
-      const visitOtpHash = crypto.createHash('sha256').update(rawVisitOtp).digest('hex');
-
-      // Create dedicated IndWorkerAssignment document
-      const assignmentDoc = {
-        parentRequestId: request._id,
-        bookingType: request.bookingType || 'HOURLY',
-        farmerId,
-        workerId: wId,
-        teamLeaderId: request.teamLeaderId || null,
-        workerType: request.bookingMode === 'TEAM_LEADER' ? 'TEAM_MEMBER' : 'INDEPENDENT',
-        agreedRate: offeredRate,
-        rateUnit,
-        creationIdempotencyKey: `assign_${request._id}_${wId}_${Date.now()}`,
-        assignmentStatus: 'CONFIRMED',
-        paymentMethod: 'online',
-        isCashBooking: false,
-        journeyStatus: 'NOT_STARTED',
-        visitOtpStatus: 'PENDING',
-        workStatus: 'NOT_STARTED',
-        completionStatus: 'PENDING',
-        settlementStatus: 'PENDING',
-        locationStatus: 'UNAVAILABLE',
-        visitOtpCode: rawVisitOtp,
-        visitOtpHash,
-        visitOtpExpiresAt: otpExpiryDate,
-        grossAmount: toINR(grossPaise),
-        commissionRate,
-        commissionAmount,
-        netEarning
-      };
-
-      if (isDaily) {
-        assignmentDoc.bookedDays = bookedDays;
-        assignmentDoc.workedDays = 0;
-        assignmentDoc.currentDayIndex = 1;
-        assignmentDoc.isDecreased = false;
-        assignmentDoc.dailyLogs = [{
-          dayNumber: 1,
-          date: request.startDate ? new Date(request.startDate) : new Date(),
-          journeyStatus: 'NOT_STARTED',
-          visitOtpCode: rawVisitOtp,
-          visitOtpHash,
-          visitOtpStatus: 'PENDING',
-          visitOtpExpiresAt: otpExpiryDate,
-          workStatus: 'NOT_STARTED'
-        }];
-      }
-
-      assignmentDocs.push(assignmentDoc);
-
-      // Also create legacy Booking doc for backward compatibility
-      bookingDocs.push({
-        bookingNumber: `WRK-${Date.now()}-${idx}`,
-        userId: farmerId,
-        workerId: wId,
-        providerType: 'WORKER',
-        workerRequestId: request._id,
-        scheduledDate: isDaily ? (request.startDate || request.scheduledDate || new Date()) : (request.scheduledDate || new Date()),
-        scheduledTime: isDaily ? '09:00' : (request.startTime || '09:00'),
-        timeSlot: isDaily ? { start: '09:00', end: '17:00' } : { start: request.startTime || '09:00', end: request.endTime || '17:00' },
-        serviceName: request.workTitle || 'Worker Service',
-        serviceCategory: request.workCategory || 'Worker',
-        basePrice: null,
-        minRate: isDaily ? request.minDailyRate : request.minRate,
-        maxRate: isDaily ? request.maxDailyRate : request.maxRate,
-        agreedRate: offeredRate,
-        rateUnit,
-        workerOfferedRate: offeredRate,
-        workerGrossEarning: toINR(grossPaise),
-        commissionRate: commissionRate,
-        commissionAmount: commissionAmount,
-        workerNetEarning: netEarning,
-        finalAmount: toINR(grossPaise), 
-        totalAmount: toINR(grossPaise),
-        farmerPaidAmount: request.financialSnapshot?.totalPayable || toINR(grossPaise),
-        platformFeeAmount: request.financialSnapshot?.platformChargeAmount || 0,
-        platformFeeRate: request.financialSnapshot?.platformChargeRate || 0,
-        visitOtp: rawVisitOtp,
-        address: {
-          addressLine1: request.location?.addressLine1 || request.location?.city || '',
-          city: request.location?.city || '',
-          state: request.location?.state || '',
-          pincode: request.location?.pincode || '',
-          lat: request.location?.lat || null,
-          lng: request.location?.lng || null,
-        },
-        status: 'confirmed',
-        paymentStatus: 'success',
-        paymentMethod: 'online',
-        paymentId: razorpay_payment_id,
-        razorpayPaymentId: razorpay_payment_id,
-        razorpayOrderId: razorpay_order_id,
-        notes: `${request.workTitle}: ${request.workDescription || ''}`.substring(0, 500)
-      });
+    if (result.ok && !result.already) {
+      await announceConfirmation({ request: result.request, assignments: result.assignments, bookings: result.bookings, method: 'online' });
     }
-
-    // Insert Assignments and Bookings
-    const createdAssignments = await IndWorkerAssignment.insertMany(assignmentDocs);
-    const createdBookings = await Booking.insertMany(bookingDocs);
-
-    // Record Transaction for audit trail
-    try {
-      const Transaction = require('../../models/Transaction');
-      await Transaction.create({
-        userId: farmerId,
-        amount: request.financialSnapshot?.totalPayable || 0,
-        type: 'booking_payment',
-        paymentMethod: 'razorpay',
-        status: 'completed',
-        gatewayTransactionId: razorpay_payment_id,
-        description: `Online payment for worker booking "${request.workTitle}"`,
-        metadata: {
-          workerRequestId: request._id,
-          razorpayOrderId: razorpay_order_id,
-          razorpayPaymentId: razorpay_payment_id
-        }
-      });
-    } catch (txErr) {
-      console.error('[verifyWorkerBookingPayment] Transaction create error (non-fatal):', txErr);
-    }
-
-    // Link legacy booking IDs into assignments
-    for (let i = 0; i < createdAssignments.length; i++) {
-      if (createdBookings[i]) {
-        createdAssignments[i].legacyBookingId = createdBookings[i]._id;
-        await createdAssignments[i].save();
-      }
-    }
-
-    request.assignmentIds = createdAssignments.map(a => a._id);
-    request.finalBookingIds = createdBookings.map(b => b._id);
-    request.refundAmount = null;
-    request.refundCredited = false;
-    request.refundCreditedAt = null;
-
-    // Section 25: Expire any remaining unresponded member invitations
-    if (Array.isArray(request.memberInvitations)) {
-      for (const inv of request.memberInvitations) {
-        if (inv.status === 'member_pending' || inv.status === 'pending') {
-          inv.status = 'member_expired';
-          emitSafe(`worker_${inv.workerId}`, 'workerBookingCancelled', {
-            requestId: request._id,
-            message: 'This team job invitation has expired because booking was finalized.'
-          });
-        }
-      }
-    }
-
-    await request.save();
-
-    // Notify each worker
-    for (const a of createdAssignments) {
-      await notify({
-        recipientType: 'worker',
-        recipientId: a.workerId,
-        type: 'worker_booking_confirmed',
-        title: '🎉 Booking Confirmed & Paid!',
-        message: `Your booking for ${request.workTitle} has been confirmed. You will earn ₹${a.netEarning}.`,
-        relatedId: request._id,
-        relatedType: 'WorkerBookingRequest',
-        data: {
-          assignmentId: a._id,
-          requestId: request._id,
-          link: `/worker/job/${a._id}`
-        }
-      });
-    }
-
-    // Notify farmer of successful booking and payment
-    await notify({
-      recipientType: 'user',
-      recipientId: farmerId,
-      type: 'worker_booking_confirmed',
-      title: '🎉 Worker Booking Confirmed & Paid!',
-      message: `Payment successful! ${createdAssignments.length} worker(s) confirmed for "${request.workTitle}".`,
-      relatedId: request._id,
-      relatedType: 'WorkerBookingRequest',
-      data: {
-        requestId: request._id,
-        workTitle: request.workTitle,
-        workerCount: createdAssignments.length,
-        link: `/user/farmer-worker-request/${request._id}`
-      }
-    });
-
-    // Emit socket event to parent request room
-    emitSafe(`booking_req:${request._id}`, 'booking_confirmed', {
-      requestId: request._id,
-      assignmentIds: request.assignmentIds,
-      totalWorkers: request.assignmentIds.length,
-      serverTimestamp: new Date()
-    });
-    emitSafe(`user_${farmerId}`, 'userBookingsUpdated', {});
-
-    return res.json({
-      success: true,
-      message: 'Payment verified and worker assignments created.',
-      data: {
-        requestId: request._id,
-        assignmentIds: request.assignmentIds,
-        bookingIds: request.finalBookingIds
-      }
-    });
-
+    return sendConfirmResult(res, result, 'online');
   } catch (err) {
     console.error('[verifyWorkerBookingPayment]', err);
     return res.status(500).json({ success: false, message: 'Payment verification failed: ' + err.message });
@@ -3637,256 +3374,17 @@ exports.verifyWorkerBookingPayment = async (req, res) => {
 exports.confirmWorkerBookingCash = async (req, res) => {
   try {
     const farmerId = req.user._id;
-    const request = await WorkerBookingRequest.findOne({
-      _id: req.params.id,
-      farmerId,
-      status: { $in: ['awaiting_farmer_confirmation', 'matching', 'pending'] }
-    });
 
-    if (!request) {
-      return res.status(404).json({ success: false, message: 'Request not found or not in confirmable state.' });
+    const settings = await getWorkerFinancialSettings();
+    if (settings.workerCashPaymentEnabled === false) {
+      return res.status(403).json({ success: false, message: 'Cash payment is currently disabled.' });
     }
 
-    if (!Array.isArray(request.selectedWorkerIds) || request.selectedWorkerIds.length === 0) {
-      return res.status(400).json({ success: false, message: 'No workers selected for booking. Please select workers first.' });
+    const result = await confirmSvc.confirmRequest({ requestId: req.params.id, farmerId, method: 'cash' });
+    if (result.ok && !result.already) {
+      await announceConfirmation({ request: result.request, assignments: result.assignments, bookings: result.bookings, method: 'cash' });
     }
-
-    request.paymentMethod = 'cash';
-    request.paymentStatus = 'pending';
-    request.status = 'confirmed';
-    request.farmerAcceptedPartial = request.selectedWorkerIds.length < request.requiredWorkers;
-    request.acceptedWorkersCount = request.selectedWorkerIds.length;
-    request.finalWorkers = request.selectedWorkerIds;
-
-    request.workerOffers.forEach(offer => {
-      if (!request.selectedWorkerIds.some(wId => wId.toString() === offer.workerId.toString())) {
-        offer.status = 'rejected';
-      } else {
-        offer.status = 'selected';
-      }
-    });
-
-    const assignmentDocs = [];
-    const bookingDocs = [];
-    const otpExpiryDate = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-    const isDaily = request.bookingType === 'DAILY';
-
-    for (const [idx, wId] of request.selectedWorkerIds.entries()) {
-      const offer = request.workerOffers.find(o => o.workerId.toString() === wId.toString());
-      const offeredRate = offer 
-        ? offer.offeredRate 
-        : (isDaily ? (request.minDailyRate || request.minRate || 0) : (request.minRate || 0));
-
-      const toP   = (inr) => Math.round(Number(inr) * 100);
-      const toINR = (p)   => p / 100;
-
-      const commissionRate  = request.financialSnapshot?.commissionRate || 10;
-      let grossPaise = 0;
-      let rateUnit = isDaily ? 'daily' : (request.rateUnit || 'hourly');
-      let bookedDays = null;
-
-      if (isDaily) {
-        bookedDays = Number(request.numberOfDays) || 1;
-        grossPaise = toP(offeredRate) * bookedDays;
-      } else {
-        const durationHours = (Number(request.durationMinutes) || 60) / 60;
-        grossPaise = Math.round(toP(offeredRate) * durationHours);
-      }
-
-      const commissionPaise = Math.floor((grossPaise * commissionRate) / 100);
-      const netPaise        = grossPaise - commissionPaise;
-      const commissionAmount = toINR(commissionPaise);
-      const netEarning       = toINR(netPaise);
-
-      // 4-digit visit OTP for this worker assignment
-      const rawVisitOtp = Math.floor(1000 + Math.random() * 9000).toString();
-      const visitOtpHash = crypto.createHash('sha256').update(rawVisitOtp).digest('hex');
-
-      const assignmentDoc = {
-        parentRequestId: request._id,
-        bookingType: request.bookingType || 'HOURLY',
-        farmerId,
-        workerId: wId,
-        teamLeaderId: request.teamLeaderId || null,
-        workerType: request.bookingMode === 'TEAM_LEADER' ? 'TEAM_MEMBER' : 'INDEPENDENT',
-        agreedRate: offeredRate,
-        rateUnit,
-        creationIdempotencyKey: `assign_${request._id}_${wId}_${Date.now()}`,
-        assignmentStatus: 'CONFIRMED',
-        paymentMethod: 'cash',
-        isCashBooking: true,
-        journeyStatus: 'NOT_STARTED',
-        visitOtpStatus: 'PENDING',
-        workStatus: 'NOT_STARTED',
-        completionStatus: 'PENDING',
-        settlementStatus: 'PENDING',
-        locationStatus: 'UNAVAILABLE',
-        visitOtpCode: rawVisitOtp,
-        visitOtpHash,
-        visitOtpExpiresAt: otpExpiryDate,
-        grossAmount: toINR(grossPaise),
-        commissionRate,
-        commissionAmount,
-        netEarning
-      };
-
-      if (isDaily) {
-        assignmentDoc.bookedDays = bookedDays;
-        assignmentDoc.workedDays = 0;
-        assignmentDoc.currentDayIndex = 1;
-        assignmentDoc.isDecreased = false;
-        assignmentDoc.dailyLogs = [{
-          dayNumber: 1,
-          date: request.startDate ? new Date(request.startDate) : new Date(),
-          journeyStatus: 'NOT_STARTED',
-          visitOtpCode: rawVisitOtp,
-          visitOtpHash,
-          visitOtpStatus: 'PENDING',
-          visitOtpExpiresAt: otpExpiryDate,
-          workStatus: 'NOT_STARTED'
-        }];
-      }
-
-      assignmentDocs.push(assignmentDoc);
-
-      bookingDocs.push({
-        bookingNumber: `WRK-${Date.now()}-${idx}`,
-        userId: farmerId,
-        workerId: wId,
-        providerType: 'WORKER',
-        workerRequestId: request._id,
-        scheduledDate: isDaily ? (request.startDate || request.scheduledDate) : request.scheduledDate,
-        scheduledTime: isDaily ? '09:00' : request.startTime,
-        timeSlot: isDaily ? { start: '09:00', end: '17:00' } : { start: request.startTime, end: request.endTime },
-        serviceName: request.workTitle,
-        serviceCategory: request.workCategory || 'Worker',
-        basePrice: null,
-        minRate: isDaily ? request.minDailyRate : request.minRate,
-        maxRate: isDaily ? request.maxDailyRate : request.maxRate,
-        agreedRate: offeredRate,
-        rateUnit,
-        workerOfferedRate: offeredRate,
-        workerGrossEarning: toINR(grossPaise),
-        commissionRate: commissionRate,
-        commissionAmount: commissionAmount,
-        workerNetEarning: netEarning,
-        finalAmount: toINR(grossPaise), 
-        totalAmount: toINR(grossPaise),
-        farmerPaidAmount: 0,
-        platformFeeAmount: request.financialSnapshot?.platformChargeAmount || 0,
-        platformFeeRate: request.financialSnapshot?.platformChargeRate || 0,
-        visitOtp: rawVisitOtp,
-        address: {
-          addressLine1: request.location?.addressLine1 || request.location?.city || '',
-          city: request.location?.city || '',
-          state: request.location?.state || '',
-          pincode: request.location?.pincode || '',
-          lat: request.location?.lat || null,
-          lng: request.location?.lng || null,
-        },
-        status: 'confirmed',
-        paymentStatus: 'pending',
-        paymentMethod: 'cash',
-        notes: `${request.workTitle}: ${request.workDescription || ''}`.substring(0, 500)
-      });
-    }
-
-    const createdAssignments = await IndWorkerAssignment.insertMany(assignmentDocs);
-    const createdBookings = await Booking.insertMany(bookingDocs);
-
-    for (let i = 0; i < createdAssignments.length; i++) {
-      if (createdBookings[i]) {
-        createdAssignments[i].legacyBookingId = createdBookings[i]._id;
-        await createdAssignments[i].save();
-      }
-    }
-
-    request.assignmentIds = createdAssignments.map(a => a._id);
-    request.finalBookingIds = createdBookings.map(b => b._id);
-
-    if (Array.isArray(request.memberInvitations)) {
-      for (const inv of request.memberInvitations) {
-        if (inv.status === 'member_pending' || inv.status === 'pending') {
-          inv.status = 'member_expired';
-          emitSafe(`worker_${inv.workerId}`, 'workerBookingCancelled', {
-            requestId: request._id,
-            message: 'This team job invitation has expired because booking was finalized.'
-          });
-        }
-      }
-    }
-
-    await request.save();
-
-    for (const a of createdAssignments) {
-      await notify({
-        recipientType: 'worker',
-        recipientId:   a.workerId,
-        type:          'worker_booking_confirmed',
-        title:         '🎉 Booking Confirmed (Cash on Service)!',
-        message:       `You have been booked for ${request.workTitle}. Payment will be collected in cash directly from customer upon completion.`,
-        relatedId:     a._id,
-        relatedType:   'IndWorkerAssignment',
-        data: {
-          assignmentId:  a._id,
-          requestId:     request._id,
-          bookingType:   request.bookingType,
-          scheduledDate: isDaily ? request.startDate : request.scheduledDate,
-          startTime:     request.startTime,
-          paymentMethod: 'cash'
-        }
-      });
-
-      emitSafe(`worker_${a.workerId}`, 'assignment_confirmed', {
-        assignmentId: a._id,
-        requestId: request._id,
-        bookingType: request.bookingType,
-        paymentMethod: 'cash',
-        serverTimestamp: new Date()
-      });
-      emitSafe(`worker_${a.workerId}`, 'workerJobsUpdated', {});
-    }
-
-    // Notify farmer of confirmed booking with cash on service
-    await notify({
-      recipientType: 'user',
-      recipientId:   farmerId,
-      type:          'worker_booking_confirmed',
-      title:         '🎉 Worker Booking Confirmed (Cash on Service)!',
-      message:       `Booking confirmed with ${createdAssignments.length} worker(s) for "${request.workTitle}". Payment will be collected in cash upon work completion.`,
-      relatedId:     request._id,
-      relatedType:   'WorkerBookingRequest',
-      data: {
-        requestId:             request._id,
-        workTitle:             request.workTitle,
-        workerCount:           createdAssignments.length,
-        paymentMethod:         'cash',
-        link:                  `/user/farmer-worker-request/${request._id}`
-      }
-    });
-
-    emitSafe(`user_${farmerId}`, 'booking_confirmed', {
-      requestId: request._id,
-      assignmentIds: createdAssignments.map(a => a._id),
-      bookingIds: createdBookings.map(b => b._id),
-      status: 'confirmed',
-      paymentMethod: 'cash',
-      serverTimestamp: new Date()
-    });
-    emitSafe(`user_${farmerId}`, 'userBookingsUpdated', {});
-
-    return res.json({
-      success: true,
-      message: 'Booking confirmed with Cash on Service.',
-      data: {
-        requestId: request._id,
-        bookingIds: createdBookings.map(b => b._id),
-        assignmentIds: createdAssignments.map(a => a._id),
-        paymentMethod: 'cash',
-        paymentStatus: 'pending',
-        confirmedWorkersCount: createdAssignments.length
-      }
-    });
+    return sendConfirmResult(res, result, 'cash');
   } catch (err) {
     console.error('[confirmWorkerBookingCash]', err);
     return res.status(500).json({ success: false, message: 'Failed to confirm booking with cash: ' + err.message });
@@ -3995,43 +3493,42 @@ exports.getWorkerBookingTrackingData = async (req, res) => {
   }
 };
 
+const { issueOtp: issueFreshOtp, OTP_MAX_REGENERATIONS: MAX_OTP_REGEN } = require('../../utils/otpUtil');
+const A_OPEN = { assignmentStatus: 'CONFIRMED', settlementStatus: 'PENDING' };
+
+/** Farmer-only: loads an assignment the caller owns and that is still open. */
+const loadOwnedOpenAssignment = (req) =>
+  IndWorkerAssignment.findOne({ _id: req.params.assignmentId, parentRequestId: req.params.id, farmerId: req.user._id, ...A_OPEN });
+
 /**
- * Farmer generates or retrieves Completion OTP for a specific assignment
+ * Farmer generates the HOURLY completion OTP. Only once the visit is verified and before completion.
  * POST /api/user/farmer-worker-request/:id/assignment/:assignmentId/completion-otp
  */
 exports.generateFarmerCompletionOtp = async (req, res) => {
   try {
-    const farmerId = req.user._id;
     const { id, assignmentId } = req.params;
+    if (!OID(id) || !OID(assignmentId)) return res.status(404).json({ success: false, message: 'Assignment not found.' });
 
-    const assignment = await IndWorkerAssignment.findOne({
-      _id: assignmentId,
-      parentRequestId: id,
-      farmerId
-    });
-
-    if (!assignment) {
-      return res.status(404).json({ success: false, message: 'Assignment not found.' });
+    const exists = await loadOwnedOpenAssignment(req);
+    if (!exists) return res.status(404).json({ success: false, message: 'Assignment not found or no longer open.' });
+    if (exists.bookingType === 'DAILY') {
+      return res.status(400).json({ success: false, message: 'Use the daily completion OTP endpoint for DAILY bookings.' });
     }
 
-    // Generate 4-digit completion OTP
-    const rawCompletionOtp = Math.floor(1000 + Math.random() * 9000).toString();
-    const completionOtpHash = crypto.createHash('sha256').update(rawCompletionOtp).digest('hex');
-
-    assignment.completionOtpCode = rawCompletionOtp;
-    assignment.completionOtpHash = completionOtpHash;
-    assignment.completionOtpExpiresAt = new Date(Date.now() + 60 * 60 * 1000);
-    assignment.completionOtpAttempts = 0;
-    await assignment.save();
+    const otp = issueFreshOtp();
+    const assignment = await IndWorkerAssignment.findOneAndUpdate(
+      { _id: assignmentId, parentRequestId: id, farmerId: req.user._id, ...A_OPEN, visitOtpStatus: 'VERIFIED', completionStatus: 'PENDING' },
+      { $set: { completionOtpCode: otp.code, completionOtpHash: otp.hash, completionOtpExpiresAt: otp.expiresAt, completionOtpAttempts: 0 } },
+      { new: true }
+    );
+    if (!assignment) {
+      return res.status(409).json({ success: false, message: 'The completion OTP can only be generated after the worker has started work.' });
+    }
 
     return res.json({
       success: true,
       message: 'Completion OTP generated successfully.',
-      data: {
-        assignmentId: assignment._id,
-        completionOtp: rawCompletionOtp,
-        expiresAt: assignment.completionOtpExpiresAt
-      }
+      data: { assignmentId: assignment._id, completionOtp: otp.code, expiresAt: otp.expiresAt }
     });
   } catch (err) {
     console.error('[generateFarmerCompletionOtp]', err);
@@ -4039,78 +3536,133 @@ exports.generateFarmerCompletionOtp = async (req, res) => {
   }
 };
 
+
 /**
- * Farmer decreases an individual worker on a DAILY booking
- * POST /api/user/farmer-worker-request/:id/decrease-worker
- * Body: { assignmentId, reason }
+ * Farmer removes / concludes ONE worker.
+ *   • not started yet  → the assignment is cancelled and that worker's reserve share is refunded
+ *                        (removing the LAST open worker cancels the whole booking, full refund)
+ *   • between days     → DAILY worker stops now: settled for the days actually worked, unused days refunded
+ *   • mid-day          → DAILY worker finishes today, then stops (settled + refunded on completion)
+ *   • HOURLY job already running → not allowed
+ * POST /api/user/farmer-worker-request/:id/decrease-worker   Body: { assignmentId, reason }
  */
 exports.decreaseWorker = async (req, res) => {
   try {
     const farmerId = req.user._id;
     const { id } = req.params;
-    const { assignmentId, reason } = req.body;
+    const { assignmentId } = req.body || {};
+    const reason = typeof (req.body || {}).reason === 'string' ? req.body.reason.trim().slice(0, 500) : '';
 
-    if (!assignmentId) {
-      return res.status(400).json({ success: false, message: 'assignmentId is required' });
+    if (!assignmentId || !OID(assignmentId) || !OID(id)) {
+      return res.status(400).json({ success: false, message: 'A valid assignmentId is required' });
     }
 
     const request = await WorkerBookingRequest.findOne({ _id: id, farmerId });
     if (!request) {
       return res.status(404).json({ success: false, message: 'Worker booking request not found' });
     }
-
-    if (request.bookingType !== 'DAILY') {
-      return res.status(400).json({ success: false, message: 'Worker decrease is only applicable for DAILY bookings' });
+    if (!['confirmed', 'in_progress', 'partially_completed'].includes(request.status)) {
+      return res.status(409).json({ success: false, message: `Workers can only be removed from an active booking (status: ${request.status}).` });
     }
 
-    const assignment = await IndWorkerAssignment.findOne({
-      _id: assignmentId,
-      parentRequestId: request._id,
-      farmerId,
-      assignmentStatus: 'CONFIRMED'
-    });
-
+    const assignment = await IndWorkerAssignment.findOne({ _id: assignmentId, parentRequestId: request._id, farmerId, assignmentStatus: 'CONFIRMED' });
     if (!assignment) {
       return res.status(404).json({ success: false, message: 'Active assignment not found' });
     }
-
+    if (assignment.settlementStatus !== 'PENDING' || assignment.completionStatus === 'OTP_VERIFIED') {
+      return res.status(409).json({ success: false, message: 'This worker has already finished and is being settled.' });
+    }
     if (assignment.isDecreased) {
-      return res.status(400).json({ success: false, message: 'This worker has already been marked as decreased' });
+      return res.json({ success: true, message: 'This worker has already been marked as decreased.', data: assignment });
     }
 
-    // Set decrease flags - current day will be finished, but future days stopped
-    assignment.isDecreased = true;
-    assignment.decreasedAt = new Date();
-    assignment.decreaseReason = reason || 'Decreased by farmer';
-    await assignment.save();
+    const isDaily = assignment.bookingType === 'DAILY';
+    const settlementSvc = require('../../services/workerSettlementService');
+    const notStarted = isDaily
+      ? (!(assignment.workedDays > 0) && assignment.visitOtpStatus !== 'VERIFIED')
+      : (assignment.visitOtpStatus !== 'VERIFIED' && assignment.workStatus === 'NOT_STARTED');
+    const midDay = isDaily && assignment.visitOtpStatus === 'VERIFIED';
 
-    // Socket update
-    emitSafe(`booking_req:${request._id}`, 'assignment_decreased', {
-      requestId: request._id,
-      assignmentId: assignment._id,
-      workerId: assignment.workerId,
-      isDecreased: true,
-      decreasedAt: assignment.decreasedAt,
-      serverTimestamp: new Date()
-    });
+    if (!isDaily && !notStarted) {
+      return res.status(409).json({ success: false, message: 'A running hourly job cannot be cut short. Please contact support.' });
+    }
 
-    // Notify worker
+    // ── not started: cancel this worker (or the whole booking if they are the last one) ──
+    if (notStarted) {
+      const open = await IndWorkerAssignment.countDocuments({ parentRequestId: request._id, assignmentStatus: 'CONFIRMED' });
+      if (open <= 1) {
+        const result = await cancelSvc.cancelWorkerBooking({ requestId: request._id, farmerId, actor: 'farmer', actorId: farmerId, reason: reason || 'Last worker removed by farmer' });
+        if (!result.ok) return res.status(result.code).json({ success: false, message: result.reason });
+        await announceCancellation({ request: result.request, workerIds: result.workerIds, refundAmount: result.refundAmount, wasConfirmed: true });
+        return res.json({ success: true, message: 'The only worker was removed, so the booking was cancelled and refunded.', data: { bookingCancelled: true, refundAmount: result.refundAmount } });
+      }
+
+      const cancelled = await IndWorkerAssignment.findOneAndUpdate(
+        {
+          _id: assignment._id, assignmentStatus: 'CONFIRMED', settlementStatus: 'PENDING', completionStatus: 'PENDING',
+          visitOtpStatus: { $ne: 'VERIFIED' }, workedDays: { $in: [0, null] }
+        },
+        {
+          $set: {
+            assignmentStatus: 'CANCELLED', cancelledAt: new Date(), cancellationReason: reason || 'Removed by farmer', cancelledBy: 'farmer',
+            isDecreased: true, decreasedAt: new Date(), decreaseReason: reason || 'Decreased by farmer'
+          },
+          $push: { auditLog: { at: new Date(), actor: 'farmer', actorId: farmerId, event: 'removed_before_start', meta: { reason } } }
+        },
+        { new: true }
+      );
+      if (!cancelled) {
+        return res.status(409).json({ success: false, message: 'The worker has just started; please retry.' });
+      }
+      if (cancelled.legacyBookingId) await Booking.updateOne({ _id: cancelled.legacyBookingId, status: { $nin: ['completed', 'cancelled'] } }, { $set: { status: 'cancelled', cancellationReason: reason || 'Removed by farmer' } });
+      const refund = await settlementSvc.refundWorkerReserveShare(cancelled._id, { actor: 'farmer', actorId: farmerId });
+
+      emitSafe(`booking_req:${request._id}`, 'assignment_decreased', { requestId: request._id, assignmentId: cancelled._id, workerId: cancelled.workerId, isDecreased: true, cancelled: true, serverTimestamp: new Date() });
+      await notify({
+        recipientType: 'worker', recipientId: cancelled.workerId, type: 'worker_booking_cancelled', title: '❌ Booking Cancelled',
+        message: `The farmer has removed you from "${request.workTitle || 'this job'}" before work began.`,
+        relatedId: request._id, relatedType: 'WorkerBookingRequest', data: { assignmentId: cancelled._id }
+      });
+      return res.json({
+        success: true,
+        message: refund.refundAmount > 0 ? `Worker removed. ₹${refund.refundAmount} refunded to your wallet.` : 'Worker removed.',
+        data: cancelled
+      });
+    }
+
+    // ── DAILY, work already done on some days ──
+    const flagged = await IndWorkerAssignment.findOneAndUpdate(
+      { _id: assignment._id, assignmentStatus: 'CONFIRMED', settlementStatus: 'PENDING', isDecreased: { $ne: true } },
+      {
+        $set: { isDecreased: true, decreasedAt: new Date(), decreaseReason: reason || 'Decreased by farmer' },
+        $push: { auditLog: { at: new Date(), actor: 'farmer', actorId: farmerId, event: 'decreased', meta: { reason, midDay } } }
+      },
+      { new: true }
+    );
+    if (!flagged) {
+      return res.status(409).json({ success: false, message: 'This worker changed state; please retry.' });
+    }
+
+    let message = 'Worker marked for decrease. Settlement will occur upon current day completion.';
+    let data = flagged;
+    if (!midDay) {
+      // between days: nothing is running — stop now instead of forcing another paid day
+      const wac = require('./workerAssignmentController');
+      const fin = await wac._finalizeDecreasedBetweenDays(flagged._id);
+      data = fin.assignment || flagged;
+      message = 'Worker schedule concluded. Settlement completed for the days worked and unused days were refunded.';
+    }
+
+    emitSafe(`booking_req:${request._id}`, 'assignment_decreased', { requestId: request._id, assignmentId: flagged._id, workerId: flagged.workerId, isDecreased: true, decreasedAt: flagged.decreasedAt, serverTimestamp: new Date() });
     await notify({
-      recipientType: 'worker',
-      recipientId: assignment.workerId,
-      type: 'worker_decreased',
-      title: 'Booking Update: Schedule Concluded',
-      message: 'The farmer has concluded this job after today. Your current day work will be settled upon today’s completion.',
-      relatedId: request._id,
-      relatedType: 'WorkerBookingRequest',
-      data: { assignmentId: assignment._id }
+      recipientType: 'worker', recipientId: flagged.workerId, type: 'worker_decreased', title: 'Booking Update: Schedule Concluded',
+      message: midDay
+        ? 'The farmer has concluded this job after today. Your current day work will be settled upon today’s completion.'
+        : 'The farmer has concluded this job. Your completed days have been settled.',
+      relatedId: request._id, relatedType: 'WorkerBookingRequest', data: { assignmentId: flagged._id }
     });
 
-    return res.json({
-      success: true,
-      message: 'Worker marked for decrease. Settlement will occur upon current day completion.',
-      data: assignment
-    });
+    return res.json({ success: true, message, data });
   } catch (err) {
     console.error('[decreaseWorker]', err);
     return res.status(500).json({ success: false, message: 'Failed to decrease worker: ' + err.message });
@@ -4118,250 +3670,87 @@ exports.decreaseWorker = async (req, res) => {
 };
 
 /**
- * Farmer requests additional / extra workers on an active booking (today or tomorrow)
- * POST /api/users/farmer-worker-request/:id/add-workers
- * Body: { additionalWorkersCount, startDate, numberOfDays, paymentMethod, offeredRate, assignedWorkerIds, reason }
+ * Farmer asks for MORE workers on an active booking.
+ * The add-on is its own WorkerBookingRequest (linked via addOnOfRequestId) and goes through the standard
+ * dispatch → worker accepts (consent) → farmer selects → pays → confirmed flow. Nothing is assigned or paid
+ * implicitly, and the original booking's reserve / refund maths stay untouched.
+ * POST /api/user/farmer-worker-request/:id/add-workers
+ * Body: { additionalWorkersCount, startDate, numberOfDays, offeredRate, assignedWorkerIds? }
  */
 exports.addExtraWorkers = async (req, res) => {
   try {
     const farmerId = req.user._id;
     const { id } = req.params;
-    const {
-      additionalWorkersCount = 1,
-      startDate,
-      numberOfDays = 1,
-      paymentMethod,
-      offeredRate,
-      assignedWorkerIds = [],
-      reason
-    } = req.body;
+    const b = req.body || {};
+    if (!OID(id)) return res.status(404).json({ success: false, message: 'Worker booking request not found' });
 
-    const count = Math.max(1, Number(additionalWorkersCount) || 1);
-    const days = Math.max(1, Number(numberOfDays) || 1);
+    const count = Number(b.additionalWorkersCount ?? 1);
+    if (!Number.isInteger(count) || count < 1 || count > 50) {
+      return res.status(400).json({ success: false, message: 'additionalWorkersCount must be a whole number between 1 and 50.' });
+    }
 
-    const request = await WorkerBookingRequest.findOne({ _id: id, farmerId });
-    if (!request) {
+    const parent = await WorkerBookingRequest.findOne({ _id: id, farmerId });
+    if (!parent) {
       return res.status(404).json({ success: false, message: 'Worker booking request not found' });
     }
+    if (!['confirmed', 'in_progress', 'partially_completed'].includes(parent.status)) {
+      return res.status(409).json({ success: false, message: 'Additional workers can only be added to confirmed or in-progress bookings.' });
+    }
 
-    if (!['confirmed', 'in_progress', 'scheduled'].includes(request.status)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Additional workers can only be added to confirmed or in-progress bookings.'
+    const isDaily = parent.bookingType === 'DAILY';
+    const rate = Number(b.offeredRate) || (isDaily ? (parent.maxDailyRate || parent.minDailyRate) : (parent.maxRate || parent.minRate));
+    if (!Number.isFinite(rate) || rate <= 0 || rate > 100000) {
+      return res.status(400).json({ success: false, message: 'A valid rate is required.' });
+    }
+
+    const open = await WorkerBookingRequest.findOne({ addOnOfRequestId: parent._id, status: { $in: ['pending', 'matching', 'awaiting_farmer_confirmation'] } }).select('_id');
+    if (open) {
+      return res.status(409).json({ success: false, message: 'An add-on request for this booking is already in progress.', data: { requestId: open._id } });
+    }
+
+    const body = {
+      workCategory: parent.workCategory, workTitle: parent.workTitle, workDescription: parent.workDescription,
+      requiredSkills: parent.requiredSkills, additionalInstructions: parent.additionalInstructions,
+      requiredWorkers: count, location: parent.location ? (parent.location.toObject ? parent.location.toObject() : parent.location) : undefined
+    };
+    if (isDaily) {
+      const days = Number(b.numberOfDays ?? 1);
+      if (!Number.isInteger(days) || days < 1 || days > 30) {
+        return res.status(400).json({ success: false, message: 'numberOfDays must be a whole number between 1 and 30.' });
+      }
+      const start = b.startDate ? new Date(b.startDate) : new Date();
+      if (isNaN(start.getTime())) return res.status(400).json({ success: false, message: 'Invalid startDate.' });
+      Object.assign(body, { bookingType: 'DAILY', startDate: start.toISOString().slice(0, 10), numberOfDays: days, minDailyRate: rate, maxDailyRate: rate });
+    } else {
+      Object.assign(body, {
+        bookingType: 'HOURLY', scheduledDate: parent.scheduledDate, startTime: parent.startTime, endTime: parent.endTime, minRate: rate, maxRate: rate
       });
     }
-
-    const isDaily = request.bookingType === 'DAILY';
-    const rate = Number(offeredRate) || (isDaily ? (request.maxDailyRate || request.minDailyRate || 500) : (request.maxRate || request.minRate || 80));
-
-    const toP = (inr) => Math.round(Number(inr) * 100);
-    const toINR = (p) => p / 100;
-
-    const grossPaise = isDaily
-      ? toP(rate) * days * count
-      : Math.round(toP(rate) * ((Number(request.durationMinutes) || 60) / 60) * count);
-
-    const platformRate = request.financialSnapshot?.platformChargeRate || 10;
-    const platformChargePaise = Math.round((grossPaise * platformRate) / 100);
-    const totalPayablePaise = grossPaise + platformChargePaise;
-
-    const chosenPayment = (paymentMethod || request.paymentMethod || 'cash') === 'cash' ? 'cash' : 'online';
-    const start = startDate ? new Date(startDate) : new Date();
-
-    // ── Update parent request requiredWorkers count ──
-    request.requiredWorkers = (request.requiredWorkers || 0) + count;
-
-    // If specific worker IDs are provided, create assignments immediately
-    let createdAssigns = [];
-    if (Array.isArray(assignedWorkerIds) && assignedWorkerIds.length > 0) {
-      const otpExpiryDate = new Date(Date.now() + 60 * 60 * 1000);
-      const newAssignments = [];
-
-      for (const wId of assignedWorkerIds) {
-        const rawVisitOtp = Math.floor(1000 + Math.random() * 9000).toString();
-        const visitOtpHash = crypto.createHash('sha256').update(rawVisitOtp).digest('hex');
-
-        const grossPaiseSingle = isDaily
-          ? toP(rate) * days
-          : Math.round(toP(rate) * ((Number(request.durationMinutes) || 60) / 60));
-        const commRate = request.financialSnapshot?.commissionRate || 10;
-        const commPaise = Math.floor((grossPaiseSingle * commRate) / 100);
-        const netPaise = grossPaiseSingle - commPaise;
-
-        const assignDoc = {
-          parentRequestId: request._id,
-          bookingType: request.bookingType || 'HOURLY',
-          farmerId,
-          workerId: wId,
-          teamLeaderId: request.teamLeaderId || null,
-          workerType: request.bookingMode === 'TEAM_LEADER' ? 'TEAM_MEMBER' : 'INDEPENDENT',
-          agreedRate: rate,
-          rateUnit: isDaily ? 'daily' : 'hourly',
-          creationIdempotencyKey: `assign_addon_${request._id}_${wId}_${Date.now()}`,
-          assignmentStatus: 'CONFIRMED',
-          paymentMethod: chosenPayment,
-          isCashBooking: chosenPayment === 'cash',
-          journeyStatus: 'NOT_STARTED',
-          visitOtpStatus: 'PENDING',
-          workStatus: 'NOT_STARTED',
-          completionStatus: 'PENDING',
-          settlementStatus: 'PENDING',
-          locationStatus: 'UNAVAILABLE',
-          visitOtpCode: rawVisitOtp,
-          visitOtpHash,
-          visitOtpExpiresAt: otpExpiryDate,
-          grossAmount: toINR(grossPaiseSingle),
-          commissionRate: commRate,
-          commissionAmount: toINR(commPaise),
-          netEarning: toINR(netPaise)
-        };
-
-        if (isDaily) {
-          assignDoc.bookedDays = days;
-          assignDoc.workedDays = 0;
-          assignDoc.currentDayIndex = 1;
-          assignDoc.isDecreased = false;
-          assignDoc.dailyLogs = [{
-            dayNumber: 1,
-            date: start,
-            journeyStatus: 'NOT_STARTED',
-            visitOtpCode: rawVisitOtp,
-            visitOtpHash,
-            visitOtpStatus: 'PENDING',
-            visitOtpExpiresAt: otpExpiryDate,
-            workStatus: 'NOT_STARTED'
-          }];
-        }
-
-        newAssignments.push(assignDoc);
-      }
-
-      createdAssigns = await IndWorkerAssignment.insertMany(newAssignments);
-      if (!Array.isArray(request.assignmentIds)) request.assignmentIds = [];
-      request.assignmentIds.push(...createdAssigns.map(a => a._id));
-      if (!Array.isArray(request.selectedWorkerIds)) request.selectedWorkerIds = [];
-      request.selectedWorkerIds.push(...assignedWorkerIds);
-
-      for (const a of createdAssigns) {
-        await notify({
-          recipientType: 'worker',
-          recipientId: a.workerId,
-          type: 'worker_booking_confirmed',
-          title: '🎉 Added to Active Booking!',
-          message: `You have been added to "${request.workTitle}" starting ${start.toLocaleDateString()} for ${days} day(s).`,
-          relatedId: a._id,
-          relatedType: 'IndWorkerAssignment',
-          data: {
-            assignmentId: a._id,
-            requestId: request._id,
-            bookingType: request.bookingType,
-            paymentMethod: chosenPayment
-          }
-        });
-      }
-    } else {
-      // Broadcast / Notify mode
-      if (request.bookingMode === 'TEAM_LEADER' && request.teamLeaderId) {
-        await notify({
-          recipientType: 'worker',
-          recipientId: request.teamLeaderId,
-          type: 'team_extra_workers_requested',
-          title: '👥 Extra Workers Needed!',
-          message: `Farmer needs ${count} additional worker(s) starting ${start.toLocaleDateString()} for ${days} day(s) @ ₹${rate}/day. Please assign members.`,
-          relatedId: request._id,
-          relatedType: 'WorkerBookingRequest',
-          data: {
-            requestId: request._id,
-            additionalWorkersCount: count,
-            startDate: start,
-            numberOfDays: days,
-            rate
-          }
-        });
-
-        emitSafe(`worker_${request.teamLeaderId}`, 'team_extra_workers_requested', {
-          requestId: request._id,
-          additionalWorkersCount: count,
-          startDate: start,
-          numberOfDays: days,
-          rate
-        });
-      } else {
-        // Direct Dispatch to nearby available workers
-        try {
-          const { findNearbyAvailableWorkers } = require('../../utils/geoUtils');
-          const coords = request.location?.lat && request.location?.lng
-            ? [request.location.lng, request.location.lat]
-            : null;
-
-          if (coords) {
-            const nearbyWorkers = await findNearbyAvailableWorkers(coords, 20000, request.requiredSkills);
-            const existingAssigned = new Set((request.selectedWorkerIds || []).map(id => id.toString()));
-            const eligible = nearbyWorkers.filter(w => !existingAssigned.has(w._id.toString()));
-
-            for (const w of eligible.slice(0, 10)) {
-              await notify({
-                recipientType: 'worker',
-                recipientId: w._id,
-                type: 'extra_worker_dispatch',
-                title: '⚡ Urgent: Extra Worker Needed!',
-                message: `Farmer needs an extra worker for "${request.workTitle}" on ${start.toLocaleDateString()} (${days} days) @ ₹${rate}/day.`,
-                relatedId: request._id,
-                relatedType: 'WorkerBookingRequest',
-                data: {
-                  requestId: request._id,
-                  workTitle: request.workTitle,
-                  rate,
-                  startDate: start,
-                  numberOfDays: days,
-                  paymentMethod: chosenPayment
-                }
-              });
-
-              emitSafe(`worker_${w._id}`, 'new_farmer_request', {
-                requestId: request._id,
-                workTitle: request.workTitle,
-                rate,
-                startDate: start,
-                numberOfDays: days,
-                isExtraWorker: true
-              });
-            }
-          }
-        } catch (geoErr) {
-          console.warn('[addExtraWorkers geo dispatch]', geoErr.message);
-        }
-      }
+    // a single named worker can be targeted; the worker must still ACCEPT (no one is assigned without consent)
+    if (Array.isArray(b.assignedWorkerIds) && b.assignedWorkerIds.length === 1 && OID(b.assignedWorkerIds[0])) {
+      body.targetedWorkerId = String(b.assignedWorkerIds[0]);
     }
 
-    await request.save();
+    // reuse the standard creation path (validation, routing, dispatch) through a response shim
+    let created = null; let failure = null;
+    const shim = {
+      statusCode: 200,
+      status(c) { this.statusCode = c; return this; },
+      json(payload) { if (this.statusCode >= 400 || payload?.success === false) failure = { code: this.statusCode, payload }; else created = payload; return this; }
+    };
+    await exports.createFarmerRequest({ user: req.user, body }, shim);
+    if (failure) return res.status(failure.code).json(failure.payload);
 
-    emitSafe(`booking_req:${request._id}`, 'extra_workers_requested', {
-      requestId: request._id,
-      additionalWorkersCount: count,
-      startDate: start,
-      numberOfDays: days,
-      rate,
-      totalPayable: toINR(totalPayablePaise),
-      paymentMethod: chosenPayment,
-      createdAssignmentsCount: createdAssigns.length
-    });
+    const childId = created?.data?._id || created?.data?.requestId || created?.data?.id;
+    if (childId) {
+      await WorkerBookingRequest.updateOne({ _id: childId }, { $set: { addOnOfRequestId: parent._id } });
+      await WorkerBookingRequest.updateOne({ _id: parent._id }, { $push: { auditLog: { at: new Date(), actor: 'farmer', actorId: farmerId, event: 'add_workers_requested', meta: { requestId: childId, count } } } });
+    }
 
     return res.json({
       success: true,
-      message: createdAssigns.length > 0
-        ? `Successfully added ${createdAssigns.length} extra worker(s) to booking!`
-        : `Request for ${count} additional worker(s) dispatched successfully!`,
-      data: {
-        requestId: request._id,
-        additionalWorkersCount: count,
-        startDate: start,
-        numberOfDays: days,
-        rate,
-        totalPayable: toINR(totalPayablePaise),
-        paymentMethod: chosenPayment,
-        createdAssignments: createdAssigns
-      }
+      message: `Request for ${count} additional worker(s) sent. You will be asked to select workers and pay once they accept.`,
+      data: { requestId: childId, parentRequestId: parent._id, additionalWorkersCount: count, rate, bookingType: parent.bookingType, paymentRequired: true }
     });
   } catch (err) {
     console.error('[addExtraWorkers]', err);
@@ -4370,52 +3759,32 @@ exports.addExtraWorkers = async (req, res) => {
 };
 
 /**
- * Farmer retrieves or creates fresh Visit/Reach OTP for a worker for a specific day (DAILY booking)
+ * Farmer retrieves the CURRENT day's visit OTP for a DAILY assignment (creates the day's log if missing).
+ * An expired / locked OTP is never silently reused: the farmer must call regenerate-visit-otp.
  * POST /api/user/farmer-worker-request/:id/assignment/:assignmentId/daily-visit-otp
  */
 exports.getOrCreateDailyVisitOtp = async (req, res) => {
   try {
-    const farmerId = req.user._id;
     const { id, assignmentId } = req.params;
-    const { dayNumber } = req.body;
+    if (!OID(id) || !OID(assignmentId)) return res.status(404).json({ success: false, message: 'Assignment not found' });
 
-    const assignment = await IndWorkerAssignment.findOne({
-      _id: assignmentId,
-      parentRequestId: id,
-      farmerId
-    });
-
-    if (!assignment) {
-      return res.status(404).json({ success: false, message: 'Assignment not found' });
+    const assignment = await loadOwnedOpenAssignment(req);
+    if (!assignment) return res.status(404).json({ success: false, message: 'Assignment not found' });
+    if (assignment.bookingType !== 'DAILY') {
+      return res.status(400).json({ success: false, message: 'This endpoint is for DAILY bookings.' });
     }
 
-    const targetDay = dayNumber ? Number(dayNumber) : (assignment.currentDayIndex || 1);
+    const targetDay = assignment.currentDayIndex || 1; // only the current day; never future / past days
     let log = assignment.dailyLogs?.find(l => l.dayNumber === targetDay);
 
     if (!log) {
-      const rawVisitOtp = Math.floor(1000 + Math.random() * 9000).toString();
-      const visitOtpHash = crypto.createHash('sha256').update(rawVisitOtp).digest('hex');
-      const otpExpiryDate = new Date(Date.now() + 60 * 60 * 1000);
-
-      assignment.dailyLogs.push({
-        dayNumber: targetDay,
-        date: new Date(),
-        journeyStatus: 'NOT_STARTED',
-        visitOtpCode: rawVisitOtp,
-        visitOtpHash,
-        visitOtpStatus: 'PENDING',
-        visitOtpExpiresAt: otpExpiryDate,
-        workStatus: 'NOT_STARTED'
-      });
-      await assignment.save();
-      log = assignment.dailyLogs.find(l => l.dayNumber === targetDay);
-    } else if (!log.visitOtpCode && log.visitOtpStatus !== 'VERIFIED') {
-      const rawVisitOtp = Math.floor(1000 + Math.random() * 9000).toString();
-      log.visitOtpCode = rawVisitOtp;
-      log.visitOtpHash = crypto.createHash('sha256').update(rawVisitOtp).digest('hex');
-      log.visitOtpStatus = 'PENDING';
-      log.visitOtpExpiresAt = new Date(Date.now() + 60 * 60 * 1000);
-      await assignment.save();
+      const otp = issueFreshOtp();
+      await IndWorkerAssignment.updateOne(
+        { _id: assignmentId, 'dailyLogs.dayNumber': { $ne: targetDay } },
+        { $push: { dailyLogs: { dayNumber: targetDay, date: new Date(), journeyStatus: 'NOT_STARTED', visitOtpCode: otp.code, visitOtpHash: otp.hash, visitOtpStatus: 'PENDING', visitOtpExpiresAt: otp.expiresAt, visitOtpAttempts: 0, workStatus: 'NOT_STARTED' } } }
+      );
+      const fresh = await IndWorkerAssignment.findById(assignmentId);
+      log = fresh.dailyLogs.find(l => l.dayNumber === targetDay);
     }
 
     return res.json({
@@ -4423,70 +3792,119 @@ exports.getOrCreateDailyVisitOtp = async (req, res) => {
       data: {
         assignmentId: assignment._id,
         dayNumber: targetDay,
-        visitOtp: log.visitOtpCode,
+        visitOtp: log.visitOtpStatus === 'VERIFIED' ? null : log.visitOtpCode,
         visitOtpStatus: log.visitOtpStatus,
+        expired: !!(log.visitOtpExpiresAt && log.visitOtpExpiresAt <= new Date()),
         expiresAt: log.visitOtpExpiresAt
       }
     });
   } catch (err) {
     console.error('[getOrCreateDailyVisitOtp]', err);
-    return res.status(500).json({ success: false, message: 'Failed to retrieve daily visit OTP: ' + err.message });
+    return res.status(500).json({ success: false, message: 'Failed to retrieve daily visit OTP.' });
   }
 };
 
 /**
- * Farmer generates Completion OTP for a worker for a specific day (DAILY booking)
+ * Farmer re-issues the visit OTP (hourly or the current DAILY day) after it expired or the worker got locked out.
+ * Capped, and only while the visit has not been verified.
+ * POST /api/user/farmer-worker-request/:id/assignment/:assignmentId/regenerate-visit-otp
+ */
+exports.regenerateVisitOtp = async (req, res) => {
+  try {
+    const { id, assignmentId } = req.params;
+    if (!OID(id) || !OID(assignmentId)) return res.status(404).json({ success: false, message: 'Assignment not found' });
+
+    const assignment = await loadOwnedOpenAssignment(req);
+    if (!assignment) return res.status(404).json({ success: false, message: 'Assignment not found or no longer open.' });
+
+    const isDaily = assignment.bookingType === 'DAILY';
+    const day = assignment.currentDayIndex || 1;
+    const otp = issueFreshOtp();
+    const base = { _id: assignmentId, parentRequestId: id, farmerId: req.user._id, ...A_OPEN, visitOtpRegenerations: { $lt: MAX_OTP_REGEN } };
+
+    let updated;
+    if (isDaily) {
+      updated = await IndWorkerAssignment.findOneAndUpdate(
+        { ...base, dailyLogs: { $elemMatch: { dayNumber: day, visitOtpStatus: { $ne: 'VERIFIED' } } } },
+        {
+          $set: { 'dailyLogs.$.visitOtpCode': otp.code, 'dailyLogs.$.visitOtpHash': otp.hash, 'dailyLogs.$.visitOtpExpiresAt': otp.expiresAt, 'dailyLogs.$.visitOtpAttempts': 0, 'dailyLogs.$.visitOtpStatus': 'PENDING' },
+          $inc: { visitOtpRegenerations: 1 }
+        },
+        { new: true }
+      );
+    } else {
+      updated = await IndWorkerAssignment.findOneAndUpdate(
+        { ...base, visitOtpStatus: { $ne: 'VERIFIED' } },
+        {
+          $set: { visitOtpCode: otp.code, visitOtpHash: otp.hash, visitOtpExpiresAt: otp.expiresAt, visitOtpAttempts: 0, visitOtpStatus: 'PENDING' },
+          $inc: { visitOtpRegenerations: 1 }
+        },
+        { new: true }
+      );
+    }
+    if (!updated) {
+      const fresh = await IndWorkerAssignment.findById(assignmentId);
+      const capped = fresh && (fresh.visitOtpRegenerations || 0) >= MAX_OTP_REGEN;
+      return res.status(capped ? 429 : 409).json({
+        success: false,
+        message: capped ? 'Visit OTP can no longer be regenerated. Please contact support.' : 'The visit has already been verified.'
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: 'A new visit OTP has been generated.',
+      data: { assignmentId: updated._id, ...(isDaily ? { dayNumber: day } : {}), visitOtp: otp.code, expiresAt: otp.expiresAt, regenerationsLeft: MAX_OTP_REGEN - updated.visitOtpRegenerations }
+    });
+  } catch (err) {
+    console.error('[regenerateVisitOtp]', err);
+    return res.status(500).json({ success: false, message: 'Failed to regenerate visit OTP.' });
+  }
+};
+
+/**
+ * Farmer generates the Completion OTP for the CURRENT day of a DAILY assignment (after that day's visit is verified).
  * POST /api/user/farmer-worker-request/:id/assignment/:assignmentId/daily-completion-otp
  */
 exports.generateDailyCompletionOtp = async (req, res) => {
   try {
-    const farmerId = req.user._id;
     const { id, assignmentId } = req.params;
-    const { dayNumber } = req.body;
+    if (!OID(id) || !OID(assignmentId)) return res.status(404).json({ success: false, message: 'Assignment not found' });
 
-    const assignment = await IndWorkerAssignment.findOne({
-      _id: assignmentId,
-      parentRequestId: id,
-      farmerId
-    });
-
-    if (!assignment) {
-      return res.status(404).json({ success: false, message: 'Assignment not found' });
+    const assignment = await loadOwnedOpenAssignment(req);
+    if (!assignment) return res.status(404).json({ success: false, message: 'Assignment not found' });
+    if (assignment.bookingType !== 'DAILY') {
+      return res.status(400).json({ success: false, message: 'This endpoint is for DAILY bookings.' });
     }
 
-    const targetDay = dayNumber ? Number(dayNumber) : (assignment.currentDayIndex || 1);
-    let log = assignment.dailyLogs?.find(l => l.dayNumber === targetDay);
-
-    if (!log) {
-      return res.status(400).json({ success: false, message: `Day ${targetDay} has not been started yet` });
+    const targetDay = assignment.currentDayIndex || 1;
+    const otp = issueFreshOtp();
+    const updated = await IndWorkerAssignment.findOneAndUpdate(
+      {
+        _id: assignmentId, parentRequestId: id, farmerId: req.user._id, ...A_OPEN,
+        dailyLogs: { $elemMatch: { dayNumber: targetDay, visitOtpStatus: 'VERIFIED', workStatus: { $ne: 'COMPLETED' } } }
+      },
+      { $set: { 'dailyLogs.$.completionOtpCode': otp.code, 'dailyLogs.$.completionOtpHash': otp.hash, 'dailyLogs.$.completionOtpExpiresAt': otp.expiresAt, 'dailyLogs.$.completionOtpAttempts': 0 } },
+      { new: true }
+    );
+    if (!updated) {
+      return res.status(409).json({ success: false, message: `Day ${targetDay} work has not started or is already completed.` });
     }
-
-    const rawCompletionOtp = Math.floor(1000 + Math.random() * 9000).toString();
-    const completionOtpHash = crypto.createHash('sha256').update(rawCompletionOtp).digest('hex');
-
-    log.completionOtpCode = rawCompletionOtp;
-    log.completionOtpHash = completionOtpHash;
-    log.completionOtpExpiresAt = new Date(Date.now() + 60 * 60 * 1000);
-    log.completionOtpAttempts = 0;
-    await assignment.save();
 
     return res.json({
       success: true,
       message: `Day ${targetDay} Completion OTP generated.`,
-      data: {
-        assignmentId: assignment._id,
-        dayNumber: targetDay,
-        completionOtp: rawCompletionOtp,
-        expiresAt: log.completionOtpExpiresAt
-      }
+      data: { assignmentId: updated._id, dayNumber: targetDay, completionOtp: otp.code, expiresAt: otp.expiresAt }
     });
   } catch (err) {
     console.error('[generateDailyCompletionOtp]', err);
-    return res.status(500).json({ success: false, message: 'Failed to generate completion OTP: ' + err.message });
+    return res.status(500).json({ success: false, message: 'Failed to generate completion OTP.' });
   }
 };
 
+
 exports.hasTimeConflict = hasTimeConflict;
+exports.hasDailyConflict = hasDailyConflict;
 exports.parseTimeToMinutes = parseTimeToMinutes;
 exports.doTimesOverlap = doTimesOverlap;
 exports.isSameCalendarDate = isSameCalendarDate;

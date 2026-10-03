@@ -3,6 +3,8 @@ const BookingRequest = require('../../models/BookingRequest');
 const { validationResult } = require('express-validator');
 const { BOOKING_STATUS, PAYMENT_STATUS } = require('../../utils/constants');
 
+const IndWorkerAssignment = require('../../models/IndWorkerAssignment');
+
 /**
  * Get assigned jobs for worker
  */
@@ -563,6 +565,15 @@ const updateJobStatus = async (req, res) => {
         success: false,
         message: 'Job not found'
       });
+    }
+
+    // A worker can never mark their own payout/settlement as done, and a job that belongs to the assignment
+    // lifecycle can only progress through it (OTP-verified visit/completion + atomic settlement).
+    if (finalSettlementStatus !== undefined || workerPaymentStatus !== undefined) {
+      return res.status(403).json({ success: false, message: 'Payment and settlement status cannot be set by the worker.' });
+    }
+    if (await IndWorkerAssignment.exists({ legacyBookingId: booking._id })) {
+      return res.status(409).json({ success: false, message: 'This job is managed through the assignment flow (start journey, visit OTP, completion OTP).' });
     }
 
     // Validate status transition if status is changing
