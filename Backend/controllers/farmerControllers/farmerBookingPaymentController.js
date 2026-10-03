@@ -24,6 +24,7 @@ const farmerBookingPaymentController = {
 
       let amountToPay = 0;
       let receiptId = '';
+      let paidBooking = null;
 
       if (type === 'group_booking') {
         const groupBooking = await GroupBooking.findOne({ _id: id, 'participants.farmerId': req.user.id });
@@ -35,9 +36,17 @@ const farmerBookingPaymentController = {
       } else {
         const booking = await Booking.findOne({ _id: id, userId: req.user.id });
         if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
-        
-        amountToPay = booking.finalAmount;
+        if (['cancelled', 'rejected', 'completed'].includes(booking.status)) {
+          return res.status(400).json({ success: false, message: `Cannot pay for a booking that is ${booking.status}` });
+        }
+        if (['success', 'collected_by_vendor', 'refunded'].includes(booking.paymentStatus) || booking.cashCollected) {
+          return res.status(400).json({ success: false, message: 'This booking is already paid' });
+        }
+
+        // After the final bill only the balance is owed; before it, the booking total
+        amountToPay = booking.balanceDue > 0 ? booking.balanceDue : booking.finalAmount;
         receiptId = `bk_${booking._id}`;
+        paidBooking = booking;
       }
 
       const options = {
@@ -46,7 +55,23 @@ const farmerBookingPaymentController = {
         receipt: receiptId,
       };
 
+      if (!(amountToPay > 0)) {
+        return res.status(400).json({ success: false, message: 'Nothing to pay' });
+      }
+      options.notes = paidBooking ? { bookingId: paidBooking._id.toString(), userId: String(req.user.id) } : undefined;
+
       const order = await razorpayInstance.orders.create(options);
+
+      // Remember the order so /payments/verify and the gateway webhook can find the booking
+      if (paidBooking) {
+        await Booking.updateOne(
+          { _id: paidBooking._id },
+          {
+            $set: { razorpayOrderId: order.id, [`razorpayOrderAmounts.${order.id}`]: amountToPay },
+            $addToSet: { razorpayOrderIds: order.id }
+          }
+        );
+      }
 
       // Note: Payment confirmation MUST rely SOLELY on the verified Razorpay webhook.
       // We do not update the DB status here.

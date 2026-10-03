@@ -7,7 +7,7 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "check": "node c:/Users/hp/.gemini/antigravity-ide/brain/ffa7fd1d-5a15-4c5e-9fd0-0eea72f5ff3e/scratch/check_atlas.js",
-    "test": "node tests",
+    "test": "node --test --test-concurrency=1 tests/",
     "seed:admin": "node scripts/seedAdmin.js",
     "seed:database": "node scripts/seedDatabase.js",
     "seed:electrician": "node scripts/seedElectricianService.js",

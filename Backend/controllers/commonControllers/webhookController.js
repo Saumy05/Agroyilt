@@ -6,7 +6,8 @@ const PaymentWebhookLog = require('../../models/PaymentWebhookLog');
 const Booking = require('../../models/Booking');
 
 exports.razorpayWebhook = async (req, res) => {
-  const secret = process.env.RAZORPAY_WEBHOOK_SECRET || 'test_secret'; // Fallback for dev
+  const isProd = process.env.NODE_ENV === 'production';
+  const secret = process.env.RAZORPAY_WEBHOOK_SECRET || (isProd ? null : 'test_secret'); // dev-only fallback
   const signature = req.headers['x-razorpay-signature'];
 
   // 1. Log incoming raw payload immediately
@@ -23,12 +24,16 @@ exports.razorpayWebhook = async (req, res) => {
     // we need to use JSON.stringify or configure a custom middleware for raw body.
     // For this phase, assuming JSON.stringify works as the payload is clean.
     const expectedSignature = crypto
-      .createHmac('sha256', secret)
+      .createHmac('sha256', secret || 'unset')
       .update(JSON.stringify(req.body))
       .digest('hex');
 
-    if (expectedSignature !== signature && process.env.NODE_ENV === 'production') {
-      logEntry.errorDetails = 'Invalid signature';
+    // Fail closed: production without a configured secret, or ANY configured secret with a bad signature, is rejected.
+    const mustVerify = isProd || !!process.env.RAZORPAY_WEBHOOK_SECRET;
+    const validSignature = !!secret && typeof signature === 'string' && signature.length === expectedSignature.length &&
+      crypto.timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(signature));
+    if (!secret || (mustVerify && !validSignature)) {
+      logEntry.errorDetails = secret ? 'Invalid signature' : 'Webhook secret not configured';
       await logEntry.save();
       return res.status(400).send('Invalid signature');
     }
@@ -101,11 +106,43 @@ exports.razorpayWebhook = async (req, res) => {
 
     const bookingId = paymentEntity.notes?.bookingId; 
     
-    if (!bookingId) {
+    if (!bookingId || !mongoose.Types.ObjectId.isValid(bookingId)) {
       logEntry.processedStatus = 'failed';
-      logEntry.errorDetails = 'No bookingId or registration fee details in payment notes';
+      logEntry.errorDetails = 'No (valid) bookingId or registration fee details in payment notes';
       await logEntry.save();
       return res.status(200).send('OK'); // Return 200 so RP stops retrying
+    }
+
+    // ── Mark the booking paid through the SAME idempotent path as POST /payments/verify ──
+    // (covers the app crashing after paying; whichever of verify/webhook arrives first wins)
+    try {
+      const { applyOnlinePayment } = require('../../services/bookingSettlementService');
+      const Transaction = require('../../models/Transaction');
+      if (mongoose.Types.ObjectId.isValid(bookingId)) {
+        const claimed = await Booking.findOneAndUpdate(
+          { _id: bookingId, processedPaymentIds: { $ne: gatewayTransactionId } },
+          { $push: { processedPaymentIds: gatewayTransactionId } },
+          { new: true }
+        );
+        if (claimed) {
+          const amountRupees = Math.round(Number(paymentEntity.amount) || 0) / 100;
+          const { booking: paidBooking } = await applyOnlinePayment(claimed._id, {
+            amount: amountRupees, method: 'razorpay', paymentRef: gatewayTransactionId, io: req.app.get('io')
+          });
+          await Transaction.create({
+            userId: paidBooking.userId, bookingId: paidBooking._id, amount: amountRupees, type: 'payment',
+            paymentMethod: 'razorpay', status: 'completed',
+            description: `Online payment for booking ${paidBooking.bookingNumber} (gateway webhook)`,
+            referenceId: gatewayTransactionId
+          });
+        }
+      }
+    } catch (applyErr) {
+      console.error('[Webhook] Failed to apply booking payment:', applyErr);
+      logEntry.processedStatus = 'failed';
+      logEntry.errorDetails = `apply failed: ${applyErr.message}`;
+      await logEntry.save();
+      return res.status(500).send('Internal Server Error'); // let Razorpay retry
     }
 
     const idempotencyKey = `razorpay_${event}_${gatewayTransactionId}`;
@@ -123,7 +160,14 @@ exports.razorpayWebhook = async (req, res) => {
     try {
       const booking = await Booking.findById(bookingId).session(session);
       if (!booking || !booking.vendorId) {
-        throw new Error('Booking or Vendor not found');
+        // Nothing to credit on the vendor ledger (unknown booking / independent-worker job).
+        // The booking payment itself was already applied above, so acknowledge to stop retries.
+        await session.abortTransaction();
+        session.endSession();
+        logEntry.processedStatus = booking ? 'processed' : 'failed';
+        logEntry.errorDetails = booking ? 'No vendor on booking: vendor ledger not credited' : 'Booking not found';
+        await logEntry.save();
+        return res.status(200).send('OK');
       }
 
       // Amounts in paise
@@ -163,6 +207,21 @@ exports.razorpayWebhook = async (req, res) => {
     } catch (err) {
       await session.abortTransaction();
       session.endSession();
+      // A concurrent duplicate delivery of the same event can collide on the ledger write.
+      // If the other delivery already recorded it, this one is a harmless duplicate.
+      const isConflict = err.code === 112 || /write conflict|unable to acquire/i.test(err.message || '');
+      if (isConflict) {
+        // The winning delivery commits within a few ms; poll briefly for its ledger entry.
+        for (let attempt = 0; attempt < 10; attempt++) {
+          await new Promise(r => setTimeout(r, 150));
+          const done = await WalletTransaction.findOne({ idempotencyKey: idempotencyKey + '_vendor' });
+          if (done) {
+            logEntry.processedStatus = 'ignored_duplicate';
+            await logEntry.save();
+            return res.status(200).send('OK');
+          }
+        }
+      }
       throw err;
     }
   } catch (error) {

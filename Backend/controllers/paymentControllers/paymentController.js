@@ -7,6 +7,16 @@ const { PAYMENT_STATUS, BOOKING_STATUS } = require('../../utils/constants');
 const { createOrder, verifyPayment, refundPayment } = require('../../services/razorpayService');
 const { createNotification } = require('../notificationControllers/notificationController');
 const { recordBookingEarning } = require('../../services/earningTrackerService');
+const {
+  applyOnlinePayment,
+  getAdvancePaid
+} = require('../../services/bookingSettlementService');
+
+const TERMINAL_STATUSES = [BOOKING_STATUS.CANCELLED, BOOKING_STATUS.REJECTED, BOOKING_STATUS.COMPLETED];
+const SETTLED_PAYMENT = [PAYMENT_STATUS.SUCCESS, PAYMENT_STATUS.COLLECTED_BY_VENDOR, PAYMENT_STATUS.REFUNDED];
+
+/** What the farmer still owes right now: the balance after the final bill, else the booking total. */
+const amountDue = (b) => (b.balanceDue > 0 ? b.balanceDue : b.finalAmount);
 
 /**
  * Create Razorpay order for booking payment
@@ -15,74 +25,50 @@ const createPaymentOrder = async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation failed',
-        errors: errors.array()
-      });
+      return res.status(400).json({ success: false, message: 'Validation failed', errors: errors.array() });
     }
 
     const userId = req.user.id;
     const { bookingId } = req.body;
 
-    // Get booking
     const booking = await Booking.findOne({ _id: bookingId, userId });
-
     if (!booking) {
-      return res.status(404).json({
-        success: false,
-        message: 'Booking not found'
-      });
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+    if (TERMINAL_STATUSES.includes(booking.status)) {
+      return res.status(400).json({ success: false, message: `Cannot pay for a booking that is ${booking.status}` });
+    }
+    if (SETTLED_PAYMENT.includes(booking.paymentStatus) || booking.cashCollected) {
+      return res.status(400).json({ success: false, message: 'Payment already completed for this booking' });
     }
 
-    // Check if payment already done
-    if (booking.paymentStatus === PAYMENT_STATUS.SUCCESS) {
-      return res.status(400).json({
-        success: false,
-        message: 'Payment already completed for this booking'
-      });
-    }
+    const payableAmount = Math.max(1, Math.round(Number(amountDue(booking) || booking.userPayableAmount || booking.basePrice || 1) * 100) / 100);
 
-    // Robustly determine payable amount
-    const payableAmount = Math.max(1, Number(booking.finalAmount || booking.userPayableAmount || booking.totalAmount || booking.basePrice || 1));
-
-    // Create Razorpay order
-    console.log('Creating Razorpay order with amount:', payableAmount);
-    const orderResult = await createOrder(
-      payableAmount,
-      'INR',
-      booking.bookingNumber,
-      {
-        bookingId: booking._id.toString(),
-        userId: userId.toString(),
-        bookingNumber: booking.bookingNumber
-      }
-    );
-
-    console.log('[PAYMENT] Razorpay order created:', orderResult.orderId);
-
+    const orderResult = await createOrder(payableAmount, 'INR', booking.bookingNumber, {
+      bookingId: booking._id.toString(),
+      userId: userId.toString(),
+      bookingNumber: booking.bookingNumber
+    });
     if (!orderResult.success) {
       console.error('Razorpay order creation failed:', orderResult.error);
-      return res.status(500).json({
-        success: false,
-        message: 'Failed to create payment order',
-        error: orderResult.error || 'Unknown error'
-      });
+      return res.status(500).json({ success: false, message: 'Failed to create payment order' });
     }
 
-    // Update booking with Razorpay order ID and ensure finalAmount is set
-    booking.razorpayOrderId = orderResult.orderId;
-    if (!booking.finalAmount || booking.finalAmount <= 0) {
-      booking.finalAmount = payableAmount;
-    }
-    await booking.save();
+    // Keep EVERY order id: a payment on an older order must still find this booking
+    await Booking.updateOne(
+      { _id: booking._id },
+      {
+        $set: { razorpayOrderId: orderResult.orderId, [`razorpayOrderAmounts.${orderResult.orderId}`]: payableAmount },
+        $addToSet: { razorpayOrderIds: orderResult.orderId }
+      }
+    );
 
     res.status(200).json({
       success: true,
       message: 'Payment order created successfully',
       data: {
         orderId: orderResult.orderId,
-        amount: orderResult.amount / 100, // Convert back to rupees
+        amount: orderResult.amount / 100,
         currency: orderResult.currency,
         key: process.env.RAZORPAY_KEY_ID,
         bookingId: booking._id
@@ -90,11 +76,7 @@ const createPaymentOrder = async (req, res) => {
     });
   } catch (error) {
     console.error('Create payment order error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to create payment order. Please try again.',
-      error: error.message
-    });
+    res.status(500).json({ success: false, message: 'Failed to create payment order. Please try again.' });
   }
 };
 
@@ -103,62 +85,43 @@ const createPaymentOrder = async (req, res) => {
  */
 const verifyPaymentWebhook = async (req, res) => {
   try {
-    const {
-      razorpay_order_id,
-      razorpay_payment_id,
-      razorpay_signature
-    } = req.body;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
 
-    // Verify signature
-    const isValid = verifyPayment(razorpay_order_id, razorpay_payment_id, razorpay_signature);
-
-    if (!isValid) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid payment signature'
-      });
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return res.status(400).json({ success: false, message: 'Missing payment details' });
+    }
+    if (!verifyPayment(razorpay_order_id, razorpay_payment_id, razorpay_signature)) {
+      return res.status(400).json({ success: false, message: 'Invalid payment signature' });
     }
 
-    // Find booking by Razorpay order ID
-    const booking = await Booking.findOne({ razorpayOrderId: razorpay_order_id });
-
-    if (!booking) {
-      return res.status(404).json({
-        success: false,
-        message: 'Booking not found'
-      });
+    const found = await Booking.findOne({
+      $or: [{ razorpayOrderId: razorpay_order_id }, { razorpayOrderIds: razorpay_order_id }]
+    });
+    if (!found) {
+      return res.status(404).json({ success: false, message: 'Booking not found' });
     }
 
-    // Update booking payment status
-    booking.paymentStatus = PAYMENT_STATUS.SUCCESS;
-    booking.paymentMethod = 'razorpay';
-    booking.razorpayPaymentId = razorpay_payment_id;
-    booking.paymentId = razorpay_payment_id;
-
-    // Update booking status based on current state
-    if ([BOOKING_STATUS.PENDING, BOOKING_STATUS.SEARCHING, BOOKING_STATUS.AWAITING_PAYMENT].includes(booking.status)) {
-      booking.status = BOOKING_STATUS.CONFIRMED;
-    } else if (booking.status === BOOKING_STATUS.REQUESTED) {
-      if (!booking.vendorId) {
-        booking.status = BOOKING_STATUS.CONFIRMED;
-      }
-    } else if (booking.status === BOOKING_STATUS.WORK_DONE) {
-      booking.status = BOOKING_STATUS.COMPLETED;
-      booking.completedAt = new Date();
+    // Idempotency: the client verify call, the gateway webhook and any retry all land here.
+    // Only the request that claims this payment id may move money.
+    const claimed = await Booking.findOneAndUpdate(
+      { _id: found._id, processedPaymentIds: { $ne: razorpay_payment_id } },
+      { $push: { processedPaymentIds: razorpay_payment_id } },
+      { new: true }
+    );
+    if (!claimed) {
+      return res.status(200).json({ success: true, message: 'Payment already processed', alreadyProcessed: true });
     }
 
-    await booking.save();
+    const paidAmount = Number(claimed.razorpayOrderAmounts?.[razorpay_order_id]) || amountDue(claimed);
+    const { booking, refunded, completed, lateRefund } = await applyOnlinePayment(claimed._id, {
+      amount: paidAmount, method: 'razorpay', paymentRef: razorpay_payment_id, io: req.app.get('io')
+    });
 
-    // ── Credit Vendor Wallet from VendorBill (single source of truth) ──
     const Transaction = require('../../models/Transaction');
-    const Vendor = require('../../models/Vendor');
-    const VendorBill = require('../../models/VendorBill');
-
-    // User payment transaction
     await Transaction.create({
       userId: booking.userId,
       bookingId: booking._id,
-      amount: booking.finalAmount,
+      amount: paidAmount,
       type: 'payment',
       paymentMethod: 'razorpay',
       status: 'completed',
@@ -166,182 +129,73 @@ const verifyPaymentWebhook = async (req, res) => {
       referenceId: razorpay_payment_id
     });
 
-    // Fetch VendorBill for earnings (only if bill exists = post-completion payment)
-    const bill = await VendorBill.findOne({ bookingId: booking._id });
-
-    if (bill && booking.vendorId) {
-      const vendorEarning = bill.vendorTotalEarning;
-
-      // Mark bill as paid
-      bill.status = 'paid';
-      bill.paidAt = new Date();
-      await bill.save();
-
-      // Online payment: only earnings increase, NO dues (platform holds the money)
-      await Vendor.findByIdAndUpdate(booking.vendorId, {
-        $inc: { 'wallet.earnings': vendorEarning }
-      });
-
-      // Earnings credit transaction
-      if (vendorEarning > 0) {
-        await Transaction.create({
-          vendorId: booking.vendorId,
-          bookingId: booking._id,
-          amount: vendorEarning,
-          type: 'earnings_credit',
-          paymentMethod: 'system',
-          status: 'completed',
-          description: `Earnings ₹${vendorEarning} credited for booking ${booking.bookingNumber} (online payment)`,
-          metadata: {
-            type: 'earnings_increase',
-            billId: bill._id.toString(),
-            serviceEarning: bill.vendorServiceEarning,
-            partsEarning: bill.vendorPartsEarning
-          }
-        });
-      }
-
-      console.log(`[Payment] Credited ₹${vendorEarning} to vendor ${booking.vendorId}`);
-    }
-
-    // ── Credit Independent Worker Wallet if booking is directly assigned to an independent worker ──
-    if (booking.workerId && !booking.vendorId) {
+    // Independent worker bookings are paid out to the worker's wallet on completion
+    if (completed && booking.workerId && !booking.vendorId) {
       const Worker = require('../../models/Worker');
-      const workerEarning = bill ? bill.vendorTotalEarning : (booking.finalAmount * 0.8);
-
-      await Worker.findByIdAndUpdate(booking.workerId, {
-        $inc: { 'wallet.balance': workerEarning }
-      });
-
-      booking.workerPaymentStatus = 'PAID';
-      booking.isWorkerPaid = true;
-      booking.workerPaidAt = new Date();
-      await booking.save();
-
+      const workerEarning = Math.round(booking.finalAmount * 0.8 * 100) / 100;
+      await Worker.findByIdAndUpdate(booking.workerId, { $inc: { 'wallet.balance': workerEarning } });
+      await Booking.updateOne({ _id: booking._id }, { $set: { workerPaymentStatus: 'PAID', isWorkerPaid: true, workerPaidAt: new Date() } });
       await Transaction.create({
-        workerId: booking.workerId,
-        bookingId: booking._id,
-        amount: workerEarning,
-        type: 'worker_payment',
-        paymentMethod: 'system',
-        status: 'completed',
+        workerId: booking.workerId, bookingId: booking._id, amount: workerEarning, type: 'worker_payment',
+        paymentMethod: 'system', status: 'completed',
         description: `Earnings ₹${workerEarning} credited for booking #${booking.bookingNumber} (online payment)`,
-        metadata: {
-          type: 'earnings_increase',
-          bookingNumber: booking.bookingNumber
-        }
+        metadata: { type: 'earnings_increase', bookingNumber: booking.bookingNumber }
       });
-
-      console.log(`[Payment] Credited ₹${workerEarning} to independent worker ${booking.workerId}`);
     }
 
-    // Record stats in the Daily Earning Tracker
-    recordBookingEarning({
-      date: new Date(),
-      totalRevenue: bill ? bill.grandTotal : booking.finalAmount,
-      platformCommission: bill ? bill.companyRevenue : (booking.finalAmount * 0.2),
-      vendorEarnings: bill ? bill.vendorTotalEarning : (booking.finalAmount * 0.8),
-      totalGST: bill ? bill.totalGST : 0,
-      totalTDS: 0 // Tracked in withdrawals
-    });
+    if (completed) {
+      const VendorBill = require('../../models/VendorBill');
+      const bill = booking.vendorBillId ? await VendorBill.findById(booking.vendorBillId) : null;
+      recordBookingEarning({
+        date: new Date(),
+        totalRevenue: bill ? bill.grandTotal : booking.finalAmount,
+        platformCommission: bill ? bill.companyRevenue : (booking.finalAmount * 0.2),
+        vendorEarnings: bill ? bill.vendorTotalEarning : (booking.finalAmount * 0.8),
+        totalGST: bill ? bill.totalGST : 0,
+        totalTDS: 0
+      });
+    }
 
-    // Send notification to user
     await createNotification({
       userId: booking.userId,
       type: 'payment_success',
-      title: 'Payment Successful',
-      message: `Payment of ₹${booking.finalAmount} for booking ${booking.bookingNumber} was successful. Thank you!`,
+      title: lateRefund ? 'Payment Refunded' : 'Payment Successful',
+      message: lateRefund
+        ? `Your payment of ₹${paidAmount} arrived after booking ${booking.bookingNumber} was cancelled. ₹${refunded} has been refunded to your wallet.`
+        : `Payment of ₹${paidAmount} for booking ${booking.bookingNumber} was successful. Thank you!`,
       relatedId: booking._id,
       relatedType: 'payment',
       priority: 'high'
     });
 
-    // Notify vendor & worker
-    let vendorTitle = 'Booking Confirmed';
-    let vendorMsg = `Payment received for booking ${booking.bookingNumber}. The service is now confirmed.`;
-
-    if (booking.status === BOOKING_STATUS.COMPLETED) {
-      const vendorEarning = bill ? bill.vendorTotalEarning : (booking.finalAmount * 0.8);
-      vendorTitle = 'Payment Received (Online)';
-      vendorMsg = `User paid ₹${booking.finalAmount} online for booking ${booking.bookingNumber}. Earnings of ₹${vendorEarning} credited to your wallet. Job Completed!`;
-    }
-
-    if (booking.vendorId) {
-      await createNotification({
-        vendorId: booking.vendorId,
-        type: 'payment_success',
-        title: vendorTitle,
-        message: vendorMsg,
-        relatedId: booking._id,
-        relatedType: 'booking',
-        priority: 'high'
-      });
-    }
-
-    if (booking.workerId) {
-      let workerTitle = vendorTitle;
-      let workerMsg = vendorMsg;
-      if (!booking.vendorId) {
-        // Independent Worker
-        const workerEarning = bill ? bill.vendorTotalEarning : (booking.finalAmount * 0.8);
-        workerTitle = 'Payment Received (Online)';
-        workerMsg = booking.status === BOOKING_STATUS.COMPLETED ? 
-          `Payment of ₹${booking.finalAmount} received successfully. Earnings of ₹${workerEarning} credited to your wallet.` : 
-          `Payment of ₹${booking.finalAmount} received successfully.`;
-      }
-      
-      await createNotification({
-        workerId: booking.workerId,
-        type: 'payment_success',
-        title: workerTitle,
-        message: workerMsg,
-        relatedId: booking._id,
-        relatedType: 'booking',
-        priority: 'high',
-        pushData: {
-          type: 'payment_success',
-          bookingId: booking._id.toString()
-        }
-      });
-    }
-
-    // Emit socket event to update vendor real-time
-    const io = req.app.get('io');
-    if (io) {
+    if (!lateRefund) {
+      const title = completed ? 'Payment Received (Online)' : 'Booking Payment Received';
+      const msg = completed
+        ? `User paid online for booking ${booking.bookingNumber}. Earnings credited to your wallet. Job Completed!`
+        : `Payment received for booking ${booking.bookingNumber}.`;
       if (booking.vendorId) {
-        io.to(`vendor_${booking.vendorId}`).emit('booking_updated', {
-          bookingId: booking._id,
-          status: booking.status,
-          paymentStatus: booking.paymentStatus,
-          paymentMethod: booking.paymentMethod
-        });
+        await createNotification({ vendorId: booking.vendorId, type: 'payment_success', title, message: msg, relatedId: booking._id, relatedType: 'booking', priority: 'high' });
       }
       if (booking.workerId) {
-        io.to(`worker_${booking.workerId}`).emit('booking_updated', {
-          bookingId: booking._id,
-          status: booking.status,
-          paymentStatus: booking.paymentStatus,
-          paymentMethod: booking.paymentMethod
+        await createNotification({
+          workerId: booking.workerId, type: 'payment_success', title, message: msg, relatedId: booking._id, relatedType: 'booking',
+          priority: 'high', pushData: { type: 'payment_success', bookingId: booking._id.toString() }
         });
       }
-      io.to(`user_${booking.userId}`).emit('booking_updated', {
-        bookingId: booking._id,
-        status: booking.status,
-        paymentStatus: booking.paymentStatus,
-        paymentMethod: booking.paymentMethod
-      });
     }
 
-    res.status(200).json({
-      success: true,
-      message: 'Payment verified successfully'
-    });
+    const io = req.app.get('io');
+    if (io) {
+      const payload = { bookingId: booking._id, status: booking.status, paymentStatus: booking.paymentStatus, paymentMethod: booking.paymentMethod };
+      if (booking.vendorId) io.to(`vendor_${booking.vendorId}`).emit('booking_updated', payload);
+      if (booking.workerId) io.to(`worker_${booking.workerId}`).emit('booking_updated', payload);
+      io.to(`user_${booking.userId}`).emit('booking_updated', payload);
+    }
+
+    res.status(200).json({ success: true, message: 'Payment verified successfully', refunded });
   } catch (error) {
     console.error('Verify payment error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to verify payment'
-    });
+    res.status(500).json({ success: false, message: 'Failed to verify payment' });
   }
 };
 
@@ -352,192 +206,97 @@ const processWalletPayment = async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation failed',
-        errors: errors.array()
-      });
+      return res.status(400).json({ success: false, message: 'Validation failed', errors: errors.array() });
     }
 
     const userId = req.user.id;
     const { bookingId } = req.body;
 
-    // Get user
-    const user = await User.findById(userId);
+    const pre = await Booking.findOne({ _id: bookingId, userId });
+    if (!pre) return res.status(404).json({ success: false, message: 'Booking not found' });
+    if (TERMINAL_STATUSES.includes(pre.status)) {
+      return res.status(400).json({ success: false, message: `Cannot pay for a booking that is ${pre.status}` });
+    }
+    if (SETTLED_PAYMENT.includes(pre.paymentStatus) || pre.cashCollected) {
+      return res.status(400).json({ success: false, message: 'Payment already completed for this booking' });
+    }
+
+    const due = Math.round(Number(amountDue(pre)) * 100) / 100;
+    if (!(due > 0)) return res.status(400).json({ success: false, message: 'Nothing to pay for this booking' });
+
+    // 1. Claim the booking first: only one request can ever debit for it
+    const claim = await Booking.findOneAndUpdate(
+      {
+        _id: pre._id, userId, paymentStatus: { $nin: SETTLED_PAYMENT }, cashCollected: { $ne: true },
+        status: { $nin: TERMINAL_STATUSES },
+        $or: [{ paymentLockAt: null }, { paymentLockAt: { $lt: new Date(Date.now() - 60000) } }]
+      },
+      { $set: { paymentLockAt: new Date() } },
+      { new: true }
+    );
+    if (!claim) return res.status(409).json({ success: false, message: 'Payment already in progress or completed' });
+
+    // 2. Atomic debit — fails cleanly when the balance is too low, even under concurrency
+    const user = await User.findOneAndUpdate(
+      { _id: userId, 'wallet.balance': { $gte: due } },
+      { $inc: { 'wallet.balance': -due } },
+      { new: true }
+    );
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
+      await Booking.updateOne({ _id: pre._id }, { $set: { paymentLockAt: null } });
+      return res.status(400).json({ success: false, message: 'Insufficient wallet balance' });
     }
-
-    // Get booking
-    const booking = await Booking.findOne({ _id: bookingId, userId });
-
-    if (!booking) {
-      return res.status(404).json({
-        success: false,
-        message: 'Booking not found'
-      });
-    }
-
-    // Check if payment already done
-    if (booking.paymentStatus === PAYMENT_STATUS.SUCCESS) {
-      return res.status(400).json({
-        success: false,
-        message: 'Payment already completed for this booking'
-      });
-    }
-
-    // Check wallet balance
-    if (user.wallet.balance < booking.finalAmount) {
-      return res.status(400).json({
-        success: false,
-        message: 'Insufficient wallet balance'
-      });
-    }
-
-    // Deduct from user wallet
-    user.wallet.balance -= booking.finalAmount;
-    await user.save();
 
     const Transaction = require('../../models/Transaction');
     await Transaction.create({
-      userId,
-      bookingId: booking._id,
-      amount: booking.finalAmount,
-      type: 'debit',
-      paymentMethod: 'wallet',
-      status: 'completed',
-      description: `Wallet payment for booking ${booking.bookingNumber}`,
-      balanceAfter: user.wallet.balance
+      userId, bookingId: pre._id, amount: due, type: 'debit', paymentMethod: 'wallet', status: 'completed',
+      description: `Wallet payment for booking ${pre.bookingNumber}`, balanceAfter: user.wallet.balance
     });
 
-    // Update booking payment status
-    booking.paymentStatus = PAYMENT_STATUS.SUCCESS;
-    booking.paymentMethod = 'wallet';
-    booking.paymentId = `WALLET_${Date.now()}`;
-
-    // Update booking status
-    if ([BOOKING_STATUS.PENDING, BOOKING_STATUS.SEARCHING, BOOKING_STATUS.AWAITING_PAYMENT].includes(booking.status)) {
-      booking.status = BOOKING_STATUS.CONFIRMED;
-    } else if (booking.status === BOOKING_STATUS.WORK_DONE) {
-      booking.status = BOOKING_STATUS.COMPLETED;
-      booking.completedAt = new Date();
-    }
-
-    await booking.save();
-
-    // ── Credit Vendor Wallet from VendorBill (single source of truth) ──
-    const Vendor = require('../../models/Vendor');
-    const VendorBill = require('../../models/VendorBill');
-
-    const bill = await VendorBill.findOne({ bookingId: booking._id });
-
-    if (bill && booking.vendorId) {
-      const vendorEarning = bill.vendorTotalEarning;
-
-      // Mark bill as paid
-      bill.status = 'paid';
-      bill.paidAt = new Date();
-      await bill.save();
-
-      // Wallet payment: only earnings increase, NO dues (platform holds the money)
-      await Vendor.findByIdAndUpdate(booking.vendorId, {
-        $inc: { 'wallet.earnings': vendorEarning }
+    let applied;
+    try {
+      applied = await applyOnlinePayment(pre._id, { amount: due, method: 'wallet', paymentRef: `WALLET_${Date.now()}`, io: req.app.get('io') });
+    } catch (applyErr) {
+      // Money was debited but could not be applied: put it back so the farmer is never charged for nothing
+      await User.updateOne({ _id: userId }, { $inc: { 'wallet.balance': due } });
+      await Transaction.create({
+        userId, bookingId: pre._id, amount: due, type: 'refund', paymentMethod: 'wallet', status: 'completed',
+        description: `Automatic reversal of failed wallet payment for booking ${pre.bookingNumber}`
       });
+      await Booking.updateOne({ _id: pre._id }, { $set: { paymentLockAt: null } });
+      throw applyErr;
+    }
+    const { booking, completed } = applied;
 
-      if (vendorEarning > 0) {
-        await Transaction.create({
-          vendorId: booking.vendorId,
-          bookingId: booking._id,
-          amount: vendorEarning,
-          type: 'earnings_credit',
-          paymentMethod: 'system',
-          status: 'completed',
-          description: `Earnings ₹${vendorEarning} credited for booking ${booking.bookingNumber} (wallet payment)`,
-          metadata: {
-            type: 'earnings_increase',
-            billId: bill._id.toString(),
-            serviceEarning: bill.vendorServiceEarning,
-            partsEarning: bill.vendorPartsEarning
-          }
-        });
-      }
+    await Booking.updateOne({ _id: pre._id }, { $set: { paymentLockAt: null } });
 
-      console.log(`[Wallet Payment] Credited ₹${vendorEarning} to vendor ${booking.vendorId}`);
+    if (completed) {
+      recordBookingEarning({
+        date: new Date(), totalRevenue: booking.finalAmount, platformCommission: booking.finalAmount * 0.2,
+        vendorEarnings: booking.finalAmount * 0.8, totalGST: 0, totalTDS: 0
+      });
     }
 
-    // Record stats in the Daily Earning Tracker
-    recordBookingEarning({
-      date: new Date(),
-      totalRevenue: bill ? bill.grandTotal : booking.finalAmount,
-      platformCommission: bill ? bill.companyRevenue : (booking.finalAmount * 0.2),
-      vendorEarnings: bill ? bill.vendorTotalEarning : (booking.finalAmount * 0.8),
-      totalGST: bill ? bill.totalGST : 0,
-      totalTDS: 0 // Tracked in withdrawals
-    });
-
-    // Send notification to user
     await createNotification({
-      userId,
-      type: 'payment_success',
-      title: 'Payment Successful',
-      message: `Payment of ₹${booking.finalAmount} for booking ${booking.bookingNumber} was successful.`,
-      relatedId: booking._id,
-      relatedType: 'payment',
-      priority: 'high'
+      userId, type: 'payment_success', title: 'Payment Successful',
+      message: `Payment of ₹${due} for booking ${booking.bookingNumber} was successful.`,
+      relatedId: booking._id, relatedType: 'payment', priority: 'high'
     });
-
-    // Notify vendor & worker
-    let vendorTitle = 'Booking Confirmed';
-    let vendorMsg = `Payment received for booking ${booking.bookingNumber}. The service is now confirmed.`;
-
-    if (booking.status === BOOKING_STATUS.COMPLETED) {
-      const vendorEarning = bill ? bill.vendorTotalEarning : (booking.finalAmount * 0.8);
-      vendorTitle = 'Payment Received (Wallet)';
-      vendorMsg = `User paid ₹${booking.finalAmount} via wallet for booking ${booking.bookingNumber}. Earnings of ₹${vendorEarning} credited to your wallet. Job Completed!`;
-    }
-
-    if (booking.vendorId) {
-      await createNotification({
-        vendorId: booking.vendorId,
-        type: 'payment_success',
-        title: vendorTitle,
-        message: vendorMsg,
-        relatedId: booking._id,
-        relatedType: 'booking',
-        priority: 'high'
-      });
-    }
-
-    if (booking.workerId) {
-      await createNotification({
-        workerId: booking.workerId,
-        type: 'payment_success',
-        title: vendorTitle,
-        message: vendorMsg,
-        relatedId: booking._id,
-        relatedType: 'booking',
-        priority: 'high'
-      });
-    }
+    const title = completed ? 'Payment Received (Wallet)' : 'Booking Payment Received';
+    const msg = completed
+      ? `User paid via wallet for booking ${booking.bookingNumber}. Earnings credited to your wallet. Job Completed!`
+      : `Payment received for booking ${booking.bookingNumber}.`;
+    if (booking.vendorId) await createNotification({ vendorId: booking.vendorId, type: 'payment_success', title, message: msg, relatedId: booking._id, relatedType: 'booking', priority: 'high' });
+    if (booking.workerId) await createNotification({ workerId: booking.workerId, type: 'payment_success', title, message: msg, relatedId: booking._id, relatedType: 'booking', priority: 'high' });
 
     res.status(200).json({
       success: true,
       message: 'Payment processed successfully',
-      data: {
-        bookingId: booking._id,
-        amount: booking.finalAmount,
-        remainingBalance: user.wallet.balance
-      }
+      data: { bookingId: booking._id, amount: due, remainingBalance: user.wallet.balance }
     });
   } catch (error) {
     console.error('Process wallet payment error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to process payment. Please try again.'
-    });
+    res.status(500).json({ success: false, message: 'Failed to process payment. Please try again.' });
   }
 };
 
@@ -689,49 +448,48 @@ const confirmPayAtHome = async (req, res) => {
     const { bookingId } = req.body;
 
     const booking = await Booking.findOne({ _id: bookingId, userId });
-
     if (!booking) {
-      return res.status(404).json({
-        success: false,
-        message: 'Booking not found'
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+    if (SETTLED_PAYMENT.includes(booking.paymentStatus) || booking.cashCollected) {
+      return res.status(400).json({ success: false, message: 'Payment already completed for this booking' });
+    }
+
+    // Choosing "pay at home" is only meaningful before the work is done, and must never
+    // resurrect a cancelled/rejected/finished booking or bypass the vendor's acceptance.
+    const OPEN = [BOOKING_STATUS.PENDING, BOOKING_STATUS.SEARCHING, BOOKING_STATUS.AWAITING_PAYMENT, BOOKING_STATUS.REQUESTED, BOOKING_STATUS.CONFIRMED];
+    if (!OPEN.includes(booking.status)) {
+      return res.status(400).json({ success: false, message: `Cannot change the payment method of a booking that is ${booking.status}` });
+    }
+
+    const set = { paymentMethod: 'pay_at_home', paymentStatus: PAYMENT_STATUS.PENDING };
+    if ([BOOKING_STATUS.PENDING, BOOKING_STATUS.SEARCHING, BOOKING_STATUS.AWAITING_PAYMENT].includes(booking.status) && booking.vendorId) {
+      set.status = BOOKING_STATUS.CONFIRMED;
+    } else if ([BOOKING_STATUS.PENDING, BOOKING_STATUS.AWAITING_PAYMENT].includes(booking.status)) {
+      set.status = BOOKING_STATUS.CONFIRMED;
+    }
+    const updated = await Booking.findOneAndUpdate(
+      { _id: booking._id, userId, status: { $in: OPEN }, paymentStatus: { $nin: SETTLED_PAYMENT } },
+      { $set: set },
+      { new: true }
+    );
+    if (!updated) return res.status(409).json({ success: false, message: 'Booking changed state, please refresh.' });
+
+    if (updated.vendorId) {
+      await createNotification({
+        vendorId: updated.vendorId,
+        type: 'booking_confirmed',
+        title: 'Payment Method: Pay at Home',
+        message: `Booking ${updated.bookingNumber} will be paid in cash after the service.`,
+        relatedId: updated._id,
+        relatedType: 'booking'
       });
     }
 
-    if (booking.paymentStatus === PAYMENT_STATUS.SUCCESS) {
-      return res.status(400).json({
-        success: false,
-        message: 'Payment already completed for this booking'
-      });
-    }
-
-    // Update booking status — NO earnings set (VendorBill handles that later)
-    booking.paymentMethod = 'pay_at_home';
-    booking.paymentStatus = PAYMENT_STATUS.PENDING;
-    booking.status = BOOKING_STATUS.CONFIRMED;
-
-    await booking.save();
-
-    // Notify Vendor that booking is confirmed
-    await createNotification({
-      vendorId: booking.vendorId,
-      type: 'booking_confirmed',
-      title: 'Booking Confirmed (Pay at Home)',
-      message: `Booking ${booking.bookingNumber} has been confirmed. Payment method: Pay at Home.`,
-      relatedId: booking._id,
-      relatedType: 'booking'
-    });
-
-    res.status(200).json({
-      success: true,
-      message: 'Booking confirmed with Pay at Home option',
-      data: booking
-    });
+    res.status(200).json({ success: true, message: 'Booking confirmed with Pay at Home option', data: updated });
   } catch (error) {
     console.error('Confirm Pay at Home error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to confirm booking. Please try again.'
-    });
+    res.status(500).json({ success: false, message: 'Failed to confirm booking. Please try again.' });
   }
 };
 

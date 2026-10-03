@@ -10,7 +10,32 @@ const Wallet = require('../../models/Wallet');
 const Vendor = require('../../models/Vendor');
 const Transaction = require('../../models/Transaction');
 const Settings = require('../../models/Settings');
-const { PAYMENT_STATUS } = require('../../utils/constants');
+const { PAYMENT_STATUS, BOOKING_STATUS } = require('../../utils/constants');
+const {
+  getAdvancePaid,
+  creditVendorEarningOnce,
+  ensureBill,
+  releaseVendorIfIdle
+} = require('../../services/bookingSettlementService');
+
+/** Caller's relationship to a booking/assignment/request: 'farmer' | 'provider' | 'admin' | null. */
+const qrCallerRelation = (req, { booking, assignment, parentReq }) => {
+  const role = String(req.user?.role || req.userRole || '').toUpperCase();
+  const uid = String(req.user?._id || req.user?.id || '');
+  if (role === 'ADMIN' || role === 'SUPER_ADMIN') return 'admin';
+  const farmerOf = (d) => String(d?.farmerId?._id || d?.farmerId || d?.userId?._id || d?.userId || '');
+  const target = assignment || booking || parentReq;
+  if (role === 'USER' && farmerOf(target) === uid) return 'farmer';
+  if (role === 'VENDOR' && booking?.vendorId && String(booking.vendorId._id || booking.vendorId) === uid) return 'provider';
+  if (role === 'WORKER') {
+    const w = assignment?.workerId || booking?.workerId;
+    if (w && String(w._id || w) === uid) return 'provider';
+  }
+  return null;
+};
+
+// UPI UTR / bank reference numbers are 12-22 alphanumerics
+const UTR_PATTERN = /^[A-Za-z0-9]{10,24}$/;
 const { getIO } = require('../../sockets');
 const { createNotification } = require('../notificationControllers/notificationController');
 
@@ -43,10 +68,12 @@ const getAdminUpiConfig = async () => {
 exports.generateAdminPaymentQr = async (req, res) => {
   try {
     const id = req.params.id || req.body.id || req.body.bookingId;
-    const { amount, extraItems } = req.body;
+    // The payable amount is always derived server-side (bill / agreed rate); client amounts are ignored.
+    const amount = undefined;
+    const extraItems = undefined;
 
-    if (!id) {
-      return res.status(400).json({ success: false, message: 'Target ID is required' });
+    if (!id || !/^[0-9a-fA-F]{24}$/.test(String(id))) {
+      return res.status(400).json({ success: false, message: 'Valid target ID is required' });
     }
 
     // Resolve target: Assignment, Booking, or WorkerBookingRequest
@@ -66,6 +93,16 @@ exports.generateAdminPaymentQr = async (req, res) => {
     }
 
     // Determine target entity details
+    if (!qrCallerRelation(req, { booking, assignment, parentReq })) {
+      return res.status(403).json({ success: false, message: 'Not authorized for this booking.' });
+    }
+    if (booking && [PAYMENT_STATUS.SUCCESS, PAYMENT_STATUS.COLLECTED_BY_VENDOR, PAYMENT_STATUS.REFUNDED].includes(booking.paymentStatus)) {
+      return res.status(400).json({ success: false, message: 'This booking is already paid.' });
+    }
+    if (booking && ![BOOKING_STATUS.WORK_DONE, BOOKING_STATUS.AWAITING_PAYMENT, BOOKING_STATUS.IN_PROGRESS, BOOKING_STATUS.VISITED].includes(booking.status)) {
+      return res.status(400).json({ success: false, message: `Cannot generate a payment QR while the booking is "${booking.status}"` });
+    }
+
     let docType = 'assignment';
     let targetDoc = assignment;
     let payableAmount = 0;
@@ -128,7 +165,7 @@ exports.generateAdminPaymentQr = async (req, res) => {
         booking.finalAmount = payableAmount;
         booking.userPayableAmount = payableAmount;
       } else {
-        payableAmount = booking.finalAmount || Number(booking.price) || 0;
+        payableAmount = booking.balanceDue > 0 ? booking.balanceDue : (booking.finalAmount || 0);
       }
     } else if (parentReq) {
       docType = 'worker_request';
@@ -188,7 +225,6 @@ exports.generateAdminPaymentQr = async (req, res) => {
     // Also persist in legacy booking if linked
     if (booking && targetDoc !== booking) {
       booking.qrPayment = qrSession;
-      if (payableAmount) booking.finalAmount = payableAmount;
       await booking.save();
     }
 
@@ -246,7 +282,8 @@ exports.generateAdminPaymentQr = async (req, res) => {
 exports.confirmAdminQrPayment = async (req, res) => {
   try {
     const id = req.params.id || req.body.id || req.body.bookingId;
-    const { utr, amount } = req.body;
+    const { utr } = req.body;
+    const amount = undefined; // amounts always come from the bill, never from the client
     const confirmedByUserId = req.user?._id || req.user?.id;
     const userRole = (req.user?.role || '').toLowerCase();
 
@@ -268,6 +305,22 @@ exports.confirmAdminQrPayment = async (req, res) => {
 
     if (!assignment && !booking && !parentReq) {
       return res.status(404).json({ success: false, message: 'Booking or Assignment not found' });
+    }
+
+    const rel = qrCallerRelation(req, { booking, assignment, parentReq });
+    if (rel !== 'provider' && rel !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Only the service provider (or an admin) can confirm a QR payment.' });
+    }
+    if (!utr || !UTR_PATTERN.test(String(utr).trim())) {
+      return res.status(400).json({ success: false, message: 'A valid UTR / bank reference number is required to confirm a QR payment.' });
+    }
+    const cleanUtr = String(utr).trim().toUpperCase();
+    const utrUsed = await Promise.all([
+      Booking.exists({ 'qrPayment.utr': cleanUtr, ...(booking ? { _id: { $ne: booking._id } } : {}) }),
+      IndWorkerAssignment.exists({ 'qrPayment.utr': cleanUtr, ...(assignment ? { _id: { $ne: assignment._id } } : {}) })
+    ]);
+    if (utrUsed.some(Boolean)) {
+      return res.status(409).json({ success: false, message: 'This UTR has already been used for another payment.' });
     }
 
     const { adminUpiId, settings } = await getAdminUpiConfig();
@@ -464,160 +517,78 @@ exports.confirmAdminQrPayment = async (req, res) => {
           data: { bookingId: booking._id, paymentStatus: booking.paymentStatus }
         });
       }
-
-      const collectionAmount = (amount !== undefined && Number(amount) > 0) ? Number(amount) : (booking.finalAmount || Number(booking.price) || 0);
-
-      // Settle Vendor or Worker
-      let vendorEarning = 0;
-      let workerNetEarning = 0;
-      const idempotencyKey = `qr_settle_bkg_${booking._id}_${Date.now()}`;
-
-      if (booking.vendorId) {
-        // Vendor settlement
-        const VendorBill = require('../../models/VendorBill');
-        let bill = await VendorBill.findOne({ bookingId: booking._id });
-
-        if (!bill) {
-          const serviceSplitPct = settings?.rentalPayoutPercentage ?? 90;
-          const gstPct = settings?.rentalGstPercentage ?? 5;
-          const baseAmount = Math.round(collectionAmount / (1 + gstPct / 100));
-          const gstAmount = parseFloat((collectionAmount - baseAmount).toFixed(2));
-          vendorEarning = parseFloat(((baseAmount * serviceSplitPct) / 100).toFixed(2));
-
-          bill = await VendorBill.create({
-            bookingId: booking._id,
-            vendorId: booking.vendorId,
-            services: [{
-              name: booking.serviceName || 'Equipment Service',
-              price: baseAmount,
-              gstPercentage: gstPct,
-              quantity: 1,
-              gstAmount: gstAmount,
-              total: collectionAmount,
-              isOriginal: true
-            }],
-            originalServiceBase: baseAmount,
-            originalGST: gstAmount,
-            totalServiceBase: baseAmount,
-            totalGST: gstAmount,
-            grandTotal: collectionAmount,
-            payoutConfig: { serviceSplitPercentage: serviceSplitPct, serviceGstPercentage: gstPct },
-            vendorServiceEarning: vendorEarning,
-            vendorTotalEarning: vendorEarning,
-            companyRevenue: parseFloat((collectionAmount - vendorEarning).toFixed(2)),
-            status: 'paid',
-            paidAt: new Date()
-          });
-        } else {
-          vendorEarning = bill.vendorTotalEarning;
-          bill.status = 'paid';
-          bill.paidAt = new Date();
-          await bill.save();
-        }
-
-        // Credit Vendor Wallet Earnings (WITHOUT increasing dues because money went to company)
-        await Vendor.findByIdAndUpdate(booking.vendorId, {
-          $inc: { 'wallet.earnings': vendorEarning }
-        });
-
-        await Transaction.create({
-          vendorId: booking.vendorId,
-          userId: booking.userId,
-          bookingId: booking._id,
-          amount: vendorEarning,
-          type: 'earnings_credit',
-          paymentMethod: 'qr_online',
-          description: `Admin UPI QR Payment of ₹${collectionAmount} received. Vendor earnings ₹${vendorEarning} credited.`,
-          status: 'completed',
-          metadata: { billId: bill._id.toString(), utr: utr || null }
-        });
-
-      } else if (booking.workerId) {
-        // Direct Worker settlement
-        const commissionRate = booking.commissionRate ?? settings?.workerCommissionPercentage ?? 10;
-        const commissionAmount = Math.round((collectionAmount * commissionRate) / 100);
-        workerNetEarning = collectionAmount - commissionAmount;
-
-        await Worker.findByIdAndUpdate(booking.workerId, {
-          $inc: { 'wallet.balance': workerNetEarning },
-          status: 'ONLINE'
-        });
-
-        let workerWallet = await Wallet.findOne({ workerId: booking.workerId, userModel: 'Worker' }) || await Wallet.findOne({ userId: booking.workerId });
-        if (workerWallet) {
-          workerWallet.balance = (workerWallet.balance || 0) + workerNetEarning;
-          await workerWallet.save();
-        } else {
-          await Wallet.create({ userId: booking.workerId, userModel: 'Worker', balance: workerNetEarning });
-        }
-
-        await Transaction.create({
-          workerId: booking.workerId,
-          userId: booking.userId,
-          bookingId: booking._id,
-          amount: workerNetEarning,
-          type: 'earnings_credit',
-          paymentMethod: 'qr_online',
-          description: `Admin UPI QR payment ₹${collectionAmount} received. Worker net earnings ₹${workerNetEarning} credited to wallet.`,
-          status: 'completed',
-          metadata: { grossAmount: collectionAmount, commissionAmount, workerNetEarning, utr: utr || null }
-        });
+      if ([PAYMENT_STATUS.SUCCESS, PAYMENT_STATUS.COLLECTED_BY_VENDOR, PAYMENT_STATUS.REFUNDED].includes(booking.paymentStatus) || booking.cashCollected) {
+        return res.status(409).json({ success: false, message: 'This booking has already been paid.' });
+      }
+      if (![BOOKING_STATUS.WORK_DONE, BOOKING_STATUS.AWAITING_PAYMENT].includes(booking.status)) {
+        return res.status(400).json({ success: false, message: `Cannot confirm payment while the booking is "${booking.status}"` });
       }
 
-      // Update Booking
-      booking.finalAmount = collectionAmount;
-      booking.userPayableAmount = collectionAmount;
-      booking.paymentStatus = PAYMENT_STATUS.SUCCESS;
-      booking.paymentMethod = 'qr_online';
-      booking.cashCollected = false; // Online QR payment, NOT physical cash
-      booking.status = 'completed';
-      booking.completedAt = new Date();
-      booking.qrPayment = {
-        refId: booking.qrPayment?.refId || idempotencyKey,
-        amount: collectionAmount,
-        adminUpiId,
-        status: 'COMPLETED',
-        utr: utr || null,
-        confirmedAt: new Date()
-      };
-      await booking.save();
+      const advance = getAdvancePaid(booking);
+      const collectionAmount = booking.balanceDue > 0 ? booking.balanceDue : Math.max(0, (booking.finalAmount || 0) - advance);
 
-      // Socket update
+      // Atomic claim: only one confirm can win
+      const claimed = await Booking.findOneAndUpdate(
+        {
+          _id: booking._id,
+          cashCollected: { $ne: true },
+          paymentStatus: { $nin: [PAYMENT_STATUS.SUCCESS, PAYMENT_STATUS.COLLECTED_BY_VENDOR, PAYMENT_STATUS.REFUNDED] },
+          status: { $in: [BOOKING_STATUS.WORK_DONE, BOOKING_STATUS.AWAITING_PAYMENT] }
+        },
+        {
+          $set: {
+            paymentStatus: PAYMENT_STATUS.SUCCESS,
+            paymentMethod: 'qr_online',
+            advancePaidAmount: advance + collectionAmount,
+            balanceDue: 0,
+            status: BOOKING_STATUS.COMPLETED,
+            completedAt: new Date(),
+            paymentOtp: null,
+            customerConfirmationOTP: null,
+            qrPayment: { ...(booking.qrPayment || {}), status: 'COMPLETED', utr: cleanUtr, confirmedAt: new Date(), confirmedBy: String(confirmedByUserId) }
+          }
+        },
+        { new: true }
+      );
+      if (!claimed) {
+        return res.status(409).json({ success: false, message: 'This booking has already been paid.' });
+      }
+
+      let vendorEarning = 0;
+      if (claimed.vendorId) {
+        const bill = await ensureBill(claimed);
+        vendorEarning = bill.vendorTotalEarning || 0;
+        // QR money lands in the platform account: vendor earnings only, no cash dues
+        await creditVendorEarningOnce(bill, claimed, { via: 'admin UPI QR', paymentMethod: 'qr_online' });
+        await releaseVendorIfIdle(claimed.vendorId, claimed._id);
+      }
+
       const updatePayload = {
-        bookingId: booking._id,
-        status: booking.status,
-        paymentStatus: booking.paymentStatus,
+        bookingId: claimed._id,
+        status: claimed.status,
+        paymentStatus: claimed.paymentStatus,
         paymentMethod: 'qr_online',
-        finalAmount: collectionAmount,
+        finalAmount: claimed.finalAmount,
         message: 'Admin UPI QR payment verified and booking completed!'
       };
+      emitSafe(`user_${claimed.userId}`, 'booking_updated', updatePayload);
+      emitSafe(`booking_${claimed._id}`, 'booking_updated', updatePayload);
+      if (claimed.vendorId) emitSafe(`vendor_${claimed.vendorId}`, 'booking_updated', updatePayload);
 
-      emitSafe(`user_${booking.userId}`, 'booking_updated', updatePayload);
-      emitSafe(`booking_${booking._id}`, 'booking_updated', updatePayload);
-      if (booking.vendorId) emitSafe(`vendor_${booking.vendorId}`, 'booking_updated', updatePayload);
-      if (booking.workerId) emitSafe(`worker_${booking.workerId}`, 'booking_updated', updatePayload);
-
-      // Notification
       await createNotification({
-        userId: booking.userId,
+        userId: claimed.userId,
         type: 'payment_success',
         title: 'Payment Received (Admin UPI QR)',
         message: `Your payment of ₹${collectionAmount} via UPI QR has been verified. Job Completed. Thanks!`,
-        relatedId: booking._id,
+        relatedId: claimed._id,
         relatedType: 'booking',
         priority: 'high'
       });
 
       return res.status(200).json({
         success: true,
-        message: 'Admin QR payment verified successfully and credited to wallet',
-        data: {
-          bookingId: booking._id,
-          amount: collectionAmount,
-          vendorEarning,
-          workerNetEarning,
-          paymentMethod: 'qr_online'
-        }
+        message: 'Admin QR payment verified successfully',
+        data: { bookingId: claimed._id, amount: collectionAmount, vendorEarning, paymentMethod: 'qr_online' }
       });
     }
 
@@ -681,8 +652,11 @@ exports.getAdminQrStatus = async (req, res) => {
       });
     }
 
-    let booking = await Booking.findById(id).select('paymentStatus paymentMethod cashCollected status finalAmount qrPayment');
+    let booking = await Booking.findById(id).select('paymentStatus paymentMethod cashCollected status finalAmount qrPayment userId vendorId workerId');
     if (booking) {
+      if (!qrCallerRelation(req, { booking })) {
+        return res.status(403).json({ success: false, message: 'Not authorized for this booking.' });
+      }
       const isPaid = booking.paymentStatus === PAYMENT_STATUS.SUCCESS || booking.qrPayment?.status === 'COMPLETED';
       return res.status(200).json({
         success: true,
