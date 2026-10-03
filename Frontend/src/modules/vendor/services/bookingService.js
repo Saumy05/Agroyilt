@@ -162,7 +162,7 @@ export const endTrip = async (bookingId, kmPhotoUrl, otp, workUnits, workEvidenc
  * @param {string} startKmPhoto - Cloudinary URL of starting meter photo
  */
 export const machineryStartWork = async (bookingId, otp, startKmPhoto) => {
-  const response = await api.post(`/vendor/equipment/bookings/${bookingId}/start`, {
+  const response = await api.post(`/vendors/equipment/bookings/${bookingId}/start`, {
     otp,
     startKmPhoto
   });
@@ -178,7 +178,7 @@ export const machineryStartWork = async (bookingId, otp, startKmPhoto) => {
  * @param {string} evidencePhoto - Cloudinary URL of evidence of work
  */
 export const machineryCompleteWork = async (bookingId, endKmPhoto, workUnits, evidencePhoto) => {
-  const response = await api.post(`/vendor/equipment/bookings/${bookingId}/complete`, {
+  const response = await api.post(`/vendors/equipment/bookings/${bookingId}/complete`, {
     endKmPhoto, workUnits, evidencePhoto
   });
   return response.data;

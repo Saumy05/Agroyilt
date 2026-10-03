@@ -62,9 +62,9 @@ const TripFlowModal = ({ isOpen, onClose, mode = 'start', onSubmit, rentalType, 
     };
 
     const isStart = mode === 'start';
-    // Machinery auto-generates End OTP, so vendor doesn't need to enter one on end trip
-    // But for Standalone (no driver), we REQUIRE Start OTP to verify handover.
-    const skipOtpStep = isStart ? !booking?.driver_start_otp : !booking?.driver_end_otp;
+    // Machinery/Equipment start ALWAYS requires Farmer's Start OTP to start work & live timer.
+    // Machinery complete auto-generates End/Payment OTP for the farmer, so vendor doesn't enter one on end trip.
+    const skipOtpStep = isStart ? false : (isMachinery ? true : !requiresDriver);
     const isMeterBased = trackingType === 'odometer';
 
     const title = isStart 

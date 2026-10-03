@@ -230,6 +230,7 @@ app.use('/api/vendors', require('./routes/vendor-routes/vendorBill.routes'));
 app.use('/api/vendors/maintenance', require('./routes/vendor-routes/maintenance.routes'));
 app.use('/api/vendors/compliance', require('./routes/vendor-routes/compliance.routes'));
 app.use('/api/vendors/equipment', require('./routes/vendor-routes/equipment.routes'));
+app.use('/api/vendor/equipment', require('./routes/vendor-routes/equipment.routes'));
 app.use('/api/vendors/bids', require('./routes/vendor-routes/bid.routes'));
 app.use('/api/vendors', require('./routes/vendor-routes/labour.routes'));
 app.use('/api/vendors', require('./routes/vendor-routes/attendance.routes'));

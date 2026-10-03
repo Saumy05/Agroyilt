@@ -1197,6 +1197,19 @@ const BookingDetails = () => {
                         })()}
                       </div>
 
+                      <button
+                        type="button"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          toastManager.info('Refreshing latest OTP...');
+                          await loadBooking();
+                        }}
+                        className="flex items-center gap-1.5 text-xs text-white/90 hover:text-white mb-4 px-3.5 py-1.5 rounded-full bg-white/15 hover:bg-white/25 active:scale-95 transition-all border border-white/20"
+                      >
+                        <FiRefreshCw className="w-3.5 h-3.5" />
+                        <span className="font-semibold">Refresh Code</span>
+                      </button>
+
                       <div className="w-full bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20">
                         <div className="flex items-center justify-center gap-2 text-white text-sm">
                           <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(74,222₹28,0.5)]"></span>
@@ -1472,6 +1485,21 @@ const BookingDetails = () => {
                       <span className="text-2xl font-black text-white">{digit}</span>
                     </div>
                   ))}
+                </div>
+
+                <div className="flex justify-center mb-3">
+                  <button
+                    type="button"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      toastManager.info('Refreshing completion OTP...');
+                      await loadBooking();
+                    }}
+                    className="flex items-center gap-1.5 text-xs text-white/90 hover:text-white px-3.5 py-1.5 rounded-full bg-white/15 hover:bg-white/25 active:scale-95 transition-all border border-white/20"
+                  >
+                    <FiRefreshCw className="w-3.5 h-3.5" />
+                    <span className="font-semibold">Refresh Code</span>
+                  </button>
                 </div>
 
                 <p className="text-center text-[10px] text-teal-100 font-medium bg-black/10 rounded-lg py-2 px-3 border border-white/5">
@@ -2039,7 +2067,7 @@ const BookingDetails = () => {
                   <>
                     {/* Base Items */}
                     <div className="flex justify-between items-center text-gray-600">
-                      <span>Base Price</span>
+                      <span>Base Service Price</span>
                       {booking.paymentMethod === 'plan_benefit' ? (
                         <div className="flex items-center gap-2">
                           <span className="line-through text-gray-400 text-xs">₹{(booking.basePrice || 0).toLocaleString('en-IN')}</span>
@@ -2049,6 +2077,21 @@ const BookingDetails = () => {
                         <span className="font-medium text-gray-900">₹{(booking.basePrice || 0).toLocaleString('en-IN')}</span>
                       )}
                     </div>
+
+                    {/* Attached Implements */}
+                    {Array.isArray(booking.selectedImplements) && booking.selectedImplements.length > 0 && (
+                      <div className="bg-emerald-50/70 rounded-xl p-2.5 border border-emerald-200/80 space-y-1.5 my-2">
+                        <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">Attached Implements (शामिल उपकरण)</span>
+                        {booking.selectedImplements.map((impl, idx) => (
+                          <div key={idx} className="flex justify-between text-xs text-gray-700">
+                            <span>🚜 {impl.name || impl.title || 'Implement'}</span>
+                            <span className="font-mono font-medium text-emerald-800">
+                              +₹{impl.pricing?.hourly?.price ? `${impl.pricing.hourly.price}/hr` : (impl.price || 0)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
                     {(booking.tax > 0 || booking.paymentMethod === 'plan_benefit') && (
                       <div className="flex justify-between items-center text-gray-600">

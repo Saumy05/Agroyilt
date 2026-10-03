@@ -634,26 +634,31 @@ export default function BookingDetails() {
       )
     );
 
-    if (tripMode === 'start') {
-      if (isMachinery) {
-        // Machinery: vendor enters farmer's Start OTP + KM photo
-        await machineryStartWork(id, otp, photoUrl);
-        toastManager.success('🚜 Trip Started! OTP verified, work has begun.');
+    try {
+      if (tripMode === 'start') {
+        if (isMachinery) {
+          // Machinery: vendor enters farmer's Start OTP + KM photo
+          await machineryStartWork(id, otp, photoUrl);
+          toastManager.success('🚜 Trip Started! OTP verified, work has begun.');
+        } else {
+          await startTrip(id, photoUrl, otp);
+          toastManager.success('🚜 Trip Started! KM Photo & OTP verified.');
+        }
       } else {
-        await startTrip(id, photoUrl, otp);
-        toastManager.success('🚜 Trip Started! KM Photo & OTP verified.');
+        if (isMachinery) {
+          // Machinery end: only KM photo needed — system auto-generates End OTP for farmer
+          await machineryCompleteWork(id, photoUrl, workUnits, evidencePhoto);
+          toastManager.success('🏁 Work Completed! End OTP has been sent to the farmer.');
+        } else {
+          await endTrip(id, photoUrl, otp, workUnits, evidencePhoto);
+          toastManager.success('🏁 Trip Ended! Bill Generated & Wallet Settled.');
+        }
       }
-    } else {
-      if (isMachinery) {
-        // Machinery end: only KM photo needed — system auto-generates End OTP for farmer
-        await machineryCompleteWork(id, photoUrl, workUnits, evidencePhoto);
-        toastManager.success('🏁 Work Completed! End OTP has been sent to the farmer.');
-      } else {
-        await endTrip(id, photoUrl, otp, workUnits, evidencePhoto);
-        toastManager.success('🏁 Trip Ended! Bill Generated & Wallet Settled.');
-      }
+      setIsTripModalOpen(false);
+      await refreshBooking();
+    } catch (err) {
+      toastManager.error(err?.response?.data?.message || err?.message || 'Failed to submit trip details');
     }
-    window.location.reload();
   };
   // ──────────────────────────────────────────────────────────────
 

@@ -831,6 +831,24 @@ export const LiveServiceTimer = ({
                 </div>
               </div>
 
+              {/* Partial / Breakdown Toggle */}
+              <div className="flex items-center justify-between p-2.5 bg-gray-50 hover:bg-gray-100 rounded-xl border border-gray-200 transition-colors">
+                <label className="text-xs font-bold text-gray-700 cursor-pointer flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={isPartialEnd}
+                    onChange={(e) => setIsPartialEnd(e.target.checked)}
+                    className="w-4 h-4 text-red-600 rounded border-gray-300 focus:ring-red-500 cursor-pointer"
+                  />
+                  <span>Machine breakdown / Partial work (खराबी या अधूरा काम)</span>
+                </label>
+                {isPartialEnd && (
+                  <span className="text-[10px] font-black uppercase text-red-600 bg-red-100 px-2 py-0.5 rounded-full">
+                    Partial Billing
+                  </span>
+                )}
+              </div>
+
               {isPartialEnd && (
                 <div>
                   <label className="text-[11px] font-bold text-gray-700 block mb-1">
