@@ -221,6 +221,12 @@ const isBookingExpired = (request, now = new Date()) => {
   const scheduledEnd = getBookingScheduledExpiry(request);
   const scheduledEndMs = scheduledEnd.getTime();
 
+  // A CONFIRMED (paid / committed) booking is not a "request" any more: its schedule window passing must never
+  // expire it, cancel its assignments or refund it. Overdue confirmed bookings are handled by autoCancelNoShows().
+  if (['confirmed', 'in_progress', 'partially_completed'].includes(request.status)) {
+    return { isExpired: false, scheduledEnd, effectiveExpiry: scheduledEnd, reason: 'Booking is confirmed' };
+  }
+
   // If the scheduled window has already completely passed
   if (nowMs >= scheduledEndMs) {
     return {
@@ -278,6 +284,12 @@ const expireWorkerBookingRequest = async (requestOrId, reason = 'Booking request
       return request;
     }
 
+    // Expiry applies ONLY to a request that is still being filled and has not been paid for.
+    if (!['pending', 'matching', 'awaiting_farmer_confirmation', 'accepted', 'requested'].includes(request.status) ||
+        ['success', 'processing'].includes(request.paymentStatus)) {
+      return request;
+    }
+
     console.log(`[ExpiryService] Expiring WorkerBookingRequest ${request._id} (Status was: ${request.status})`);
 
     // 1. Mark request as expired
@@ -304,77 +316,8 @@ const expireWorkerBookingRequest = async (requestOrId, reason = 'Booking request
       });
     }
 
-    // 4. Cancel any orphaned IndWorkerAssignment documents
-    await IndWorkerAssignment.updateMany(
-      {
-        parentRequestId: request._id,
-        assignmentStatus: { $ne: 'CANCELLED' }
-      },
-      {
-        $set: {
-          assignmentStatus: 'CANCELLED',
-          workStatus: 'CANCELLED'
-        }
-      }
-    );
-
-    // 5. If confirmed and paid, process wallet refund safely (idempotent)
-    if ((request.status === 'confirmed' || request.paymentStatus === 'success') && !request.refundCredited) {
-      try {
-        const snap = request.financialSnapshot || {};
-        const refundAmount = Number(snap.totalPayable || snap.maximumWorkerAmount || 0);
-
-        if (refundAmount > 0 && request.farmerId) {
-          let farmerWallet = await Wallet.findOne({ userId: request.farmerId, userModel: 'User' });
-          if (!farmerWallet) {
-            farmerWallet = await Wallet.create({ userId: request.farmerId, userModel: 'User', balance: 0 });
-          }
-
-          const prevBalance = farmerWallet.balance || 0;
-          farmerWallet.balance = prevBalance + refundAmount;
-          await farmerWallet.save();
-
-          await User.findByIdAndUpdate(request.farmerId, { 'wallet.balance': farmerWallet.balance });
-
-          const refundKey = `auto_expire_refund_${request._id.toString()}`;
-          await WalletTransaction.create({
-            walletId: farmerWallet._id,
-            type: 'credit',
-            amount: refundAmount,
-            reason: 'refund',
-            referenceId: request._id.toString(),
-            gatewayTransactionId: request.razorpayPaymentId || null,
-            idempotencyKey: refundKey,
-            status: 'completed'
-          });
-
-          await Transaction.create({
-            userId: request.farmerId,
-            type: 'refund',
-            amount: refundAmount,
-            status: 'completed',
-            paymentMethod: 'wallet',
-            description: `Full Refund for Expired Worker Booking (#${request._id.toString().slice(-6).toUpperCase()})`,
-            balanceBefore: prevBalance,
-            balanceAfter: farmerWallet.balance,
-            referenceId: request._id.toString()
-          });
-
-          request.refundAmount = refundAmount;
-          request.refundCredited = true;
-          request.refundCreditedAt = new Date();
-
-          emitSafe(`user_${request.farmerId}`, 'wallet_balance_updated', {
-            balance: farmerWallet.balance,
-            refundAmount,
-            type: 'credit',
-            message: `₹${refundAmount} refunded for expired booking`
-          });
-        }
-      } catch (refundErr) {
-        console.error(`[ExpiryService] Refund error on request ${request._id}:`, refundErr);
-      }
-    }
+    // (An unpaid request has no assignments and nothing to refund — those steps used to run here and cancelled
+    //  paid, running jobs; confirmed bookings are now filtered out above.)
 
     await request.save();
 
@@ -498,6 +441,14 @@ const checkAndExpireWorkerRequests = async () => {
     if (expiredCount > 0) {
       console.log(`[ExpiryService] Processed and expired ${expiredCount} stale worker booking request(s).`);
     }
+
+    // 3. Confirmed bookings nobody started (worker no-show) → cancel + refund; flag started-but-overdue ones.
+    try { await require('./workerBookingCancelService').autoCancelNoShows(); }
+    catch (e) { console.error('[ExpiryService] no-show sweep failed:', e.message); }
+
+    // 4. Money safety net: retry settlements stuck in FAILED/PROCESSING and refunds that never landed.
+    try { await require('./workerSettlementService').reconcile(); }
+    catch (e) { console.error('[ExpiryService] settlement reconcile failed:', e.message); }
   } catch (err) {
     console.error('[ExpiryService] Error in checkAndExpireWorkerRequests:', err);
   }

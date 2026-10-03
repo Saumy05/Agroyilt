@@ -323,166 +323,8 @@ exports.buildWorkerPaymentSummary = (assignment, booking = null, confirmedExtens
  * Idempotent Farmer Wallet Refund Processor
  * Triggered at assignment completion/settlement stage when actual worker amounts are known.
  */
-exports.processFarmerBookingRefund = async (parentRequestId) => {
-  const WorkerBookingRequest = require('../models/WorkerBookingRequest');
-  const IndWorkerAssignment = require('../models/IndWorkerAssignment');
-  const IndWorkerExtension = require('../models/IndWorkerExtension');
-  const Wallet = require('../models/Wallet');
-  const WalletTransaction = require('../models/WalletTransaction');
-
-  const request = await WorkerBookingRequest.findById(parentRequestId);
-  if (!request) return { success: false, message: 'Request not found' };
-
-  if (request.refundCredited) {
-    return { success: true, message: 'Refund already credited', refundAmount: request.refundAmount };
-  }
-
-  // Cash bookings do not pay reserve upfront; no wallet refund is due
-  const isPaidOnline = ['success', 'paid', 'PAID', 'SUCCESS'].includes(request.paymentStatus) && request.paymentMethod !== 'cash';
-  if (!isPaidOnline) {
-    request.refundAmount   = 0;
-    request.refundCredited = false;
-    await request.save();
-    return { success: true, message: 'Cash booking - refund not applicable', refundAmount: 0 };
-  }
-
-  const snap = request.financialSnapshot;
-  if (!snap || !snap.maximumWorkerAmount) {
-    return { success: false, message: 'No financial snapshot found' };
-  }
-
-  const assignments = await IndWorkerAssignment.find({
-    parentRequestId: request._id,
-    assignmentStatus: { $ne: 'CANCELLED' }
-  });
-
-  const maxWorkerTotal = snap.maximumWorkerAmount;
-  const actualWorkerTotal = assignments.reduce((sum, a) => sum + (Number(a.grossAmount) || Number(a.agreedRate) || 0), 0);
-
-  // Exclude separately paid extensions from actualWorkerTotal so reserve refund is not penalized
-  let confirmedExtGross = 0;
-  try {
-    const confirmedExts = await IndWorkerExtension.find({
-      parentRequestId: request._id,
-      status: 'CONFIRMED'
-    });
-    confirmedExtGross = confirmedExts.reduce((sum, e) => sum + (Number(e.totalServiceAmount) || 0), 0);
-  } catch (extErr) {
-    console.warn('[processFarmerBookingRefund] Error fetching extensions:', extErr.message);
-  }
-
-  const baseActualWorkerTotal = Math.max(0, actualWorkerTotal - confirmedExtGross);
-  const refundAmount = Math.max(0, maxWorkerTotal - baseActualWorkerTotal);
-
-  if (refundAmount <= 0) {
-    request.refundAmount = 0;
-    request.refundCredited = false;
-    await request.save();
-    return { success: true, message: 'No refund due', refundAmount: 0 };
-  }
-
-  const refundKey = `refund_${request._id.toString()}_booking`;
-  const existingRefund = await WalletTransaction.findOne({ idempotencyKey: refundKey });
-  if (existingRefund) {
-    request.refundAmount = refundAmount;
-    request.refundCredited = true;
-    request.refundCreditedAt = existingRefund.createdAt;
-    await request.save();
-    return { success: true, message: 'Refund already completed', refundAmount };
-  }
-
-  let farmerWallet = await Wallet.findOne({ userId: request.farmerId, userModel: 'User' });
-  if (!farmerWallet) {
-    farmerWallet = await Wallet.create({ userId: request.farmerId, userModel: 'User', balance: 0 });
-  }
-
-  const prevBalance = farmerWallet.balance || 0;
-  farmerWallet.balance = prevBalance + refundAmount;
-  await farmerWallet.save();
-
-  // Sync embedded User model balance
-  await User.findByIdAndUpdate(request.farmerId, { 'wallet.balance': farmerWallet.balance });
-
-  const bookingRef = request.bookingNumber || `WRK-${request._id.toString().slice(-6).toUpperCase()}`;
-  const refundDesc = `Unused Reserve Refund for ${request.workTitle || 'Worker'} Booking (#${bookingRef})`;
-
-  // 1. Log in WalletTransaction
-  await WalletTransaction.create({
-    walletId: farmerWallet._id,
-    type: 'credit',
-    amount: refundAmount,
-    reason: 'refund',
-    referenceId: request._id.toString(),
-    gatewayTransactionId: request.razorpayPaymentId || null,
-    idempotencyKey: refundKey,
-    status: 'completed'
-  });
-
-  // 2. Log in Transaction for unified passbook
-  await Transaction.create({
-    userId: request.farmerId,
-    type: 'refund',
-    amount: refundAmount,
-    status: 'completed',
-    paymentMethod: 'wallet',
-    description: refundDesc,
-    balanceBefore: prevBalance,
-    balanceAfter: farmerWallet.balance,
-    referenceId: request._id.toString(),
-    metadata: {
-      bookingId: request._id.toString(),
-      bookingNumber: bookingRef,
-      actualWorkerTotal,
-      maxWorkerTotal
-    }
-  });
-
-  request.refundAmount = refundAmount;
-  request.refundCredited = true;
-  request.refundCreditedAt = new Date();
-  await request.save();
-
-  console.log(`[REFUND IDEMPOTENT] Farmer ${request.farmerId} refunded Rs.${refundAmount}, New Balance: Rs.${farmerWallet.balance}`);
-
-  // Emit real-time wallet update to Farmer socket room
-  try {
-    const { getIO } = require('../sockets');
-    const io = getIO();
-    if (io) {
-      const socketPayload = {
-        balance: farmerWallet.balance,
-        refundAmount,
-        type: 'credit',
-        message: refundDesc,
-        timestamp: new Date()
-      };
-      io.to(`user_${request.farmerId}`).emit('wallet_balance_updated', socketPayload);
-      io.to(`user:${request.farmerId}`).emit('wallet_balance_updated', socketPayload);
-      io.to(`user_${request.farmerId}`).emit('wallet_updated', socketPayload);
-      io.to(`user:${request.farmerId}`).emit('wallet_updated', socketPayload);
-    }
-  } catch (sockErr) {
-    console.warn('[REFUND SOCKET EMIT WARNING]:', sockErr.message);
-  }
-
-  try {
-    const { createNotification } = require('../controllers/notificationControllers/notificationController');
-    await createNotification({
-      userId: request.farmerId,
-      type: 'refund',
-      title: 'Refund Credited to Wallet!',
-      message: `₹${refundAmount} credited to your AgroYilt wallet. Workers finalized at ₹${actualWorkerTotal} (Reserve: ₹${maxWorkerTotal}).`,
-      relatedId: request._id,
-      relatedType: 'WorkerBookingRequest',
-      priority: 'high',
-      pushData: { type: 'refund', amount: refundAmount, link: '/user/wallet' }
-    });
-  } catch (notifErr) {
-    console.warn('[REFUND NOTIF WARNING]:', notifErr.message);
-  }
-
-  return { success: true, message: 'Refund successfully credited', refundAmount, balance: farmerWallet.balance };
-};
+exports.processFarmerBookingRefund = async (parentRequestId) =>
+  require('./workerSettlementService').processBookingRefund(parentRequestId);
 
 /**
  * Adds amount to worker's outstanding dues. Restricts worker if max dues exceeded.
@@ -508,7 +350,7 @@ exports.addWorkerDues = async (workerId, amount, session = null) => {
 /**
  * Applies a penalty to a worker. Idempotent based on penaltyEventId.
  */
-exports.applyWorkerPenalty = async (workerId, bookingId, penaltyEventId, penaltyType, reason) => {
+exports.applyWorkerPenalty = async (workerId, bookingId, penaltyEventId, penaltyType, reason, opts = {}) => {
   const settings = await exports.getWorkerFinancialSettings();
 
   if (!settings.workerPenaltyEnabled) return null;
@@ -518,71 +360,66 @@ exports.applyWorkerPenalty = async (workerId, bookingId, penaltyEventId, penalty
   if (existingPenalty) return existingPenalty;
 
   let penaltyAmount = settings.workerPenaltyAmount;
-  if (settings.workerPenaltyType === 'percentage' && bookingId) {
+  if (Number.isFinite(Number(opts.amount)) && Number(opts.amount) > 0) {
+    // the caller already priced the penalty (per-minute / percentage of the assignment): use exactly that
+    penaltyAmount = Number(opts.amount);
+  } else if (settings.workerPenaltyType === 'percentage' && bookingId) {
     const booking = await Booking.findById(bookingId);
     if (booking && booking.workerGrossEarning) {
       penaltyAmount = (booking.workerGrossEarning * settings.workerPenaltyPercentage) / 100;
     }
   }
 
-  const session = await mongoose.startSession();
-  session.startTransaction();
+  penaltyAmount = Math.round(Number(penaltyAmount) * 100) / 100;
+
+  // Claim the event first (unique penaltyEventId): a replay can never charge twice.
   try {
-    // Determine how to apply penalty (deduct from wallet if balance > penalty, else add to dues)
-    const worker = await Worker.findById(workerId).session(session);
-    let walletDeducted = false;
-    let addedToDues = false;
-
-    if (worker.wallet.balance >= penaltyAmount) {
-      worker.wallet.balance -= penaltyAmount;
-      walletDeducted = true;
-
-      // Ledger entry for wallet deduction
-      await Transaction.create([{
-        workerId,
-        bookingId,
-        type: 'penalty',
-        amount: penaltyAmount,
-        status: 'completed',
-        paymentMethod: 'system',
-        description: `Penalty for ${reason}`,
-        referenceId: penaltyEventId,
-        balanceBefore: worker.wallet.balance + penaltyAmount,
-        balanceAfter: worker.wallet.balance
-      }], { session });
-    } else {
-      worker.outstandingDues += penaltyAmount;
-      addedToDues = true;
-
-      if (worker.outstandingDues > settings.maxWorkerDues) {
-        worker.isRestricted = true;
-        worker.restrictionReason = `Outstanding dues (?${worker.outstandingDues}) exceeded limit due to penalty`;
-        worker.restrictedAt = new Date();
-      }
-    }
-
-    await worker.save({ session });
-
-    const penalty = await WorkerPenalty.create([{
-      workerId,
-      bookingId,
-      penaltyEventId,
-      penaltyType,
-      penaltyAmount,
-      reason,
-      walletDeducted,
-      addedToDues,
-      status: 'applied'
-    }], { session });
-
-    await session.commitTransaction();
-    return penalty[0];
-  } catch (error) {
-    await session.abortTransaction();
-    throw error;
-  } finally {
-    session.endSession();
+    await WorkerPenalty.create({
+      workerId, bookingId, penaltyEventId, penaltyType, penaltyAmount, reason,
+      walletDeducted: false, addedToDues: false, status: 'pending'
+    });
+  } catch (err) {
+    if (err && err.code === 11000) return WorkerPenalty.findOne({ penaltyEventId });
+    throw err;
   }
+
+  // One atomic pipeline update decides wallet-vs-dues from the SAME document state it modifies.
+  const maxDues = Number(settings.maxWorkerDues) || 0;
+  const before = await Worker.findOneAndUpdate(
+    { _id: workerId },
+    [
+      { $set: { _hadBal: { $gte: [{ $ifNull: ['$wallet.balance', 0] }, penaltyAmount] } } },
+      {
+        $set: {
+          'wallet.balance': { $cond: ['$_hadBal', { $subtract: [{ $ifNull: ['$wallet.balance', 0] }, penaltyAmount] }, { $ifNull: ['$wallet.balance', 0] }] },
+          outstandingDues: { $cond: ['$_hadBal', { $ifNull: ['$outstandingDues', 0] }, { $add: [{ $ifNull: ['$outstandingDues', 0] }, penaltyAmount] }] }
+        }
+      },
+      {
+        $set: {
+          isRestricted: { $or: ['$isRestricted', { $and: [{ $not: ['$_hadBal'] }, { $gt: ['$outstandingDues', maxDues] }] }] }
+        }
+      },
+      { $unset: '_hadBal' }
+    ],
+    { new: false }
+  );
+  if (!before) {
+    await WorkerPenalty.updateOne({ penaltyEventId }, { $set: { status: 'failed' } });
+    throw new Error('Worker not found');
+  }
+  const prevBalance = Number(before.wallet?.balance || 0);
+  const walletDeducted = prevBalance >= penaltyAmount;
+
+  await Transaction.create({
+    workerId, bookingId: bookingId || null, type: 'penalty', amount: penaltyAmount, status: 'completed', paymentMethod: 'system',
+    description: `Penalty for ${reason}`, referenceId: penaltyEventId,
+    balanceBefore: prevBalance, balanceAfter: walletDeducted ? prevBalance - penaltyAmount : prevBalance,
+    metadata: { idempotencyKey: `penalty_${penaltyEventId}`, walletDeducted }
+  }).catch(e => { if (!e || e.code !== 11000) console.warn('[penalty] passbook failed:', e && e.message); });
+
+  await WorkerPenalty.updateOne({ penaltyEventId }, { $set: { walletDeducted, addedToDues: !walletDeducted, status: 'applied' } });
+  return WorkerPenalty.findOne({ penaltyEventId });
 };
 
 // ============================================================================
@@ -624,136 +461,5 @@ exports.calculateDailyWorkerSettlement = (assignment, commissionRateOverride = n
  * @param {string|ObjectId} parentRequestId
  * @returns {{ success, refundAmount, balance? }}
  */
-exports.processDailyFarmerRefund = async (parentRequestId) => {
-  const WorkerBookingRequest = require('../models/WorkerBookingRequest');
-  const IndWorkerAssignment  = require('../models/IndWorkerAssignment');
-  const Wallet         = require('../models/Wallet');
-  const WalletTransaction = require('../models/WalletTransaction');
-
-  const request = await WorkerBookingRequest.findById(parentRequestId);
-  if (!request) return { success: false, message: 'Request not found' };
-  if (request.bookingType !== 'DAILY') return { success: false, message: 'Not a DAILY booking' };
-  if (request.refundCredited) {
-    return { success: true, message: 'Refund already credited', refundAmount: request.refundAmount };
-  }
-
-  // Cash bookings do not pay reserve upfront; no wallet refund is due
-  const isPaidOnline = ['success', 'paid', 'PAID', 'SUCCESS'].includes(request.paymentStatus) && request.paymentMethod !== 'cash';
-  if (!isPaidOnline) {
-    request.refundAmount   = 0;
-    request.refundCredited = false;
-    await request.save();
-    return { success: true, message: 'Cash booking - refund not applicable', refundAmount: 0 };
-  }
-
-  const snap = request.financialSnapshot;
-  if (!snap || !snap.maximumWorkerAmount) {
-    return { success: false, message: 'No financial snapshot found' };
-  }
-
-  const assignments = await IndWorkerAssignment.find({
-    parentRequestId: request._id,
-    assignmentStatus: { $ne: 'CANCELLED' }
-  });
-
-  // Actual gross = sum of (agreedRate x workedDays) per assignment
-  const actualWorkerTotal = assignments.reduce((sum, a) => {
-    const days  = a.workedDays || 0;
-    const rate  = Number(a.agreedRate || 0);
-    return sum + toINR(toP(rate) * days);
-  }, 0);
-
-  const maxWorkerTotal = snap.maximumWorkerAmount;
-  const rawRefundAmount = Math.max(0, toINR(toP(maxWorkerTotal) - toP(actualWorkerTotal)));
-  const alreadyRefunded = Number(request.refundAmount) || 0;
-  const refundAmount = Math.max(0, toINR(toP(rawRefundAmount) - toP(alreadyRefunded)));
-
-  if (refundAmount <= 0) {
-    request.refundAmount   = 0;
-    request.refundCredited = false;
-    await request.save();
-    return { success: true, message: 'No refund due', refundAmount: 0 };
-  }
-
-  const refundKey      = `daily_refund_${request._id.toString()}`;
-  const existingRefund = await WalletTransaction.findOne({ idempotencyKey: refundKey });
-  if (existingRefund) {
-    request.refundAmount      = refundAmount;
-    request.refundCredited    = true;
-    request.refundCreditedAt  = existingRefund.createdAt;
-    await request.save();
-    return { success: true, message: 'Refund already completed', refundAmount };
-  }
-
-  let farmerWallet = await Wallet.findOne({ userId: request.farmerId, userModel: 'User' });
-  if (!farmerWallet) {
-    farmerWallet = await Wallet.create({ userId: request.farmerId, userModel: 'User', balance: 0 });
-  }
-
-  const prevBalance     = farmerWallet.balance || 0;
-  farmerWallet.balance  = prevBalance + refundAmount;
-  await farmerWallet.save();
-
-  await User.findByIdAndUpdate(request.farmerId, { 'wallet.balance': farmerWallet.balance });
-
-  const bookingRef  = request.bookingNumber || `WRK-${request._id.toString().slice(-6).toUpperCase()}`;
-  const refundDesc  = `Unused Reserve Refund (DAILY) for ${request.workTitle || 'Worker'} Booking (#${bookingRef})`;
-
-  await WalletTransaction.create({
-    walletId:             farmerWallet._id,
-    type:                 'credit',
-    amount:               refundAmount,
-    reason:               'refund',
-    referenceId:          request._id.toString(),
-    gatewayTransactionId: request.razorpayPaymentId || null,
-    idempotencyKey:       refundKey,
-    status:               'completed'
-  });
-
-  await Transaction.create({
-    userId:        request.farmerId,
-    type:          'refund',
-    amount:        refundAmount,
-    status:        'completed',
-    paymentMethod: 'wallet',
-    description:   refundDesc,
-    balanceBefore: prevBalance,
-    balanceAfter:  farmerWallet.balance,
-    referenceId:   request._id.toString(),
-    metadata: { bookingId: request._id.toString(), bookingNumber: bookingRef, actualWorkerTotal, maxWorkerTotal }
-  });
-
-  request.refundAmount     = refundAmount;
-  request.refundCredited   = true;
-  request.refundCreditedAt = new Date();
-  await request.save();
-
-  console.log(`[DAILY REFUND] Farmer ${request.farmerId} refunded Rs.${refundAmount}`);
-
-  // Real-time wallet update
-  try {
-    const { getIO } = require('../sockets');
-    const io = getIO();
-    if (io) {
-      const socketPayload = { balance: farmerWallet.balance, refundAmount, type: 'credit', message: refundDesc, timestamp: new Date() };
-      io.to(`user_${request.farmerId}`).emit('wallet_balance_updated', socketPayload);
-      io.to(`user:${request.farmerId}`).emit('wallet_balance_updated', socketPayload);
-    }
-  } catch (sockErr) { console.warn('[DAILY REFUND SOCKET]:', sockErr.message); }
-
-  try {
-    const { createNotification } = require('../controllers/notificationControllers/notificationController');
-    await createNotification({
-      userId:     request.farmerId,
-      type:       'refund',
-      title:      'Refund Credited to Wallet!',
-      message:    `₹${refundAmount} credited for Daily Worker Booking (#${bookingRef}). Workers earned ₹${actualWorkerTotal} of ₹${maxWorkerTotal} reserve.`,
-      relatedId:  request._id,
-      relatedType:'WorkerBookingRequest',
-      priority:   'high',
-      pushData:   { type: 'refund', amount: refundAmount, link: '/user/wallet' }
-    });
-  } catch (notifErr) { console.warn('[DAILY REFUND NOTIF]:', notifErr.message); }
-
-  return { success: true, message: 'DAILY refund successfully credited', refundAmount, balance: farmerWallet.balance };
-};
+exports.processDailyFarmerRefund = async (parentRequestId) =>
+  require('./workerSettlementService').processBookingRefund(parentRequestId);
