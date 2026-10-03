@@ -238,6 +238,14 @@ const settingsSchema = new mongoose.Schema({
     default: 15,
     min: 1
   },
+  // Duration (in seconds) the worker alert modal is shown before auto-dismissing.
+  // Admin can increase this for rural areas with slow connectivity.
+  workerAlertTimeoutSeconds: {
+    type: Number,
+    default: 60,
+    min: 10,
+    max: 300
+  },
 
   // ==========================================
   // WORKER EXTENSION SETTINGS

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { FiX, FiMapPin, FiClock, FiBell, FiUser, FiCalendar, FiDollarSign, FiUsers, FiStar, FiCheck, FiShield, FiPhone, FiCheckCircle } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -72,6 +72,7 @@ const isPastScheduledTime = (data) => {
 
 const WorkerBookingRequestAlertModal = ({ isOpen, requestData, onClose, onRequestResponded }) => {
   const [timeLeft, setTimeLeft] = useState(60);
+  const [alertTimeout, setAlertTimeout] = useState(60); // admin-configurable timeout in seconds
   const [loadingAction, setLoadingAction] = useState(null);
   const [showRateInput, setShowRateInput] = useState(false);
   const [offeredRate, setOfferedRate] = useState(0);
@@ -120,7 +121,20 @@ const WorkerBookingRequestAlertModal = ({ isOpen, requestData, onClose, onReques
       } else {
         stopAlertRing();
       }
-      setTimeLeft(60);
+
+      // Fetch admin-configured alert timeout (non-blocking, falls back to 60s)
+      api.get('/public/config').then(res => {
+        const t = Number(res.data?.settings?.workerAlertTimeoutSeconds);
+        if (!isNaN(t) && t >= 10) {
+          setAlertTimeout(t);
+          setTimeLeft(t);
+        } else {
+          setTimeLeft(60);
+        }
+      }).catch(() => {
+        setTimeLeft(60);
+      });
+
       setOfferedRate(requestData.minRate || requestData.farmerOfferedRate || 0);
 
       // Only check team if NOT a team invite
@@ -376,7 +390,7 @@ const WorkerBookingRequestAlertModal = ({ isOpen, requestData, onClose, onReques
 
   const radius = 20;
   const circumference = 2 * Math.PI * radius;
-  const dashoffset = circumference - (timeLeft / 60) * circumference;
+  const dashoffset = circumference - (timeLeft / Math.max(1, alertTimeout)) * circumference;
 
   const content = (
     <AnimatePresence>

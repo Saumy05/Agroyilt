@@ -58,6 +58,7 @@ exports.updateSettings = async (req, res, next) => {
       workerPlatformChargePercentage,
       maxIndependentWorkerRequest,
       workerSearchRadiusKm,
+      workerAlertTimeoutSeconds,
       // Worker Late Arrival Penalty & Extension Settings
       workerPenaltyEnabled,
       workerPenaltyType,
@@ -176,6 +177,13 @@ exports.updateSettings = async (req, res, next) => {
         }
         settings.workerSearchRadiusKm = val;
       }
+      if (workerAlertTimeoutSeconds !== undefined) {
+        const val = parseInt(workerAlertTimeoutSeconds, 10);
+        if (isNaN(val) || val < 10 || val > 300) {
+          return res.status(400).json({ success: false, message: 'workerAlertTimeoutSeconds must be between 10 and 300 seconds.' });
+        }
+        settings.workerAlertTimeoutSeconds = val;
+      }
 
       // Worker Late Arrival Penalty & Extension Settings
       if (workerPenaltyEnabled !== undefined) settings.workerPenaltyEnabled = Boolean(workerPenaltyEnabled);
@@ -244,11 +252,11 @@ exports.updateSettings = async (req, res, next) => {
 // Get Public Settings (Visited Charges, GST, Branding)
 exports.getPublicSettings = async (req, res, next) => {
   try {
-    let settings = await Settings.findOne({ type: 'global' }).select('visitedCharges serviceGstPercentage partsGstPercentage supportEmail supportPhone supportWhatsapp cancellationPenalty bookingCommissionPercentage appName appTagline appLogo appFavicon');
+    let settings = await Settings.findOne({ type: 'global' }).select('visitedCharges serviceGstPercentage partsGstPercentage supportEmail supportPhone supportWhatsapp cancellationPenalty bookingCommissionPercentage appName appTagline appLogo appFavicon workerAlertTimeoutSeconds');
 
     // Default if not found (fallback values)
     if (!settings) {
-      settings = { visitedCharges: 29, serviceGstPercentage: 18, partsGstPercentage: 18, appName: 'AgroYilt', appLogo: '/AgroyiltLogo.png', appFavicon: '/AgroyiltLogo.png' };
+      settings = { visitedCharges: 29, serviceGstPercentage: 18, partsGstPercentage: 18, appName: 'AgroYilt', appLogo: '/AgroyiltLogo.png', appFavicon: '/AgroyiltLogo.png', workerAlertTimeoutSeconds: 60 };
     }
 
     res.status(200).json({

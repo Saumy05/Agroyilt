@@ -67,8 +67,11 @@ const AvailableVendors = () => {
 
   useEffect(() => {
     if (!category?._id && !category?.id) {
-      // If user landed here directly without picking a category, redirect to explorer
-      navigate('/user/machinery-explorer', { replace: true });
+      // If user landed here directly without picking a category (e.g. via browser
+      // history navigation which strips React Router state), redirect to home.
+      // Do NOT redirect back to /machinery-explorer — that creates a loop because
+      // MachineryExplorer's back button does navigate(-1) which would return here.
+      navigate('/user', { replace: true });
       return;
     }
     fetchVendors();
@@ -118,7 +121,12 @@ const AvailableVendors = () => {
   };
 
   const handleEditRequirements = () => {
+    // Use replace: true so that /machinery/vendors is replaced in history.
+    // Without replace, MachineryExplorer's navigate(-1) back button would return
+    // to this vendors page (which would have no location.state), triggering the
+    // no-category guard and creating an infinite redirect loop.
     navigate('/user/machinery-explorer', {
+      replace: true,
       state: {
         category,
         preSelectedImplement: implement,
@@ -127,7 +135,8 @@ const AvailableVendors = () => {
         quantity,
         bookingDate,
         startTime,
-        endTime
+        endTime,
+        step: 4
       }
     });
   };

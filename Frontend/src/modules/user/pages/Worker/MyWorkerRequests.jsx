@@ -64,7 +64,26 @@ const MyWorkerRequests = () => {
       } else {
         res = await workerBookingService.getMyGroupRequests();
       }
-      setRequests(res.data || []);
+
+      let data = res.data || [];
+
+      // ── Client-side expiry guard ──────────────────────────────────────────
+      // If backend returns a stale pending/matching request that has passed
+      // its expiresAt window, mark it expired locally so the list is accurate.
+      if (tab === 'farmer') {
+        const now = Date.now();
+        data = data.map(r => {
+          if (['pending', 'matching'].includes(r.status) && r.expiresAt) {
+            const expiresAtMs = new Date(r.expiresAt).getTime();
+            if (!isNaN(expiresAtMs) && now > expiresAtMs) {
+              return { ...r, status: 'expired' };
+            }
+          }
+          return r;
+        });
+      }
+
+      setRequests(data);
     } catch {
       toast.error('Failed to load requests');
     } finally {

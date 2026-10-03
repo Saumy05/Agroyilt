@@ -17,6 +17,7 @@ class BookingScheduler {
   constructor(io) {
     this.io = io;
     this.intervalId = null;
+    this.workerExpiryIntervalId = null;
     this.isRunning = false;
   }
 
@@ -36,15 +37,27 @@ class BookingScheduler {
     this.intervalId = setInterval(() => {
       this.processTimeouts();
     }, 30000);
+
+    // ── Proactive Worker Request Expiry Scanner ──────────────────────────────
+    // Runs every 2 minutes. Finds farmer broadcast requests that have passed
+    // their scheduled window without being confirmed, and notifies the farmer.
+    this.processWorkerRequestExpiries();
+    this.workerExpiryIntervalId = setInterval(() => {
+      this.processWorkerRequestExpiries();
+    }, 2 * 60 * 1000);
   }
 
   stop() {
     if (this.intervalId) {
       clearInterval(this.intervalId);
       this.intervalId = null;
-      this.isRunning = false;
-      console.log('[BookingScheduler] Stopped.');
     }
+    if (this.workerExpiryIntervalId) {
+      clearInterval(this.workerExpiryIntervalId);
+      this.workerExpiryIntervalId = null;
+    }
+    this.isRunning = false;
+    console.log('[BookingScheduler] Stopped.');
   }
 
   async processTimeouts() {
@@ -115,6 +128,50 @@ class BookingScheduler {
       }
     } catch (error) {
       console.error('[BookingScheduler] Error processing timeouts:', error);
+    }
+  }
+
+  /**
+   * Proactive Worker Booking Request Expiry Scanner
+   * Scans for stale farmer broadcast requests (pending/matching) that passed their
+   * `expiresAt` or scheduled window. Expires them and notifies the farmer proactively
+   * instead of relying on lazy expiry on the next farmer API call.
+   */
+  async processWorkerRequestExpiries() {
+    try {
+      const WorkerBookingRequest = require('../models/WorkerBookingRequest');
+      const { isBookingExpired, expireWorkerBookingRequest } = require('./workerBookingExpiryService');
+
+      const now = new Date();
+
+      // Find stale pending/matching requests that are past their expiresAt window
+      const staleRequests = await WorkerBookingRequest.find({
+        status: { $in: ['pending', 'matching'] },
+        expiresAt: { $lt: now }
+      }).limit(50).lean();  // Cap at 50 per cycle to avoid blocking
+
+      if (staleRequests.length > 0) {
+        console.log(`[BookingScheduler] Found ${staleRequests.length} stale worker requests to expire proactively.`);
+      }
+
+      for (const reqDoc of staleRequests) {
+        try {
+          const evalResult = isBookingExpired(reqDoc, now);
+          if (evalResult.isExpired) {
+            // Load the full document to allow save() in expiry service
+            const fullDoc = await WorkerBookingRequest.findById(reqDoc._id);
+            if (fullDoc && !['expired', 'cancelled', 'completed', 'confirmed'].includes(fullDoc.status)) {
+              await expireWorkerBookingRequest(fullDoc, evalResult.reason || 'Scheduled window elapsed');
+              console.log(`[BookingScheduler] Proactively expired worker request ${reqDoc._id} (${reqDoc.workTitle}).`);
+            }
+          }
+        } catch (singleErr) {
+          console.error(`[BookingScheduler] Error expiring worker request ${reqDoc._id}:`, singleErr.message);
+        }
+      }
+    } catch (err) {
+      // Non-fatal — log and continue
+      console.error('[BookingScheduler] processWorkerRequestExpiries error:', err.message);
     }
   }
 
