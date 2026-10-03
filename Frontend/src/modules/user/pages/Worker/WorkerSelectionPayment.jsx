@@ -4,6 +4,7 @@ import { Helmet } from 'react-helmet-async';
 import { FiArrowLeft, FiShield, FiLock, FiCheckCircle, FiAlertCircle, FiCreditCard, FiDollarSign } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import workerBookingService from '../../../../services/workerBookingService';
+import authStorage from '../../../../utils/authStorage';
 
 const WorkerSelectionPayment = () => {
   const { id } = useParams();
@@ -52,6 +53,7 @@ const WorkerSelectionPayment = () => {
 
   const loadRazorpay = () => {
     return new Promise((resolve) => {
+      if (window.Razorpay) return resolve(true);
       const script = document.createElement('script');
       script.src = 'https://checkout.razorpay.com/v1/checkout.js';
       script.onload = () => resolve(true);
@@ -72,12 +74,25 @@ const WorkerSelectionPayment = () => {
 
       // Initialize Payment on Backend
       const orderRes = await workerBookingService.createWorkerBookingPayment(id);
-      const { orderId, amount, currency, financials } = orderRes.data;
+      if (!orderRes.success || !orderRes.data) {
+        toast.error(orderRes.message || 'Failed to initialize payment.');
+        setProcessing(false);
+        return;
+      }
+
+      const { orderId, amount, currency } = orderRes.data;
+      const razorpayKey = orderRes.data.key || import.meta.env.VITE_RAZORPAY_KEY_ID;
+
+      if (!razorpayKey) {
+        toast.error('Razorpay key is not configured.');
+        setProcessing(false);
+        return;
+      }
 
       const options = {
-        key: import.meta.env.VITE_RAZORPAY_KEY_ID, // Use Razorpay Key from Env
+        key: razorpayKey,
         amount: amount.toString(),
-        currency: currency,
+        currency: currency || 'INR',
         name: 'AgroYilt Worker Booking',
         description: `Booking for ${request.workTitle}`,
         order_id: orderId,
@@ -96,11 +111,12 @@ const WorkerSelectionPayment = () => {
             navigate(`/user/farmer-worker-request/${id}`);
           } catch (verifyErr) {
             toast.error(verifyErr?.response?.data?.message || 'Payment verification failed', { id: 'verify-toast' });
+            setProcessing(false);
           }
         },
         prefill: {
-          name: request.farmerId?.name || 'AgroYilt User',
-          contact: request.farmerId?.phone || '',
+          name: request.farmerId?.name || (authStorage.getUserData('user')?.name) || 'AgroYilt User',
+          contact: request.farmerId?.phone || (authStorage.getUserData('user')?.phone) || '',
         },
         theme: {
           color: '#059669', // Emerald-600
@@ -114,6 +130,10 @@ const WorkerSelectionPayment = () => {
       };
 
       const paymentObject = new window.Razorpay(options);
+      paymentObject.on('payment.failed', function (resp) {
+        toast.error(`Payment failed: ${resp.error?.description || 'Transaction unsuccessful'}`);
+        setProcessing(false);
+      });
       paymentObject.open();
 
     } catch (err) {

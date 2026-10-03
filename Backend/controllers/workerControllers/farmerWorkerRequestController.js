@@ -3102,8 +3102,7 @@ exports.farmerSelectWorkers = async (req, res) => {
     const request = await WorkerBookingRequest.findOne({
       _id: req.params.id,
       farmerId,
-      status: { $in: ['matching', 'awaiting_farmer_confirmation'] },
-      requestType: { $in: ['independent_broadcast', 'team_leader'] }
+      status: { $in: ['matching', 'awaiting_farmer_confirmation', 'pending'] }
     });
 
     if (!request) {
@@ -3214,7 +3213,7 @@ exports.farmerSelectWorkers = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('[farmerSelectWorkers]', err); require('fs').writeFileSync('C:/Users/hp/Desktop/Appzeto/AgroYilt/backend/error_log.txt', err.stack);
+    console.error('[farmerSelectWorkers]', err);
     return res.status(500).json({ success: false, message: 'Failed to select workers.' });
   }
 };
@@ -3225,21 +3224,26 @@ exports.createWorkerBookingPayment = async (req, res) => {
     const request = await WorkerBookingRequest.findOne({
       _id: req.params.id,
       farmerId,
-      paymentStatus: 'pending'
+      paymentStatus: { $in: ['pending', 'not_started', 'failed'] }
     });
 
     if (!request) {
       return res.status(404).json({ success: false, message: 'Request not found or workers not selected yet.' });
     }
 
+    if (!request.financialSnapshot || !request.financialSnapshot.totalPayable) {
+      return res.status(400).json({ success: false, message: 'Financial snapshot is missing. Please select workers again.' });
+    }
+
     const { totalPayable, currency } = request.financialSnapshot;
 
-    const orderRes = await createOrder(totalPayable, currency, `req_${request._id}`);
+    const orderRes = await createOrder(totalPayable, currency || 'INR', `req_${request._id}`);
     if (!orderRes.success) {
-      return res.status(500).json({ success: false, message: 'Failed to create payment order.' });
+      return res.status(500).json({ success: false, message: 'Failed to create payment order: ' + (orderRes.error || '') });
     }
 
     request.razorpayOrderId = orderRes.orderId;
+    request.paymentStatus = 'pending';
     await request.save();
 
     return res.json({
@@ -3248,6 +3252,7 @@ exports.createWorkerBookingPayment = async (req, res) => {
         orderId: orderRes.orderId,
         amount: orderRes.amount,
         currency: orderRes.currency,
+        key: process.env.RAZORPAY_KEY_ID,
         financials: request.financialSnapshot
       }
     });
@@ -3262,14 +3267,31 @@ exports.verifyWorkerBookingPayment = async (req, res) => {
     const farmerId = req.user._id;
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
 
-    const request = await WorkerBookingRequest.findOne({
+    let request = await WorkerBookingRequest.findOne({
       _id: req.params.id,
       farmerId,
       razorpayOrderId: razorpay_order_id,
-      paymentStatus: 'pending'
+      paymentStatus: { $in: ['pending', 'failed'] }
     });
 
     if (!request) {
+      const alreadySuccess = await WorkerBookingRequest.findOne({
+        _id: req.params.id,
+        farmerId,
+        razorpayOrderId: razorpay_order_id,
+        paymentStatus: 'success'
+      });
+      if (alreadySuccess) {
+        return res.json({
+          success: true,
+          message: 'Payment already verified.',
+          data: {
+            requestId: alreadySuccess._id,
+            assignmentIds: alreadySuccess.assignmentIds,
+            bookingIds: alreadySuccess.finalBookingIds
+          }
+        });
+      }
       return res.status(404).json({ success: false, message: 'Invalid payment verification request.' });
     }
 
@@ -3281,6 +3303,7 @@ exports.verifyWorkerBookingPayment = async (req, res) => {
     }
 
     request.paymentStatus = 'success';
+    request.paymentMethod = 'online';
     request.razorpayPaymentId = razorpay_payment_id;
     request.status = 'confirmed';
     request.farmerAcceptedPartial = request.selectedWorkerIds.length < request.requiredWorkers;
@@ -3388,10 +3411,10 @@ exports.verifyWorkerBookingPayment = async (req, res) => {
         workerId: wId,
         providerType: 'WORKER',
         workerRequestId: request._id,
-        scheduledDate: isDaily ? (request.startDate || request.scheduledDate) : request.scheduledDate,
-        scheduledTime: isDaily ? '09:00' : request.startTime,
-        timeSlot: isDaily ? { start: '09:00', end: '17:00' } : { start: request.startTime, end: request.endTime },
-        serviceName: request.workTitle,
+        scheduledDate: isDaily ? (request.startDate || request.scheduledDate || new Date()) : (request.scheduledDate || new Date()),
+        scheduledTime: isDaily ? '09:00' : (request.startTime || '09:00'),
+        timeSlot: isDaily ? { start: '09:00', end: '17:00' } : { start: request.startTime || '09:00', end: request.endTime || '17:00' },
+        serviceName: request.workTitle || 'Worker Service',
         serviceCategory: request.workCategory || 'Worker',
         basePrice: null,
         minRate: isDaily ? request.minDailyRate : request.minRate,
@@ -3421,6 +3444,8 @@ exports.verifyWorkerBookingPayment = async (req, res) => {
         paymentStatus: 'success',
         paymentMethod: 'online',
         paymentId: razorpay_payment_id,
+        razorpayPaymentId: razorpay_payment_id,
+        razorpayOrderId: razorpay_order_id,
         notes: `${request.workTitle}: ${request.workDescription || ''}`.substring(0, 500)
       });
     }
@@ -3428,6 +3453,27 @@ exports.verifyWorkerBookingPayment = async (req, res) => {
     // Insert Assignments and Bookings
     const createdAssignments = await IndWorkerAssignment.insertMany(assignmentDocs);
     const createdBookings = await Booking.insertMany(bookingDocs);
+
+    // Record Transaction for audit trail
+    try {
+      const Transaction = require('../../models/Transaction');
+      await Transaction.create({
+        userId: farmerId,
+        amount: request.financialSnapshot?.totalPayable || 0,
+        type: 'booking_payment',
+        paymentMethod: 'razorpay',
+        status: 'completed',
+        gatewayTransactionId: razorpay_payment_id,
+        description: `Online payment for worker booking "${request.workTitle}"`,
+        metadata: {
+          workerRequestId: request._id,
+          razorpayOrderId: razorpay_order_id,
+          razorpayPaymentId: razorpay_payment_id
+        }
+      });
+    } catch (txErr) {
+      console.error('[verifyWorkerBookingPayment] Transaction create error (non-fatal):', txErr);
+    }
 
     // Link legacy booking IDs into assignments
     for (let i = 0; i < createdAssignments.length; i++) {

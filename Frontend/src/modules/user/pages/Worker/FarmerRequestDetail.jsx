@@ -543,7 +543,7 @@ const FarmerRequestDetail = () => {
               {request.acceptedWorkersCount || request.finalWorkers?.length || 0} worker(s) accepted your request for <span className="font-black">{request.workTitle}</span>. Track them live or contact them directly.
             </p>
             <button
-              onClick={() => navigate(`/user/farmer-worker-request/${request._id}/tracking`)}
+              onClick={() => navigate(`/user/farmer-worker-request/${request._id}/track`)}
               className="w-full py-3 bg-white text-emerald-700 rounded-2xl font-black text-sm flex items-center justify-center gap-2 active:scale-95 transition-all shadow-md"
             >
               <FiNavigation size={16} className="animate-pulse text-emerald-600" />
@@ -552,8 +552,8 @@ const FarmerRequestDetail = () => {
           </div>
         )}
 
-        {/* Confirmed Workers (Post-payment) */}
-        {request.paymentStatus === 'success' && request.finalWorkers?.length > 0 && (
+        {/* Confirmed Workers (Post-confirmation) */}
+        {(request.status === 'confirmed' || request.paymentStatus === 'success') && request.finalWorkers?.length > 0 && (
           <div className="bg-white rounded-3xl border-2 border-emerald-500 shadow-sm p-5 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-bl-full -z-10 opacity-50" />
             
@@ -577,7 +577,11 @@ const FarmerRequestDetail = () => {
               </button>
             </div>
             
-            <p className="text-xs text-slate-500 font-medium mb-4">Your payment was successful and worker details are unlocked. You can track their live journey to your farm in real time.</p>
+            <p className="text-xs text-slate-500 font-medium mb-4">
+              {request.paymentMethod === 'cash' 
+                ? 'Your booking is confirmed with Cash on Service. Worker details are unlocked below.' 
+                : 'Your payment was successful and worker details are unlocked. You can track their live journey to your farm in real time.'}
+            </p>
 
             <div className="space-y-3">
               {request.finalWorkers.map((w, i) => (
