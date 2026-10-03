@@ -616,31 +616,21 @@ const BookingTimeline = () => {
     if (value && index < 3) document.getElementById(`otp-${index + 1}`).focus();
   };
 
+  // Arrival is confirmed by the customer's visit OTP (BookingDetails / map flow) — never by a plain status
+  // update, which the server now refuses. This button only opens directions.
   async function handleVisitSite() {
     const url = `https://www.google.com/maps/dir/?api=1&destination=${booking.location?.lat || 22.7196},${booking.location?.lng || 75.8577}`;
     window.open(url, '_blank');
-
-    try {
-      await updateBookingStatus(id, 'visited');
-      // Reload booking to get latest state
-      const response = await getBookingById(id);
-      setBooking(prev => ({ ...prev, status: response.data?.status || response.status }));
-      setCurrentStage(6); // Visited moves us to Step 6 (Work)
-    } catch (error) {
-      console.error('Error updating status to visited:', error);
-    }
   }
 
+  // Work is finished by generating the bill (Complete Work) or ending the trip with the end OTP;
+  // the server rejects a bare "work_done" status update.
   async function handleWorkDone() {
-    try {
-      await updateBookingStatus(id, 'work_done');
-      setCurrentStage(7); 
-      safeReload();
-    } catch (error) {
-      console.error('Error updating status to work done:', error);
-      toastManager.error('Failed to update status. Please follow valid status flow.');
-    }
+    toastManager.info
+      ? toastManager.info('Use "Complete Work" to generate the bill and finish the job.')
+      : toastManager.error('Use "Complete Work" to generate the bill and finish the job.');
   }
+
 
 
 

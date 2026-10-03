@@ -414,6 +414,9 @@ const Checkout = () => {
             estimatedTime: '15-30 min'
           });
           setSearchingVendors(false); // Finished search
+        } else if (response.paymentRequired) {
+          // Online booking: the vendor is alerted only after the payment is verified
+          await handleOnlinePayment(response.data);
         } else {
           // Normal flow: Entered pooling/searching
           setCurrentStep('waiting'); // Waiting for vendor acceptance
@@ -685,6 +688,9 @@ const Checkout = () => {
           setCurrentStep('details');
           toastManager.error('Booking created but ID missing. Check My Bookings.');
         }
+      } else if (bookingResponse.paymentRequired) {
+        // Online booking: the vendor is alerted only after the payment is verified
+        await handleOnlinePayment(booking);
       } else {
         // Move to waiting state - alerts sent to nearby vendors
         setCurrentStep('waiting');
@@ -705,20 +711,29 @@ const Checkout = () => {
   };
 
   // Proceed to payment after vendor acceptance
-  const handleOnlinePayment = async () => {
+  const handleOnlinePayment = async (heldBooking = null) => {
+    // heldBooking: a just-created online booking whose request reaches the vendor only after this payment
+    const target = heldBooking || bookingRequest;
+    const bail = () => {
+      if (!heldBooking) return;
+      setSearchingVendors(false);
+      setShowVendorModal(false);
+      navigate(`/user/booking/${heldBooking._id}`, { replace: true });
+    };
     try {
-      if (!acceptedVendor || !bookingRequest) {
+      if (!target || (!heldBooking && !acceptedVendor)) {
         toastManager.error('No vendor selected or booking not created');
         return;
       }
 
       // Create Razorpay order
       toastManager.info('Creating payment order...');
-      const orderResponse = await paymentService.createOrder(bookingRequest._id);
+      const orderResponse = await paymentService.createOrder(target._id);
 
       if (!orderResponse.success) {
         toast.dismiss();
         toastManager.error(orderResponse.message || 'Failed to create payment order');
+        bail();
         return;
       }
 
@@ -728,11 +743,13 @@ const Checkout = () => {
       const razorpayKey = import.meta.env.VITE_RAZORPAY_KEY_ID;
       if (!razorpayKey) {
         toastManager.error('Razorpay key not configured');
+        bail();
         return;
       }
 
       if (!window.Razorpay) {
         toastManager.error('Razorpay SDK not loaded');
+        bail();
         return;
       }
 
@@ -742,7 +759,7 @@ const Checkout = () => {
         currency: orderResponse.data.currency || 'INR',
         order_id: orderResponse.data.orderId,
         name: 'Groo',
-        description: `Payment for ${bookingRequest.serviceName || 'service'}`,
+        description: `Payment for ${target.serviceName || 'service'}`,
         handler: async function (response) {
           try {
             toastManager.info('Verifying payment...');
@@ -768,6 +785,13 @@ const Checkout = () => {
               } catch (error) {
               }
 
+              if (heldBooking) {
+                // Payment verified: the request has now been sent to the vendor
+                setBookingRequest(heldBooking);
+                setCurrentStep('waiting');
+                toastManager.success('Request sent to the vendor. Waiting for them to accept.');
+                return;
+              }
               // Navigate to booking confirmation
               navigate(`/user/booking-confirmation/${bookingRequest._id}`, {
                 replace: true
@@ -785,6 +809,15 @@ const Checkout = () => {
           email: (authStorage.getUserData('user')?.email) || '',
           contact: contactDetails.phone || userPhone
         },
+        modal: heldBooking ? {
+          ondismiss: () => {
+            // Not paid: the vendor has NOT been contacted. Payment can be retried from the booking page.
+            setSearchingVendors(false);
+            setShowVendorModal(false);
+            toastManager.info('Payment not completed. The vendor is notified only after you pay.');
+            navigate(`/user/booking/${heldBooking._id}`, { replace: true });
+          }
+        } : undefined,
         theme: {
           color: themeColors.button
         }
@@ -800,6 +833,7 @@ const Checkout = () => {
     } catch (error) {
       toast.dismiss();
       toastManager.error('Failed to process payment');
+      bail();
     }
   };
 

@@ -27,51 +27,40 @@ const BookingAlertCard = ({ booking, onAccept, onReject, onAssign, initialTimeLe
     }
   };
 
+  // The countdown follows the SERVER's expiry (15 min window). When it reaches zero the card only
+  // disables itself — it never auto-rejects, because a vendor who was away from the phone must not
+  // silently decline the farmer's booking (a targeted reject kills the request).
+  const [windowSeconds, setWindowSeconds] = useState(initialTimeLeft);
   useEffect(() => {
     if (!booking) return;
 
-    const bookingId = booking.id || booking._id;
-    const storageKey = `alert_start_${bookingId}`;
-    let startTime = parseInt(localStorage.getItem(storageKey));
-
-    if (!startTime) {
-      startTime = Date.now();
-      localStorage.setItem(storageKey, startTime.toString());
-      setTimeLeft(initialTimeLeft);
-    } else {
-      const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
-      const remaining = initialTimeLeft - elapsedSeconds;
-
-      if (remaining <= 0) {
-        setTimeLeft(0);
-        onReject?.(bookingId);
-        localStorage.removeItem(storageKey);
-        return;
+    const serverExpiry = booking.expiresAt ? new Date(booking.expiresAt).getTime() : null;
+    const computeRemaining = () => {
+      if (serverExpiry) return Math.max(0, Math.floor((serverExpiry - Date.now()) / 1000));
+      const sentAt = booking.sentAt || booking.createdAt;
+      if (sentAt) {
+        const elapsed = Math.floor((Date.now() - new Date(sentAt).getTime()) / 1000);
+        return Math.max(0, 15 * 60 - elapsed);
       }
-      setTimeLeft(remaining);
-    }
+      return initialTimeLeft;
+    };
+
+    const first = computeRemaining();
+    setWindowSeconds(Math.max(first, 1));
+    setTimeLeft(first);
 
     const timer = setInterval(() => {
-      setTimeLeft((prev) => {
-        const currentElapsed = Math.floor((Date.now() - startTime) / 1000);
-        const currentRemaining = initialTimeLeft - currentElapsed;
-
-        if (currentRemaining <= 0) {
-          clearInterval(timer);
-          onReject?.(bookingId);
-          localStorage.removeItem(storageKey);
-          return 0;
-        }
-        return currentRemaining;
-      });
+      const remaining = computeRemaining();
+      setTimeLeft(remaining);
+      if (remaining <= 0) clearInterval(timer);
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [booking, onReject, initialTimeLeft]);
+  }, [booking, initialTimeLeft]);
 
   const radius = 23;
   const circumference = 2 * Math.PI * radius;
-  const progress = (timeLeft / 60) * circumference;
+  const progress = Math.min(1, timeLeft / Math.max(windowSeconds, 1)) * circumference;
   const dashoffset = circumference - progress;
 
   // Pricing synchronization with farmer checkout
@@ -147,7 +136,7 @@ const BookingAlertCard = ({ booking, onAccept, onReject, onAssign, initialTimeLe
             />
           </svg>
           <div className="text-center">
-            <span className={`text-base font-black block leading-none ${timeLeft <= 10 ? 'text-red-500' : 'text-emerald-700'}`}>{timeLeft}</span>
+            <span className={`text-base font-black block leading-none ${timeLeft <= 10 ? 'text-red-500' : 'text-emerald-700'}`}>{timeLeft >= 60 ? `${Math.floor(timeLeft / 60)}:${String(timeLeft % 60).padStart(2, '0')}` : timeLeft}</span>
             <span className="text-[7.5px] font-bold text-slate-400 uppercase tracking-tighter block mt-0.5">Sec left</span>
           </div>
           {timeLeft <= 10 && <div className="absolute inset-0 rounded-full border-2 border-red-500/30 animate-ping" />}
