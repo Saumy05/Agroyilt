@@ -903,6 +903,13 @@ exports.createFarmerRequest = async (req, res) => {
       expiresAt: new Date(Date.now() + REQUEST_TTL_MS)
     };
 
+    const targetedWorkerId = req.body.targetedWorkerId || req.body.workerId;
+    if (targetedWorkerId) {
+      requestDoc.workerId = targetedWorkerId;
+      requestDoc.dispatchedTo = [{ workerId: targetedWorkerId, status: 'pending' }];
+      requestDoc.status = 'pending';
+    }
+
     if (isDaily) {
       const sDate  = new Date(startDate);
       const numD   = parseInt(numberOfDays, 10);
@@ -962,7 +969,17 @@ exports.createFarmerRequest = async (req, res) => {
 
     const newRequest = await WorkerBookingRequest.create(requestDoc);
 
-    if (requestType === 'independent_broadcast') {
+    if (targetedWorkerId) {
+      const targetedWorker = await Worker.findById(targetedWorkerId);
+      if (targetedWorker) {
+        let farmerName = 'Farmer';
+        try {
+          const f = await User.findById(farmerId).select('name').lean();
+          if (f?.name) farmerName = f.name;
+        } catch (_) {}
+        await dispatchWave(newRequest, [targetedWorker], farmerName, false);
+      }
+    } else if (requestType === 'independent_broadcast') {
       if (isDaily) {
         await dispatchToIndependentWorkersForDaily({
           request: newRequest,
@@ -1330,8 +1347,14 @@ async function dispatchToIndependentWorkers({
     const [wave0, wave1, wave2] = sortIntoWaves(available, workerLocation?.lat, workerLocation?.lng);
     console.log(`[HOURLY DISPATCH] Wave0(0-5km): ${wave0.length} | Wave1(5-15km): ${wave1.length} | Wave2(15km+): ${wave2.length}`);
 
-    // Dispatch wave 0 immediately (or fallback to next if empty)
-    const firstWave = wave0.length ? wave0 : wave1.length ? wave1 : wave2;
+    // Proactive dispatch: ensure enough workers receive the job immediately without 10-20m wait
+    let firstWave = [...wave0];
+    if (firstWave.length < Math.max(5, (request.requiredWorkers || 1) * 2) && wave1.length > 0) {
+      firstWave = [...firstWave, ...wave1];
+    }
+    if (firstWave.length === 0 && wave2.length > 0) {
+      firstWave = [...wave2];
+    }
     await dispatchWave(request, firstWave, farmerName, false);
 
     // Wave 1 after 10 minutes (only if wave0 ran first)
@@ -1402,7 +1425,14 @@ async function dispatchToIndependentWorkersForDaily({
     const [wave0, wave1, wave2] = sortIntoWaves(available, workerLocation?.lat, workerLocation?.lng);
     console.log(`[DAILY DISPATCH] Wave0(0-5km): ${wave0.length} | Wave1(5-15km): ${wave1.length} | Wave2(15km+): ${wave2.length}`);
 
-    const firstWave = wave0.length ? wave0 : wave1.length ? wave1 : wave2;
+    // Proactive dispatch: ensure enough workers receive the job immediately without 10-20m wait
+    let firstWave = [...wave0];
+    if (firstWave.length < Math.max(5, (request.requiredWorkers || 1) * 2) && wave1.length > 0) {
+      firstWave = [...firstWave, ...wave1];
+    }
+    if (firstWave.length === 0 && wave2.length > 0) {
+      firstWave = [...wave2];
+    }
     await dispatchWave(request, firstWave, farmerName, false);
 
     if (wave0.length && wave1.length) {
@@ -1515,6 +1545,33 @@ async function dispatchToTeamLeaders({
       const f = await User.findById(request.farmerId).select('name').lean();
       if (f?.name) farmerName = f.name;
     } catch (_) {}
+
+    if (eligibleLeaders.length === 0) {
+      console.warn(`[TL DISPATCH] No eligible Team Leaders found for request ${request._id}. Falling back immediately to independent workers.`);
+      await WorkerBookingRequest.findByIdAndUpdate(request._id, {
+        bookingMode:  'INDEPENDENT_WORKERS',
+        requestType:  'independent_broadcast',
+        status:       'matching'
+      });
+      const freshReq = await WorkerBookingRequest.findById(request._id);
+      if (freshReq) {
+        if (freshReq.bookingType === 'DAILY') {
+          await dispatchToIndependentWorkersForDaily({
+            request: freshReq, requiredSkills,
+            startDate: freshReq.startDate, endDate: freshReq.endDate,
+            workerLocation: freshReq.location, radiusKm
+          });
+        } else {
+          await dispatchToIndependentWorkers({
+            request: freshReq, requiredSkills,
+            scheduledDate: freshReq.scheduledDate,
+            startTime: freshReq.startTime, endTime: freshReq.endTime,
+            workerLocation: freshReq.location, radiusKm
+          });
+        }
+      }
+      return;
+    }
 
     await dispatchWave(request, eligibleLeaders, farmerName, false);
 
@@ -1677,19 +1734,28 @@ exports.getWorkerPendingFarmerRequests = async (req, res) => {
   try {
     const workerId = req.user._id;
     
-    // Find requests that are pending AND where this worker is in dispatchedTo with 'pending' status
+    // Find requests that are pending AND where this worker is in dispatchedTo or directly assigned
     // Exclude expired requests and requests where worker has already submitted an offer
     const pendingRequests = await WorkerBookingRequest.find({
-      status: { $in: ['pending', 'matching'] },
+      status: { $in: ['pending', 'matching', 'requested'] },
       expiresAt: { $gt: new Date() },
-      dispatchedTo: {
-        $elemMatch: {
-          workerId: workerId,
-          status: 'pending'
+      $or: [
+        {
+          dispatchedTo: {
+            $elemMatch: {
+              workerId: workerId,
+              status: { $in: ['pending', 'notified'] }
+            }
+          }
+        },
+        {
+          workerId: workerId
         }
-      },
+      ],
       'workerOffers.workerId': { $ne: workerId }
-    }).sort({ createdAt: -1 });
+    })
+      .populate('farmerId', 'name phone profilePhoto')
+      .sort({ createdAt: -1 });
 
     // Server-side authoritative expiry validation:
     // Filter out and auto-expire any request whose scheduled window has already completely elapsed

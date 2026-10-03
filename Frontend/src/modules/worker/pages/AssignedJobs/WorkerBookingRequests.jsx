@@ -5,6 +5,7 @@ import { FiArrowLeft, FiClock, FiMapPin, FiCalendar, FiDollarSign, FiX } from 'r
 import toast from 'react-hot-toast';
 import workerBookingService from '../../../../services/workerBookingService'; // Use the main booking service
 import workerService from '../../../../services/workerService';
+import { workerRequestService } from '../../../../services/workerRequestService';
 
 const STATUS_COLORS = {
   pending: 'bg-amber-100 text-amber-700 border-amber-200',
@@ -85,10 +86,24 @@ const WorkerBookingRequests = () => {
   const fetchRequests = async () => {
     try {
       setLoading(true);
-      // Fetch farmer broadcast requests pending for this worker (NEW endpoint)
-      const res = await workerService.getPendingFarmerRequests();
-      const data = res?.data || res || [];
-      setRequests(Array.isArray(data) ? data : []);
+      // Fetch both broadcast farmer requests AND direct worker booking requests
+      const [broadcastRes, singleRes] = await Promise.all([
+        workerService.getPendingFarmerRequests().catch(() => ({ success: false, data: [] })),
+        workerRequestService.getIncomingRequests().catch(() => ({ success: false, data: [] }))
+      ]);
+
+      const broadcastData = broadcastRes?.data || broadcastRes || [];
+      const singleData = singleRes?.data || singleRes || [];
+
+      const map = new Map();
+      (Array.isArray(broadcastData) ? broadcastData : []).forEach(r => {
+        if (r && r._id) map.set(r._id.toString(), r);
+      });
+      (Array.isArray(singleData) ? singleData : []).forEach(r => {
+        if (r && r._id && !map.has(r._id.toString())) map.set(r._id.toString(), r);
+      });
+
+      setRequests(Array.from(map.values()));
     } catch (err) {
       toast.error('Failed to load requests');
     } finally {

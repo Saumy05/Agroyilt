@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import {
   FiArrowLeft, FiMapPin, FiCalendar, FiClock,
-  FiUsers, FiTag, FiFileText, FiDollarSign, FiInfo, FiCheckCircle
+  FiUsers, FiTag, FiFileText, FiDollarSign, FiInfo, FiCheckCircle, FiUser
 } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import workerBookingService from '../../../../services/workerBookingService';
@@ -25,6 +25,11 @@ const COMMON_SKILLS = [
 
 const WorkerRequestForm = () => {
   const navigate = useNavigate();
+  const { id } = useParams();
+  const location = useLocation();
+  const targetedWorker = location.state?.worker;
+  const targetedWorkerId = id || targetedWorker?._id;
+
   const [loading, setLoading] = useState(false);
   const [skillInput, setSkillInput] = useState('');
 
@@ -32,10 +37,10 @@ const WorkerRequestForm = () => {
 
   const [formData, setFormData] = useState({
     bookingType:     'HOURLY', // 'HOURLY' | 'DAILY'
-    workCategory:    '',
-    workTitle:       '',
+    workCategory:    targetedWorker?.skills?.[0] || targetedWorker?.primaryService || '',
+    workTitle:       targetedWorker ? `Hire ${targetedWorker.name}` : '',
     workDescription: '',
-    requiredSkills:  [],   // array
+    requiredSkills:  targetedWorker?.skills?.length ? targetedWorker.skills : [],
     requiredWorkers: '1',
     // HOURLY fields
     scheduledDate:   '',
@@ -45,8 +50,8 @@ const WorkerRequestForm = () => {
     startDate:       '',
     numberOfDays:    '1',
     // Rates
-    minRate:         '',
-    maxRate:         '',
+    minRate:         targetedWorker?.dailyRate || targetedWorker?.hourlyRate || '',
+    maxRate:         targetedWorker?.dailyRate || targetedWorker?.hourlyRate || '',
     // Location fields
     addressLine1:    '',
     city:            '',
@@ -55,6 +60,20 @@ const WorkerRequestForm = () => {
     lng:             '',
     additionalInstructions: ''
   });
+
+  useEffect(() => {
+    if (targetedWorker) {
+      setFormData(prev => ({
+        ...prev,
+        requiredWorkers: '1',
+        workCategory: targetedWorker.skills?.[0] || targetedWorker.primaryService || prev.workCategory,
+        workTitle: prev.workTitle || `Hire ${targetedWorker.name}`,
+        requiredSkills: targetedWorker.skills?.length ? targetedWorker.skills : prev.requiredSkills,
+        minRate: targetedWorker.dailyRate || targetedWorker.hourlyRate || prev.minRate,
+        maxRate: targetedWorker.dailyRate || targetedWorker.hourlyRate || prev.maxRate,
+      }));
+    }
+  }, [targetedWorker]);
 
   const [errors, setErrors] = useState({});
 
@@ -176,6 +195,10 @@ const WorkerRequestForm = () => {
         payload.maxRate       = maxR;
       }
 
+      if (targetedWorkerId) {
+        payload.targetedWorkerId = targetedWorkerId;
+      }
+
       await workerBookingService.createFarmerRequest(payload);
       toast.success('Request submitted! Finding workers near you...');
       navigate('/user/my-worker-requests', { replace: true });
@@ -216,11 +239,33 @@ const WorkerRequestForm = () => {
       <div className="max-w-xl mx-auto p-5">
         <form onSubmit={handleSubmit} className="space-y-5">
 
+          {/* Targeted Worker Hiring Banner */}
+          {targetedWorker && (
+            <div className="bg-gradient-to-r from-emerald-600 to-teal-700 text-white rounded-2xl p-4 flex items-center justify-between shadow-md">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center font-black text-lg">
+                  {targetedWorker.name?.[0]?.toUpperCase() || <FiUser />}
+                </div>
+                <div>
+                  <h4 className="font-black text-sm">Hiring {targetedWorker.name}</h4>
+                  <p className="text-[11px] text-emerald-100">
+                    {targetedWorker.skills?.join(', ') || 'Agricultural Worker'} • {targetedWorker.address?.city || 'Verified'}
+                  </p>
+                </div>
+              </div>
+              <span className="text-[10px] bg-white/20 px-2.5 py-1 rounded-full font-bold">
+                Direct Hire
+              </span>
+            </div>
+          )}
+
           {/* Info note */}
           <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 flex gap-3 items-start">
             <FiInfo size={16} className="text-blue-500 mt-0.5 shrink-0" />
             <p className="text-xs text-blue-700 leading-relaxed">
-              Fill in your requirements below. Based on the number of workers needed, the system will automatically match independent workers or a team — you don't choose workers manually.
+              {targetedWorker
+                ? `You are sending a direct booking request to ${targetedWorker.name}. If they are unavailable, the request will automatically help you find another matching worker.`
+                : "Fill in your requirements below. Based on the number of workers needed, the system will automatically match independent workers or a team."}
             </p>
           </div>
 

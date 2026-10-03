@@ -186,6 +186,9 @@ exports.createSingleRequest = async (req, res) => {
       location:       location || {},
       workerRate,
       farmerOfferedRate: Number(farmerOfferedRate),
+      status:         'pending',
+      requestType:    'single_worker',
+      dispatchedTo:   [{ workerId, status: 'pending' }],
       expiresAt,
       negotiation: [{
         by: 'farmer',

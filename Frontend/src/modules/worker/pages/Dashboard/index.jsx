@@ -88,8 +88,7 @@ const Dashboard = () => {
   const socket = useSocket();
 
   const [alertJobId, setAlertJobId] = useState(null);
-
-
+  const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
 
   // Fetch Dashboard Data Function
   const fetchDashboardData = async () => {
@@ -103,6 +102,9 @@ const Dashboard = () => {
         workerService.getPendingFarmerRequests().catch(() => ({ success: false, data: [] })),
         workerRequestService.getMemberInvites().catch(() => ({ success: false, data: [] }))
       ]);
+
+      const pendingCount = (pendingRequestsRes?.data?.length || 0) + (memberInvitesRes?.data?.length || 0);
+      setPendingRequestsCount(pendingCount);
 
       if (profileRes.success) {
         const profile = profileRes.worker;
@@ -128,9 +130,9 @@ const Dashboard = () => {
         setStats(prev => ({
           ...prev,
           totalEarnings: totalEarnings || 0,
-          thisMonthEarnings: totalEarnings || 0, // Assuming total is this month for now or total
-          pendingJobs: activeJobs || 0, // Using active for pending display for now, or map specifically if needed
-          acceptedJobs: activeJobs || 0, // Overlap in meaning, simplify
+          thisMonthEarnings: totalEarnings || 0,
+          pendingJobs: pendingCount > 0 ? pendingCount : (activeJobs || 0),
+          acceptedJobs: activeJobs || 0,
           completedJobs: completedJobs || 0,
           rating: rating || 0
         }));
@@ -460,7 +462,7 @@ const Dashboard = () => {
 
             {/* Card 2: Pending Jobs - Light Blue Gradient */}
             <div
-              onClick={() => navigate('/worker/jobs')}
+              onClick={() => navigate(pendingRequestsCount > 0 ? '/worker/booking-requests' : '/worker/jobs')}
               className="rounded-xl p-3 relative overflow-hidden cursor-pointer active:scale-95 transition-transform shadow-sm"
               style={{
                 background: 'linear-gradient(135deg, #406788 0%, #304a63 100%)',
@@ -539,6 +541,44 @@ const Dashboard = () => {
                   <FiCheckCircle className="w-3 h-3 text-emerald-400" />
                   <span className="text-[10px] font-medium">Done</span>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Farmer Work Requests Card (For All Workers) */}
+        <div className="px-4 mt-1.5">
+          <div 
+            onClick={() => navigate('/worker/booking-requests')}
+            className="relative overflow-hidden rounded-xl p-3 cursor-pointer shadow-sm active:scale-[0.98] transition-transform duration-200"
+            style={{
+              background: 'linear-gradient(135deg, #047857 0%, #065F46 100%)',
+              color: '#fff'
+            }}
+          >
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center backdrop-blur-sm shrink-0">
+                  <FiBriefcase size={18} color="#fff" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold truncate">Farmer Work Requests</h3>
+                    {pendingRequestsCount > 0 && (
+                      <span className="bg-amber-400 text-slate-900 text-[10px] font-black px-1.5 py-0.5 rounded-full animate-pulse">
+                        {pendingRequestsCount} NEW
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-emerald-100 text-[11px] font-medium truncate">
+                    {pendingRequestsCount > 0
+                      ? `${pendingRequestsCount} new job request(s) waiting for your quote`
+                      : 'View and quote on incoming farmer requests'}
+                  </p>
+                </div>
+              </div>
+              <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center shrink-0 ml-2">
+                <FiArrowRight size={13} />
               </div>
             </div>
           </div>
