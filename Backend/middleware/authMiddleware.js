@@ -16,7 +16,9 @@ const authenticate = async (req, res, next) => {
       token = req.headers.authorization.split(' ')[1];
     } else if (req.cookies && req.cookies.accessToken) {
       token = req.cookies.accessToken;
-    } else if (req.query && req.query.token) {
+    } else if (req.query && req.query.token && req.method === 'GET') {
+      // Query-string tokens exist only for browser download links (e.g. invoices). They end up in logs and
+      // referrers, so they are never accepted for state-changing requests.
       token = req.query.token;
     }
 
@@ -46,6 +48,9 @@ const authenticate = async (req, res, next) => {
     switch (decoded.role) {
       case USER_ROLES.USER:
         user = await User.findById(decoded.userId).select('-password');
+        if (user && user.isActive === false) {
+          return res.status(403).json({ success: false, message: 'Your account has been deactivated. Please contact support.' });
+        }
         break;
       case USER_ROLES.VENDOR:
         user = await Vendor.findById(decoded.userId).select('-password');
@@ -58,6 +63,9 @@ const authenticate = async (req, res, next) => {
         break;
       case USER_ROLES.WORKER:
         user = await Worker.findById(decoded.userId).select('-password');
+        if (user && (user.isActive === false || ['rejected', 'suspended'].includes(user.approvalStatus))) {
+          return res.status(403).json({ success: false, message: 'Your worker account has been suspended or deactivated. Please contact support.' });
+        }
         break;
       case USER_ROLES.ADMIN:
       case 'super_admin':

@@ -99,12 +99,13 @@ const indWorkerAssignmentSchema = new mongoose.Schema(
     /**
      * Top-level assignment lifecycle:
      *   CONFIRMED   - created after successful payment, worker is committed
+     *   COMPLETED   - all work verified and settlement finished (terminal; no further mutation)
      *   CANCELLED   - cancelled by farmer, admin, or system
      *   REPLACED    - worker was replaced (another worker substituted)
      */
     assignmentStatus: {
       type: String,
-      enum: ['CONFIRMED', 'CANCELLED', 'REPLACED'],
+      enum: ['CONFIRMED', 'COMPLETED', 'CANCELLED', 'REPLACED'],
       default: 'CONFIRMED',
       index: true
     },
@@ -378,12 +379,57 @@ const indWorkerAssignmentSchema = new mongoose.Schema(
     decreaseReason: { type: String,  default: null },
 
     // Extension references
-    extensionIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'IndWorkerExtension' }]
+    extensionIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'IndWorkerExtension' }],
+
+    // Number of times the farmer re-issued a visit OTP (capped, see otpUtil.OTP_MAX_REGENERATIONS)
+    visitOtpRegenerations: { type: Number, default: 0 },
+
+    // extensions already applied to this assignment (makes applying them idempotent)
+    appliedExtensionIds: [{ type: mongoose.Schema.Types.ObjectId }],
+
+    // Settlement claim (atomic PENDING/FAILED -> PROCESSING) so a crashed run can be detected/retried
+    settlementClaimedAt: { type: Date, default: null },
+
+    // Late-arrival penalty actually applied (previously written but dropped by strict mode)
+    latePenalty: {
+      applied:     { type: Boolean, default: false },
+      amount:      { type: Number, default: 0 },
+      minutesLate: { type: Number, default: 0 },
+      ruleType:    { type: String, default: null },
+      appliedAt:   { type: Date, default: null }
+    },
+
+    cancelledBy: { type: String, default: null },
+
+    // Audit trail of lifecycle events (who/what/when) — append-only
+    auditLog: [{
+      at:     { type: Date, default: Date.now },
+      actor:  { type: String },          // 'farmer' | 'worker' | 'system' | 'admin'
+      actorId:{ type: mongoose.Schema.Types.ObjectId, default: null },
+      event:  { type: String },
+      meta:   { type: mongoose.Schema.Types.Mixed, default: null }
+    }]
   },
   {
     timestamps: true
   }
 );
+
+// ── Default-deny serialization of secrets ───────────────────────────────────
+// Plaintext OTPs are kept only so the FARMER can be shown the code. They (and their hashes) must never
+// leave through a generic res.json(assignment); code that deliberately needs them reads the fields
+// explicitly or serializes with `toJSON({ includeOtp: true })`.
+const OTP_SECRET_FIELDS = ['visitOtpCode', 'visitOtpHash', 'completionOtpCode', 'completionOtpHash'];
+const stripOtpSecrets = (_doc, ret, options) => {
+  if (options && options.includeOtp) return ret;
+  OTP_SECRET_FIELDS.forEach(k => { delete ret[k]; });
+  if (Array.isArray(ret.dailyLogs)) {
+    ret.dailyLogs.forEach(l => { if (l) OTP_SECRET_FIELDS.forEach(k => { delete l[k]; }); });
+  }
+  return ret;
+};
+indWorkerAssignmentSchema.set('toJSON', { transform: stripOtpSecrets });
+indWorkerAssignmentSchema.set('toObject', { transform: stripOtpSecrets });
 
 // Indexes
 indWorkerAssignmentSchema.index({ parentRequestId: 1, assignmentStatus: 1 });

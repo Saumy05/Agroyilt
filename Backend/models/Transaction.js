@@ -66,6 +66,8 @@ const transactionSchema = new mongoose.Schema({
 
 // Index for faster queries
 transactionSchema.index({ userId: 1, createdAt: -1 });
+// at-most-once passbook rows for ledger-driven credits/refunds (see services/ledgerService.js)
+transactionSchema.index({ 'metadata.idempotencyKey': 1 }, { unique: true, partialFilterExpression: { 'metadata.idempotencyKey': { $type: 'string' } } });
 transactionSchema.index({ vendorId: 1, createdAt: -1 });
 transactionSchema.index({ workerId: 1, createdAt: -1 });
 transactionSchema.index({ bookingId: 1 });

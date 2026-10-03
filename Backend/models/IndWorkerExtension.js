@@ -123,12 +123,24 @@ const indWorkerExtensionSchema = new mongoose.Schema({
   // ── Payment tracking ─────────────────────────────────────────────────────────
   paymentStatus: {
     type:    String,
-    enum:    ['not_started', 'pending', 'success', 'failed'],
+    enum:    ['not_started', 'pending', 'processing', 'success', 'failed'],
     default: 'not_started',
     index:   true
   },
   razorpayOrderId:  { type: String, default: null },
   razorpayPaymentId:{ type: String, default: null },
+  // every order created for this extension, with its amount (payments on any of them are matched / refunded)
+  paymentOrders: [{
+    orderId:     { type: String, required: true },
+    amountPaise: { type: Number, required: true },
+    createdAt:   { type: Date, default: Date.now }
+  }],
+  // 'cash' extensions of cash bookings have no online step: they apply as soon as the workers have answered
+  paymentMode: { type: String, enum: ['online', 'cash'], default: 'online' },
+  confirmClaimedAt: { type: Date, default: null },
+  paidAt: { type: Date, default: null },
+  // true while REQUESTED / WORKER_EVALUATION / PAYMENT_PENDING — backs the "one open extension per booking" index
+  isActive: { type: Boolean, default: true },
 
   // ── Idempotency ──────────────────────────────────────────────────────────────
   // Unique key set at creation to prevent duplicate extension creation.
@@ -145,5 +157,8 @@ indWorkerExtensionSchema.index({ 'workerExtensions.workerId': 1, status: 1 });
 indWorkerExtensionSchema.index({ 'workerExtensions.assignmentId': 1, status: 1 });
 indWorkerExtensionSchema.index({ expiresAt: 1, status: 1 });  // expiry cron queries
 indWorkerExtensionSchema.index({ razorpayOrderId: 1 });
+indWorkerExtensionSchema.index({ 'paymentOrders.orderId': 1 });
+// at most ONE open extension per booking, enforced by the database (the old check-then-create could race)
+indWorkerExtensionSchema.index({ parentRequestId: 1 }, { name: 'one_open_extension_per_booking', unique: true, partialFilterExpression: { isActive: true } });
 
 module.exports = mongoose.model('IndWorkerExtension', indWorkerExtensionSchema);

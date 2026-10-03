@@ -26,4 +26,9 @@ const walletSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
+// One wallet per owner. Without this, concurrent first-time upserts silently create several wallets for the same
+// owner and money lands on whichever one a reader happens to pick (see scripts/dedupe-wallets.js to clean existing data,
+// which must be done BEFORE this index can be built on a database that already has duplicates).
+walletSchema.index({ userId: 1, userModel: 1 }, { unique: true });
+
 module.exports = mongoose.model('Wallet', walletSchema);

@@ -9,6 +9,8 @@ const connectDB = async () => {
 
     console.log(`MongoDB Connected: ${conn.connection.host}`);
 
+    // One-time data-safety migration (idempotent): remove the TTL index that hard-deleted live worker bookings.
+    require('../models/WorkerBookingRequest').dropLegacyTtlIndex();
 
   } catch (error) {
     console.error('MongoDB connection error:', error.message);

@@ -20,7 +20,7 @@ const workerPenaltySchema = new mongoose.Schema({
   
   penaltyType: {
     type: String,
-    enum: ['cancellation', 'no_show', 'other'],
+    enum: ['cancellation', 'no_show', 'late_arrival', 'other'],
     required: true
   },
   penaltyAmount: {

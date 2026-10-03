@@ -126,6 +126,7 @@ const notificationSchema = new mongoose.Schema({
       'worker_request_slot_lost',
       'worker_request_expired',
       'worker_decreased',
+      'worker_withdrew',
       'worker_decrease_refund',
       'early_decrease_refund',
       'team_extra_workers_requested',

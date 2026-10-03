@@ -164,6 +164,10 @@ const workerBookingRequestSchema = new mongoose.Schema({
     status:      { type: String, enum: ['pending', 'accepted', 'selected', 'rejected', 'expired'], default: 'pending' }
   }],
 
+  // set when this request was created by "add extra workers" on another (confirmed) booking: the add-on is its OWN
+  // request, so it goes through the normal accept → select → pay → confirm flow (consent, payment, idempotency)
+  addOnOfRequestId: { type: mongoose.Schema.Types.ObjectId, ref: 'WorkerBookingRequest', default: null, index: true },
+
   // Team Leader ID if this is handled via Team Leader flow
   teamLeaderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Worker', default: null, index: true },
 
@@ -204,7 +208,7 @@ const workerBookingRequestSchema = new mongoose.Schema({
   // ════════════════════════════════════════════════════════════════════════
   paymentStatus: {
     type: String,
-    enum: ['not_started', 'pending', 'success', 'failed', 'cash_pending'],
+    enum: ['not_started', 'pending', 'processing', 'success', 'failed', 'cash_pending'],
     default: 'not_started'
   },
   paymentMethod: {
@@ -214,6 +218,25 @@ const workerBookingRequestSchema = new mongoose.Schema({
   },
   razorpayOrderId:   { type: String, default: null },
   razorpayPaymentId: { type: String, default: null },
+  // Every order ever created for this request, with the amount it was created for. A payment on ANY of
+  // them is matched (never lost), and its amount must equal the snapshot it was priced from.
+  paymentOrders: [{
+    orderId:     { type: String, required: true },
+    amountPaise: { type: Number, required: true },
+    createdAt:   { type: Date, default: Date.now }
+  }],
+  // Set while a confirm (verify / cash) is running: the atomic claim that makes confirmation single-shot.
+  confirmClaimedAt: { type: Date, default: null },
+  confirmedAt:      { type: Date, default: null },
+  cancelledAt:      { type: Date, default: null },
+  cancelledBy:      { type: String, default: null },
+  auditLog: [{
+    at:      { type: Date, default: Date.now },
+    actor:   { type: String },
+    actorId: { type: mongoose.Schema.Types.ObjectId, default: null },
+    event:   { type: String },
+    meta:    { type: mongoose.Schema.Types.Mixed, default: null }
+  }],
   qrPayment: {
     refId: { type: String, default: null },
     amount: { type: Number, default: null },
@@ -304,11 +327,29 @@ workerBookingRequestSchema.index({ workerId: 1, scheduledDate: 1, status: 1 });
 workerBookingRequestSchema.index({ bookingMode: 1, status: 1 });
 workerBookingRequestSchema.index({ bookingType: 1, status: 1 });
 workerBookingRequestSchema.index({ startDate: 1, endDate: 1, status: 1 });  // DAILY conflict detection
-workerBookingRequestSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 }); // TTL
+// NOT a TTL index: a TTL here hard-deleted confirmed / in-progress / multi-day bookings as soon as the
+// 24h acceptance window passed. Expiry is a state transition (workerBookingExpiryService), never a delete.
+workerBookingRequestSchema.index({ expiresAt: 1 });
+workerBookingRequestSchema.index({ 'paymentOrders.orderId': 1 });
 // Prevent duplicate active broadcast from same farmer for same date+time
 workerBookingRequestSchema.index(
   { farmerId: 1, scheduledDate: 1, startTime: 1, requestType: 1 },
   { partialFilterExpression: { status: 'pending', requestType: 'independent_broadcast' } }
 );
+
+/** One-time migration: drop the legacy TTL index so deployed databases stop deleting live bookings. */
+workerBookingRequestSchema.statics.dropLegacyTtlIndex = async function () {
+  try {
+    const idx = await this.collection.indexes();
+    const ttl = idx.find(i => i.name === 'expiresAt_1' && i.expireAfterSeconds !== undefined);
+    if (ttl) {
+      await this.collection.dropIndex('expiresAt_1');
+      await this.collection.createIndex({ expiresAt: 1 });
+      console.warn('[WorkerBookingRequest] dropped legacy TTL index expiresAt_1');
+    }
+  } catch (err) {
+    if (err && err.codeName !== 'NamespaceNotFound') console.error('[WorkerBookingRequest] TTL index migration failed:', err.message);
+  }
+};
 
 module.exports = mongoose.model('WorkerBookingRequest', workerBookingRequestSchema);
