@@ -17,7 +17,8 @@ const DailyTrackingView = ({
   onDecreaseClick,
   onRequestExtensionClick,
   onAddWorkersClick,
-  onGenerateCompletionOtp
+  onGenerateCompletionOtp,
+  onRegenerateVisitOtp
 }) => {
   const totalDays = Number(trackingData?.numberOfDays) || 1;
   const currentDay = Math.max(1, Math.max(...workers.map(w => w.currentDayIndex || 1)));
@@ -183,15 +184,31 @@ const DailyTrackingView = ({
                   </div>
 
                   {/* Reach OTP Box */}
-                  {(isJourneyStarted || isArrived) && visitOtp && (
+                  {(isJourneyStarted || isArrived) && (visitOtp || w.visitOtpStatus === 'LOCKED') && (
                     <div className="mt-2 p-2.5 bg-purple-50 border border-purple-200 rounded-xl flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <FiKey className="text-purple-600" size={14} />
-                        <span className="text-xs text-purple-900 font-bold">Today’s Reach OTP:</span>
+                        <span className="text-xs text-purple-900 font-bold">
+                          {w.visitOtpStatus === 'LOCKED' ? 'Reach OTP Locked:' : 'Today’s Reach OTP:'}
+                        </span>
                       </div>
-                      <span className="text-base font-black font-mono tracking-widest text-purple-700 bg-white px-2.5 py-0.5 rounded-lg border border-purple-200">
-                        {visitOtp}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        {visitOtp && w.visitOtpStatus !== 'LOCKED' && (
+                          <span className="text-base font-black font-mono tracking-widest text-purple-700 bg-white px-2.5 py-0.5 rounded-lg border border-purple-200">
+                            {visitOtp}
+                          </span>
+                        )}
+                        {onRegenerateVisitOtp && (
+                          <button
+                            type="button"
+                            onClick={() => onRegenerateVisitOtp(w.assignmentId || w.bookingId)}
+                            className="px-2.5 py-1 bg-white hover:bg-purple-100 text-purple-700 text-xs font-bold rounded-lg border border-purple-200 transition-all active:scale-95 shadow-xs"
+                            title="Regenerate Visit OTP"
+                          >
+                            {w.visitOtpStatus === 'LOCKED' ? 'Unlock OTP' : 'New Code'}
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )}
 

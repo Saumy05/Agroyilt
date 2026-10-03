@@ -113,6 +113,7 @@ const BookingTrack = () => {
   const [isAddWorkersModalOpen, setIsAddWorkersModalOpen] = useState(false);
   const [decreaseTargetWorker, setDecreaseTargetWorker] = useState(null);
   const [payingExtensionId, setPayingExtensionId] = useState(null);
+  const [regeneratingVisitOtpId, setRegeneratingVisitOtpId] = useState(null);
   const [redirectCountdown, setRedirectCountdown] = useState(3);
   // leafletLoaded state removed — L is now imported directly from npm
 
@@ -252,6 +253,23 @@ const BookingTrack = () => {
       }
     } catch (err) {
       toastManager.error(err.response?.data?.message || 'Failed to generate Completion OTP');
+    }
+  };
+
+  const handleRegenerateVisitOtp = async (assignmentId) => {
+    try {
+      setRegeneratingVisitOtpId(assignmentId);
+      const res = await workerBookingService.regenerateVisitOtp(id, assignmentId);
+      if (res?.success) {
+        toastManager.success(`New Visit OTP generated: ${res.data?.visitOtp || 'Success'}`);
+        fetchSnapshot(false);
+      } else {
+        toastManager.error(res?.message || 'Failed to regenerate Visit OTP');
+      }
+    } catch (err) {
+      toastManager.error(err.response?.data?.message || 'Failed to regenerate Visit OTP');
+    } finally {
+      setRegeneratingVisitOtpId(null);
     }
   };
 
@@ -415,17 +433,25 @@ const BookingTrack = () => {
       fetchSnapshot(false);
     };
 
-    // Register all socket listeners
+    // Register all socket listeners (unified & legacy)
     socket.on('worker_journey_started', handleJourneyStarted);
+    socket.on('assignment_journey_started', handleJourneyStarted);
     socket.on('worker_location_updated', handleLocationUpdated);
+    socket.on('assignment_location_updated', handleLocationUpdated);
     socket.on('worker_arrived', handleArrived);
+    socket.on('assignment_arrived', handleArrived);
     socket.on('worker_otp_verified', handleOtpVerified);
     socket.on('worker_work_started', handleOtpVerified);
+    socket.on('assignment_visit_otp_verified', handleOtpVerified);
+    socket.on('assignment_work_started', handleOtpVerified);
     socket.on('worker_work_completed', handleWorkCompleted);
+    socket.on('assignment_work_submitted', handleWorkCompleted);
+    socket.on('assignment_day_completed', () => fetchSnapshot(false));
     socket.on('live_location_update', handleLegacyLocation);
     socket.on('booking_completed', handleBookingCompleted);
     socket.on('assignment_completion_otp_verified', handleAssignmentSettled);
     socket.on('assignment_settled', handleAssignmentSettled);
+    socket.on('assignment_cancelled', () => fetchSnapshot(false));
     socket.on('extension_requested', () => fetchSnapshot(false));
     socket.on('extension_status_changed', () => fetchSnapshot(false));
     socket.on('extension_confirmed', () => fetchSnapshot(false));
@@ -438,15 +464,23 @@ const BookingTrack = () => {
       socket.off('connect', onConnect);
       socket.off('disconnect', onDisconnect);
       socket.off('worker_journey_started', handleJourneyStarted);
+      socket.off('assignment_journey_started', handleJourneyStarted);
       socket.off('worker_location_updated', handleLocationUpdated);
+      socket.off('assignment_location_updated', handleLocationUpdated);
       socket.off('worker_arrived', handleArrived);
+      socket.off('assignment_arrived', handleArrived);
       socket.off('worker_otp_verified', handleOtpVerified);
       socket.off('worker_work_started', handleOtpVerified);
+      socket.off('assignment_visit_otp_verified', handleOtpVerified);
+      socket.off('assignment_work_started', handleOtpVerified);
       socket.off('worker_work_completed', handleWorkCompleted);
+      socket.off('assignment_work_submitted', handleWorkCompleted);
+      socket.off('assignment_day_completed');
       socket.off('live_location_update', handleLegacyLocation);
       socket.off('booking_completed', handleBookingCompleted);
       socket.off('assignment_completion_otp_verified', handleAssignmentSettled);
       socket.off('assignment_settled', handleAssignmentSettled);
+      socket.off('assignment_cancelled');
       socket.off('extension_requested');
       socket.off('extension_status_changed');
       socket.off('extension_confirmed');
@@ -1048,6 +1082,7 @@ const BookingTrack = () => {
             onRequestExtensionClick={() => setIsExtensionModalOpen(true)}
             onAddWorkersClick={() => setIsAddWorkersModalOpen(true)}
             onGenerateCompletionOtp={handleGenerateCompletionOtp}
+            onRegenerateVisitOtp={handleRegenerateVisitOtp}
           />
         )}
 
@@ -1188,25 +1223,45 @@ const BookingTrack = () => {
                   </div>
 
                   {/* ── Visit OTP Banner for Farmer ── */}
-                  {worker.visitOtp &&
-                    ['JOURNEY_STARTED', 'ARRIVED'].includes(worker.journeyStatus) &&
+                  {['JOURNEY_STARTED', 'ARRIVED'].includes(worker.journeyStatus) &&
                     worker.visitOtpStatus !== 'VERIFIED' &&
                     !['IN_PROGRESS', 'WORK_SUBMITTED', 'COMPLETED', 'CANCELLED'].includes(worker.journeyStatus) &&
                     !isAllCompleted && (
-                    <div className="mt-4 pt-3 border-t border-slate-100 bg-emerald-50/50 -mx-4 -mb-4 sm:-mx-5 sm:-mb-5 p-4 rounded-b-3xl flex items-center justify-between gap-3">
+                    <div className={`mt-4 pt-3 border-t border-slate-100 ${worker.visitOtpStatus === 'LOCKED' ? 'bg-amber-50/70 border-amber-200' : 'bg-emerald-50/50'} -mx-4 -mb-4 sm:-mx-5 sm:-mb-5 p-4 rounded-b-3xl flex flex-wrap items-center justify-between gap-3`}>
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                        <div className={`w-8 h-8 rounded-xl ${worker.visitOtpStatus === 'LOCKED' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'} flex items-center justify-center shrink-0`}>
                           <FiKey size={16} />
                         </div>
                         <div>
-                          <p className="text-[10px] font-black uppercase tracking-wider text-emerald-800">Visit Verification OTP</p>
-                          <p className="text-xs text-emerald-600 font-medium">Share this code with {worker.workerName?.split(' ')[0]} upon arrival</p>
+                          <p className={`text-[10px] font-black uppercase tracking-wider ${worker.visitOtpStatus === 'LOCKED' ? 'text-amber-800' : 'text-emerald-800'}`}>
+                            {worker.visitOtpStatus === 'LOCKED' ? 'Visit OTP Locked (5 failed attempts)' : 'Visit Verification OTP'}
+                          </p>
+                          <p className={`text-xs ${worker.visitOtpStatus === 'LOCKED' ? 'text-amber-700 font-bold' : 'text-emerald-600 font-medium'}`}>
+                            {worker.visitOtpStatus === 'LOCKED'
+                              ? 'Generate a fresh OTP to unlock your worker'
+                              : `Share this code with ${worker.workerName?.split(' ')[0]} upon arrival`}
+                          </p>
                         </div>
                       </div>
-                      <div className="bg-white px-3.5 py-1.5 rounded-xl border border-emerald-200 shadow-sm">
-                        <span className="font-mono font-black text-lg text-emerald-700 tracking-widest">
-                          {worker.visitOtp}
-                        </span>
+
+                      <div className="flex items-center gap-2">
+                        {worker.visitOtp && worker.visitOtpStatus !== 'LOCKED' && (
+                          <div className="bg-white px-3.5 py-1.5 rounded-xl border border-emerald-200 shadow-sm">
+                            <span className="font-mono font-black text-lg text-emerald-700 tracking-widest">
+                              {worker.visitOtp}
+                            </span>
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleRegenerateVisitOtp(worker.assignmentId || worker.bookingId)}
+                          disabled={regeneratingVisitOtpId === (worker.assignmentId || worker.bookingId)}
+                          className="px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold text-xs rounded-xl shadow-xs transition-all active:scale-95 flex items-center gap-1.5"
+                          title="Generate a fresh OTP code"
+                        >
+                          <FiRefreshCw className={`w-3.5 h-3.5 ${regeneratingVisitOtpId === (worker.assignmentId || worker.bookingId) ? 'animate-spin' : ''}`} />
+                          <span>{worker.visitOtpStatus === 'LOCKED' ? 'Unlock & Re-issue' : 'New Code'}</span>
+                        </button>
                       </div>
                     </div>
                   )}

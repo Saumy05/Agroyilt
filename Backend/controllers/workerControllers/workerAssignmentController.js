@@ -315,11 +315,15 @@ exports.startJourney = async (req, res) => {
     }
     await settlement.syncParentProgress(assignment.parentRequestId);
 
-    emitSafe(`booking_req:${assignment.parentRequestId}`, 'assignment_journey_started', {
-      requestId: assignment.parentRequestId, assignmentId: assignment._id, workerId: assignment.workerId,
-      journeyStatus: 'JOURNEY_STARTED', dayNumber: assignment.bookingType === 'DAILY' ? (assignment.currentDayIndex || 1) : null,
-      serverTimestamp: new Date()
-    });
+    for (const room of [`booking_req:${assignment.parentRequestId}`, `booking_req_${assignment.parentRequestId}`]) {
+      const p = {
+        requestId: assignment.parentRequestId, assignmentId: assignment._id, workerId: assignment.workerId,
+        journeyStatus: 'JOURNEY_STARTED', dayNumber: assignment.bookingType === 'DAILY' ? (assignment.currentDayIndex || 1) : null,
+        serverTimestamp: new Date()
+      };
+      emitSafe(room, 'assignment_journey_started', p);
+      emitSafe(room, 'worker_journey_started', p);
+    }
 
     await notify({
       recipientType: 'user', recipientId: assignment.farmerId, type: 'worker_journey_started',
@@ -369,11 +373,15 @@ exports.markArrived = async (req, res) => {
       );
     }
 
-    emitSafe(`booking_req:${assignment.parentRequestId}`, 'assignment_arrived', {
-      requestId: assignment.parentRequestId, assignmentId: assignment._id, workerId: assignment.workerId,
-      journeyStatus: 'ARRIVED', dayNumber: assignment.bookingType === 'DAILY' ? (assignment.currentDayIndex || 1) : null,
-      serverTimestamp: new Date()
-    });
+    for (const room of [`booking_req:${assignment.parentRequestId}`, `booking_req_${assignment.parentRequestId}`]) {
+      const p = {
+        requestId: assignment.parentRequestId, assignmentId: assignment._id, workerId: assignment.workerId,
+        journeyStatus: 'ARRIVED', dayNumber: assignment.bookingType === 'DAILY' ? (assignment.currentDayIndex || 1) : null,
+        serverTimestamp: new Date()
+      };
+      emitSafe(room, 'assignment_arrived', p);
+      emitSafe(room, 'worker_arrived', p);
+    }
     await notify({
       recipientType: 'user', recipientId: assignment.farmerId, type: 'worker_arrived',
       title: 'Worker has arrived!', message: 'Worker has arrived at your farm. Please provide the Visit OTP to begin work.',
@@ -483,10 +491,15 @@ exports.verifyVisitOtp = async (req, res) => {
     if (!isDaily) await applyLatePenalty(verified);
     await settlement.syncParentProgress(verified.parentRequestId);
 
-    emitSafe(`booking_req:${verified.parentRequestId}`, 'assignment_visit_otp_verified', {
-      requestId: verified.parentRequestId, assignmentId: verified._id, workerId: verified.workerId,
-      ...(isDaily ? { dayNumber: dayIdx } : {}), visitOtpStatus: 'VERIFIED', workStatus: 'IN_PROGRESS', serverTimestamp: new Date()
-    });
+    for (const room of [`booking_req:${verified.parentRequestId}`, `booking_req_${verified.parentRequestId}`]) {
+      const p = {
+        requestId: verified.parentRequestId, assignmentId: verified._id, workerId: verified.workerId,
+        ...(isDaily ? { dayNumber: dayIdx } : {}), visitOtpStatus: 'VERIFIED', workStatus: 'IN_PROGRESS', journeyStatus: 'IN_PROGRESS', serverTimestamp: new Date()
+      };
+      emitSafe(room, 'assignment_visit_otp_verified', p);
+      emitSafe(room, 'worker_otp_verified', p);
+      emitSafe(room, 'worker_work_started', p);
+    }
 
     return res.json({
       success: true,
@@ -579,7 +592,7 @@ exports.verifyCompletionOtp = async (req, res) => {
   try {
     const assignmentId = req.params.id;
     const workerId = req.user._id;
-    const { otp } = req.body || {};
+    const { otp, workPhotos, fileUrl, notes, publicId } = req.body || {};
 
     if (!otp) {
       return res.status(400).json({ success: false, message: 'Completion OTP is required.' });
@@ -616,14 +629,40 @@ exports.verifyCompletionOtp = async (req, res) => {
     }
 
     const now = new Date();
+    const proofUrl = (typeof fileUrl === 'string' && fileUrl.trim())
+      ? fileUrl.trim()
+      : (Array.isArray(workPhotos) && workPhotos.length > 0 && typeof workPhotos[0] === 'string'
+          ? workPhotos[0].trim()
+          : (typeof workPhotos === 'string' && workPhotos.trim() ? workPhotos.trim() : null));
+
+    const verifiedSet = isDaily ? {} : { workCompletedAt: now };
+    if (proofUrl) {
+      verifiedSet.completionProof = {
+        fileUrl: proofUrl,
+        publicId: typeof publicId === 'string' ? publicId : null,
+        notes: typeof notes === 'string' ? notes.slice(0, 1000) : '',
+        uploadedAt: now
+      };
+      if (!isDaily) {
+        verifiedSet.workStatus = 'SUBMITTED';
+        verifiedSet.workSubmittedAt = now;
+      }
+    }
+
     const result = await verifyOtp({
       assignmentId, workerId, kind: 'completion', dayNumber: isDaily ? dayIdx : null, otp,
-      verifiedSet: isDaily ? {} : { workCompletedAt: now }
+      verifiedSet
     });
     if (result.status === 'already') {
       return res.json({ success: true, message: 'Completion already verified.', data: await IndWorkerAssignment.findById(assignmentId) });
     }
     if (result.status !== 'verified') return sendOtpFailure(res, result, 'Completion OTP');
+
+    if (proofUrl && assignment.legacyBookingId) {
+      Booking.updateOne({ _id: assignment.legacyBookingId }, {
+        $set: { workPhotos: Array.isArray(workPhotos) && workPhotos.length > 0 ? workPhotos : [proofUrl] }
+      }).catch(e => console.warn('[Legacy Booking workPhotos warn]:', e.message));
+    }
 
     // ── DAILY: advance the day counter atomically ──
     if (isDaily) {
@@ -695,11 +734,14 @@ const respondCompletion = async (res, assignment, r) => {
     });
     const eventData = {
       requestId: a.parentRequestId, assignmentId: a._id, workerId: a.workerId, completionStatus: 'OTP_VERIFIED',
-      settlementStatus: a.settlementStatus, netEarning: a.netEarning, workedDays: a.workedDays, serverTimestamp: new Date()
+      settlementStatus: a.settlementStatus, netEarning: a.netEarning, workedDays: a.workedDays,
+      completionProof: a.completionProof || null, serverTimestamp: new Date()
     };
-    for (const room of [`booking_req:${a.parentRequestId}`, `booking_req_${a.parentRequestId}`]) {
+    for (const room of [`booking_req:${a.parentRequestId}`, `booking_req_${a.parentRequestId}`, `booking_${a._id}`]) {
       emitSafe(room, 'assignment_completion_otp_verified', eventData);
       emitSafe(room, 'assignment_settled', eventData);
+      emitSafe(room, 'worker_work_completed', eventData);
+      emitSafe(room, 'booking_completed', eventData);
     }
     await notify({
       recipientType: 'worker', recipientId: a.workerId, type: 'assignment_settled', title: 'Payment Credited to Wallet!',

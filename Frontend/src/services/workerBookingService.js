@@ -85,6 +85,16 @@ export const workerBookingService = {
     const response = await api.post(`/users/farmer-worker-request/${requestId}/assignment/${assignmentId}/completion-otp`);
     return response.data;
   },
+
+  generateDailyCompletionOtp: async (requestId, assignmentId, dayNumber) => {
+    const response = await api.post(`/users/farmer-worker-request/${requestId}/assignment/${assignmentId}/daily-completion-otp`, { dayNumber });
+    return response.data;
+  },
+
+  regenerateVisitOtp: async (requestId, assignmentId) => {
+    const response = await api.post(`/users/farmer-worker-request/${requestId}/assignment/${assignmentId}/regenerate-visit-otp`);
+    return response.data;
+  },
   
   processWorkerSettlement: async (bookingId, data) => {
     const response = await api.post(`/booking/${bookingId}/worker-settlement`, data);

@@ -3512,7 +3512,7 @@ exports.generateFarmerCompletionOtp = async (req, res) => {
     const exists = await loadOwnedOpenAssignment(req);
     if (!exists) return res.status(404).json({ success: false, message: 'Assignment not found or no longer open.' });
     if (exists.bookingType === 'DAILY') {
-      return res.status(400).json({ success: false, message: 'Use the daily completion OTP endpoint for DAILY bookings.' });
+      return exports.generateDailyCompletionOtp(req, res);
     }
 
     const otp = issueFreshOtp();
