@@ -813,9 +813,9 @@ const verifyVisit = async (req, res) => {
     }
 
     const expectedOtp = booking.visitOtp || booking.driver_start_otp;
-    const isOtpValid = (expectedOtp && expectedOtp.toString() === otp?.toString()) || otp === '1234' || otp === '0000';
-    if (!isOtpValid) {
-      return res.status(400).json({ success: false, message: 'Invalid OTP' });
+    const submittedOtp = otp ? otp.toString().trim() : '';
+    if (!expectedOtp || !submittedOtp || submittedOtp !== expectedOtp.toString().trim()) {
+      return res.status(400).json({ success: false, message: 'Invalid Visit OTP. Please enter the code from the customer.' });
     }
 
     // Update status
@@ -995,8 +995,10 @@ const collectCash = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Work is not marked as done yet' });
     }
 
-    if (booking.paymentOtp !== otp) {
-      return res.status(400).json({ success: false, message: 'Invalid OTP' });
+    const expectedPayOtp = booking.paymentOtp || booking.customerConfirmationOTP || booking.driver_end_otp;
+    const submittedPayOtp = otp ? otp.toString().trim() : '';
+    if (!expectedPayOtp || !submittedPayOtp || submittedPayOtp !== expectedPayOtp.toString().trim()) {
+      return res.status(400).json({ success: false, message: 'Invalid Payment OTP. Please enter the correct code from the farmer.' });
     }
 
     let grandTotal = 0;
@@ -1352,7 +1354,9 @@ const startMachineryWork = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Booking not found' });
     }
 
-    if (booking.driver_start_otp !== otp) {
+    const expectedStartOtp = booking.driver_start_otp || booking.visitOtp;
+    const submittedStartOtp = otp ? otp.toString().trim() : '';
+    if (!expectedStartOtp || !submittedStartOtp || submittedStartOtp !== expectedStartOtp.toString().trim()) {
       return res.status(400).json({ success: false, message: 'Invalid Start OTP. Please ask farmer for correct OTP.' });
     }
 

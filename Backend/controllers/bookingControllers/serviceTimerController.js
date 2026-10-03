@@ -138,7 +138,8 @@ const broadcastTimerUpdate = (booking, action, extra = {}) => {
         ...commonPayload,
         resumeOtp: (booking.serviceTimer?.status === 'PAUSED')
           ? (booking.serviceTimer?.resumeOtp || booking.resumeOtp || null)
-          : null
+          : null,
+        driver_end_otp: booking.driver_end_otp || booking.customerConfirmationOTP || booking.paymentOtp || null
       };
       io.to(`user_${uId}`).emit('service_timer_updated', farmerPayload);
       io.to(`user:${uId}`).emit('service_timer_updated', farmerPayload);
@@ -206,9 +207,12 @@ const getServiceTimerStatus = async (req, res) => {
         lastPausedBy: booking.serviceTimer?.lastPausedBy || null,
         lastPauseReason: booking.serviceTimer?.lastPauseReason || null,
         lastPauseNotes: booking.serviceTimer?.lastPauseNotes || null,
-        // Anti-fraud: only farmer and admin can see the secret resumeOtp
+        // Anti-fraud: only farmer and admin can see the secret resumeOtp and driver_end_otp
         resumeOtp: (role === 'farmer' || role === 'admin')
           ? (booking.serviceTimer?.resumeOtp || booking.resumeOtp || null)
+          : null,
+        driver_end_otp: (role === 'farmer' || role === 'admin')
+          ? (booking.driver_end_otp || booking.customerConfirmationOTP || booking.paymentOtp || null)
           : null,
         requiresResumeOtp: Boolean(status === 'PAUSED'),
         billingSummary: booking.serviceTimer?.billingSummary || null,
@@ -269,7 +273,10 @@ const startServiceTimer = async (req, res) => {
       booking.startedAt = now;
     }
     if (!booking.driver_end_otp) {
-      booking.driver_end_otp = Math.floor(1000 + Math.random() * 9000).toString();
+      const generatedOtp = Math.floor(1000 + Math.random() * 9000).toString();
+      booking.driver_end_otp = generatedOtp;
+      if (!booking.customerConfirmationOTP) booking.customerConfirmationOTP = generatedOtp;
+      if (!booking.paymentOtp) booking.paymentOtp = generatedOtp;
     }
 
     // Log action
@@ -432,8 +439,7 @@ const resumeServiceTimer = async (req, res) => {
         });
       }
       const submittedOtp = otp.toString().trim();
-      const isValid = (expectedOtp && submittedOtp === expectedOtp.toString().trim()) || submittedOtp === '1234' || submittedOtp === '0000';
-      if (!isValid) {
+      if (!expectedOtp || submittedOtp !== expectedOtp.toString().trim()) {
         return res.status(400).json({
           success: false,
           message: 'Invalid Resume OTP. Please enter the correct 4-digit code shown on the farmer’s screen.'
@@ -488,7 +494,7 @@ const endServiceTimer = async (req, res) => {
     const { id } = req.params;
     const { isPartial = false, reason = '', end_otp = null } = req.body;
 
-    const booking = await Booking.findById(id).select('+driver_end_otp');
+    const booking = await Booking.findById(id).select('+driver_end_otp +paymentOtp');
     if (!booking) {
       return res.status(404).json({ success: false, message: 'Booking not found' });
     }
@@ -498,10 +504,20 @@ const endServiceTimer = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Not authorized' });
     }
 
-    // Verify OTP if vendor ends and driver_end_otp is set
-    if (role === 'vendor' && booking.driver_end_otp && end_otp) {
-      if (booking.driver_end_otp !== end_otp && end_otp !== '1234') {
-        return res.status(400).json({ success: false, message: 'Invalid End OTP provided by farmer' });
+    // Strict End OTP verification for vendor/operator
+    if (role === 'vendor') {
+      const expectedEndOtp = booking.driver_end_otp || booking.customerConfirmationOTP || booking.paymentOtp;
+      if (!expectedEndOtp) {
+        return res.status(400).json({
+          success: false,
+          message: 'No Completion OTP was found for this booking. Please check with the farmer.'
+        });
+      }
+      if (!end_otp || end_otp.toString().trim() !== expectedEndOtp.toString().trim()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid Completion OTP. Please enter the exact 4-digit code shown on the farmer’s screen.'
+        });
       }
     }
 

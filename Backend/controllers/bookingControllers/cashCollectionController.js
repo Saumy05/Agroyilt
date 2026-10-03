@@ -152,12 +152,22 @@ exports.confirmCashCollection = async (req, res) => {
     }
 
     // OTP Verification: check customerConfirmationOTP, paymentOtp, or driver_end_otp
-    const isPlanBenefitNoExtras = booking.paymentMethod === 'plan_benefit' && otp === '0000';
+    const isPlanBenefitNoExtras = booking.paymentMethod === 'plan_benefit' && (!booking.userPayableAmount || booking.userPayableAmount === 0);
     const validOtp = booking.customerConfirmationOTP || booking.paymentOtp || booking.driver_end_otp;
 
-    if (!isPlanBenefitNoExtras && validOtp) {
-      if (otp !== validOtp && otp !== '0000' && otp !== '1234') {
-        return res.status(400).json({ success: false, message: 'Invalid OTP. Please enter the 4-digit code provided by the customer.' });
+    if (!isPlanBenefitNoExtras) {
+      if (!validOtp) {
+        return res.status(400).json({
+          success: false,
+          message: 'No Payment Confirmation OTP found for this booking. Please generate OTP first.'
+        });
+      }
+      const submittedOtp = otp ? otp.toString().trim() : '';
+      if (!submittedOtp || submittedOtp !== validOtp.toString().trim()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid OTP. Please enter the exact 4-digit code provided by the customer.'
+        });
       }
     }
 

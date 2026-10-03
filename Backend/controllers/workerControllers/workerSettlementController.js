@@ -32,8 +32,10 @@ exports.processWorkerSettlement = async (req, res) => {
       return res.status(409).json({ success: false, message: 'Settlement already completed for this booking.' });
     }
 
-    if (booking.customerConfirmationOTP !== otp) {
-      return res.status(400).json({ success: false, message: 'Invalid OTP provided.' });
+    const expectedOtp = booking.customerConfirmationOTP || booking.paymentOtp || booking.driver_end_otp;
+    const submittedOtp = otp ? otp.toString().trim() : '';
+    if (!expectedOtp || !submittedOtp || submittedOtp !== expectedOtp.toString().trim()) {
+      return res.status(400).json({ success: false, message: 'Invalid OTP provided. Please enter the code from the customer.' });
     }
 
     const settings = await getWorkerFinancialSettings();

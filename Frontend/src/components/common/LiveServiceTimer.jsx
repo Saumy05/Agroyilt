@@ -379,16 +379,24 @@ export const LiveServiceTimer = ({
 
   const handleConfirmEnd = async () => {
     try {
+      if (role === 'vendor') {
+        const cleanOtp = (endOtp || '').toString().trim();
+        if (!cleanOtp || cleanOtp.length !== 4) {
+          toastManager.error('Please enter the 4-digit Completion OTP from the farmer');
+          return;
+        }
+      }
       setLoadingAction(true);
       const res = await serviceTimerService.end(bookingId, {
         isPartial: isPartialEnd,
         reason: partialReasonText || (isPartialEnd ? 'Breakdown partial finish' : 'Completed'),
-        end_otp: role === 'vendor' ? endOtp : null
+        end_otp: role === 'vendor' ? endOtp.toString().trim() : null
       });
       if (res?.success) {
         setShowEndModal(false);
+        setEndOtp('');
         toastManager.success(isPartialEnd ? 'Ended with partial bill' : 'Service completed successfully!');
-        onStatusChange();
+        if (onStatusChange) onStatusChange();
       }
     } catch (err) {
       toastManager.error(err.response?.data?.message || 'Failed to end service');
@@ -595,6 +603,24 @@ export const LiveServiceTimer = ({
             <span className="text-sm font-black text-emerald-900">₹{estimatedTotal}</span>
           </div>
         </div>
+
+        {/* Farmer Completion OTP Card - anti-fraud guarantee */}
+        {role === 'farmer' && ['RUNNING', 'PAUSED'].includes(timerData.status) && (timerData.driver_end_otp || booking?.driver_end_otp) && (
+          <div className="bg-gradient-to-r from-teal-700 via-emerald-700 to-green-700 rounded-2xl p-3.5 text-white shadow-md flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center shrink-0">
+                <FiKey className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <h5 className="font-black text-xs uppercase tracking-wider">Service Completion OTP (समाप्ति ओटीपी)</h5>
+                <p className="text-[10px] text-teal-100">Share with operator ONLY when work is finished</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1 font-mono font-black text-xl tracking-[0.2em] bg-black/25 px-3 py-1.5 rounded-xl border border-white/20 text-emerald-200">
+              {timerData.driver_end_otp || booking?.driver_end_otp}
+            </div>
+          </div>
+        )}
 
         {/* Action Controls for Both Farmer and Vendor */}
         <div className="pt-2">
@@ -821,28 +847,29 @@ export const LiveServiceTimer = ({
               )}
 
               {/* If Vendor is ending, verify End OTP from farmer */}
-              {role === 'vendor' && booking?.driver_end_otp && (
+              {role === 'vendor' && (
                 <div>
                   <label className="text-[11px] font-bold text-gray-700 block mb-1">
-                    Farmer End OTP (किसान का समाप्ति ओटीपी):
+                    Farmer End OTP (किसान का समाप्ति ओटीपी) <span className="text-red-500">*</span>:
                   </label>
                   <input
-                    type="number"
+                    type="text"
+                    maxLength={4}
                     value={endOtp}
-                    onChange={(e) => setEndOtp(e.target.value)}
-                    placeholder="Ask 4-digit code from Farmer"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-center font-mono font-black text-lg tracking-widest focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    onChange={(e) => setEndOtp(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                    placeholder="Enter 4-digit code from Farmer"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-center font-mono font-black text-xl tracking-[0.25em] focus:ring-2 focus:ring-emerald-500 focus:outline-none placeholder:text-sm placeholder:tracking-normal"
                   />
-                  <p className="text-[10px] text-gray-400 mt-1 text-center">
-                    Farmer has this OTP on their booking screen to confirm minutes.
+                  <p className="text-[10px] text-gray-500 mt-1 text-center font-medium">
+                    Farmer must provide the 4-digit code shown on their booking screen to approve bill and completion.
                   </p>
                 </div>
               )}
 
               <button
                 onClick={handleConfirmEnd}
-                disabled={loadingAction}
-                className={`w-full py-4 rounded-2xl font-black text-white shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 text-sm ${
+                disabled={loadingAction || (role === 'vendor' && (!endOtp || endOtp.trim().length !== 4))}
+                className={`w-full py-4 rounded-2xl font-black text-white shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed ${
                   isPartialEnd
                     ? 'bg-gradient-to-r from-red-500 to-orange-600 hover:from-red-600 hover:to-orange-700 shadow-red-200'
                     : 'bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 shadow-emerald-200'

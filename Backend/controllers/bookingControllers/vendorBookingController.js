@@ -1058,10 +1058,11 @@ const verifySelfVisit = async (req, res) => {
 
     if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
     if (booking.status !== BOOKING_STATUS.JOURNEY_STARTED) return res.status(400).json({ success: false, message: 'Journey not started' });
-    const isOtpValid = (booking.visitOtp && booking.visitOtp === otp) ||
-                       (booking.driver_start_otp && booking.driver_start_otp === otp) ||
-                       otp === '0000' || otp === '1234';
-    if (!isOtpValid) return res.status(400).json({ success: false, message: 'Invalid OTP' });
+    const expectedVisitOtp = booking.visitOtp || booking.driver_start_otp;
+    const submittedVisitOtp = otp ? otp.toString().trim() : '';
+    if (!expectedVisitOtp || !submittedVisitOtp || (submittedVisitOtp !== booking.visitOtp?.toString()?.trim() && submittedVisitOtp !== booking.driver_start_otp?.toString()?.trim())) {
+      return res.status(400).json({ success: false, message: 'Invalid Visit OTP. Please enter the correct code from the customer.' });
+    }
 
     booking.status = BOOKING_STATUS.VISITED;
     booking.visitedAt = new Date();
@@ -1395,8 +1396,12 @@ const collectSelfCash = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Work not done yet' });
     }
     const validOtp = booking.paymentOtp || booking.customerConfirmationOTP || booking.driver_end_otp;
-    if (validOtp && validOtp !== otp && otp !== '0000' && otp !== '1234') {
-      return res.status(400).json({ success: false, message: 'Invalid OTP' });
+    if (!validOtp) {
+      return res.status(400).json({ success: false, message: 'No Payment OTP generated. Please request OTP from the customer.' });
+    }
+    const submittedOtp = otp ? otp.toString().trim() : '';
+    if (!submittedOtp || submittedOtp !== validOtp.toString().trim()) {
+      return res.status(400).json({ success: false, message: 'Invalid Payment OTP. Please enter the correct code from the customer.' });
     }
 
     // ── Fetch the VendorBill (single source of truth) ──
@@ -1792,8 +1797,10 @@ const startTrip = async (req, res) => {
     if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
 
     // --- 1. VERIFY OTP ---
-    if (booking.driver_start_otp && booking.driver_start_otp !== driver_start_otp && driver_start_otp !== '1234') {
-      return res.status(400).json({ success: false, message: 'Invalid Start OTP. Please check with the farmer.' });
+    const expectedStartOtp = booking.driver_start_otp || booking.visitOtp;
+    const submittedStartOtp = driver_start_otp ? driver_start_otp.toString().trim() : '';
+    if (!expectedStartOtp || !submittedStartOtp || submittedStartOtp !== expectedStartOtp.toString().trim()) {
+      return res.status(400).json({ success: false, message: 'Invalid Start OTP. Please check the code with the farmer.' });
     }
 
     // --- 2. VALIDATE STATUS BASED ON TYPE ---
@@ -1913,12 +1920,20 @@ const endTrip = async (req, res) => {
     const booking = await Booking.findOne({ _id: id, vendorId }).populate('serviceId');
     if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
 
-    // NEW: VERIFY END OTP before proceeding with billing or completion
+    // VERIFY END OTP before proceeding with billing or completion
     // This ensures the farmer has approved the end of work and quantity
-    if (booking.driver_end_otp && booking.driver_end_otp !== driver_end_otp && driver_end_otp !== '1234' && driver_end_otp !== 1234) {
+    const expectedEndOtp = booking.driver_end_otp || booking.customerConfirmationOTP || booking.paymentOtp;
+    if (!expectedEndOtp) {
+      return res.status(400).json({
+        success: false,
+        message: 'No Completion/End OTP found on this booking. Please check with the farmer.'
+      });
+    }
+    const submittedEndOtp = driver_end_otp ? driver_end_otp.toString().trim() : '';
+    if (!submittedEndOtp || submittedEndOtp !== expectedEndOtp.toString().trim()) {
       return res.status(400).json({ 
         success: false, 
-        message: 'Invalid End OTP. Please verify the code with the farmer.' 
+        message: 'Invalid End OTP. Please verify the 4-digit code with the farmer.' 
       });
     }
 

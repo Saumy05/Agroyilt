@@ -371,7 +371,9 @@ exports.startMachineryWork = async (req, res) => {
     const booking = await Booking.findOne({ _id: bookingId, vendorId }).select('+driver_start_otp');
     if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
 
-    if (booking.driver_start_otp !== otp) {
+    const expectedStartOtp = booking.driver_start_otp || booking.visitOtp;
+    const submittedStartOtp = otp ? otp.toString().trim() : '';
+    if (!expectedStartOtp || !submittedStartOtp || submittedStartOtp !== expectedStartOtp.toString().trim()) {
       return res.status(400).json({ success: false, message: 'Invalid Start OTP from Farmer' });
     }
 
@@ -468,6 +470,8 @@ exports.completeMachineryWork = async (req, res) => {
     if (workUnits) booking.workUnits = workUnits;
     
     booking.driver_end_otp = endOtp;
+    booking.customerConfirmationOTP = endOtp;
+    booking.paymentOtp = endOtp;
     await booking.save();
 
     const { createNotification } = require('../notificationControllers/notificationController');
