@@ -490,7 +490,7 @@ const BillingPage = () => {
                   className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl border border-slate-200 flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer"
                 >
                   <FaRupeeSign className="w-3 h-3 text-orange-500" />
-                  <span>Collect Physical Cash (Send OTP) - ₹{calculations?.finalBillAmount?.toFixed(2)}</span>
+                  <span>Collect Physical Cash (Send OTP) - ₹{Math.ceil(calculations?.finalBillAmount || 0)}</span>
                 </button>
               )}
             </>

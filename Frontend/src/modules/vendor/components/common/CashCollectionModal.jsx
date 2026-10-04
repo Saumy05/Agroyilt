@@ -567,7 +567,20 @@ const CashCollectionModal = ({
                     </div>
                     <div className="flex justify-between items-end">
                       <div>
-                        <p className="text-3xl font-black tracking-tight">₹{finalTotal.toLocaleString()}</p>
+                        {(() => {
+                          const roundedCash = paymentMode === 'cash' ? Math.ceil(finalTotal) : finalTotal;
+                          const cashChange = Number((roundedCash - finalTotal).toFixed(2));
+                          return (
+                            <>
+                              <p className="text-3xl font-black tracking-tight">₹{roundedCash.toLocaleString()}</p>
+                              {cashChange > 0 && (
+                                <p className="text-[11px] text-emerald-400 font-semibold mt-1">
+                                  Bill: ₹{finalTotal.toFixed(2)} (+₹{cashChange.toFixed(2)} change ➔ Customer Wallet)
+                                </p>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                       <div className="text-right">
                         <div className="px-2 py-1 bg-blue-500/20 text-blue-400 text-[10px] font-bold rounded-lg border border-blue-500/30">
@@ -585,9 +598,16 @@ const CashCollectionModal = ({
                   <FiClock className="w-8 h-8 animate-pulse" />
                 </div>
                 <h4 className="font-bold text-gray-900 mb-2">Enter Confirmation Code</h4>
-                <p className="text-xs text-gray-500 mb-8 px-4">
-                  Ask the customer for the 4-digit code sent to their phone to verify the payment of <span className="font-bold text-gray-900">₹{finalTotal.toLocaleString()}</span>.
-                </p>
+                {(() => {
+                  const roundedCash = paymentMode === 'cash' ? Math.ceil(finalTotal) : finalTotal;
+                  const cashChange = Number((roundedCash - finalTotal).toFixed(2));
+                  return (
+                    <p className="text-xs text-gray-500 mb-8 px-4">
+                      Ask the customer for the 4-digit code sent to their phone to verify the payment of <span className="font-bold text-gray-900">₹{roundedCash.toLocaleString()}</span>
+                      {cashChange > 0 ? ` (₹${cashChange.toFixed(2)} change will be credited to customer's wallet)` : ''}.
+                    </p>
+                  );
+                })()}
 
                 <div className="flex gap-3 justify-center mb-8">
                   {[0, 1, 2, 3].map((i) => (

@@ -366,7 +366,10 @@ const settleVendorCash = async (bookingId, { collectorRole, collectorId }) => {
     const bill = await ensureBill(claimed);
     const grandTotal = bill.grandTotal || claimed.finalAmount;
     const advance = getAdvancePaid(claimed);
-    const cashAmount = claimed.balanceDue > 0 ? claimed.balanceDue : round2(Math.max(0, grandTotal - advance));
+    const exactDue = claimed.balanceDue > 0 ? claimed.balanceDue : round2(Math.max(0, grandTotal - advance));
+    // Physical cash is rounded UP to the nearest whole Rupee (Math.ceil) so no fractional paise are needed
+    const cashAmount = Math.ceil(exactDue);
+    const cashChange = round2(cashAmount - exactDue);
     const vendorId = claimed.vendorId;
 
     // Vendor now physically holds `cashAmount`; the platform owes them their earning.
@@ -417,6 +420,41 @@ const settleVendorCash = async (bookingId, { collectorRole, collectorId }) => {
       }
     );
 
+    // If loose paise were rounded up, credit the change back into the farmer's wallet
+    if (cashChange > 0 && claimed.userId) {
+      try {
+        const user = await User.findByIdAndUpdate(
+          claimed.userId,
+          { $inc: { 'wallet.balance': cashChange } },
+          { new: true }
+        ).select('wallet');
+
+        await Transaction.create({
+          userId: claimed.userId,
+          bookingId,
+          type: 'refund',
+          amount: cashChange,
+          status: 'completed',
+          paymentMethod: 'wallet',
+          description: `Cash change ₹${cashChange.toFixed(2)} from booking #${claimed.bookingNumber} added to wallet`,
+          balanceAfter: user?.wallet?.balance
+        });
+
+        const { createNotification } = require('../controllers/notificationControllers/notificationController');
+        await createNotification({
+          userId: claimed.userId,
+          type: 'wallet_credited',
+          title: 'Cash Change Added to Wallet',
+          message: `₹${cashChange.toFixed(2)} change from your cash payment was credited to your AgroYilt Wallet!`,
+          relatedId: claimed._id,
+          relatedType: 'booking',
+          pushData: { type: 'wallet_credited', amount: cashChange }
+        });
+      } catch (notifErr) {
+        console.warn('[settleVendorCash] Wallet credit/notification error:', notifErr.message);
+      }
+    }
+
     await Transaction.create({
       vendorId,
       userId: claimed.userId,
@@ -425,8 +463,8 @@ const settleVendorCash = async (bookingId, { collectorRole, collectorId }) => {
       amount: cashAmount,
       status: 'completed',
       paymentMethod: 'cash',
-      description: `Cash ₹${cashAmount} collected for booking #${claimed.bookingNumber}. Dues increased.`,
-      metadata: { type: 'dues_increase', collectedBy: collectorRole, billId: bill._id.toString(), grandTotal, vendorEarning }
+      description: `Cash ₹${cashAmount} collected for booking #${claimed.bookingNumber}${cashChange > 0 ? ` (includes ₹${cashChange} customer wallet change)` : ''}. Dues increased.`,
+      metadata: { type: 'dues_increase', collectedBy: collectorRole, billId: bill._id.toString(), grandTotal, vendorEarning, cashChange }
     });
     if (vendorEarning > 0) {
       await Transaction.create({

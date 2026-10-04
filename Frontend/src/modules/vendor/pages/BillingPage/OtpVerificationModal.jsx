@@ -89,15 +89,31 @@ const OtpVerificationModal = ({ isOpen, onClose, onVerify, loading, amount }) =>
           </div>
 
           {/* Amount Badge */}
-          {amount !== undefined && amount !== null && (
-            <div className="bg-emerald-50/80 border-b border-emerald-100 px-6 py-2.5 flex items-center justify-between">
-              <span className="text-xs text-emerald-800 font-bold">Cash to Collect:</span>
-              <span className="text-sm font-black text-emerald-950 flex items-center">
-                <FaRupeeSign className="w-3 h-3 mr-0.5 text-emerald-700" />
-                {Number(amount).toFixed(2)}
-              </span>
-            </div>
-          )}
+          {amount !== undefined && amount !== null && (() => {
+            const rawAmount = Number(amount);
+            const cashToCollect = Math.ceil(rawAmount);
+            const walletChange = Number((cashToCollect - rawAmount).toFixed(2));
+
+            return (
+              <div className="bg-emerald-50/90 border-b border-emerald-100 px-6 py-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-emerald-800 font-bold">Cash to Collect (Rounded):</span>
+                  <span className="text-base font-black text-emerald-950 flex items-center">
+                    <FaRupeeSign className="w-3.5 h-3.5 mr-0.5 text-emerald-700" />
+                    {cashToCollect}
+                  </span>
+                </div>
+                {walletChange > 0 && (
+                  <div className="mt-1 text-[11px] text-emerald-700 font-medium bg-white/80 rounded-lg px-2 py-1 flex items-center justify-between border border-emerald-200/60">
+                    <span>Bill: ₹{rawAmount.toFixed(2)}</span>
+                    <span className="font-bold text-teal-800">
+                      +₹{walletChange.toFixed(2)} change ➔ Customer Wallet
+                    </span>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Body */}
           <div className="px-6 py-6 space-y-5">
