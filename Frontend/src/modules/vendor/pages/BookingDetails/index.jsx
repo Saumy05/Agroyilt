@@ -1040,14 +1040,20 @@ export default function BookingDetails() {
             <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest mb-0.5">TOTAL INVOICE AMOUNT</p>
             <h2 className="text-2xl font-black">₹{finalTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h2>
             <div className="mt-1">
-              <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
-                booking.paymentStatus === 'SUCCESS' || booking.paymentStatus === 'paid' || booking.paymentStatus === 'success' || booking.paymentStatus === 'PAID'
-                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-              }`}>
-                <FiDollarSign className="w-2.5 h-2.5" />
-                <span>Payment: {booking.paymentStatus === 'SUCCESS' || booking.paymentStatus === 'paid' || booking.paymentStatus === 'success' || booking.paymentStatus === 'PAID' ? 'Received (Wallet Credited)' : 'Pending'}</span>
-              </span>
+              {(() => {
+                const pStatus = (booking.paymentStatus || '').toLowerCase();
+                const isPaid = ['success', 'paid', 'collected_by_vendor', 'collected_by_worker'].includes(pStatus) || Boolean(booking.cashCollected);
+                return (
+                  <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                    isPaid
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  }`}>
+                    <FiDollarSign className="w-2.5 h-2.5" />
+                    <span>Payment: {isPaid ? (pStatus === 'collected_by_vendor' || booking.cashCollected ? 'Received (Cash Collected)' : 'Received (Verified)') : 'Pending'}</span>
+                  </span>
+                );
+              })()}
             </div>
             {isPlanBenefit && (
               <span className="inline-block mt-1 bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase">

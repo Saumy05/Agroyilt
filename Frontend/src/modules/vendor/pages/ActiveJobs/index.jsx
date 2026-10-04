@@ -209,6 +209,9 @@ const ActiveJobs = memo(() => {
           price: Number(rawEarnings).toFixed(2),
           status: job.status,
           paymentStatus: job.paymentStatus,
+          cashCollected: job.cashCollected ?? job._raw?.cashCollected,
+          paymentMethod: job.paymentMethod ?? job._raw?.paymentMethod,
+          finalSettlementStatus: job.finalSettlementStatus,
           assignedTo: job.workerId ? { name: job.workerId.name } : job.assignedAt ? { name: 'You (Self)' } : null,
           timeSlot: {
             date: job.scheduledDate
@@ -436,7 +439,13 @@ const ActiveJobs = memo(() => {
             {filteredJobs.map((job) => {
               const statusConfig = getStatusConfig(job.status);
               const durationLabel = getDurationLabel(job);
-              const isPaid = ['SUCCESS', 'PAID', 'paid', 'success'].includes(job.paymentStatus);
+              const pStatus = (job.paymentStatus || '').toLowerCase();
+              const isPaid =
+                ['success', 'paid', 'collected_by_vendor', 'collected_by_worker'].includes(pStatus) ||
+                Boolean(job.cashCollected) ||
+                Boolean(job._raw?.cashCollected) ||
+                job.paymentMethod === 'plan_benefit' ||
+                job._raw?.paymentMethod === 'plan_benefit';
               const isCompleted = job.status?.toUpperCase() === 'COMPLETED';
 
               return (
@@ -558,7 +567,9 @@ const ActiveJobs = memo(() => {
                             <span
                               className={`w-1.5 h-1.5 rounded-full ${isPaid ? 'bg-emerald-500' : 'bg-amber-500'}`}
                             />
-                            {isPaid ? 'Payment Received' : 'Payment Pending'}
+                            {isPaid
+                              ? (pStatus === 'collected_by_vendor' || job.cashCollected ? 'Cash Collected' : 'Payment Received')
+                              : 'Payment Pending'}
                           </span>
                         </div>
 
