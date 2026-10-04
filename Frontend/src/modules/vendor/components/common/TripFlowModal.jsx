@@ -320,7 +320,7 @@ const TripFlowModal = ({ isOpen, onClose, mode = 'start', onSubmit, rentalType, 
                                         style={{ background: themeColor }}>
                                         {uploading
                                             ? <><FiLoader className="w-4 h-4 animate-spin" /> {photoFile ? 'Uploading...' : 'Processing...'}</>
-                                            : <><FiUpload className="w-4 h-4" /> {skipOtpStep && isStart ? (isMachinery ? 'Confirm & Start Field Service' : (requiresDriver ? 'Confirm & Start Engine' : 'Confirm Handover')) : (!photoPreview ? 'Skip Photo & Continue' : 'Next: Verify OTP')}</>}
+                                            : <>{skipOtpStep && isStart ? (isMachinery ? 'Confirm & Start Field Service' : (requiresDriver ? 'Confirm & Start Engine' : 'Confirm Handover')) : (!photoPreview ? 'Next: Enter Farmer OTP →' : 'Next: Verify OTP →')}</>}
                                     </button>
                                     {/* Safety spacer for mobile BottomNav */}
                                     <div className="h-20 sm:hidden" />

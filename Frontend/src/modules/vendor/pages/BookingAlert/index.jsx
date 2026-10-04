@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { acceptBooking, rejectBooking } from '../../services/bookingService';
 import BookingAlertModal from '../../components/bookings/BookingAlertModal';
@@ -64,8 +64,8 @@ const BookingAlert = () => {
       localStorage.setItem('vendorPendingJobs', JSON.stringify(updatedPending));
 
       window.dispatchEvent(new Event('vendorJobsUpdated'));
-      toastManager.success('Booking accepted & assigned to yourself!');
-      navigate('/vendor/dashboard', { replace: true });
+      toastManager.success('Booking accepted successfully!');
+      navigate(`/vendor/booking/${id}`, { replace: true });
     } catch (error) {
       console.error('Error accepting:', error);
       const status = error?.response?.status;

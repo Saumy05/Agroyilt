@@ -27,9 +27,11 @@ const GlobalBookingAlertModal = () => {
   const handleAcceptAlert = async (bookingId) => {
     // Immediately mark as ignored so local/background polling doesn't keep it open
     window.dispatchEvent(new CustomEvent('removeVendorBooking', { detail: { id: String(bookingId) } }));
+    setActiveAlertBookings([]);
     try {
       await acceptBooking(bookingId);
-      toastManager.success('Booking accepted successfully');
+      toastManager.success('Booking accepted successfully!');
+      navigate(`/vendor/booking/${bookingId}`);
     } catch (error) {
       const status = error?.response?.status;
       if (status === 409) {

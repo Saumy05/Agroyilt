@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { FiMapPin, FiClock, FiDollarSign, FiUser, FiPhone, FiNavigation, FiArrowRight, FiEdit, FiCheckCircle, FiCreditCard, FiX, FiCheck, FiTool, FiXCircle, FiAward, FiPackage, FiAlertCircle, FiDownload, FiAlertTriangle, FiLoader, FiKey, FiCalendar, FiCompass } from 'react-icons/fi';
+import { FiMapPin, FiClock, FiDollarSign, FiUser, FiPhone, FiNavigation, FiArrowRight, FiChevronRight, FiEdit, FiCheckCircle, FiCreditCard, FiX, FiCheck, FiTool, FiXCircle, FiAward, FiPackage, FiAlertCircle, FiDownload, FiAlertTriangle, FiLoader, FiKey, FiCalendar, FiCompass } from 'react-icons/fi';
 import { FaSeedling } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
 import { vendorTheme as themeColors } from '../../../../theme';
@@ -758,6 +758,9 @@ export default function BookingDetails() {
       (booking?.serviceType || booking?.serviceName || '').toLowerCase().includes(w)
     )
   );
+
+  const hasLiveTimer = !['requested', 'pending', 'searching', 'rejected', 'cancelled'].includes(booking?.status?.toLowerCase()) &&
+    !!(booking?.serviceTimer || booking?.equipmentId || booking?.rental_type || ['visited', 'in_progress', 'completed'].includes(booking?.status?.toLowerCase()));
 
   const gstPercentageRate = booking?.gstPercentage !== undefined && booking?.gstPercentage !== null
     ? (Number(booking.gstPercentage) / 100)
@@ -1579,25 +1582,50 @@ export default function BookingDetails() {
           </div>
         )}
 
-        {/* Action Buttons */}
-        <div className="space-y-2 mb-3">
+        {/* Booking Timeline & Status Navigation */}
+        <div className="mb-3">
           <button
             onClick={handleViewTimeline}
-            className="w-full py-3 rounded-lg font-bold text-xs text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-sm"
-            style={{
-              background: themeColors.button,
-              boxShadow: `0 4px 12px ${themeColors.button}30`,
-            }}
+            className="w-full py-2.5 px-3.5 rounded-xl bg-white border border-slate-200/90 hover:border-emerald-300 text-slate-700 text-xs font-semibold flex items-center justify-between shadow-2xs transition-all active:scale-[0.99] cursor-pointer"
           >
-            <span>View Timeline</span>
-            <FiArrowRight className="w-4 h-4" />
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold text-xs">
+                <FiClock className="w-3.5 h-3.5" />
+              </div>
+              <span className="text-slate-800 font-semibold">Booking Timeline</span>
+              <span className="text-[10px] text-slate-400 font-normal">• Step-by-step progress</span>
+            </div>
+            <FiChevronRight className="w-4 h-4 text-slate-400" />
           </button>
+        </div>
 
+        {/* Action Button for non-timer services */}
+        {!hasLiveTimer && (
+          <div className="space-y-2 mb-3">
+            {['confirmed', 'accepted', 'assigned', 'visited'].includes(booking?.status?.toLowerCase()) && (
+              <button
+                onClick={() => openTripModal('start')}
+                className="w-full py-3 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-2 transition-all active:scale-95 shadow-sm bg-emerald-700 hover:bg-emerald-800 cursor-pointer"
+              >
+                <FiTool className="w-4 h-4" />
+                <span>Start Service (Verify OTP)</span>
+              </button>
+            )}
 
-
+            {booking?.status?.toLowerCase() === 'in_progress' && (
+              <button
+                onClick={() => openTripModal('end')}
+                className="w-full py-3 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-2 transition-all active:scale-95 shadow-sm bg-teal-700 hover:bg-teal-800 cursor-pointer"
+              >
+                <FiCheckCircle className="w-4 h-4" />
+                <span>Complete Service & Bill</span>
+              </button>
+            )}
+          </div>
+        )}
           {/* Self-Job Operational Buttons (Hidden for Agriculture to use new Trip Flow) */}
           {booking.assignedTo?.name === 'You (Self)' && !booking.rental_type && booking.serviceCategory !== 'Agriculture' && (
-            <div className="space-y-3 pt-2">
+            <div className="space-y-3 pt-2 mb-3">
               {(booking.status === 'confirmed' || booking.status === 'assigned') && (
                 <button
                   onClick={handleStartJourney}
@@ -1648,7 +1676,6 @@ export default function BookingDetails() {
               )}
             </div>
           )}
-        </div>
 
         {/* ══════ LIVE AGRICULTURAL SERVICE TIMER (PLAY / PAUSE / BREAKDOWN) ══════ */}
         {!['requested', 'pending', 'searching', 'rejected', 'cancelled'].includes(booking?.status?.toLowerCase()) &&
@@ -1658,6 +1685,7 @@ export default function BookingDetails() {
               booking={booking}
               role="vendor"
               onStatusChange={refreshBooking}
+              onStartClick={() => openTripModal('start')}
             />
           </div>
         )}

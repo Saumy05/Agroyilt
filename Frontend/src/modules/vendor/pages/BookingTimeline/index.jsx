@@ -655,6 +655,10 @@ const BookingTimeline = () => {
               onStatusChange={() => {
                 window.location.reload();
               }}
+              onStartClick={() => {
+                setTripModalMode('start');
+                setIsTripModalOpen(true);
+              }}
             />
           </div>
         ) : null}

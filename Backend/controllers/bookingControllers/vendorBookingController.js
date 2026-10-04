@@ -1497,7 +1497,15 @@ const startTrip = async (req, res) => {
 
     await markVendorBusy(vendorId);
 
-    if (requiresDriver) {
+    const shouldStartTimer = requiresDriver || Boolean(
+      claimed.serviceTimer ||
+      claimed.rental_type === 'hourly' ||
+      claimed.bookingType === 'hourly' ||
+      claimed.ratePerMinute ||
+      /tractor|rotavator|harvester|tiller|agriculture|machinery/i.test(`${claimed.serviceCategory || ''} ${claimed.serviceName || ''}`)
+    );
+
+    if (shouldStartTimer) {
       try {
         const { resolveRates, broadcastTimerUpdate } = require('./serviceTimerController');
         if (!claimed.serviceTimer) claimed.serviceTimer = { status: 'NOT_STARTED', logs: [] };
@@ -1524,8 +1532,8 @@ const startTrip = async (req, res) => {
       await createNotification({
         userId: claimed.userId,
         type: 'trip_started',
-        title: requiresDriver ? '🚜 Machinery Engine Started' : '📦 Equipment Handed Over',
-        message: requiresDriver
+        title: (requiresDriver || shouldStartTimer) ? '🚜 Machinery Engine Started' : '📦 Equipment Handed Over',
+        message: (requiresDriver || shouldStartTimer)
           ? `The operator has started the engine for ${serviceName}. Work is now in progress.`
           : `The equipment for booking ${claimed.bookingNumber} has been handed over. Rental period is now active.`,
         relatedId: claimed._id,
@@ -1542,13 +1550,13 @@ const startTrip = async (req, res) => {
     if (io) {
       io.to(`user_${claimed.userId}`).emit('booking_updated', {
         bookingId: claimed._id, status: BOOKING_STATUS.IN_PROGRESS, startedAt: claimed.startedAt,
-        message: requiresDriver ? 'Machinery engine started' : 'Equipment handed over'
+        message: (requiresDriver || shouldStartTimer) ? 'Machinery engine started' : 'Equipment handed over'
       });
     }
 
     res.status(200).json({
       success: true,
-      message: requiresDriver ? 'Engine started successfully' : 'Equipment handed over successfully',
+      message: (requiresDriver || shouldStartTimer) ? 'Engine started successfully' : 'Equipment handed over successfully',
       data: toProviderView(claimed)
     });
   } catch (error) {

@@ -191,14 +191,20 @@ const BookingDetails = () => {
   const isBookingCompleted = booking?.status?.toLowerCase() === 'completed';
   const showCompletionExit = Boolean(isBookingCompleted && isPaid && !isFromHistory && !stayOnPage);
 
-  const isAgri = ['agriculture', 'agri', 'equipment', 'machinery', 'tractor'].includes(booking?.serviceCategory?.toLowerCase()) ||
-    ['agriculture', 'agri', 'equipment', 'machinery', 'tractor'].includes(booking?.categoryTitle?.toLowerCase()) ||
-    booking?.providerType === 'MACHINERY' ||
-    Boolean(booking?.equipmentId);
+  const isAgri = useMemo(() => {
+    if (!booking) return false;
+    const catStr = `${booking.serviceCategory || ''} ${booking.categoryTitle || ''} ${booking.serviceName || ''} ${booking.categoryId?.title || ''} ${booking.categoryId?.name || ''}`.toLowerCase();
+    const typeStr = `${booking.bookingType || ''} ${booking.providerType || ''}`.toLowerCase();
+    return (
+      /tractor|rotavator|harvester|tiller|cultivator|agriculture|agri|machinery|equipment|drone/.test(catStr) ||
+      typeStr.includes('machinery') ||
+      Boolean(booking.equipmentId)
+    );
+  }, [booking]);
 
   const serviceLabel = useMemo(() => {
     if (!booking) return 'Equipment';
-    const name = booking.serviceName || booking.equipmentId?.name || booking.categoryTitle || booking.categoryId?.name || '';
+    const name = `${booking.serviceName || ''} ${booking.equipmentId?.name || ''} ${booking.categoryTitle || ''} ${booking.categoryId?.name || ''} ${booking.categoryId?.title || ''} ${booking.serviceCategory || ''}`;
     if (/tractor/i.test(name)) return 'Tractor';
     if (/harvester/i.test(name)) return 'Harvester';
     if (/rotavator/i.test(name)) return 'Rotavator';
@@ -206,7 +212,7 @@ const BookingDetails = () => {
     if (/drone/i.test(name)) return 'Drone';
     if (/labour|worker|team/i.test(name)) return 'Farm Worker';
     if (/machinery|equipment/i.test(name) || booking.rental_type) return 'Equipment';
-    return name || 'Equipment';
+    return booking.serviceName || 'Equipment';
   }, [booking]);
 
   // Auto-redirect timer when work is completed and paid in active live flow
@@ -424,9 +430,6 @@ const BookingDetails = () => {
   };
 
   const getStatusLabel = (status) => {
-    const isAgri = ['agriculture', 'equipment', 'tractor'].includes(booking?.serviceCategory?.toLowerCase()) ||
-      ['agriculture', 'equipment', 'tractor'].includes(booking?.categoryTitle?.toLowerCase());
-
     switch (status) {
       case 'confirmed': return 'Confirmed';
       case 'journey_started': return isAgri ? 'Equipment En Route' : 'Agent En Route';
@@ -1059,30 +1062,30 @@ const BookingDetails = () => {
 
           {/* Service Partner Card */}
           {(booking.workerId || booking.assignedTo || booking.vendorId) && ['accepted', 'confirmed', 'assigned', 'journey_started', 'visited', 'in_progress', 'work_done'].includes(booking.status?.toLowerCase()) && (
-            <div className="bg-white rounded-3xl p-5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100 transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]">
-              <div className="flex justify-between items-start mb-4">
+            <div className="bg-white rounded-2xl p-3.5 shadow-[0_4px_16px_rgb(0,0,0,0.04)] border border-gray-100 transition-all hover:shadow-[0_4px_16px_rgb(0,0,0,0.08)]">
+              <div className="flex justify-between items-center mb-3">
                 {['accepted', 'confirmed', 'assigned', 'journey_started', 'visited', 'in_progress'].includes(booking.status?.toLowerCase()) ? (
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-3 w-3 relative">
+                  <div className="flex items-center gap-1.5">
+                    <span className="flex h-2 w-2 relative">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
                     </span>
-                    <p className="text-xs font-bold text-green-600 tracking-wider uppercase">TRACKING LIVE</p>
+                    <p className="text-[10px] font-bold text-green-600 tracking-wider uppercase">TRACKING LIVE</p>
                   </div>
                 ) : (
-                  <p className="text-xs font-bold text-gray-400 tracking-wider uppercase">Your Partner</p>
+                  <p className="text-[10px] font-bold text-gray-400 tracking-wider uppercase">Your Partner</p>
                 )}
 
                 <button
                   onClick={() => navigate(`/user/booking/${booking._id || booking.id}/track`)}
-                  className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
+                  className="text-[10px] font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-0.5"
                 >
-                  Map View <FiChevronRight />
+                  Map View <FiChevronRight className="w-3 h-3" />
                 </button>
               </div>
 
-              <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-full p-1 bg-gradient-to-tr from-gray-100 to-gray-50 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full p-0.5 bg-gradient-to-tr from-gray-100 to-gray-50 shrink-0">
                   <div className="w-full h-full rounded-full overflow-hidden relative bg-white">
                     {(booking.workerId?.profileImage || booking.workerId?.profilePhoto || booking.assignedTo?.profileImage || booking.assignedTo?.profilePhoto || booking.vendorId?.profileImage || booking.vendorId?.profilePhoto) ? (
                       <>
@@ -1101,19 +1104,22 @@ const BookingDetails = () => {
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-bold text-gray-900 text-lg truncate">
+                  <h3 className="font-bold text-gray-900 text-sm truncate">
                     {booking.workerId?.name || booking.assignedTo?.name || booking.vendorId?.name || 'Service Partner'}
                   </h3>
-                  <div className="flex items-center gap-1.5 mt-1">
-                    <div className="flex items-center gap-1 bg-yellow-50 px-2 py-0.5 rounded-md border border-yellow-100">
-                      <FiStar className="w-3 h-3 text-yellow-500 fill-current" />
-                      <span className="text-xs font-bold text-yellow-700">
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <div className="flex items-center gap-0.5 bg-yellow-50 px-1.5 py-0.5 rounded border border-yellow-100">
+                      <FiStar className="w-2.5 h-2.5 text-yellow-500 fill-current" />
+                      <span className="text-[10px] font-bold text-yellow-700">
                         {(booking.workerId?.rating || booking.assignedTo?.rating || booking.vendorId?.rating || 0) > 0
                           ? (booking.workerId?.rating || booking.assignedTo?.rating || booking.vendorId?.rating).toFixed(1)
                           : 'New'}
                       </span>
                     </div>
-                    <span className="text-xs text-gray-400 font-medium">? Verified</span>
+                    <span className="inline-flex items-center gap-0.5 text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                      <FiCheckCircle className="w-2.5 h-2.5 text-emerald-600" />
+                      Verified
+                    </span>
                   </div>
                 </div>
 
@@ -1121,9 +1127,9 @@ const BookingDetails = () => {
                 {(booking.workerId?.phone || booking.assignedTo?.phone || booking.vendorId?.phone) && (
                   <a
                     href={`tel:${booking.workerId?.phone || booking.assignedTo?.phone || booking.vendorId?.phone}`}
-                    className="w-10 h-10 bg-green-50 text-green-600 rounded-full flex items-center justify-center hover:bg-green-100 transition-colors active:scale-95 border border-green-100"
+                    className="w-8 h-8 bg-green-50 text-green-600 rounded-full flex items-center justify-center hover:bg-green-100 transition-colors active:scale-95 border border-green-100 shrink-0"
                   >
-                    <FiPhone className="w-5 h-5" />
+                    <FiPhone className="w-4 h-4" />
                   </a>
                 )}
               </div>
@@ -1132,16 +1138,13 @@ const BookingDetails = () => {
 
           {/* Arrival/Start OTP Card - Show during early stages until verified */}
           {(booking.arrivalOTP || booking.visitOtp || booking.driver_start_otp || (['confirmed', 'accepted'].includes(booking.status?.toLowerCase()) && (booking.requiresDriver === false || booking.categoryId?.requiresDriver === false))) && ['confirmed', 'accepted', 'assigned', 'journey_started', 'visited'].includes(booking.status?.toLowerCase()) && (
-            <div className="relative overflow-hidden rounded-3xl shadow-lg border border-blue-100 mb-6 active:scale-[0.99] transition-all">
+            <div className="relative overflow-hidden rounded-2xl shadow-md border border-blue-100 mb-4 active:scale-[0.99] transition-all">
               {/* Animated gradient background */}
               <div className="absolute inset-0 bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-700 opacity-95"></div>
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.15)_0%,transparent_50%)]"></div>
 
-              <div className="relative z-10 p-6 flex flex-col items-center">
+              <div className="relative z-10 p-4 flex flex-col items-center">
                 {(() => {
-                  const isAgri = ['agriculture', 'agri', 'equipment', 'machinery', 'tractor'].includes(booking.serviceCategory?.toLowerCase()) ||
-                    ['agriculture', 'agri', 'equipment', 'machinery', 'tractor'].includes(booking.categoryTitle?.toLowerCase());
-                  
                   // Logic to prioritize correct OTP
                   let otpValue = null;
                   let otpTitle = '';
@@ -1163,35 +1166,35 @@ const BookingDetails = () => {
 
                   return (
                     <>
-                      <div className="flex items-center gap-3 w-full mb-4">
-                        <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center border border-white/30">
-                          <FiMapPin className="w-6 h-6 text-white" />
+                      <div className="flex items-center gap-2.5 w-full mb-3">
+                        <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center border border-white/30 shrink-0">
+                          <FiMapPin className="w-4.5 h-4.5 text-white" />
                         </div>
                         <div>
-                          <h3 className="text-lg font-bold text-white tracking-tight">
+                          <h3 className="text-sm font-bold text-white tracking-tight leading-tight">
                             {otpTitle}
                           </h3>
-                          <p className="text-xs text-blue-100 font-medium">
+                          <p className="text-[10px] text-blue-100 font-medium leading-tight">
                             {otpDesc}
                           </p>
                         </div>
                       </div>
 
                       {/* OTP Display */}
-                      <div className="flex justify-center gap-3 mb-5">
+                      <div className="flex justify-center gap-2 mb-3">
                         {(() => {
                           if (!otpValue) return (
-                            <div className="py-2 px-4 bg-white/10 rounded-xl border border-white/20">
-                              <p className="text-sm text-white font-bold animate-pulse">Generating code...</p>
+                            <div className="py-1.5 px-3 bg-white/10 rounded-lg border border-white/20">
+                              <p className="text-xs text-white font-bold animate-pulse">Generating code...</p>
                             </div>
                           );
 
                           return String(otpValue).split('').map((digit, idx) => (
                             <div
                               key={idx}
-                              className="w-14 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center border-2 border-white/40 shadow-xl"
+                              className="w-11 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center border-2 border-white/40 shadow-md"
                             >
-                              <span className="text-3xl font-black text-white drop-shadow-md">{digit}</span>
+                              <span className="text-2xl font-black text-white drop-shadow-md">{digit}</span>
                             </div>
                           ));
                         })()}
@@ -1204,21 +1207,23 @@ const BookingDetails = () => {
                           toastManager.info('Refreshing latest OTP...');
                           await loadBooking();
                         }}
-                        className="flex items-center gap-1.5 text-xs text-white/90 hover:text-white mb-4 px-3.5 py-1.5 rounded-full bg-white/15 hover:bg-white/25 active:scale-95 transition-all border border-white/20"
+                        className="flex items-center gap-1 text-[10px] text-white/90 hover:text-white mb-2.5 px-3 py-1 rounded-full bg-white/15 hover:bg-white/25 active:scale-95 transition-all border border-white/20"
                       >
-                        <FiRefreshCw className="w-3.5 h-3.5" />
+                        <FiRefreshCw className="w-3 h-3" />
                         <span className="font-semibold">Refresh Code</span>
                       </button>
 
-                      <div className="w-full bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20">
-                        <div className="flex items-center justify-center gap-2 text-white text-sm">
-                          <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(74,222₹28,0.5)]"></span>
-                          <p className="font-medium">
+                      <div className="w-full bg-white/10 backdrop-blur-md rounded-lg p-2 border border-white/20">
+                        <div className="flex items-center justify-center gap-1.5 text-white text-[11px]">
+                          <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse shadow-[0_0_6px_rgba(74,222,128,0.5)] shrink-0"></span>
+                          <p className="font-medium text-center">
                             {isAgri 
-                              ? `${serviceLabel} and operator en route to your field` 
+                              ? (['journey_started', 'visited'].includes(booking.status?.toLowerCase())
+                                  ? `${serviceLabel} & operator en route` 
+                                  : `${serviceLabel} & operator ready to start`)
                               : ((booking.requiresDriver === false || booking.categoryId?.requiresDriver === false) 
                                 ? 'Ready for equipment handover' 
-                                : 'Waiting for professional to reach your location')}
+                                : 'Waiting for professional to arrive')}
                           </p>
                         </div>
                       </div>
@@ -1231,15 +1236,15 @@ const BookingDetails = () => {
 
           {/* Professional Arrived Notification - Only after OTP verified */}
           {booking?.status?.toLowerCase() === 'visited' && (
-            <div className="relative overflow-hidden rounded-3xl shadow-lg mb-6 active:scale-[0.98] transition-all">
+            <div className="relative overflow-hidden rounded-2xl shadow-md mb-3 active:scale-[0.98] transition-all">
               <div className="absolute inset-0 bg-gradient-to-br from-teal-500 via-teal-600 to-emerald-700 opacity-95"></div>
-              <div className="relative z-10 p-6 flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center border border-white/30 shrink-0">
-                  <FiCheckCircle className="w-6 h-6 text-white" />
+              <div className="relative z-10 p-3.5 flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center border border-white/30 shrink-0">
+                  <FiCheckCircle className="w-4.5 h-4.5 text-white" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white tracking-tight">Professional Arrived</h3>
-                  <p className="text-sm text-teal-50 font-medium">Expert is at your location and starting the work.</p>
+                  <h3 className="text-sm font-bold text-white tracking-tight">Professional Arrived</h3>
+                  <p className="text-[11px] text-teal-50 font-medium">Expert is at your location and starting the work.</p>
                 </div>
               </div>
             </div>
@@ -1459,35 +1464,35 @@ const BookingDetails = () => {
 
           {/* Agriculture Completion OTP - Share only when work is done */}
           {['in_progress', 'work_done'].includes(booking.status?.toLowerCase()) && booking.driver_end_otp && (
-            <div className="bg-gradient-to-br from-teal-600 to-emerald-700 rounded-3xl p-6 shadow-xl relative overflow-hidden mb-6">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-16 translate-x-16 blur-2xl"></div>
+            <div className="bg-gradient-to-br from-teal-600 to-emerald-700 rounded-2xl p-4 shadow-md relative overflow-hidden mb-4">
+              <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-10 translate-x-10 blur-xl"></div>
 
               <div className="relative z-10">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center border border-white/30">
-                    <FiKey className="w-5 h-5 text-white" />
+                <div className="flex items-center gap-2.5 mb-3">
+                  <div className="w-8 h-8 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center border border-white/30 shrink-0">
+                    <FiKey className="w-4 h-4 text-white" />
                   </div>
                   <div>
-                    <h3 className="text-white font-bold">
+                    <h3 className="text-sm text-white font-bold leading-tight">
                       {isAgri 
                         ? 'Field Service Completion OTP' 
                         : ((booking.requiresDriver === false || booking.categoryId?.requiresDriver === false) ? 'Return Verification' : 'Completion Verification')}
                     </h3>
-                    <p className="text-teal-50 text-[10px] font-medium opacity-80 uppercase tracking-widest">
+                    <p className="text-teal-50 text-[10px] font-medium opacity-80 uppercase tracking-wider leading-tight">
                       {isAgri ? 'Service End OTP' : ((booking.requiresDriver === false || booking.categoryId?.requiresDriver === false) ? 'Return OTP' : 'Verification OTP')}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex gap-2 justify-center mb-4">
+                <div className="flex gap-2 justify-center mb-3">
                   {String(booking.driver_end_otp).split('').map((digit, idx) => (
-                    <div key={idx} className="w-12 h-14 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center border border-white/30">
+                    <div key={idx} className="w-11 h-12 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center border border-white/30">
                       <span className="text-2xl font-black text-white">{digit}</span>
                     </div>
                   ))}
                 </div>
 
-                <div className="flex justify-center mb-3">
+                <div className="flex justify-center mb-2">
                   <button
                     type="button"
                     onClick={async (e) => {
@@ -1495,19 +1500,19 @@ const BookingDetails = () => {
                       toastManager.info('Refreshing completion OTP...');
                       await loadBooking();
                     }}
-                    className="flex items-center gap-1.5 text-xs text-white/90 hover:text-white px-3.5 py-1.5 rounded-full bg-white/15 hover:bg-white/25 active:scale-95 transition-all border border-white/20"
+                    className="flex items-center gap-1 text-[10px] text-white/90 hover:text-white px-3 py-1 rounded-full bg-white/15 hover:bg-white/25 active:scale-95 transition-all border border-white/20"
                   >
-                    <FiRefreshCw className="w-3.5 h-3.5" />
+                    <FiRefreshCw className="w-3 h-3" />
                     <span className="font-semibold">Refresh Code</span>
                   </button>
                 </div>
 
-                <p className="text-center text-[10px] text-teal-100 font-medium bg-black/10 rounded-lg py-2 px-3 border border-white/5">
+                <p className="text-center text-[10px] text-teal-100 font-medium bg-black/10 rounded-lg py-1.5 px-2.5 border border-white/5 leading-relaxed">
                   {isAgri
-                    ? `Share this OTP with the ${serviceLabel.toLowerCase()} operator ONLY after field work has finished to stop the live timer and finalize your active-minutes bill.`
+                    ? `Share with the ${serviceLabel.toLowerCase()} operator ONLY after field work finishes to stop the live timer.`
                     : ((booking.requiresDriver === false || booking.categoryId?.requiresDriver === false)
-                        ? "Share this OTP with the professional ONLY after the equipment is returned and you have verified its condition."
-                        : "Share this OTP with the driver ONLY after equipment has finished and you have verified the work.")
+                        ? "Share ONLY after equipment is returned and you've verified its condition."
+                        : "Share ONLY after equipment has finished and you've verified the work.")
                   }
                 </p>
               </div>

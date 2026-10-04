@@ -68,7 +68,8 @@ const PAUSE_REASONS = [
 export const LiveServiceTimer = ({
   booking,
   role = 'farmer', // 'farmer' or 'vendor'
-  onStatusChange = () => {}
+  onStatusChange = () => {},
+  onStartClick
 }) => {
   const socket = useSocket();
   const bookingId = booking?._id;
@@ -280,6 +281,12 @@ export const LiveServiceTimer = ({
 
   // Handlers
   const handleStartTimer = async () => {
+    // If work has not started (handover OTP not verified yet), open the Start OTP modal directly
+    if (booking?.status?.toLowerCase() !== 'in_progress' && onStartClick) {
+      onStartClick();
+      return;
+    }
+
     try {
       setLoadingAction(true);
       const res = await serviceTimerService.start(bookingId);
@@ -298,7 +305,13 @@ export const LiveServiceTimer = ({
         if (onStatusChange) onStatusChange();
       }
     } catch (err) {
-      toastManager.error(err.response?.data?.message || 'Failed to start service timer');
+      const msg = err.response?.data?.message || err.message || '';
+      // If error indicates handover OTP / work not started, route to OTP verification modal
+      if ((msg.toLowerCase().includes('otp') || msg.toLowerCase().includes('work has started') || msg.toLowerCase().includes('handover')) && onStartClick) {
+        onStartClick();
+        return;
+      }
+      toastManager.error(msg || 'Failed to start service timer');
     } finally {
       setLoadingAction(false);
     }
@@ -628,10 +641,10 @@ export const LiveServiceTimer = ({
             <button
               onClick={handleStartTimer}
               disabled={loadingAction}
-              className="w-full py-4 rounded-2xl font-black text-white bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 shadow-lg shadow-emerald-200 active:scale-95 transition-all flex items-center justify-center gap-2"
+              className="w-full py-3.5 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 shadow-md shadow-emerald-900/10 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
-              <FiPlay className="w-5 h-5 fill-current" />
-              Start Work Timer (काम शुरू करें)
+              <FiPlay className="w-4 h-4 fill-current" />
+              <span>{booking?.status?.toLowerCase() !== 'in_progress' ? 'Start Service (Verify OTP)' : 'Start Work Timer'}</span>
             </button>
           )}
 
