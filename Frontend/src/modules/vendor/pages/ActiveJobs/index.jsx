@@ -122,6 +122,35 @@ const ActiveJobs = memo(() => {
           dot: 'bg-orange-500',
           accent: '#f97316',
         };
+      case 'REQUESTED':
+      case 'SEARCHING':
+        return {
+          label: 'Action Required',
+          bg: 'bg-emerald-50',
+          text: 'text-emerald-800 font-black',
+          border: 'border-emerald-300',
+          dot: 'bg-emerald-500 animate-pulse',
+          accent: '#059669',
+        };
+      case 'REJECTED':
+      case 'EXPIRED':
+        return {
+          label: s === 'REJECTED' ? 'Timed Out / Expired' : 'Expired',
+          bg: 'bg-rose-50',
+          text: 'text-rose-700 font-bold',
+          border: 'border-rose-200/70',
+          dot: 'bg-rose-400',
+          accent: '#f43f5e',
+        };
+      case 'CANCELLED':
+        return {
+          label: 'Cancelled',
+          bg: 'bg-slate-100',
+          text: 'text-slate-600',
+          border: 'border-slate-200',
+          dot: 'bg-slate-400',
+          accent: '#94a3b8',
+        };
       default:
         return {
           label: (s.replace(/_/g, ' ') || 'Pending').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()),
@@ -131,7 +160,7 @@ const ActiveJobs = memo(() => {
           dot: 'bg-slate-400',
           accent: '#94a3b8',
         };
-    }
+      }
   }, []);
 
   // Duration label helper
@@ -197,6 +226,12 @@ const ActiveJobs = memo(() => {
         };
       });
       setJobs(mappedJobs);
+      const hasRequests = mappedJobs.some((j) =>
+        ['REQUESTED', 'SEARCHING'].includes((j.status || '').toUpperCase())
+      );
+      if (hasRequests) {
+        setFilter((prev) => (prev === 'in_progress' ? 'requests' : prev));
+      }
     } catch (error) {
       console.error('Error loading jobs:', error);
     } finally {
@@ -213,15 +248,19 @@ const ActiveJobs = memo(() => {
   }, [loadJobs]);
 
   // Filter tabs definition
-  const filterTabs = useMemo(
-    () => [
+  const filterTabs = useMemo(() => {
+    const requestedCount = jobs.filter((job) =>
+      ['REQUESTED', 'SEARCHING'].includes((job.status || '').toUpperCase())
+    ).length;
+
+    return [
+      { id: 'requests', label: 'New Requests', badge: requestedCount },
       { id: 'in_progress', label: 'On Field' },
       { id: 'assigned', label: 'Driver Assigned' },
       { id: 'completed', label: 'Completed' },
       { id: 'all', label: 'All' },
-    ],
-    []
-  );
+    ];
+  }, [jobs]);
 
   // Memoize filtered jobs
   const filteredJobs = useMemo(() => {
@@ -231,6 +270,8 @@ const ActiveJobs = memo(() => {
       let matchesFilter = false;
       if (filter === 'all') {
         matchesFilter = true;
+      } else if (filter === 'requests') {
+        matchesFilter = ['REQUESTED', 'SEARCHING'].includes(status);
       } else if (filter === 'assigned') {
         matchesFilter =
           ['ASSIGNED', 'WORKER_ACCEPTED'].includes(status) ||
@@ -302,13 +343,22 @@ const ActiveJobs = memo(() => {
               <button
                 key={tab.id}
                 onClick={() => setFilter(tab.id)}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-150 ${
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all duration-150 active:scale-95 flex items-center gap-1.5 ${
                   isActive
-                    ? 'bg-emerald-700 text-white shadow-sm shadow-emerald-700/20'
-                    : 'bg-white text-slate-600 border border-slate-200/80 hover:bg-slate-50'
+                    ? 'bg-emerald-800 text-white shadow-xs'
+                    : 'bg-white text-slate-600 border border-slate-200/90 hover:bg-slate-50'
                 }`}
               >
-                {tab.label}
+                <span>{tab.label}</span>
+                {tab.badge > 0 && (
+                  <span
+                    className={`px-1.5 py-0.5 rounded-full text-[10px] font-black leading-tight ${
+                      isActive ? 'bg-white text-emerald-900' : 'bg-emerald-600 text-white animate-pulse'
+                    }`}
+                  >
+                    {tab.badge}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -341,7 +391,13 @@ const ActiveJobs = memo(() => {
             </div>
             <p className="text-slate-700 font-semibold text-sm mb-1">No bookings found</p>
             <p className="text-xs text-slate-400">
-              {searchQuery ? 'Try adjusting your search query' : 'No field operations found under this filter'}
+              {searchQuery
+                ? 'Try adjusting your search query'
+                : filter === 'requests'
+                ? 'No new pending requests at this time'
+                : filter === 'in_progress'
+                ? 'No field operations found under this filter'
+                : 'No bookings found under this filter'}
             </p>
           </div>
         ) : (
@@ -437,22 +493,36 @@ const ActiveJobs = memo(() => {
 
                   {/* Footer Row: Payment Status & Action Hint */}
                   <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] pl-1.5">
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className={`inline-flex items-center gap-1 font-medium ${
-                          isPaid ? 'text-emerald-700' : 'text-amber-700'
-                        }`}
-                      >
-                        <span
-                          className={`w-1.5 h-1.5 rounded-full ${isPaid ? 'bg-emerald-500' : 'bg-amber-500'}`}
-                        />
-                        {isPaid ? 'Payment Received' : 'Payment Pending'}
-                      </span>
-                    </div>
+                    {['REQUESTED', 'SEARCHING'].includes(job.status?.toUpperCase()) ? (
+                      <div className="flex items-center justify-between w-full">
+                        <span className="text-emerald-800 font-bold flex items-center gap-1.5 text-[11px]">
+                          <span className="w-2 h-2 rounded-full bg-emerald-600 animate-ping" />
+                          Order awaiting response
+                        </span>
+                        <span className="text-white bg-emerald-700 hover:bg-emerald-800 font-black text-xs px-2.5 py-1 rounded-lg shadow-xs flex items-center gap-1">
+                          Review & Accept →
+                        </span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`inline-flex items-center gap-1 font-medium ${
+                              isPaid ? 'text-emerald-700' : 'text-amber-700'
+                            }`}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${isPaid ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                            />
+                            {isPaid ? 'Payment Received' : 'Payment Pending'}
+                          </span>
+                        </div>
 
-                    <span className="text-slate-400 text-[10px] flex items-center gap-0.5">
-                      View details
-                    </span>
+                        <span className="text-slate-400 text-[10px] flex items-center gap-0.5">
+                          View details
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
               );
