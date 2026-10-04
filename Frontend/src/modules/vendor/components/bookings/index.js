@@ -4,4 +4,5 @@ export { default as BookingStatusIndicator } from './BookingStatusIndicator';
 export { default as ServiceTypeBadge } from './ServiceTypeBadge';
 export { default as TimeSlotDisplay } from './TimeSlotDisplay';
 export { default as BookingAlertModal } from './BookingAlertModal';
+export { default as GlobalBookingAlertModal } from './GlobalBookingAlertModal';
 

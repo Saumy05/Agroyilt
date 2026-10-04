@@ -5,8 +5,6 @@ import { FaWallet } from 'react-icons/fa';
 import { vendorTheme as themeColors } from '../../../../theme';
 import Header from '../../components/layout/Header';
 import { vendorDashboardService } from '../../services/dashboardService';
-import { acceptBooking, rejectBooking } from '../../services/bookingService';
-import { BookingAlertModal } from '../../components/bookings';
 import { toastManager } from '../../../../utils/toastManager';
 import { io } from 'socket.io-client';
 import maintenanceService from '../../services/maintenanceService';
@@ -43,46 +41,6 @@ const Dashboard = memo(() => {
     error,
     loadDashboardData
   } = useVendorDashboard();
-
-  const handleAcceptAlert = async (bookingId) => {
-    // Immediately mark as ignored so API refresh doesn't bring it back
-    window.dispatchEvent(new CustomEvent('removeVendorBooking', { detail: { id: String(bookingId) } }));
-    try {
-      await acceptBooking(bookingId);
-      toastManager.success('Booking accepted successfully');
-    } catch (error) {
-      const status = error?.response?.status;
-      if (status === 409) {
-        toastManager.error('This job was already accepted by another vendor.');
-      } else {
-        toastManager.error('Failed to accept booking');
-      }
-    } finally {
-      window.dispatchEvent(new Event('vendorStatsUpdated'));
-    }
-  };
-
-  const handleRejectAlert = async (bookingId) => {
-    // Immediately mark as ignored so API refresh doesn't bring it back
-    window.dispatchEvent(new CustomEvent('removeVendorBooking', { detail: { id: String(bookingId) } }));
-    try {
-      const result = await rejectBooking(bookingId);
-      if (result?.alreadyTaken) {
-        toastManager.error('This job was already accepted by another vendor.');
-      } else {
-        toastManager.success('Booking declined');
-      }
-    } catch (error) {
-      // Silently ignore — booking is already removed from modal
-      console.error('Reject booking error (modal already closed):', error);
-    } finally {
-      window.dispatchEvent(new Event('vendorStatsUpdated'));
-    }
-  };
-  
-  const handleAssignAlert = (bookingId) => {
-    navigate(`/vendor/booking/${bookingId}`);
-  };
 
   // Set background gradient
   useLayoutEffect(() => {
@@ -460,7 +418,13 @@ const Dashboard = memo(() => {
                 return (
                   <div
                     key={job.id}
-                    onClick={() => navigate(`/vendor/booking/${job.id}`)}
+                    onClick={() => {
+                      if (['REQUESTED', 'SEARCHING'].includes(job.status?.toUpperCase())) {
+                        setActiveAlertBookings([job]);
+                      } else {
+                        navigate(`/vendor/booking/${job.id}`);
+                      }
+                    }}
                     className="bg-white rounded-2xl shadow-xs cursor-pointer active:scale-[0.99] transition-all duration-200 relative overflow-hidden border border-emerald-100/70 p-3 hover:border-emerald-300 hover:shadow-[0_4px_16px_rgba(46,125,50,0.08)]"
                   >
                     <div className="flex items-start gap-3">
@@ -531,16 +495,6 @@ const Dashboard = memo(() => {
           )}
         </div>
       </main>
-
-      <BookingAlertModal 
-        isOpen={activeAlertBookings && activeAlertBookings.length > 0}
-        bookings={activeAlertBookings}
-        onAccept={handleAcceptAlert}
-        onReject={handleRejectAlert}
-        onAssign={handleAssignAlert}
-        onMinimize={() => setActiveAlertBookings([])}
-        servicePayoutPct={stats?.servicePayoutPercentage || 70}
-      />
     </div>
   );
 });

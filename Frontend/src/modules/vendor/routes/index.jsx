@@ -6,6 +6,7 @@ import ErrorBoundary from '../components/common/ErrorBoundary';
 import ProtectedRoute from '../../../components/auth/ProtectedRoute';
 import PublicRoute from '../../../components/auth/PublicRoute';
 import CashLimitModal from '../components/common/CashLimitModal';
+import { GlobalBookingAlertModal } from '../components/bookings';
 import { SkeletonProfileHeader, SkeletonDashboardStats } from '../../../components/common/SkeletonLoaders';
 import { VendorDashboardProvider } from '../../../context/VendorDashboardContext';
 
@@ -162,7 +163,8 @@ const VendorRoutes = () => {
         {/* Global Alert for Cash Limit */}
         {!shouldHideBottomNav && <CashLimitModal />}
         
-        {/* Real-time Incoming Booking Popup */}
+        {/* Real-time Incoming Booking Popup (Global across all vendor tabs) */}
+        <GlobalBookingAlertModal />
 
       </VendorDashboardProvider>
     </ErrorBoundary>

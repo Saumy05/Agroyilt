@@ -15,9 +15,11 @@ import Header from '../../components/layout/Header';
 import BottomNav from '../../components/layout/BottomNav';
 import { getBookings } from '../../services/bookingService';
 import { ConfirmDialog } from '../../components/common';
+import { useVendorDashboard } from '../../../../context/VendorDashboardContext';
 
 const ActiveJobs = memo(() => {
   const navigate = useNavigate();
+  const { setActiveAlertBookings } = useVendorDashboard();
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('in_progress');
@@ -196,6 +198,7 @@ const ActiveJobs = memo(() => {
 
         return {
           id: job._id || job.id,
+          _raw: job,
           serviceType: job.serviceId?.title || job.serviceType || 'Equipment Rental',
           user: {
             name: job.userId?.name || job.customerName || 'Farmer',
@@ -238,6 +241,34 @@ const ActiveJobs = memo(() => {
       setLoading(false);
     }
   }, []);
+
+  // Open rich booking alert modal directly from bookings tab
+  const openBookingAlert = useCallback((job) => {
+    const raw = job._raw || job;
+    const alertData = {
+      ...raw,
+      ...job,
+      id: job.id || job._id,
+      _id: job._id || job.id,
+      customerName: job.user?.name || job.customerName || raw.userId?.name || 'Farmer',
+      serviceType: job.serviceType || raw.serviceId?.title || 'Equipment Rental',
+      serviceName: job.serviceType || raw.serviceId?.title || 'Equipment Rental',
+      basePrice: raw.basePrice || raw.price || job.price || 0,
+      finalAmount: raw.finalAmount || raw.totalAmount || job.price || 0,
+      vendorEarnings: raw.vendorEarnings || job.price || 0,
+      address: raw.address || { addressLine1: job.location?.address },
+      location: {
+        address: job.location?.address || raw.address?.addressLine1 || 'Address not available',
+        distance: raw.distance || job.location?.distance
+      },
+      timeSlot: job.timeSlot || {
+        date: job.scheduledDate,
+        time: job.scheduledTime
+      },
+      status: job.status
+    };
+    setActiveAlertBookings([alertData]);
+  }, [setActiveAlertBookings]);
 
   useEffect(() => {
     loadJobs();
@@ -411,7 +442,13 @@ const ActiveJobs = memo(() => {
               return (
                 <div
                   key={job.id}
-                  onClick={() => navigate(`/vendor/booking/${job.id}`)}
+                  onClick={() => {
+                    if (['REQUESTED', 'SEARCHING'].includes(job.status?.toUpperCase())) {
+                      openBookingAlert(job);
+                    } else {
+                      navigate(`/vendor/booking/${job.id}`);
+                    }
+                  }}
                   className="bg-white rounded-xl border border-slate-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-md hover:border-slate-300 transition-all duration-150 p-3.5 relative overflow-hidden cursor-pointer active:scale-[0.99]"
                 >
                   {/* Subtle left status accent */}
@@ -499,9 +536,16 @@ const ActiveJobs = memo(() => {
                           <span className="w-2 h-2 rounded-full bg-emerald-600 animate-ping" />
                           Order awaiting response
                         </span>
-                        <span className="text-white bg-emerald-700 hover:bg-emerald-800 font-black text-xs px-2.5 py-1 rounded-lg shadow-xs flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openBookingAlert(job);
+                          }}
+                          className="text-white bg-emerald-700 hover:bg-emerald-800 active:scale-95 transition-all font-black text-xs px-2.5 py-1 rounded-lg shadow-xs flex items-center gap-1 cursor-pointer"
+                        >
                           Review & Accept →
-                        </span>
+                        </button>
                       </div>
                     ) : (
                       <>
