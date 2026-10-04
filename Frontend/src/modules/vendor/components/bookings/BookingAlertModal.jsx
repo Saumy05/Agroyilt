@@ -58,10 +58,15 @@ const BookingAlertCard = ({ booking, onAccept, onReject, onAssign, initialTimeLe
     return () => clearInterval(timer);
   }, [booking, initialTimeLeft]);
 
-  const radius = 23;
+  const radius = 26;
   const circumference = 2 * Math.PI * radius;
   const progress = Math.min(1, timeLeft / Math.max(windowSeconds, 1)) * circumference;
   const dashoffset = circumference - progress;
+
+  const isUrgent = timeLeft <= 15;
+  const isWarning = timeLeft > 15 && timeLeft <= 60;
+  const timerStrokeColor = isUrgent ? '#EF4444' : isWarning ? '#F59E0B' : '#059669';
+  const timerTextColor = isUrgent ? 'text-red-500' : isWarning ? 'text-amber-600' : 'text-emerald-700';
 
   // Pricing synchronization with farmer checkout
   const isAgriService = !!(
@@ -92,6 +97,63 @@ const BookingAlertCard = ({ booking, onAccept, onReject, onAssign, initialTimeLe
   );
 
   const vendorNetEarning = Math.round(baseAmt * (servicePayoutPct / 100));
+
+  const format12Hour = (timeStr) => {
+    if (!timeStr) return '';
+    const trimmed = String(timeStr).trim();
+    if (/am|pm/i.test(trimmed)) return trimmed;
+
+    if (trimmed.includes('-') || trimmed.includes('–')) {
+      const delimiter = trimmed.includes('–') ? '–' : '-';
+      const [start, end] = trimmed.split(delimiter).map(t => format12Hour(t));
+      return `${start} – ${end}`;
+    }
+
+    const parts = trimmed.split(':');
+    if (parts.length >= 2) {
+      const h = parseInt(parts[0], 10);
+      const m = parts[1].slice(0, 2);
+      if (isNaN(h)) return trimmed;
+      const period = h >= 12 ? 'PM' : 'AM';
+      const h12 = h % 12 || 12;
+      return `${h12}:${m} ${period}`;
+    }
+    return trimmed;
+  };
+
+  const formatScheduleDate = (rawDate) => {
+    if (!rawDate) return '';
+    try {
+      const d = new Date(rawDate);
+      if (isNaN(d.getTime())) return String(rawDate);
+
+      const now = new Date();
+      const isToday = d.toDateString() === now.toDateString();
+      const tomorrow = new Date(now);
+      tomorrow.setDate(now.getDate() + 1);
+      const isTomorrow = d.toDateString() === tomorrow.toDateString();
+
+      const shortDate = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+      const fullDate = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+
+      if (isToday) return `Today, ${shortDate}`;
+      if (isTomorrow) return `Tomorrow, ${shortDate}`;
+      return fullDate;
+    } catch {
+      return String(rawDate);
+    }
+  };
+
+  const rawDate = booking?.timeSlot?.date || booking?.scheduledDate || booking?.date || booking?.startDate;
+  const formattedDate = formatScheduleDate(rawDate);
+
+  const rawTime = booking?.timeSlot?.time || booking?.scheduledTime || booking?.time || booking?.slot || 
+    (booking?.startTime && booking?.endTime ? `${booking.startTime} - ${booking.endTime}` : (booking?.startTime || ''));
+  const formattedTime = format12Hour(rawTime);
+
+  const scheduledDisplay = formattedDate && formattedTime
+    ? `${formattedDate} • ${formattedTime}`
+    : (formattedDate || formattedTime || 'Flexible / ASAP');
 
   return (
     <div className="bg-white w-[92vw] max-w-[340px] flex-none rounded-3xl overflow-hidden shadow-2xl relative flex flex-col font-sans border border-slate-100/90 mx-auto">
@@ -124,27 +186,31 @@ const BookingAlertCard = ({ booking, onAccept, onReject, onAssign, initialTimeLe
       </div>
 
       {/* Floating Countdown Ring (Overlaps header & body seam with z-30, completely unclipped) */}
-      <div className="relative flex justify-center -my-7 z-30 pointer-events-none">
-        <div className="relative w-14 h-14 bg-white rounded-full flex items-center justify-center shadow-xl p-0.5 border-2 border-white ring-2 ring-emerald-900/10">
-          <svg className="absolute inset-0 w-full h-full -rotate-90 transform" viewBox="0 0 56 56">
-            <circle cx="28" cy="28" r={radius} fill="none" stroke="#F1F5F9" strokeWidth="4" />
+      <div className="relative flex justify-center -my-8 z-30 pointer-events-none">
+        <div className={`relative w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-xl p-0.5 border-2 border-white ring-2 ${isUrgent ? 'ring-red-500/30 shadow-red-500/20' : 'ring-emerald-900/10 shadow-emerald-900/10'}`}>
+          <svg className="absolute inset-0 w-full h-full -rotate-90 transform" viewBox="0 0 64 64">
+            <circle cx="32" cy="32" r={radius} fill="none" stroke="#F1F5F9" strokeWidth="3.5" />
             <motion.circle
-              cx="28" cy="28" r={radius} fill="none"
-              stroke={timeLeft <= 10 ? '#EF4444' : '#059669'} strokeWidth="4"
+              cx="32" cy="32" r={radius} fill="none"
+              stroke={timerStrokeColor} strokeWidth="3.5"
               strokeDasharray={circumference} strokeDashoffset={dashoffset}
               strokeLinecap="round" className="transition-all duration-1000 ease-linear"
             />
           </svg>
-          <div className="text-center">
-            <span className={`text-base font-black block leading-none ${timeLeft <= 10 ? 'text-red-500' : 'text-emerald-700'}`}>{timeLeft >= 60 ? `${Math.floor(timeLeft / 60)}:${String(timeLeft % 60).padStart(2, '0')}` : timeLeft}</span>
-            <span className="text-[7.5px] font-bold text-slate-400 uppercase tracking-tighter block mt-0.5">Sec left</span>
+          <div className="relative z-10 flex flex-col items-center justify-center text-center select-none">
+            <span className={`font-black font-mono tracking-tight leading-none ${timeLeft >= 60 ? 'text-[13px]' : 'text-base'} ${timerTextColor}`}>
+              {timeLeft >= 60 ? `${Math.floor(timeLeft / 60)}:${String(timeLeft % 60).padStart(2, '0')}` : timeLeft}
+            </span>
+            <span className={`text-[7.5px] font-extrabold uppercase tracking-wider block mt-1 leading-none ${isUrgent ? 'text-red-400' : 'text-slate-400'}`}>
+              {timeLeft >= 60 ? 'Min Left' : 'Sec Left'}
+            </span>
           </div>
-          {timeLeft <= 10 && <div className="absolute inset-0 rounded-full border-2 border-red-500/30 animate-ping" />}
+          {isUrgent && <div className="absolute inset-0 rounded-full border-2 border-red-500/30 animate-ping pointer-events-none" />}
         </div>
       </div>
 
       {/* Body Section */}
-      <div className="pt-8 px-3.5 pb-3 flex-1 space-y-2">
+      <div className="pt-9 px-3.5 pb-3 flex-1 space-y-2">
         {/* Pricing Metrics: Farmer Total & Vendor Net Share */}
         <div className="grid grid-cols-2 gap-2">
           {/* Farmer Collection */}
@@ -266,8 +332,8 @@ const BookingAlertCard = ({ booking, onAccept, onReject, onAssign, initialTimeLe
             <FiClock className="text-emerald-600 w-3 h-3 shrink-0" />
             <div className="flex-1 min-w-0">
               <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider block leading-none">Scheduled Time</span>
-              <p className="text-[11px] font-bold text-slate-800 truncate leading-tight mt-0.5">
-                {booking?.timeSlot?.date || (booking?.scheduledDate ? new Date(booking.scheduledDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '')} {booking?.timeSlot?.time || booking?.scheduledTime || 'Flexible'}
+              <p className="text-[11px] font-bold text-slate-800 truncate leading-tight mt-0.5" title={scheduledDisplay}>
+                {scheduledDisplay}
               </p>
             </div>
           </div>

@@ -1,4 +1,4 @@
-﻿import React, { memo } from 'react';
+import React, { memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FiClock, FiMapPin, FiBell } from 'react-icons/fi';
 import { vendorTheme as themeColors } from '../../../../../theme';
@@ -8,6 +8,53 @@ import { acceptBooking, rejectBooking } from '../../../services/bookingService';
 const PendingBookings = memo(({ bookings, setPendingBookings, setActiveAlertBooking }) => {
   const navigate = useNavigate();
   const [loadingAction, setLoadingAction] = React.useState({ id: null, type: null });
+
+  const formatScheduleText = (b) => {
+    const rawDate = b.timeSlot?.date || b.scheduledDate;
+    let dateStr = '';
+    if (rawDate) {
+      try {
+        const d = new Date(rawDate);
+        if (!isNaN(d.getTime())) {
+          dateStr = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+        } else {
+          dateStr = String(rawDate);
+        }
+      } catch {
+        dateStr = String(rawDate);
+      }
+    }
+    const rawTime = b.timeSlot?.time || b.scheduledTime;
+    let timeStr = '';
+    if (rawTime) {
+      const trimmed = String(rawTime).trim();
+      if (/am|pm/i.test(trimmed)) {
+        timeStr = trimmed;
+      } else if (trimmed.includes('-') || trimmed.includes('–')) {
+        const delimiter = trimmed.includes('–') ? '–' : '-';
+        timeStr = trimmed.split(delimiter).map(t => {
+          const parts = t.trim().split(':');
+          if (parts.length >= 2) {
+            const h = parseInt(parts[0], 10);
+            const m = parts[1].slice(0, 2);
+            if (!isNaN(h)) return `${h % 12 || 12}:${m} ${h >= 12 ? 'PM' : 'AM'}`;
+          }
+          return t.trim();
+        }).join(' – ');
+      } else {
+        const parts = trimmed.split(':');
+        if (parts.length >= 2) {
+          const h = parseInt(parts[0], 10);
+          const m = parts[1].slice(0, 2);
+          if (!isNaN(h)) timeStr = `${h % 12 || 12}:${m} ${h >= 12 ? 'PM' : 'AM'}`;
+        } else {
+          timeStr = trimmed;
+        }
+      }
+    }
+    if (dateStr && timeStr) return `${dateStr} • ${timeStr}`;
+    return dateStr || timeStr || 'Flexible';
+  };
 
   if (bookings.length === 0) {
     return null;
@@ -134,9 +181,7 @@ const PendingBookings = memo(({ bookings, setPendingBookings, setActiveAlertBook
               <div className="flex items-center gap-1 text-xs text-gray-500">
                 <FiClock className="w-4 h-4" />
                 <span>
-                  {booking.timeSlot?.date || (booking.scheduledDate ? new Date(booking.scheduledDate).toLocaleDateString() : '')}
-                  {(booking.timeSlot?.date || booking.scheduledDate) ? ' ? ' : ''}
-                  {booking.timeSlot?.time || booking.scheduledTime || 'N/A'}
+                  {formatScheduleText(booking)}
                 </span>
               </div>
               <div className="flex items-center gap-1 text-xs text-gray-500">

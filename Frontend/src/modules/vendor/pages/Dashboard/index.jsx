@@ -445,7 +445,16 @@ const Dashboard = memo(() => {
               {recentJobs.map((job) => {
                 const statusStyle = getStatusStyle(job.status);
                 const timeText = job.timeSlot?.time && job.timeSlot.time !== 'Time not set' ? job.timeSlot.time : (job.time || 'Scheduled');
-                const dateText = job.timeSlot?.date || '';
+                const rawDate = job.timeSlot?.date || job.scheduledDate;
+                let dateText = '';
+                if (rawDate) {
+                  try {
+                    const d = new Date(rawDate);
+                    dateText = !isNaN(d.getTime()) ? d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : String(rawDate);
+                  } catch {
+                    dateText = String(rawDate);
+                  }
+                }
                 const payoutAmount = job.vendorEarnings || job.price;
 
                 return (
