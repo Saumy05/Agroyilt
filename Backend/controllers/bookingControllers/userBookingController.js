@@ -200,7 +200,16 @@ const createBooking = async (req, res) => {
     const category = categoryId ? await Category.findById(categoryId) : null;
 
     // Calculate total value from booked items or fallback to service base price immediately after service load
-    const isAgriService = service.category === 'Agriculture' || (category && category.title === 'Agriculture') || reqServiceCategory === 'Agriculture';
+    const isAgriService = !!(
+      equipmentId ||
+      rental_type ||
+      service.rental_type ||
+      service.category === 'Agriculture' ||
+      (category && ['agriculture', 'machinery', 'tractor', 'equipment', 'farm equipment'].includes(category.title?.toLowerCase())) ||
+      (reqServiceCategory && ['agriculture', 'machinery', 'tractor', 'equipment', 'farm equipment'].some(c => reqServiceCategory.toLowerCase().includes(c))) ||
+      (service.serviceCategory && ['agriculture', 'machinery', 'tractor', 'equipment', 'farm equipment'].some(c => service.serviceCategory.toLowerCase().includes(c))) ||
+      (service.title && ['tractor', 'rotavator', 'harvester', 'cultivator', 'plough', 'drone'].some(k => service.title.toLowerCase().includes(k)))
+    );
 
     let equipmentObj = null;
     let calculatedDurationMinutes = null; // hoisted: persisted on the booking below
@@ -547,9 +556,9 @@ const createBooking = async (req, res) => {
     if (!usePlanBenefits) {
       const settings = await Settings.findOne({ type: 'global' });
       
-      // Override visiting charges with settings unless it's a worker booking without conveyance
+      // Override visiting charges with settings unless it's a worker booking without conveyance or an agri/equipment booking
       const systemVisitingCharges = settings?.visitedCharges || 49;
-      visitingCharges = systemVisitingCharges;
+      visitingCharges = isAgriService ? 0 : systemVisitingCharges;
       
       const gstPercentage = isAgriService ? (settings?.rentalGstPercentage || 5) : (settings?.serviceGstPercentage || 18);
       const gstDecMultiplier = gstPercentage / 100;
@@ -558,6 +567,7 @@ const createBooking = async (req, res) => {
         // ALWAYS trust backend for Agri/Equipment Flow. Disregard frontend amounts.
         basePrice = totalServiceValue;
         discount = 0; // Standard flow has no discount unless added by admin/coupons (TBD)
+        visitingCharges = 0; // Agri/equipment bookings have FREE conveyance/mobilization!
         tax = Math.round(basePrice * gstDecMultiplier);
         finalAmount = basePrice - discount + tax + visitingCharges + pendingPenalty;
         console.log(`[CreateBooking] Backend calculated Agri Price: Base=${basePrice}, Tax=${tax}, Total=${finalAmount}`);
@@ -686,6 +696,7 @@ const createBooking = async (req, res) => {
       basePrice,
       discount,
       tax,
+      gstPercentage,
       visitingCharges,
       penalty: pendingPenalty || 0,
       finalAmount,
@@ -2077,7 +2088,15 @@ const calculatePrice = async (req, res) => {
 
     const categoryId = service.categoryId || service.categoryIds?.[0];
     const category = categoryId ? await Category.findById(categoryId) : null;
-    const isAgriService = service.category === 'Agriculture' || (category && category.title === 'Agriculture');
+    const isAgriService = !!(
+      equipmentId ||
+      rental_type ||
+      service.rental_type ||
+      service.category === 'Agriculture' ||
+      (category && ['agriculture', 'machinery', 'tractor', 'equipment', 'farm equipment'].includes(category.title?.toLowerCase())) ||
+      (service.serviceCategory && ['agriculture', 'machinery', 'tractor', 'equipment', 'farm equipment'].some(c => service.serviceCategory.toLowerCase().includes(c))) ||
+      (service.title && ['tractor', 'rotavator', 'harvester', 'cultivator', 'plough', 'drone'].some(k => service.title.toLowerCase().includes(k)))
+    );
 
     let unitRate = service.basePrice || 500;
     let equipmentObj = null;
@@ -2123,7 +2142,7 @@ const calculatePrice = async (req, res) => {
     }
 
     const settings = await Settings.findOne({ type: 'global' });
-    const visitingCharges = settings?.visitedCharges || 49;
+    const visitingCharges = isAgriService ? 0 : (settings?.visitedCharges || 49);
     const gstPercentage = isAgriService ? (settings?.rentalGstPercentage || 5) : (settings?.serviceGstPercentage || 18);
     const gstDecMultiplier = gstPercentage / 100;
 
@@ -2289,7 +2308,13 @@ const reselectVendor = async (req, res) => {
         scheduledTime: booking.scheduledTime,
         timeSlot: booking.timeSlot,
         price: booking.finalAmount,
+        finalAmount: booking.finalAmount,
         basePrice: booking.basePrice,
+        tax: booking.tax,
+        gstPercentage: booking.gstPercentage,
+        visitingCharges: booking.visitingCharges,
+        equipmentId: booking.equipmentId,
+        serviceCategory: booking.serviceCategory,
         address: booking.address,
         distance: vendorDist,
         rental_type: booking.rental_type || '',

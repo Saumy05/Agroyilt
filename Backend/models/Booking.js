@@ -167,6 +167,10 @@ const bookingSchema = new mongoose.Schema({
     default: 0,
     min: 0
   },
+  gstPercentage: {
+    type: Number,
+    default: null
+  },
   visitingCharges: {
     type: Number,
     default: 0,

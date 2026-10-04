@@ -236,6 +236,9 @@ export default function BookingDetails() {
           cropType: apiData.cropType,
           endDate: apiData.endDate,
           scheduledDate: apiData.scheduledDate,
+          equipmentId: apiData.equipmentId,
+          isAgricultural: apiData.isAgricultural,
+          gstPercentage: apiData.gstPercentage,
         };
 
         setBooking(mappedBooking);
@@ -744,9 +747,27 @@ export default function BookingDetails() {
     partsGST += (parseFloat(c.gstAmount) || 0);
   });
 
+  // Agricultural detection
+  const isAgriBooking = !!(
+    booking?.rental_type ||
+    booking?.equipmentId ||
+    booking?.isAgricultural ||
+    booking?.categoryId?.isAgricultural ||
+    (booking?.serviceCategory && ['machinery', 'agriculture', 'equipment', 'farm equipment', 'tractor'].some(c => booking.serviceCategory.toLowerCase().includes(c))) ||
+    ['tractor', 'harvester', 'rotavator', 'sprayer', 'plough', 'combine', 'cultivator', 'agri', 'farm'].some(w =>
+      (booking?.serviceType || booking?.serviceName || '').toLowerCase().includes(w)
+    )
+  );
+
+  const gstPercentageRate = booking?.gstPercentage !== undefined && booking?.gstPercentage !== null
+    ? (Number(booking.gstPercentage) / 100)
+    : (isAgriBooking ? 0.05 : 0.18);
+
   // Tax Logic
-  // Use bill.originalGST if available, else fallback to totalGST
-  const originalGST = bill ? (bill.originalGST || bill.totalGST || 0) : (originalBase * 0.18);
+  // Use bill.originalGST if available, else booking.tax, else fallback to rate
+  const originalGST = bill 
+    ? (bill.originalGST || bill.totalGST || 0) 
+    : (booking?.tax !== undefined && booking?.tax !== null ? Number(booking.tax) : (originalBase * gstPercentageRate));
   const totalGST = originalGST + extraServiceGST + partsGST;
 
   // Final Total from bill or booking
@@ -1215,11 +1236,13 @@ export default function BookingDetails() {
 
                 {/* Service GST */}
                 {(() => {
-                  const activeGST = bill ? (originalGST + extraServiceGST) : (booking.tax || originalGST);
+                  const activeGST = bill ? (originalGST + extraServiceGST) : (booking?.tax !== undefined && booking?.tax !== null ? Number(booking.tax) : originalGST);
                   const activeBase = bill ? (originalBase - (booking.discount || 0) + extraServiceBase) : (originalBase - (booking.discount || 0));
-                  const dynamicGstPct = (activeGST > 0 && activeBase > 0)
-                    ? Math.round((activeGST * 100) / activeBase)
-                    : 18;
+                  const dynamicGstPct = booking?.gstPercentage !== undefined && booking?.gstPercentage !== null
+                    ? Number(booking.gstPercentage)
+                    : ((activeGST > 0 && activeBase > 0)
+                      ? Math.round((activeGST * 100) / activeBase)
+                      : (isAgriBooking ? 5 : 18));
                   return (
                     <div className="flex justify-between text-xs text-gray-500 border-t border-dashed border-gray-100 pt-1 mt-1">
                       <span>Service GST ({dynamicGstPct}%)</span>
@@ -1231,7 +1254,7 @@ export default function BookingDetails() {
                 {/* Service Subtotal */}
                 <div className="flex justify-between font-bold text-gray-800 pt-1">
                   <span>Total Service</span>
-                  <span>₹{(bill ? (originalBase + extraServiceBase + originalGST + extraServiceGST) : (originalBase - (booking.discount || 0) + (booking.tax || originalGST))).toFixed(2)}</span>
+                  <span>₹{(bill ? (originalBase + extraServiceBase + originalGST + extraServiceGST) : (originalBase - (booking.discount || 0) + (booking?.tax !== undefined && booking?.tax !== null ? Number(booking.tax) : originalGST))).toFixed(2)}</span>
                 </div>
               </div>
             </div>
