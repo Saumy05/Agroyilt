@@ -12,7 +12,9 @@ import {
   completeSelfJob, 
   collectSelfCash, 
   startTrip, 
-  endTrip 
+  endTrip,
+  machineryStartWork,
+  machineryCompleteWork
 } from '../../services/bookingService';
 import { uploadToCloudinary } from '../../../../utils/cloudinaryUpload';
 import { CashCollectionModal, ConfirmDialog } from '../../components/common';
@@ -455,11 +457,21 @@ const BookingTimeline = () => {
 
       // 2. Call API with URLs
       if (tripModalMode === 'start') {
-        await startTrip(id, photoUrl, otp);
-        toastManager.success(requiresDriver === false ? 'Equipment Handover Successful' : 'Engine started successfully');
+        if (isAgriBooking) {
+          await machineryStartWork(id, otp, photoUrl);
+          toastManager.success('🚜 Trip Started! OTP verified, work has begun.');
+        } else {
+          await startTrip(id, photoUrl, otp);
+          toastManager.success(requiresDriver === false ? 'Equipment Handover Successful' : 'Engine started successfully');
+        }
       } else {
-        await endTrip(id, photoUrl, otp, workUnits, evidenceUrl);
-        toastManager.success('Work ended and bill generated successfully');
+        if (isAgriBooking) {
+          await machineryCompleteWork(id, photoUrl, workUnits, evidenceUrl);
+          toastManager.success('🏁 Work Completed! Bill Generated & Payment OTP sent to farmer.');
+        } else {
+          await endTrip(id, photoUrl, otp, workUnits, evidenceUrl);
+          toastManager.success('Work ended and bill generated successfully');
+        }
       }
       
       setIsTripModalOpen(false);

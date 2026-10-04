@@ -249,8 +249,8 @@ const TripFlowModal = ({ isOpen, onClose, mode = 'start', onSubmit, rentalType, 
                                 <h2 className="text-lg font-extrabold text-gray-900">{title}</h2>
                                 <p className="text-xs text-gray-500 mt-0.5">
                                     Step {step === 3 && isStart ? 2 : step} of {skipOtpStep ? (isStart ? 1 : 2) : (isStart ? 2 : 3)}: {
-                                       step === 1 ? (isMeterBased ? 'Take KM Photo' : 'Confirm & Handover') : 
-                                       step === 2 ? (skipOtpStep ? 'Confirm Submission' : 'Evidence of Work') : 
+                                       step === 1 ? (isMachinery ? (isStart ? 'Setup Photo' : 'Completion Photo') : (isMeterBased ? 'Take KM Photo' : 'Confirm & Handover')) : 
+                                       step === 2 ? (skipOtpStep ? (isMachinery ? 'Work Evidence & Bill' : 'Confirm Submission') : 'Evidence of Work') : 
                                        'Enter Farmer OTP'
                                     }
                                 </p>
@@ -278,7 +278,7 @@ const TripFlowModal = ({ isOpen, onClose, mode = 'start', onSubmit, rentalType, 
                                     {/* Photo Preview / Camera Button */}
                                     {photoPreview ? (
                                         <div className="relative">
-                                            <img src={photoPreview} alt="KM" className="w-full h-52 object-cover rounded-2xl border-2 border-gray-200" />
+                                            <img src={photoPreview} alt="Captured" className="w-full h-52 object-cover rounded-2xl border-2 border-gray-200" />
                                             <button
                                                 onClick={() => { setPhotoPreview(null); setPhotoFile(null); }}
                                                 className="absolute top-2 right-2 p-1.5 bg-white/90 rounded-full shadow-md">
@@ -320,7 +320,12 @@ const TripFlowModal = ({ isOpen, onClose, mode = 'start', onSubmit, rentalType, 
                                         style={{ background: themeColor }}>
                                         {uploading
                                             ? <><FiLoader className="w-4 h-4 animate-spin" /> {photoFile ? 'Uploading...' : 'Processing...'}</>
-                                            : <>{skipOtpStep && isStart ? (isMachinery ? 'Confirm & Start Field Service' : (requiresDriver ? 'Confirm & Start Engine' : 'Confirm Handover')) : (!photoPreview ? 'Next: Enter Farmer OTP →' : 'Next: Verify OTP →')}</>}
+                                            : <>{skipOtpStep 
+                                                ? (isStart 
+                                                    ? (isMachinery ? 'Confirm & Start Field Service' : (requiresDriver ? 'Confirm & Start Engine' : 'Confirm Handover'))
+                                                    : 'Next: Work Evidence →')
+                                                : (!photoPreview ? 'Next: Enter Farmer OTP →' : 'Next: Verify OTP →')
+                                              }</>}
                                     </button>
                                     {/* Safety spacer for mobile BottomNav */}
                                     <div className="h-20 sm:hidden" />
@@ -330,7 +335,14 @@ const TripFlowModal = ({ isOpen, onClose, mode = 'start', onSubmit, rentalType, 
                             {/* === STEP 2: EVIDENCE PHOTO (Only for End Trip) === */}
                             {step === 2 && !isStart && (
                                 <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
-                                    <p className="text-sm font-semibold text-gray-700">Finished Work Evidence</p>
+                                    <div>
+                                        <p className="text-sm font-semibold text-gray-700">Finished Work Evidence</p>
+                                        {skipOtpStep && (
+                                            <p className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl p-2 mt-1">
+                                                ℹ️ Submitting here completes service and generates the bill. Payment OTP is entered in the next step when collecting payment.
+                                            </p>
+                                        )}
+                                    </div>
 
                                     {evidencePreview ? (
                                         <div className="relative">
@@ -375,8 +387,8 @@ const TripFlowModal = ({ isOpen, onClose, mode = 'start', onSubmit, rentalType, 
                                             {uploading
                                                 ? <><FiLoader className="w-4 h-4 animate-spin" /> Uploading...</>
                                                 : !evidencePreview 
-                                                    ? <>{'Skip Photo & Continue'} <FiArrowRight className="w-4 h-4" /></>
-                                                    : <><FiCheck className="w-4 h-4" /> {skipOtpStep ? 'Confirm & End Trip' : 'Verify & Continue'}</>}
+                                                    ? <>{skipOtpStep ? (isMachinery ? 'Complete Service & Bill' : 'Confirm & End Trip') : 'Skip Photo & Continue'} <FiArrowRight className="w-4 h-4" /></>
+                                                    : <><FiCheck className="w-4 h-4" /> {skipOtpStep ? (isMachinery ? 'Complete Service & Bill' : 'Confirm & End Trip') : 'Verify & Continue'}</>}
                                         </button>
                                     </div>
                                     <div className="h-20 sm:hidden" />

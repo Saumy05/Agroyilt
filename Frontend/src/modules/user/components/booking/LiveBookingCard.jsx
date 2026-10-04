@@ -121,9 +121,11 @@ const LiveBookingCard = ({ hasBottomNav }) => {
     }
   };
 
-  // Auto-show rating modal when work is marked done
+  // Auto-show rating modal ONLY when booking is fully completed AND paid
   useEffect(() => {
-    if (activeBooking && activeBooking.status?.toUpperCase() === 'WORK_DONE' && !activeBooking.rating && !showRatingModal) {
+    const isCompleted = activeBooking?.status?.toLowerCase() === 'completed';
+    const isPaid = ['success', 'paid', 'collected_by_vendor'].includes(activeBooking?.paymentStatus?.toLowerCase()) || activeBooking?.cashCollected === true;
+    if (activeBooking && isCompleted && isPaid && !activeBooking.rating && !showRatingModal) {
       const dismissed = localStorage.getItem(`rating_dismissed_live_${activeBooking._id}`);
       if (!dismissed) {
         setShowRatingModal(true);

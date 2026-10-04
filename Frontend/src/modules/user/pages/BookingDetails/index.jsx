@@ -296,44 +296,40 @@ const BookingDetails = () => {
     }
   }, [id, navigate]);
 
-  // Auto-show rating modal ONLY when booking is fully completed AND paid (or work_done for machinery)
+  // Auto-show rating modal ONLY when booking is fully completed AND payment is settled
   useEffect(() => {
     if (booking) {
-      const isCompleted = ['completed', 'work_done'].includes(booking.status?.toLowerCase());
-      const isPaid = ['success', 'paid', 'collected_by_vendor'].includes(booking.paymentStatus?.toLowerCase());
-      const isMachineryWorkDone = booking.status?.toLowerCase() === 'work_done';
+      const isCompleted = booking.status?.toLowerCase() === 'completed';
+      const isPaid = ['success', 'paid', 'collected_by_vendor'].includes(booking.paymentStatus?.toLowerCase()) || booking.cashCollected === true;
       const isRated = !!booking.rating;
       const isDismissed = localStorage.getItem(`rating_dismissed_${id}`);
 
-      // Show rating modal if: (completed + paid) OR (work_done for machinery) AND not yet rated or dismissed
-      if (isCompleted && (isPaid || isMachineryWorkDone) && !isRated && !isDismissed) {
+      // Show rating modal only if completed AND paid AND not yet rated or dismissed
+      if (isCompleted && isPaid && !isRated && !isDismissed) {
         setShowRatingModal(true);
       }
     }
   }, [booking, id]);
 
-  // Track if we've shown the payment modal this session to prevent re-opening on data refresh
-
-
   // Handle Payment Modal Visibility - Only auto-open ONCE per session AND if payment is PENDING
   useEffect(() => {
     // Check if payment is already done (success or collected)
     const isPaymentDone = booking?.paymentStatus === 'success' || booking?.cashCollected === true;
+    const hasOtp = Boolean(booking?.customerConfirmationOTP || booking?.paymentOtp);
 
     // Open logic: 
-    // 1. Has verification OTP (Work is done)
+    // 1. Has verification/payment OTP (Work is done)
     // 2. Payment is NOT done (Pending)
     // 3. Haven't shown modal automatically in this session yet
-    // Check session storage to see if we already showed it this session
     const hasShown = booking ? sessionStorage.getItem(`payment_modal_shown_${booking._id}`) : false;
 
-    if (booking && booking.customerConfirmationOTP && !isPaymentDone && !hasShown) {
+    if (booking && hasOtp && !isPaymentDone && !hasShown) {
       setShowPaymentModal(true);
       sessionStorage.setItem(`payment_modal_shown_${booking._id}`, 'true');
     }
     // Close logic:
     // If payment becomes done or OTP missing, close it.
-    else if (!booking?.customerConfirmationOTP || isPaymentDone) {
+    else if (!hasOtp || isPaymentDone) {
       setShowPaymentModal(false);
     }
   }, [booking]);
