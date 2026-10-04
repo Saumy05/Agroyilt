@@ -4,8 +4,7 @@ import {
   FiSearch, FiMapPin, FiTruck, FiClock, 
   FiChevronRight, FiArrowLeft, FiCalendar, 
   FiCheckCircle, FiZap, FiPlus, FiMinus, 
-  FiInfo, FiShield, FiSliders, FiSun, 
-  FiSunrise, FiSunset, FiMoon, FiCheck, FiTool,
+  FiInfo, FiShield, FiSliders, FiCheck, FiTool,
   FiArrowRight, FiEdit2, FiLock
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -43,12 +42,32 @@ const MachineryExplorer = () => {
   const tomorrowStr = new Date(Date.now() + 86400000).toISOString().split('T')[0];
   const dayAfterStr = new Date(Date.now() + 172800000).toISOString().split('T')[0];
 
-  const START_SLOTS = [
-    { label: 'Early Morning', time: '07:00', icon: FiSunrise, tag: 'Cool Hours' },
-    { label: 'Morning', time: '09:00', icon: FiSun, tag: 'Popular' },
-    { label: 'Afternoon', time: '13:00', icon: FiSun, tag: 'Dry Field' },
-    { label: 'Late Afternoon', time: '16:00', icon: FiSunset, tag: 'Tillage' }
+  const QUICK_TIME_PRESETS = [
+    { label: '6:00 AM', time: '06:00' },
+    { label: '8:00 AM', time: '08:00' },
+    { label: '10:00 AM', time: '10:00' },
+    { label: '1:00 PM', time: '13:00' },
+    { label: '3:00 PM', time: '15:00' },
+    { label: '5:00 PM', time: '17:00' },
+    { label: '7:00 PM', time: '19:00' }
   ];
+
+  const getEarliestStartTime = (dateStr) => {
+    if (!dateStr || dateStr !== todayStr) return '08:00';
+    const now = new Date();
+    // 45 minute buffer from now
+    const targetMin = now.getHours() * 60 + now.getMinutes() + 45;
+    const roundedMin = Math.ceil(targetMin / 15) * 15;
+    const h = Math.floor(roundedMin / 60);
+    const m = roundedMin % 60;
+    if (h >= 24) return '23:00';
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  };
+
+  const isTodayClosed = (() => {
+    const now = new Date();
+    return now.getHours() >= 20; // 8:00 PM cutoff for new same-day dispatches
+  })();
 
   const calculateEndTime = (startStr, durationHours) => {
     if (!startStr) return '11:00';
@@ -63,22 +82,6 @@ const MachineryExplorer = () => {
       return '11:00';
     }
   };
-
-  const getAvailableSlotsForDate = (dateStr) => {
-    if (!dateStr || dateStr !== todayStr) return START_SLOTS;
-
-    const now = new Date();
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
-    const LEAD_TIME_MINUTES = 45; // 45-minute dispatch lead time buffer
-
-    return START_SLOTS.filter(slot => {
-      const [startH, startM] = slot.time.split(':').map(Number);
-      const slotStartMinutes = startH * 60 + startM;
-      return slotStartMinutes >= currentMinutes + LEAD_TIME_MINUTES;
-    });
-  };
-
-  const isTodayClosed = getAvailableSlotsForDate(todayStr).length === 0;
 
   const [selectedCat, setSelectedCat] = useState(location.state?.category || null);
   const [selectedImplement, setSelectedImplement] = useState(location.state?.preSelectedImplement || null);
@@ -99,22 +102,18 @@ const MachineryExplorer = () => {
     return isTodayClosed ? tomorrowStr : todayStr;
   });
 
-  const availableSlots = getAvailableSlotsForDate(bookingDate);
-
   const [startTime, setStartTime] = useState(() => {
     if (location.state?.startTime) return location.state.startTime;
-    return availableSlots[0]?.time || '09:00';
+    return getEarliestStartTime(location.state?.bookingDate || (isTodayClosed ? tomorrowStr : todayStr));
   });
 
   const [endTime, setEndTime] = useState(() => {
     if (location.state?.endTime) return location.state.endTime;
     const initialQty = location.state?.quantity ? (Math.round((parseFloat(location.state.quantity) || 1) * 100) / 100) : 1;
-    return calculateEndTime(location.state?.startTime || availableSlots[0]?.time || '09:00', initialQty);
+    const initStart = location.state?.startTime || getEarliestStartTime(location.state?.bookingDate || (isTodayClosed ? tomorrowStr : todayStr));
+    return calculateEndTime(initStart, initialQty);
   });
 
-  const [activeSlotPreset, setActiveSlotPreset] = useState(() => {
-    return availableSlots[0]?.label || 'Morning';
-  });
   const [currentStep, setCurrentStep] = useState(location.state?.step || 1);
 
   // Automatically sync endTime whenever startTime, quantity, or rentalType changes
@@ -124,14 +123,14 @@ const MachineryExplorer = () => {
     setEndTime(calculateEndTime(startTime, hours));
   }, [startTime, quantity, rentalType]);
 
-  // Automatically update start time when date changes if previous selection is in the past for today
+  // When switching to today, ensure startTime is not in the past
   useEffect(() => {
-    const validSlots = getAvailableSlotsForDate(bookingDate);
-    if (validSlots.length > 0) {
-      const isCurrentSlotValid = validSlots.some(s => s.time === startTime);
-      if (!isCurrentSlotValid) {
-        setStartTime(validSlots[0].time);
-        setActiveSlotPreset(validSlots[0].label);
+    if (bookingDate === todayStr) {
+      const now = new Date();
+      const currentMin = now.getHours() * 60 + now.getMinutes() + 45;
+      const [sh, sm] = startTime.split(':').map(Number);
+      if (sh * 60 + sm < currentMin) {
+        setStartTime(getEarliestStartTime(todayStr));
       }
     }
   }, [bookingDate]);
@@ -1113,104 +1112,81 @@ const MachineryExplorer = () => {
                       />
                     </div>
 
-                    {/* Preferred Arrival / Start Time Slots */}
-                    <div className="space-y-2 pt-2 border-t border-slate-100">
+                    {/* Machine Arrival Time */}
+                    <div className="space-y-2.5 pt-2 border-t border-slate-100">
                       <div className="flex items-center justify-between gap-2">
-                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider">
-                          Select Preferred Start Time:
-                        </p>
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
+                          Preferred Arrival Time
+                        </label>
                         {bookingDate === todayStr && (
                           <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60 shrink-0">
-                            45m lead time
+                            45m dispatch lead time
                           </span>
                         )}
                       </div>
 
-                      {availableSlots.length === 0 ? (
-                        <div className="bg-amber-50/90 border border-amber-200/90 rounded-xl p-3 text-center space-y-1.5 shadow-2xs">
-                          <p className="text-xs font-black text-amber-950">
-                            Today's operating shifts have concluded
-                          </p>
-                          <p className="text-[10.5px] font-semibold text-amber-800 leading-relaxed">
-                            Machinery dispatch buffer has ended for today. Book for tomorrow to access all morning and daytime slots.
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => setBookingDate(tomorrowStr)}
-                            className="mt-1 px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-black transition-all cursor-pointer shadow-xs"
-                          >
-                            Switch to Tomorrow ({formatToDDMMYYYY(tomorrowStr)})
-                          </button>
+                      {/* Prominent Arrival Time Card (Matches Date Picker Pattern) */}
+                      <div className="relative group">
+                        <div className="w-full flex items-center justify-between p-3 rounded-xl bg-slate-50/80 border border-slate-200/80 group-hover:border-emerald-500 group-hover:bg-emerald-50/20 transition-all shadow-2xs cursor-pointer">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-8 h-8 rounded-lg bg-emerald-100/90 text-emerald-800 flex items-center justify-center shrink-0">
+                              <FiClock size={15} />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs font-black text-slate-900 tracking-wider">
+                                {formatTime12Hour(startTime)}
+                              </p>
+                              <p className="text-[10px] font-bold text-slate-400">
+                                Machine starts work at your field
+                              </p>
+                            </div>
+                          </div>
+                          <span className="text-[10.5px] font-black text-emerald-700 bg-white border border-emerald-200/70 px-2.5 py-1 rounded-lg shadow-2xs shrink-0 flex items-center gap-1">
+                            <FiEdit2 size={10} />
+                            <span>Change Time</span>
+                          </span>
                         </div>
-                      ) : (
-                        <div className="grid grid-cols-2 gap-2">
-                          {availableSlots.map((slot) => {
-                            const isSelected = startTime === slot.time;
-                            const IconComp = slot.icon;
+                        <input
+                          type="time"
+                          value={startTime}
+                          onChange={(e) => setStartTime(e.target.value)}
+                          className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
+                        />
+                      </div>
+
+                      {/* Quick Hour Preset Pills */}
+                      <div className="space-y-1.5 pt-1">
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">
+                          Popular Start Times:
+                        </p>
+                        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                          {QUICK_TIME_PRESETS.map((preset) => {
+                            const isSelected = startTime === preset.time;
+                            const isPast = bookingDate === todayStr && (() => {
+                              const now = new Date();
+                              const curMin = now.getHours() * 60 + now.getMinutes() + 45;
+                              const [ph, pm] = preset.time.split(':').map(Number);
+                              return ph * 60 + pm < curMin;
+                            })();
+
                             return (
                               <button
-                                key={slot.label}
+                                key={preset.time}
                                 type="button"
-                                onClick={() => {
-                                  setStartTime(slot.time);
-                                  setActiveSlotPreset(slot.label);
-                                }}
-                                className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between min-h-[70px] ${
+                                disabled={isPast}
+                                onClick={() => setStartTime(preset.time)}
+                                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-black shrink-0 transition-all cursor-pointer ${
                                   isSelected
-                                    ? 'bg-emerald-50/90 border-emerald-500 ring-2 ring-emerald-500/20 shadow-xs'
-                                    : 'bg-slate-50/70 border-slate-200/80 hover:border-slate-300 hover:bg-slate-100/60'
+                                    ? 'bg-emerald-700 text-white shadow-2xs'
+                                    : isPast
+                                    ? 'bg-slate-100 text-slate-400 opacity-40 cursor-not-allowed border border-slate-200/40'
+                                    : 'bg-slate-50 text-slate-700 border border-slate-200/80 hover:bg-slate-100'
                                 }`}
                               >
-                                <div className="flex items-center justify-between gap-1 w-full">
-                                  <div className="flex items-center gap-1.5 min-w-0">
-                                    <span className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 ${
-                                      isSelected ? 'bg-emerald-600 text-white shadow-2xs' : 'bg-slate-200/70 text-slate-600'
-                                    }`}>
-                                      <IconComp size={11} />
-                                    </span>
-                                    <span className="text-[11px] font-black text-slate-900 truncate">
-                                      {slot.label}
-                                    </span>
-                                  </div>
-                                  {slot.tag && (
-                                    <span className={`text-[7.5px] font-black uppercase px-1.5 py-0.5 rounded shrink-0 tracking-wider ${
-                                      isSelected ? 'bg-emerald-600 text-white' : 'bg-slate-200/80 text-slate-600'
-                                    }`}>
-                                      {slot.tag}
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="flex items-baseline justify-between mt-2 pt-1 border-t border-slate-200/50">
-                                  <p className="text-xs font-black text-emerald-800 tracking-tight">
-                                    {formatTime12Hour(slot.time)}
-                                  </p>
-                                  {isSelected && (
-                                    <span className="text-[9px] font-black text-emerald-700 flex items-center gap-0.5">
-                                      <FiCheck size={11} />
-                                    </span>
-                                  )}
-                                </div>
+                                {preset.label}
                               </button>
                             );
                           })}
-                        </div>
-                      )}
-
-                      {/* Custom Start Time Input */}
-                      <div className="pt-1.5">
-                        <label className="text-[9.5px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                          Or Set Custom Start Time:
-                        </label>
-                        <div className="relative">
-                          <input
-                            type="time"
-                            value={startTime}
-                            onChange={(e) => {
-                              setStartTime(e.target.value);
-                              setActiveSlotPreset('');
-                            }}
-                            className="w-full text-xs font-black p-2.5 rounded-xl bg-slate-50/80 border border-slate-200/80 focus:outline-none focus:border-emerald-500 focus:bg-white text-slate-900 transition-all"
-                          />
                         </div>
                       </div>
 
