@@ -649,9 +649,9 @@ export default function BookingDetails() {
         }
       } else {
         if (isMachinery) {
-          // Machinery end: only KM photo needed — system auto-generates End OTP for farmer
+          // Machinery end: only KM photo needed — system auto-generates Payment OTP for farmer
           await machineryCompleteWork(id, photoUrl, workUnits, evidencePhoto);
-          toastManager.success('🏁 Work Completed! End OTP has been sent to the farmer.');
+          toastManager.success('🏁 Work Completed! Bill Generated & Payment OTP sent to the farmer.');
         } else {
           await endTrip(id, photoUrl, otp, workUnits, evidencePhoto);
           toastManager.success('🏁 Trip Ended! Bill Generated & Wallet Settled.');

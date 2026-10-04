@@ -564,7 +564,7 @@ const BookingTimeline = () => {
           return null;
       })(),
       description: isAgriBooking 
-        ? 'Verify End OTP to finish work & generate active-minute bill' 
+        ? 'Finish work & generate active-minute bill' 
         : 'Complete the service work',
     },
     {
