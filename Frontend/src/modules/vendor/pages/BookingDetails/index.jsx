@@ -758,6 +758,42 @@ export default function BookingDetails() {
       <Header title="Booking Details" />
 
       <main className="px-4 py-6">
+        {/* Action Required: Incoming Request Banner */}
+        {['requested', 'pending', 'searching'].includes(booking.status?.toLowerCase()) && (
+          <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border-2 border-emerald-500/40 rounded-2xl p-4 mb-4 shadow-lg shadow-emerald-900/5 relative overflow-hidden">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-ping" />
+                <h3 className="font-black text-emerald-950 text-sm">Action Required: New Order</h3>
+              </div>
+              <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-600 text-white px-2.5 py-0.5 rounded-full shadow-xs">
+                Awaiting Response
+              </span>
+            </div>
+            <p className="text-xs text-emerald-800 font-medium mb-3.5 leading-relaxed">
+              Farmer <span className="font-bold text-emerald-950">{booking.user?.name || booking.customerName || 'Farmer'}</span> is waiting for your confirmation. Please accept or decline this request.
+            </p>
+            <div className="flex gap-2.5">
+              <button
+                onClick={handleReject}
+                disabled={actionLoading}
+                className="flex-1 py-3 rounded-xl font-bold text-xs text-red-600 bg-white border border-red-200 hover:bg-red-50 flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-xs disabled:opacity-50"
+              >
+                <FiXCircle className="w-4 h-4" />
+                Decline
+              </button>
+              <button
+                onClick={handleAccept}
+                disabled={actionLoading}
+                className="flex-1 py-3 rounded-xl font-black text-xs text-white bg-gradient-to-r from-emerald-600 to-green-700 hover:from-emerald-700 hover:to-green-800 flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-md shadow-emerald-900/20 disabled:opacity-50"
+              >
+                <FiCheckCircle className="w-4 h-4" />
+                {actionLoading ? 'Accepting...' : 'Accept Order'}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Service Type Card */}
         <div
           className="bg-white rounded-xl p-4 mb-4 shadow-md"
@@ -1681,27 +1717,26 @@ export default function BookingDetails() {
 
         {/* Action Buttons */}
         <div className="space-y-3 mb-4">
-          {(booking.status === 'pending' || booking.status === 'searching') && (
+          {['requested', 'pending', 'searching'].includes(booking.status?.toLowerCase()) && (
             <div className="flex gap-3">
               <button
                 onClick={handleReject}
                 disabled={actionLoading}
-                className="flex-1 py-4 rounded-xl font-bold text-red-600 bg-red-50 border border-red-100 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50"
+                className="flex-1 py-4 rounded-xl font-bold text-red-600 bg-red-50 border border-red-200 hover:bg-red-100 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50"
               >
                 <FiXCircle className="w-5 h-5" />
-                Reject
+                Decline Order
               </button>
               <button
                 onClick={handleAccept}
                 disabled={actionLoading}
-                className="flex-1 py-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50"
+                className="flex-1 py-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 shadow-md shadow-emerald-900/20"
                 style={{
                   background: 'linear-gradient(135deg, #10B981, #059669)',
-                  boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
                 }}
               >
                 <FiCheckCircle className="w-5 h-5" />
-                Accept
+                {actionLoading ? 'Accepting...' : 'Accept Order'}
               </button>
             </div>
           )}
@@ -1776,7 +1811,8 @@ export default function BookingDetails() {
         </div>
 
         {/* ══════ LIVE AGRICULTURAL SERVICE TIMER (PLAY / PAUSE / BREAKDOWN) ══════ */}
-        {(booking?.serviceTimer || booking?.equipmentId || booking?.rental_type || ['visited', 'in_progress', 'completed'].includes(booking?.status)) && (
+        {!['requested', 'pending', 'searching', 'rejected', 'cancelled'].includes(booking?.status?.toLowerCase()) &&
+         (booking?.serviceTimer || booking?.equipmentId || booking?.rental_type || ['visited', 'in_progress', 'completed'].includes(booking?.status?.toLowerCase())) && (
           <div className="mb-4">
             <LiveServiceTimer
               booking={booking}
