@@ -252,11 +252,11 @@ exports.updateSettings = async (req, res, next) => {
 // Get Public Settings (Visited Charges, GST, Branding)
 exports.getPublicSettings = async (req, res, next) => {
   try {
-    let settings = await Settings.findOne({ type: 'global' }).select('visitedCharges serviceGstPercentage partsGstPercentage supportEmail supportPhone supportWhatsapp cancellationPenalty bookingCommissionPercentage appName appTagline appLogo appFavicon workerAlertTimeoutSeconds');
+    let settings = await Settings.findOne({ type: 'global' }).select('visitedCharges serviceGstPercentage partsGstPercentage rentalGstPercentage supportEmail supportPhone supportWhatsapp cancellationPenalty bookingCommissionPercentage appName appTagline appLogo appFavicon workerAlertTimeoutSeconds');
 
     // Default if not found (fallback values)
     if (!settings) {
-      settings = { visitedCharges: 29, serviceGstPercentage: 18, partsGstPercentage: 18, appName: 'AgroYilt', appLogo: '/AgroyiltLogo.png', appFavicon: '/AgroyiltLogo.png', workerAlertTimeoutSeconds: 60 };
+      settings = { visitedCharges: 29, serviceGstPercentage: 18, partsGstPercentage: 18, rentalGstPercentage: 5, appName: 'AgroYilt', appLogo: '/AgroyiltLogo.png', appFavicon: '/AgroyiltLogo.png', workerAlertTimeoutSeconds: 60 };
     }
 
     res.status(200).json({

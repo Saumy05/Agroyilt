@@ -168,7 +168,7 @@ const AvailableVendors = () => {
           basePrice: item.pricing.basePrice,
           tax: item.pricing.tax,
           visitingCharges: item.pricing.visitingCharges,
-          gstPercentage: item.pricing.gstPercentage || 5,
+          gstPercentage: item.pricing.gstPercentage ?? 5,
           total: item.pricing.totalAmount,
           tractorTotal: item.pricing.tractorTotal || item.pricing.basePrice,
           implementTotal: item.pricing.implementTotal || 0,
@@ -256,6 +256,17 @@ const AvailableVendors = () => {
       return dateStr;
     } catch {
       return dateStr;
+    }
+  };
+
+  const formatDateDisplay = (dateStr) => {
+    if (!dateStr) return '';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return String(dateStr);
+      return d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+    } catch {
+      return String(dateStr);
     }
   };
 
@@ -439,7 +450,7 @@ const AvailableVendors = () => {
             <div className="space-y-1">
               <h3 className="text-sm font-black text-slate-900">No Machinery Free for This Window</h3>
               <p className="text-[11px] text-slate-500 max-w-sm mx-auto leading-relaxed">
-                All qualified equipment in your 60 km cluster is currently booked or off-duty during {startTime} - {endTime} on {formatDateDisplay(bookingDate)}.
+                All qualified equipment in your 60 km cluster is currently booked or off-duty during {formatTime12Hour(startTime)} – {formatTime12Hour(endTime)} on {formatDateDisplay(bookingDate)}.
               </p>
             </div>
             <div className="pt-1 flex flex-col sm:flex-row gap-2 justify-center">

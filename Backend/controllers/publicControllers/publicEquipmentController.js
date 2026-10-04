@@ -312,7 +312,7 @@ exports.findQualifiedVendors = async (req, res) => {
     // 0. Fetch global settings for pricing integrity
     const settings = await Settings.findOne({ type: 'global' });
     const visitingCharges = (settings && typeof settings.visitedCharges === 'number') ? settings.visitedCharges : 49;
-    const gstPercentage = settings?.rentalGstPercentage || 5;
+    const gstPercentage = typeof settings?.rentalGstPercentage === 'number' ? settings.rentalGstPercentage : 5;
 
     // 1. Calculate Multiplier and Normalized Interval
     const reqInterval = parseSlotInterval(timeSlot, null, rental_type);

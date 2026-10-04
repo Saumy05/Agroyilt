@@ -438,7 +438,7 @@ const createBooking = async (req, res) => {
     }
 
     // Calculate pricing - use amount from frontend if provided, otherwise calculate
-    let basePrice, discount, tax, finalAmount;
+    let basePrice, discount, tax, finalAmount, gstPercentage;
     let bookingStatus = BOOKING_STATUS.SEARCHING;
     let bookingPaymentStatus = PAYMENT_STATUS.PENDING;
 
@@ -542,7 +542,8 @@ const createBooking = async (req, res) => {
             visitingCharges = 0; // Waive transport fee
         }
 
-        tax = Math.round((basePrice - discount) * 0.18);
+        gstPercentage = 18;
+        tax = Math.round((basePrice - discount) * (gstPercentage / 100));
         finalAmount = (basePrice - discount + tax + visitingCharges) + pendingPenalty;
 
         bookingStatus = BOOKING_STATUS.SEARCHING;
@@ -560,7 +561,7 @@ const createBooking = async (req, res) => {
       const systemVisitingCharges = settings?.visitedCharges || 49;
       visitingCharges = isAgriService ? 0 : systemVisitingCharges;
       
-      const gstPercentage = isAgriService ? (settings?.rentalGstPercentage || 5) : (settings?.serviceGstPercentage || 18);
+      gstPercentage = isAgriService ? (settings?.rentalGstPercentage ?? 5) : (settings?.serviceGstPercentage ?? 18);
       const gstDecMultiplier = gstPercentage / 100;
 
       if (isAgriService) {
@@ -1095,7 +1096,7 @@ const createBooking = async (req, res) => {
     console.error('Create booking error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to create booking. Please try again.'
+      message: error.message || 'Failed to create booking. Please try again.'
     });
   }
 };
@@ -2143,7 +2144,7 @@ const calculatePrice = async (req, res) => {
 
     const settings = await Settings.findOne({ type: 'global' });
     const visitingCharges = isAgriService ? 0 : (settings?.visitedCharges || 49);
-    const gstPercentage = isAgriService ? (settings?.rentalGstPercentage || 5) : (settings?.serviceGstPercentage || 18);
+    const gstPercentage = isAgriService ? (settings?.rentalGstPercentage ?? 5) : (settings?.serviceGstPercentage ?? 18);
     const gstDecMultiplier = gstPercentage / 100;
 
     const basePrice = isAgriService ? totalServiceValue : (totalServiceValue || unitRate);

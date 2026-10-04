@@ -740,10 +740,10 @@ const BookingConfirmation = () => {
               )}
 
               {/* GST */}
-              {(booking.tax > 0 || booking.gstPercentage || booking.paymentMethod === 'plan_benefit') && (
+              {(booking.tax > 0 || typeof booking.gstPercentage === 'number' || booking.paymentMethod === 'plan_benefit') && (
                 <div className="flex justify-between items-center text-slate-600">
                   <span>
-                    GST ({booking.gstPercentage || (booking.basePrice > 0 ? Math.round((booking.tax * 100) / booking.basePrice) : 5)}%)
+                    GST ({typeof booking.gstPercentage === 'number' ? booking.gstPercentage : (booking.basePrice > 0 ? Math.round((booking.tax * 100) / booking.basePrice) : 5)}%)
                   </span>
                   {booking.paymentMethod === 'plan_benefit' ? (
                     <div className="flex items-center gap-1.5">

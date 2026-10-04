@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   FiMapPin, FiTruck, FiCalendar, FiClock, 
@@ -9,6 +9,7 @@ import { motion } from 'framer-motion';
 import { toastManager } from '../../../../utils/toastManager';
 import { bookingService } from '../../../../services/bookingService';
 import { paymentService } from '../../../../services/paymentService';
+import { configService } from '../../../../services/configService';
 import authStorage from '../../../../utils/authStorage';
 import AddressSelectionModal from '../Checkout/components/AddressSelectionModal';
 
@@ -35,6 +36,25 @@ const MachineryCheckout = () => {
     const [paymentMethod, setPaymentMethod] = useState('cash'); // Defaulting to COD for agriculture
     const [submitting, setSubmitting] = useState(false);
     const [showPaymentConfirmModal, setShowPaymentConfirmModal] = useState(false);
+    const [adminRentalGst, setAdminRentalGst] = useState(null);
+
+    useEffect(() => {
+        let isMounted = true;
+        const loadSettings = async () => {
+            try {
+                const res = await configService.getSettings();
+                if (isMounted && res?.success && res?.settings) {
+                    if (typeof res.settings.rentalGstPercentage === 'number') {
+                        setAdminRentalGst(res.settings.rentalGstPercentage);
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to load dynamic settings in MachineryCheckout:', e);
+            }
+        };
+        loadSettings();
+        return () => { isMounted = false; };
+    }, []);
 
     if (!equipment || !bookingData) {
         return (
@@ -61,14 +81,38 @@ const MachineryCheckout = () => {
         slot, 
         startTime, 
         endTime, 
-        total, 
-        basePrice, 
-        tax, 
-        visitingCharges,
+        total: initialTotal, 
+        basePrice: initialBasePrice, 
+        tax: initialTax, 
+        visitingCharges = 0,
         tractorTotal,
         implementTotal,
-        gstPercentage
+        gstPercentage: passedGstPercentage
     } = bookingData;
+
+    const activeGstPercentage = typeof passedGstPercentage === 'number'
+        ? passedGstPercentage
+        : (adminRentalGst !== null ? adminRentalGst : 5);
+
+    const calculatedTractorTotal = (typeof tractorTotal === 'number') 
+        ? tractorTotal 
+        : (initialBasePrice !== undefined ? initialBasePrice : (initialTotal || 0));
+
+    const calculatedBasePrice = initialBasePrice !== undefined 
+        ? initialBasePrice 
+        : (calculatedTractorTotal + (implementTotal || 0));
+
+    const calculatedTax = (typeof initialTax === 'number' && initialTax > 0)
+        ? initialTax 
+        : Math.round(calculatedBasePrice * (activeGstPercentage / 100));
+
+    const calculatedTotal = (typeof initialTotal === 'number' && initialTotal > 0)
+        ? initialTotal
+        : (calculatedBasePrice + calculatedTax + (visitingCharges || 0));
+
+    const total = calculatedTotal;
+    const tax = calculatedTax;
+    const basePrice = calculatedBasePrice;
 
     const formatToDDMMYYYY = (dateStr) => {
         if (!dateStr) return '';
@@ -104,9 +148,7 @@ const MachineryCheckout = () => {
         return formatTime12Hour(slotStr || start);
     };
 
-    const finalTractorTotal = (typeof tractorTotal === 'number') 
-        ? tractorTotal 
-        : (basePrice !== undefined ? basePrice : total);
+    const finalTractorTotal = calculatedTractorTotal;
 
     const formatDuration = (qty, type) => {
         const num = Math.round((parseFloat(qty) || 1) * 100) / 100;
@@ -164,10 +206,11 @@ const MachineryCheckout = () => {
                     lng: selectedAddress.lng
                 },
                 paymentMethod,
-                amount: total,
-                basePrice: basePrice || total,
-                tax: tax || 0,
+                amount: calculatedTotal,
+                basePrice: calculatedBasePrice,
+                tax: calculatedTax,
                 visitingCharges: visitingCharges || 0,
+                gstPercentage: activeGstPercentage,
                 // Selected implements
                 selectedImplements: selectedImplements.map(impl => ({
                     subCategoryId: impl.subCategoryId?._id || impl.subCategoryId,
@@ -219,7 +262,7 @@ const MachineryCheckout = () => {
                     const razorpayKey = orderRes.data?.key || import.meta.env.VITE_RAZORPAY_KEY_ID;
                     const options = {
                         key: razorpayKey,
-                        amount: Math.round((orderRes.data.amount || total) * 100),
+                        amount: Math.round((orderRes.data.amount || calculatedTotal) * 100),
                         currency: orderRes.data.currency || 'INR',
                         order_id: orderRes.data.orderId,
                         name: 'Agroyilt',
@@ -497,9 +540,9 @@ const MachineryCheckout = () => {
                         {/* GST */}
                         <div className="flex justify-between items-center text-xs pt-0.5">
                           <span className="font-bold text-slate-500 text-[11px]">
-                            GST {gstPercentage ? `(${gstPercentage}%)` : '(5%)'}
+                            GST ({activeGstPercentage}%)
                           </span>
-                          <span className="font-bold text-slate-700 text-xs">+ ₹{tax || 0}</span>
+                          <span className="font-bold text-slate-700 text-xs">+ ₹{calculatedTax || 0}</span>
                         </div>
 
                         {/* Total Highlight */}
@@ -508,7 +551,7 @@ const MachineryCheckout = () => {
                             <span className="text-[11px] font-black text-slate-900 uppercase tracking-wider block">Total Payable</span>
                             <span className="text-[9.5px] font-semibold text-slate-400">All taxes & operator expenses included</span>
                           </div>
-                          <span className="text-xl font-black text-emerald-800">₹{total}</span>
+                          <span className="text-xl font-black text-emerald-800">₹{calculatedTotal}</span>
                         </div>
                     </div>
                 </div>
@@ -606,7 +649,7 @@ const MachineryCheckout = () => {
                 <div className="max-w-xl mx-auto flex items-center justify-between gap-3">
                     <div>
                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider leading-none mb-0.5">Total Payable</p>
-                        <h4 className="text-xl font-black text-slate-900 leading-none">₹{total}</h4>
+                        <h4 className="text-xl font-black text-slate-900 leading-none">₹{calculatedTotal}</h4>
                         <span className="text-[9.5px] font-bold text-emerald-700 mt-0.5 block">
                           {paymentMethod === 'cash' ? 'Pay on field after work' : 'Online payment'}
                         </span>
@@ -676,7 +719,7 @@ const MachineryCheckout = () => {
                     <div className="rounded-2xl px-5 py-4 mb-5 flex items-center justify-between bg-gradient-to-r from-emerald-50 to-teal-50/60 border border-emerald-200/60">
                       <div>
                         <p className="text-[10px] font-black text-emerald-800 uppercase tracking-widest">Payable Amount</p>
-                        <p className="text-2xl font-black text-emerald-950">₹{total}</p>
+                        <p className="text-2xl font-black text-emerald-950">₹{calculatedTotal}</p>
                       </div>
                       <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-emerald-700 text-white shadow-sm">
                         <FiTruck className="w-6 h-6" />
@@ -754,7 +797,7 @@ const MachineryCheckout = () => {
                       disabled={submitting}
                       className="w-full py-4 rounded-2xl text-white font-black text-xs uppercase tracking-wider bg-gradient-to-r from-emerald-600 via-emerald-700 to-green-800 hover:from-emerald-700 hover:to-green-900 transition-all active:scale-95 shadow-lg shadow-emerald-700/25 cursor-pointer"
                     >
-                      {submitting ? 'Dispatching...' : `Confirm & Dispatch (₹${total}) ➔`}
+                      {submitting ? 'Dispatching...' : `Confirm & Dispatch (₹${calculatedTotal}) ➔`}
                     </button>
 
                     <p className="text-center text-[10px] text-slate-400 font-bold mt-3 flex items-center justify-center gap-1">
