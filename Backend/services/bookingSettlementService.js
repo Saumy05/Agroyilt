@@ -226,6 +226,13 @@ const refundToWallet = async (booking, { amount = null, reason = 'Booking refund
   );
   if (!claimed) return 0; // another request already refunded
 
+  const Wallet = require('../models/Wallet');
+  await Wallet.findOneAndUpdate(
+    { userId: booking.userId, userModel: 'User' },
+    { $inc: { balance: toRefund } },
+    { upsert: true, new: true }
+  );
+
   const user = await User.findByIdAndUpdate(
     booking.userId,
     { $inc: { 'wallet.balance': toRefund } },
@@ -424,11 +431,29 @@ const settleVendorCash = async (bookingId, { collectorRole, collectorId }) => {
     // If loose paise were rounded up, credit the change back into the farmer's wallet
     if (cashChange > 0 && claimed.userId) {
       try {
-        const user = await User.findByIdAndUpdate(
+        const Wallet = require('../models/Wallet');
+        const WalletTransaction = require('../models/WalletTransaction');
+
+        const wallet = await Wallet.findOneAndUpdate(
+          { userId: claimed.userId, userModel: 'User' },
+          { $inc: { balance: cashChange } },
+          { new: true, upsert: true }
+        );
+
+        await User.findByIdAndUpdate(
           claimed.userId,
-          { $inc: { 'wallet.balance': cashChange } },
-          { new: true }
-        ).select('wallet');
+          { $set: { 'wallet.balance': wallet.balance } }
+        );
+
+        await WalletTransaction.create({
+          walletId: wallet._id,
+          type: 'credit',
+          amount: cashChange,
+          reason: 'refund',
+          status: 'completed',
+          description: `Cash change ₹${cashChange.toFixed(2)} from booking #${claimed.bookingNumber} added to wallet`,
+          referenceId: claimed._id.toString()
+        });
 
         await Transaction.create({
           userId: claimed.userId,
@@ -438,7 +463,8 @@ const settleVendorCash = async (bookingId, { collectorRole, collectorId }) => {
           status: 'completed',
           paymentMethod: 'wallet',
           description: `Cash change ₹${cashChange.toFixed(2)} from booking #${claimed.bookingNumber} added to wallet`,
-          balanceAfter: user?.wallet?.balance
+          balanceAfter: wallet.balance,
+          referenceId: claimed._id.toString()
         });
 
         const { createNotification } = require('../controllers/notificationControllers/notificationController');
@@ -458,14 +484,13 @@ const settleVendorCash = async (bookingId, { collectorRole, collectorId }) => {
 
     await Transaction.create({
       vendorId,
-      userId: claimed.userId,
       bookingId,
       type: 'cash_collected',
       amount: cashAmount,
       status: 'completed',
       paymentMethod: 'cash',
       description: `Cash ₹${cashAmount} collected for booking #${claimed.bookingNumber}${cashChange > 0 ? ` (includes ₹${cashChange} customer wallet change)` : ''}. Dues increased.`,
-      metadata: { type: 'dues_increase', collectedBy: collectorRole, billId: bill._id.toString(), grandTotal, vendorEarning, cashChange }
+      metadata: { type: 'dues_increase', customerId: claimed.userId, collectedBy: collectorRole, billId: bill._id.toString(), grandTotal, vendorEarning, cashChange }
     });
     if (vendorEarning > 0) {
       await Transaction.create({

@@ -209,10 +209,14 @@ const getWalletTransactions = async (req, res) => {
     }
     const walletId = wallet ? wallet._id : null;
 
-    // Fetch from WalletTransaction and Transaction
+    // Fetch from WalletTransaction and Transaction (exclude vendor-scoped or cash collection transactions)
     const [walletTxns, generalTxns] = await Promise.all([
       walletId ? WalletTransaction.find({ walletId }).sort({ createdAt: -1 }).limit(500).lean() : [],
-      Transaction.find({ userId }).sort({ createdAt: -1 }).limit(500).lean()
+      Transaction.find({
+        userId,
+        $or: [{ vendorId: null }, { vendorId: { $exists: false } }],
+        type: { $ne: 'cash_collected' }
+      }).sort({ createdAt: -1 }).limit(500).lean()
     ]);
 
     // Merge and deduplicate by referenceId / idempotencyKey
@@ -226,16 +230,17 @@ const getWalletTransactions = async (req, res) => {
         id: wt._id,
         type: wt.type || 'credit',
         amount: wt.amount,
-        description: wt.reason === 'refund' ? 'Booking Unused Reserve Refund' : (wt.reason === 'topup' ? 'Wallet Top-up' : (wt.reason === 'referral_reward' ? 'Referral Reward' : (wt.reason === 'referral_reversal' ? 'Referral Reward Reversal' : (wt.reason || 'Wallet Credit')))),
+        description: wt.description || (wt.reason === 'refund' ? 'Booking Unused Reserve Refund' : (wt.reason === 'topup' ? 'Wallet Top-up' : (wt.reason === 'referral_reward' ? 'Referral Reward' : (wt.reason === 'referral_reversal' ? 'Referral Reward Reversal' : (wt.reason || 'Wallet Credit'))))),
         date: wt.createdAt,
         status: wt.status || 'completed',
+        balanceAfter: wt.balanceAfter,
         referenceId: wt.referenceId
       });
     });
 
     generalTxns.forEach(gt => {
-      const ref = gt.referenceId || gt._id.toString();
-      if (!seenRefs.has(ref)) {
+      const ref = gt.referenceId || (gt.bookingId ? gt.bookingId.toString() : null) || gt._id.toString();
+      if (!seenRefs.has(ref) && !seenRefs.has(gt._id.toString())) {
         seenRefs.add(ref);
         merged.push({
           id: gt._id,
@@ -255,7 +260,7 @@ const getWalletTransactions = async (req, res) => {
 
     // Calculate full ledger metrics
     const totalSpent = merged
-      .filter(t => ['payment', 'withdrawal', 'platform_fee', 'convenience_fee', 'gst', 'worker_payment', 'cash_collected'].includes(t.type))
+      .filter(t => ['payment', 'withdrawal', 'platform_fee', 'convenience_fee', 'gst', 'worker_payment'].includes(t.type))
       .reduce((sum, t) => sum + (t.amount || 0), 0) -
       merged
       .filter(t => ['refund', 'cashback'].includes(t.type))
