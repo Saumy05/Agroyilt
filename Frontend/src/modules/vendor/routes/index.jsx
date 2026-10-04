@@ -97,7 +97,8 @@ const VendorRoutes = () => {
     location.pathname === '/vendor/signup' ||
     location.pathname === '/vendor/forgot-mpin' ||
     location.pathname.endsWith('/map') ||
-    location.pathname.includes('/booking-alert/');
+    location.pathname.includes('/booking-alert/') ||
+    location.pathname.includes('/billing');
 
   const shouldShowBottomNav = !shouldHideBottomNav;
 

@@ -511,6 +511,7 @@ const BillingPage = () => {
         onClose={() => setShowOtpModal(false)}
         onVerify={handleVerifyOTP}
         loading={otpLoading}
+        amount={calculations?.finalBillAmount}
       />
 
       {/* Dynamic Admin QR Modal for Farmer Scanning */}
