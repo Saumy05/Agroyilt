@@ -448,12 +448,13 @@ export default function BookingDetails() {
     setConfirmDialog({
       isOpen: true,
       title: 'Final Settlement',
-      message: 'Mark final settlement as done? This will allow you to complete the booking.',
+      message: 'Mark final settlement as done and close this booking?',
       type: 'warning',
       onConfirm: async () => {
         setLoading(true);
         try {
-          await updateBookingStatus(id, booking.status, {
+          const targetStatus = booking.status === 'work_done' ? 'completed' : (booking.status || 'completed');
+          await updateBookingStatus(id, targetStatus, {
             finalSettlementStatus: 'DONE'
           });
           window.dispatchEvent(new Event('vendorJobsUpdated'));
@@ -461,7 +462,7 @@ export default function BookingDetails() {
           window.location.reload();
         } catch (error) {
           console.error('Error updating settlement:', error);
-          toastManager.error('Failed to update settlement. Please try again.');
+          toastManager.error(error.response?.data?.message || 'Failed to update settlement. Please try again.');
         } finally {
           setLoading(false);
         }

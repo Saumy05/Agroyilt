@@ -40,8 +40,16 @@ const assignWorkerValidation = [
 ];
 
 const updateStatusValidation = [
-  body('status').isIn(['pending', 'confirmed', 'in_progress', 'completed', 'cancelled', 'rejected'])
-    .withMessage('Invalid status')
+  body('status').optional().isIn(['pending', 'confirmed', 'in_progress', 'completed', 'cancelled', 'rejected', 'work_done'])
+    .withMessage('Invalid status'),
+  body('finalSettlementStatus').optional().isIn(['PENDING', 'DONE'])
+    .withMessage('Invalid final settlement status'),
+  body().custom((val, { req }) => {
+    if (!req.body.status && !req.body.finalSettlementStatus) {
+      throw new Error('Either status or finalSettlementStatus is required');
+    }
+    return true;
+  })
 ];
 
 const addNotesValidation = [

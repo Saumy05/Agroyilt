@@ -415,7 +415,8 @@ const settleVendorCash = async (bookingId, { collectorRole, collectorId }) => {
           userPayableAmount: grandTotal,
           vendorBillId: bill._id,
           paymentOtp: null,
-          customerConfirmationOTP: null
+          customerConfirmationOTP: null,
+          finalSettlementStatus: collectorRole === 'vendor' ? 'DONE' : 'PENDING'
         }
       }
     );

@@ -571,7 +571,7 @@ const updateBookingStatus = async (req, res) => {
 
     const vendorId = req.user.id;
     const { id } = req.params;
-    const { status, reason } = req.body;
+    const { status, reason, finalSettlementStatus } = req.body;
 
     const booking = await Booking.findOne({ _id: id, vendorId });
     if (!booking) {
@@ -581,9 +581,59 @@ const updateBookingStatus = async (req, res) => {
     // Work/payment milestones are only reachable through their dedicated, verified endpoints
     // (journey → visit OTP → trip start OTP → trip end → payment OTP). This route can only
     // assign, cancel before work starts, or close an already-paid job.
-    if (['worker_payment_status', 'finalSettlementStatus'].some(k => k in req.body) && !status) {
+    if ('worker_payment_status' in req.body || 'workerPaymentStatus' in req.body) {
       return res.status(400).json({ success: false, message: 'Use the worker payment endpoint to settle worker payments.' });
     }
+
+    const paid = [PAYMENT_STATUS.SUCCESS, PAYMENT_STATUS.COLLECTED_BY_VENDOR].includes(booking.paymentStatus) ||
+      booking.paymentMethod === 'plan_benefit' || booking.cashCollected;
+
+    // Handle Final Settlement / Closing Booking
+    if (finalSettlementStatus === 'DONE') {
+      if (![BOOKING_STATUS.WORK_DONE, BOOKING_STATUS.COMPLETED].includes(booking.status) || !paid) {
+        return res.status(400).json({
+          success: false,
+          message: 'Final settlement can only be done after work is completed and payment has been received.'
+        });
+      }
+      booking.finalSettlementStatus = 'DONE';
+      const wasWorkDone = booking.status === BOOKING_STATUS.WORK_DONE;
+      if (wasWorkDone || status === BOOKING_STATUS.COMPLETED) {
+        booking.status = BOOKING_STATUS.COMPLETED;
+        booking.completedAt = booking.completedAt || new Date();
+      }
+      await booking.save();
+      await releaseVendorIfIdle(vendorId, booking._id);
+
+      if (wasWorkDone) {
+        await createNotification({
+          userId: booking.userId,
+          type: 'booking_completed',
+          title: 'Booking Completed',
+          message: `Your booking ${booking.bookingNumber} has been finalized and completed. Please rate your experience.`,
+          relatedId: booking._id,
+          relatedType: 'booking',
+          pushData: { type: 'booking_completed', bookingId: booking._id.toString(), link: `/user/booking/${booking._id}` }
+        });
+      }
+
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`user_${booking.userId}`).emit('booking_updated', {
+          bookingId: booking._id,
+          status: booking.status,
+          finalSettlementStatus: 'DONE',
+          message: 'Booking finalized'
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: 'Final settlement completed successfully',
+        data: toProviderView(booking)
+      });
+    }
+
     if (!status || status === booking.status) {
       return res.status(200).json({ success: true, message: 'No change', data: toProviderView(booking) });
     }

@@ -340,13 +340,13 @@ const BookingTimeline = () => {
     setConfirmDialog({
       isOpen: true,
       title: 'Final Settlement',
-      message: 'Mark final settlement as done? This will allow you to complete the booking.',
+      message: 'Mark final settlement as done and complete the booking?',
       type: 'warning',
       onConfirm: async () => {
         try {
           setActionLoading(true);
-          // Using existing updateBookingStatus to mark settlement
-          await updateBookingStatus(id, booking.status, { finalSettlementStatus: 'DONE' });
+          const targetStatus = booking?.status === 'work_done' ? 'completed' : (booking?.status || 'completed');
+          await updateBookingStatus(id, targetStatus, { finalSettlementStatus: 'DONE' });
           toastManager.success('Final settlement completed!');
           safeReload();
         } catch (e) {
