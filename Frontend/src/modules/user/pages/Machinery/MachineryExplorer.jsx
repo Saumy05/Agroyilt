@@ -84,7 +84,16 @@ const MachineryExplorer = () => {
   const [selectedImplement, setSelectedImplement] = useState(location.state?.preSelectedImplement || null);
   const [hpRange, setHpRange] = useState(location.state?.hpRange || 'all'); // 'all', '20-35', '35-50', '50-75', '75+'
   const [rentalType, setRentalType] = useState(location.state?.rentalType || 'hourly'); // 'hourly' | 'land_based' | 'daily'
-  const [quantity, setQuantity] = useState(location.state?.quantity || 1);
+  const [quantity, setQuantity] = useState(() => {
+    const raw = location.state?.quantity;
+    if (raw !== undefined && raw !== null) {
+      const parsed = parseFloat(raw);
+      if (!isNaN(parsed) && parsed > 0) {
+        return Math.round(parsed * 100) / 100;
+      }
+    }
+    return 1;
+  });
   const [bookingDate, setBookingDate] = useState(() => {
     if (location.state?.bookingDate) return location.state.bookingDate;
     return isTodayClosed ? tomorrowStr : todayStr;
@@ -99,7 +108,8 @@ const MachineryExplorer = () => {
 
   const [endTime, setEndTime] = useState(() => {
     if (location.state?.endTime) return location.state.endTime;
-    return calculateEndTime(location.state?.startTime || availableSlots[0]?.time || '09:00', location.state?.quantity || 1);
+    const initialQty = location.state?.quantity ? (Math.round((parseFloat(location.state.quantity) || 1) * 100) / 100) : 1;
+    return calculateEndTime(location.state?.startTime || availableSlots[0]?.time || '09:00', initialQty);
   });
 
   const [activeSlotPreset, setActiveSlotPreset] = useState(() => {
@@ -109,7 +119,8 @@ const MachineryExplorer = () => {
 
   // Automatically sync endTime whenever startTime, quantity, or rentalType changes
   useEffect(() => {
-    const hours = rentalType === 'hourly' ? quantity : (rentalType === 'daily' ? 8 * quantity : 4);
+    const qtyNum = parseFloat(quantity) || 1;
+    const hours = rentalType === 'hourly' ? qtyNum : (rentalType === 'daily' ? 8 * qtyNum : 4);
     setEndTime(calculateEndTime(startTime, hours));
   }, [startTime, quantity, rentalType]);
 
@@ -216,8 +227,14 @@ const MachineryExplorer = () => {
   };
 
   const handleStep3Next = () => {
-    if (!quantity || quantity <= 0) {
-      toastManager.error('Please specify a valid work duration or land size');
+    const { min, max, unit } = getScopeLimits(rentalType);
+    const qtyNum = parseFloat(quantity);
+    if (!qtyNum || isNaN(qtyNum) || qtyNum < min) {
+      toastManager.error(`Please specify at least ${min} ${unit.toLowerCase()}`);
+      return;
+    }
+    if (qtyNum > max) {
+      toastManager.error(`Maximum allowed is ${max} ${unit.toLowerCase()} per booking`);
       return;
     }
     setCurrentStep(4);
@@ -247,8 +264,10 @@ const MachineryExplorer = () => {
       return;
     }
     if (targetStep === 4) {
-      if (!quantity || quantity <= 0) {
-        toastManager.info('Please set duration or land size first');
+      const { min, max } = getScopeLimits(rentalType);
+      const qtyNum = parseFloat(quantity);
+      if (!qtyNum || isNaN(qtyNum) || qtyNum < min || qtyNum > max) {
+        toastManager.info('Please set valid duration or land size first');
         setCurrentStep(3);
         return;
       }
@@ -280,24 +299,118 @@ const MachineryExplorer = () => {
     }
   };
 
+  const formatQtyDisplay = (qty) => {
+    const num = parseFloat(qty);
+    if (isNaN(num) || num <= 0) return '1';
+    return Number(num.toFixed(2)).toString();
+  };
+
   const formatScopeDisplay = (qty, type) => {
+    const num = parseFloat(qty) || 1;
+    const formatted = formatQtyDisplay(num);
     if (type === 'hourly') {
-      return `${qty} ${qty === 1 ? 'Hour' : 'Hours'} • Hourly Metered`;
+      return `${formatted} ${num === 1 ? 'Hour' : 'Hours'} • Hourly Metered`;
     }
     if (type === 'land_based') {
-      return `${qty} ${qty === 1 ? 'Acre' : 'Acres'} • Land Acreage`;
+      return `${formatted} ${num === 1 ? 'Acre' : 'Acres'} • Land Acreage`;
     }
-    return `${qty} ${qty === 1 ? 'Day' : 'Days'} • Daily Rental`;
+    return `${formatted} ${num === 1 ? 'Day' : 'Days'} • Daily Rental`;
   };
 
   const formatScopeShort = (qty, type) => {
+    const num = parseFloat(qty) || 1;
+    const formatted = formatQtyDisplay(num);
     if (type === 'hourly') {
-      return `${qty} ${qty === 1 ? 'Hr' : 'Hrs'}`;
+      return `${formatted} ${num === 1 ? 'Hr' : 'Hrs'}`;
     }
     if (type === 'land_based') {
-      return `${qty} ${qty === 1 ? 'Acre' : 'Acres'}`;
+      return `${formatted} ${num === 1 ? 'Acre' : 'Acres'}`;
     }
-    return `${qty} ${qty === 1 ? 'Day' : 'Days'}`;
+    return `${formatted} ${num === 1 ? 'Day' : 'Days'}`;
+  };
+
+  const getScopeLimits = (type) => {
+    if (type === 'daily') return { min: 1, max: 30, unit: 'Days' };
+    if (type === 'hourly') return { min: 0.5, max: 24, unit: 'Hours' };
+    return { min: 0.5, max: 200, unit: 'Acres' };
+  };
+
+  const handleRentalTypeChange = (newType) => {
+    setRentalType(newType);
+    const { min, max } = getScopeLimits(newType);
+    setQuantity(prev => {
+      const current = parseFloat(prev) || 1;
+      const clamped = Math.min(max, Math.max(min, current));
+      if (newType === 'daily') {
+        return Math.round(clamped);
+      }
+      if (newType === 'hourly') {
+        return Math.round(clamped * 2) / 2;
+      }
+      // land_based
+      return Math.round(clamped * 10) / 10;
+    });
+  };
+
+  const handleDecrementQuantity = () => {
+    const { min } = getScopeLimits(rentalType);
+    setQuantity(prev => {
+      const current = parseFloat(prev) || 1;
+      if (current <= min) return min;
+      if (rentalType === 'daily') {
+        return Math.max(min, Math.round(current) - 1);
+      }
+      // Snap to nearest 0.5 step, then subtract 0.5 cleanly
+      const snapped = Math.round(current * 2) / 2;
+      return Math.max(min, Math.round((snapped - 0.5) * 10) / 10);
+    });
+  };
+
+  const handleIncrementQuantity = () => {
+    const { max } = getScopeLimits(rentalType);
+    setQuantity(prev => {
+      const current = parseFloat(prev) || 1;
+      if (current >= max) return max;
+      if (rentalType === 'daily') {
+        return Math.min(max, Math.round(current) + 1);
+      }
+      // Snap to nearest 0.5 step, then add 0.5 cleanly
+      const snapped = Math.round(current * 2) / 2;
+      return Math.min(max, Math.round((snapped + 0.5) * 10) / 10);
+    });
+  };
+
+  const handleQuantityInputChange = (valStr) => {
+    if (valStr === '') {
+      setQuantity('');
+      return;
+    }
+    const val = parseFloat(valStr);
+    if (isNaN(val)) return;
+
+    const { max } = getScopeLimits(rentalType);
+    // If entered value exceeds max (e.g. 12122), strictly clamp to max
+    const clampedVal = val > max ? max : val;
+    
+    // Limit decimal precision while typing: max 2 decimals for land_based, max 1 for hourly, 0 for daily
+    const maxDecimals = rentalType === 'land_based' ? 2 : (rentalType === 'hourly' ? 1 : 0);
+    const factor = Math.pow(10, maxDecimals);
+    const rounded = Math.round(clampedVal * factor) / factor;
+    setQuantity(rounded);
+  };
+
+  const handleQuantityInputBlur = () => {
+    const { min, max } = getScopeLimits(rentalType);
+    const num = parseFloat(quantity);
+    if (!num || isNaN(num) || num < min) {
+      setQuantity(min);
+    } else if (num > max) {
+      setQuantity(max);
+    } else {
+      const maxDecimals = rentalType === 'land_based' ? 2 : (rentalType === 'hourly' ? 1 : 0);
+      const factor = Math.pow(10, maxDecimals);
+      setQuantity(Math.round(num * factor) / factor);
+    }
   };
 
   const getBottomButtonContent = () => {
@@ -377,6 +490,12 @@ const MachineryExplorer = () => {
       toastManager.error('Please select a machinery category');
       return;
     }
+    const { min, max, unit } = getScopeLimits(rentalType);
+    const qtyNum = parseFloat(quantity);
+    if (!qtyNum || isNaN(qtyNum) || qtyNum < min || qtyNum > max) {
+      toastManager.error(`Please specify a valid work scope (${min} - ${max} ${unit.toLowerCase()})`);
+      return;
+    }
     if (!bookingDate) {
       toastManager.error('Please select a booking date');
       return;
@@ -407,7 +526,7 @@ const MachineryExplorer = () => {
         implement: selectedImplement,
         hpRange,
         rentalType,
-        quantity,
+        quantity: Math.round((parseFloat(quantity) || 1) * 100) / 100,
         bookingDate,
         startTime,
         endTime,
@@ -797,7 +916,7 @@ const MachineryExplorer = () => {
                         <button
                           key={t.value}
                           type="button"
-                          onClick={() => setRentalType(t.value)}
+                          onClick={() => handleRentalTypeChange(t.value)}
                           className={`py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
                             rentalType === t.value
                               ? 'bg-white text-emerald-800 shadow-xs border border-slate-200/50'
@@ -820,8 +939,10 @@ const MachineryExplorer = () => {
                           </label>
                           <span className="text-[9.5px] text-emerald-600 font-bold block mt-0.5">
                             {rentalType === 'hourly'
-                              ? '⏱️ Billed on actual running minutes via Play/Pause'
-                              : '🌾 Rate applied per acre completed'}
+                              ? '⏱️ Billed on actual running minutes (0.5 – 24 Hrs)'
+                              : rentalType === 'land_based'
+                              ? '🌾 Rate applied per acre completed (0.5 – 200 Acres)'
+                              : '📅 Multi-day machine rental (1 – 30 Days)'}
                           </span>
                         </div>
 
@@ -829,24 +950,28 @@ const MachineryExplorer = () => {
                         <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/80 rounded-xl p-0.5 shadow-inner">
                           <button
                             type="button"
-                            onClick={() => setQuantity(prev => Math.max(0.5, prev - (rentalType === 'daily' ? 1 : 0.5)))}
-                            className="w-8 h-8 rounded-lg bg-white border border-slate-200/70 flex items-center justify-center font-black text-slate-800 shadow-2xs hover:bg-slate-100 active:scale-95 transition-all cursor-pointer"
+                            onClick={handleDecrementQuantity}
+                            disabled={parseFloat(quantity) <= getScopeLimits(rentalType).min}
+                            className="w-8 h-8 rounded-lg bg-white border border-slate-200/70 flex items-center justify-center font-black text-slate-800 shadow-2xs hover:bg-slate-100 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 transition-all cursor-pointer"
                             aria-label="Decrease"
                           >
                             <FiMinus size={13} />
                           </button>
                           <input
                             type="number"
-                            step={rentalType === 'daily' ? '1' : '0.5'}
-                            min="0.5"
+                            step={rentalType === 'daily' ? '1' : rentalType === 'hourly' ? '0.5' : '0.1'}
+                            min={getScopeLimits(rentalType).min}
+                            max={getScopeLimits(rentalType).max}
                             value={quantity}
-                            onChange={(e) => setQuantity(Math.max(0.5, parseFloat(e.target.value) || 0.5))}
-                            className="w-14 text-center text-xs font-black text-slate-900 bg-transparent focus:outline-none"
+                            onChange={(e) => handleQuantityInputChange(e.target.value)}
+                            onBlur={handleQuantityInputBlur}
+                            className="w-16 min-w-[3.5rem] px-1 text-center text-xs font-black text-slate-900 bg-transparent focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           />
                           <button
                             type="button"
-                            onClick={() => setQuantity(prev => prev + (rentalType === 'daily' ? 1 : 0.5))}
-                            className="w-8 h-8 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center font-black shadow-2xs active:scale-95 transition-all cursor-pointer"
+                            onClick={handleIncrementQuantity}
+                            disabled={parseFloat(quantity) >= getScopeLimits(rentalType).max}
+                            className="w-8 h-8 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 text-white flex items-center justify-center font-black shadow-2xs active:scale-95 transition-all cursor-pointer"
                             aria-label="Increase"
                           >
                             <FiPlus size={13} />
@@ -867,7 +992,7 @@ const MachineryExplorer = () => {
                             type="button"
                             onClick={() => setQuantity(preset)}
                             className={`px-2.5 py-1 rounded-lg text-[11px] font-black shrink-0 transition-all cursor-pointer ${
-                              quantity === preset
+                              parseFloat(quantity) === preset
                                 ? 'bg-emerald-700 text-white shadow-2xs'
                                 : 'bg-slate-50 text-slate-600 border border-slate-200/80 hover:bg-slate-100'
                             }`}
@@ -1101,10 +1226,10 @@ const MachineryExplorer = () => {
                             </p>
                             <p className="text-xs font-black text-slate-900 truncate">
                               {rentalType === 'hourly' 
-                                ? `${formatTime12Hour(startTime)} – ${formatTime12Hour(endTime)} (${quantity} ${quantity === 1 ? 'Hour' : 'Hours'})`
+                                ? `${formatTime12Hour(startTime)} – ${formatTime12Hour(endTime)} (${formatQtyDisplay(quantity)} ${parseFloat(quantity) === 1 ? 'Hour' : 'Hours'})`
                                 : rentalType === 'land_based'
-                                ? `Starts at ${formatTime12Hour(startTime)} • ${quantity} ${quantity === 1 ? 'Acre' : 'Acres'} Workload`
-                                : `${quantity} ${quantity === 1 ? 'Day' : 'Days'} • Starts at ${formatTime12Hour(startTime)}`}
+                                ? `Starts at ${formatTime12Hour(startTime)} • ${formatQtyDisplay(quantity)} ${parseFloat(quantity) === 1 ? 'Acre' : 'Acres'} Workload`
+                                : `${formatQtyDisplay(quantity)} ${parseFloat(quantity) === 1 ? 'Day' : 'Days'} • Starts at ${formatTime12Hour(startTime)}`}
                             </p>
                           </div>
                         </div>

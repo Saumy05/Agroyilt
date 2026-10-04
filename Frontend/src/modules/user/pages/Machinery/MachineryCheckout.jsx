@@ -109,16 +109,18 @@ const MachineryCheckout = () => {
         : (basePrice !== undefined ? basePrice : total);
 
     const formatDuration = (qty, type) => {
+        const num = Math.round((parseFloat(qty) || 1) * 100) / 100;
+        const formatted = Number(num.toFixed(2)).toString();
         if (type === 'hourly') {
-            const totalMinutes = Math.round(qty * 60);
+            const totalMinutes = Math.round(num * 60);
             const hours = Math.floor(totalMinutes / 60);
             const minutes = totalMinutes % 60;
             let parts = [];
             if (hours > 0) parts.push(`${hours} Hr${hours > 1 ? 's' : ''}`);
             if (minutes > 0) parts.push(`${minutes} Mins`);
-            return parts.join(' ');
+            return parts.join(' ') || `${formatted} Hrs`;
         }
-        return `${qty} ${type === 'land_based' ? (qty === 1 ? 'Acre' : 'Acres') : type === 'daily' ? (qty === 1 ? 'Day' : 'Days') : type}`;
+        return `${formatted} ${type === 'land_based' ? (num === 1 ? 'Acre' : 'Acres') : type === 'daily' ? (num === 1 ? 'Day' : 'Days') : type}`;
     };
 
     const handleConfirmBooking = async () => {

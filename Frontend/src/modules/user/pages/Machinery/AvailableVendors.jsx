@@ -132,7 +132,7 @@ const AvailableVendors = () => {
         preSelectedImplement: implement,
         hpRange,
         rentalType,
-        quantity,
+        quantity: Math.round((parseFloat(quantity) || 1) * 100) / 100,
         bookingDate,
         startTime,
         endTime,
@@ -272,9 +272,11 @@ const AvailableVendors = () => {
   };
 
   const formatScopeText = (qty, type) => {
-    if (type === 'hourly') return `${qty} ${qty === 1 ? 'Hr' : 'Hrs'}`;
-    if (type === 'land_based') return `${qty} ${qty === 1 ? 'Acre' : 'Acres'}`;
-    return `${qty} ${qty === 1 ? 'Day' : 'Days'}`;
+    const num = Math.round((parseFloat(qty) || 1) * 100) / 100;
+    const formatted = Number(num.toFixed(2)).toString();
+    if (type === 'hourly') return `${formatted} ${num === 1 ? 'Hr' : 'Hrs'}`;
+    if (type === 'land_based') return `${formatted} ${num === 1 ? 'Acre' : 'Acres'}`;
+    return `${formatted} ${num === 1 ? 'Day' : 'Days'}`;
   };
 
   return (

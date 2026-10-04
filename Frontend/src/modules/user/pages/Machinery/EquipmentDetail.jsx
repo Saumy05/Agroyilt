@@ -45,8 +45,8 @@ const EquipmentDetail = () => {
       let diffMinutes = (endHours * 60 + endMinutes) - (startHours * 60 + startMinutes);
       
       if (diffMinutes > 0) {
-        // Calculate exact hours (30-min minimum)
-        const hours = Math.max(0.5, diffMinutes / 60);
+        // Calculate exact hours (30-min minimum), cleanly rounded to 1 decimal
+        const hours = Math.max(0.5, Math.round((diffMinutes / 60) * 10) / 10);
         setQuantity(hours);
       }
     }
@@ -379,18 +379,18 @@ const EquipmentDetail = () => {
                       onClick={() => {
                         const step = selectedRateType === 'land_based' ? 0.5 : 1;
                         const min = selectedRateType === 'land_based' ? 0.5 : 1;
-                        setQuantity(Math.max(min, quantity - step));
+                        setQuantity(Math.max(min, Math.round(((parseFloat(quantity) || 1) - step) * 10) / 10));
                       }}
                       disabled={selectedRateType === 'hourly'}
                       className={`w-10 h-10 bg-white rounded-xl flex items-center justify-center font-bold transition-all shadow-sm ${selectedRateType === 'hourly' ? 'text-slate-400 opacity-50 cursor-not-allowed' : 'text-slate-800 active:scale-90'}`}
                     >
                       <FiMinus size={14} />
                     </button>
-                    <span className="text-lg font-black text-slate-800 w-8 text-center">{quantity}</span>
+                    <span className="text-lg font-black text-slate-800 min-w-8 px-1 text-center">{Number((parseFloat(quantity) || 1).toFixed(2))}</span>
                     <button 
                       onClick={() => {
                         const step = selectedRateType === 'land_based' ? 0.5 : 1;
-                        setQuantity(quantity + step);
+                        setQuantity(Math.round(((parseFloat(quantity) || 1) + step) * 10) / 10);
                       }}
                       disabled={selectedRateType === 'hourly'}
                       className={`w-10 h-10 bg-white rounded-xl flex items-center justify-center font-bold transition-all shadow-sm ${selectedRateType === 'hourly' ? 'text-slate-400 opacity-50 cursor-not-allowed' : 'text-slate-800 active:scale-90'}`}
