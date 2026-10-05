@@ -38,6 +38,22 @@ const CashLimitModal = () => {
 
   // Show modal based on data & Re-show on navigation
   useEffect(() => {
+    // Never show modal on ANY wallet or settlement pages to prevent infinite loops
+    const isExemptRoute = 
+      location.pathname.startsWith('/vendor/wallet') ||
+      location.pathname.startsWith('/vendor/settlement');
+
+    if (isExemptRoute) {
+      setShow(false);
+      return;
+    }
+
+    const isDismissed = sessionStorage.getItem('cash_limit_modal_dismissed') === 'true';
+    if (isDismissed) {
+      setShow(false);
+      return;
+    }
+
     if (walletData) {
       const dues = walletData.dues || 0;
       const limit = walletData.cashLimit || 10000;
@@ -56,8 +72,11 @@ const CashLimitModal = () => {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 text-center animate-bounce-in relative">
         <button
-          onClick={() => setShow(false)}
-          className="absolute top-4 right-4 p-2 hover:bg-gray-100 rounded-full transition-colors"
+          onClick={() => {
+            setShow(false);
+            sessionStorage.setItem('cash_limit_modal_dismissed', 'true');
+          }}
+          className="absolute top-4 right-4 p-2 hover:bg-gray-100 rounded-full transition-colors cursor-pointer"
         >
           <FiX className="w-5 h-5 text-gray-400" />
         </button>
@@ -86,9 +105,10 @@ const CashLimitModal = () => {
         <button
           onClick={() => {
             setShow(false);
+            sessionStorage.setItem('cash_limit_modal_dismissed', 'true');
             navigate('/vendor/wallet/settle');
           }}
-          className="w-full py-3 bg-red-600 text-white font-bold rounded-xl shadow-lg shadow-red-200 hover:bg-red-700 transition-all active:scale-95"
+          className="w-full py-3 bg-red-600 text-white font-bold rounded-xl shadow-lg shadow-red-200 hover:bg-red-700 transition-all active:scale-95 cursor-pointer"
         >
           Pay Now / Settle Dues
         </button>

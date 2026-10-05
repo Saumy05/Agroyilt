@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FiDollarSign, FiArrowUp, FiArrowDown, FiArrowRight, FiClock, FiCheckCircle, FiAlertCircle, FiSend } from 'react-icons/fi';
 import { vendorTheme as themeColors } from '../../../../theme';
@@ -151,7 +151,7 @@ const Wallet = () => {
   if (loading) {
     return (
       <div className="min-h-screen pb-24" style={{ background: themeColors.backgroundGradient }}>
-        <Header title="Wallet & Ledger" />
+        <Header title="Wallet & Ledger" onBack={() => navigate('/vendor/dashboard')} />
         <main className="px-4 py-6">
           <div className="animate-pulse space-y-6">
             <div className="h-36 bg-white/20 rounded-2xl border border-white/10"></div>
@@ -170,7 +170,7 @@ const Wallet = () => {
 
   return (
     <div className="min-h-screen pb-24" style={{ background: themeColors.backgroundGradient }}>
-      <Header title="Wallet & Ledger" />
+      <Header title="Wallet & Ledger" onBack={() => navigate('/vendor/dashboard')} />
 
       <main className="px-4 py-6">
         {/* Earnings Card (Green) */}

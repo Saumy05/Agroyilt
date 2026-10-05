@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FiArrowLeft, FiCheckCircle } from 'react-icons/fi';
 import { vendorTheme as themeColors } from '../../../../theme';
@@ -107,7 +107,8 @@ const SettlementRequest = () => {
 
             if (verifyRes.success) {
               toastManager.success('Payment successful!', { id: 'verify' });
-              navigate('/vendor/wallet');
+              sessionStorage.removeItem('cash_limit_modal_dismissed');
+              navigate('/vendor/wallet', { replace: true });
             } else {
               toastManager.error(verifyRes.message || 'Payment verification failed', { id: 'verify' });
             }
@@ -150,7 +151,13 @@ const SettlementRequest = () => {
       <Header
         title="Pay to Admin"
         showBack={true}
-        onBack={() => navigate('/vendor/wallet')}
+        onBack={() => {
+          if (window.history.state && window.history.state.idx > 0) {
+            navigate(-1);
+          } else {
+            navigate('/vendor/wallet', { replace: true });
+          }
+        }}
       />
 
       <main className="px-4 py-6">

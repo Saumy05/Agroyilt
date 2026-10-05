@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   FiClock, 
@@ -217,7 +217,13 @@ const SettlementHistory = () => {
       <Header
         title="History"
         showBack={true}
-        onBack={() => navigate('/vendor/wallet')}
+        onBack={() => {
+          if (window.history.state && window.history.state.idx > 0) {
+            navigate(-1);
+          } else {
+            navigate('/vendor/wallet', { replace: true });
+          }
+        }}
       />
 
       <main className="px-4 py-6">
