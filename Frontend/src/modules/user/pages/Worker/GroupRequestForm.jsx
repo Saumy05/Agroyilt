@@ -280,13 +280,17 @@ const GroupRequestForm = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (formData.rateUnit === 'hourly' && formData.startTime && formData.endTime && formData.startTime === formData.endTime) {
-      toast.error('Start time and end time cannot be the same.');
-      return;
+    if (formData.rateUnit === 'hourly' && formData.startTime && formData.endTime) {
+      const [sh, sm] = formData.startTime.split(':').map(Number);
+      const [eh, em] = formData.endTime.split(':').map(Number);
+      if (eh * 60 + em <= sh * 60 + sm) {
+        toast.error('End time must be after start time.', { id: 'group-req-toast' });
+        return;
+      }
     }
 
     if (Number(formData.requiredWorkers) > (leader.teamId?.memberCount || 0)) {
-      toast.error(`Team only has ${leader.teamId?.memberCount} members. Cannot request ${formData.requiredWorkers}.`);
+      toast.error(`Team only has ${leader.teamId?.memberCount} members. Cannot request ${formData.requiredWorkers}.`, { id: 'group-req-toast' });
       return;
     }
 
@@ -304,10 +308,10 @@ const GroupRequestForm = () => {
       };
 
       await workerBookingService.createGroupRequest(payload);
-      toast.success('Group work request sent successfully!');
+      toast.success('Group work request sent successfully!', { id: 'group-req-toast' });
       navigate('/user/my-worker-requests', { replace: true });
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to send group request');
+      toast.error(err.response?.data?.message || 'Failed to send group request', { id: 'group-req-toast' });
     } finally {
       setLoading(false);
     }

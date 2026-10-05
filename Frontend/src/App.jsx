@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react'; // Updated index to .jsx
 import { BrowserRouter } from 'react-router-dom';
-import { Toaster } from 'react-hot-toast';
-import toast from 'react-hot-toast';
+import toast, { Toaster, useToasterStore } from 'react-hot-toast';
 import AppRoutes from './routes';
 import { SocketProvider } from './context/SocketContext';
 import { CartProvider } from './context/CartContext';
@@ -11,6 +10,32 @@ import { BrandProvider } from './context/BrandContext';
 import { initializePushNotifications, setupForegroundNotificationHandler } from './services/pushNotificationService';
 // Global common imports removed here as they are now handled in AppRoutes.jsx for conditional rendering
 // import { LocationPermissionChecker, Chatbot } from './components/common';
+
+/**
+ * Global Toast Limiter:
+ * Strictly enforces that only ONE toast notification is visible at any given time.
+ * If a new toast is created, all older active toasts are immediately dismissed.
+ */
+function ToastLimiter() {
+  const { toasts } = useToasterStore();
+
+  useEffect(() => {
+    const visibleToasts = toasts.filter((t) => t.visible);
+    if (visibleToasts.length > 1) {
+      // visibleToasts[0] is the newest toast.
+      // Dismiss the immediate previous one smoothly, remove any older burst toasts immediately.
+      visibleToasts.slice(1).forEach((t, index) => {
+        if (index === 0) {
+          toast.dismiss(t.id);
+        } else {
+          toast.remove(t.id);
+        }
+      });
+    }
+  }, [toasts]);
+
+  return null;
+}
 
 function App() {
   // Initialize push notifications on app load
@@ -99,6 +124,7 @@ function App() {
             <CartProvider>
               <EcommerceCartProvider>
                 <div className="App">
+                  <ToastLimiter />
                   <AppRoutes />
                   {/* Global components moved to routes/index.jsx */}
                   <Toaster

@@ -1,4 +1,4 @@
-﻿import { toast } from 'react-hot-toast';
+import { toast } from 'react-hot-toast';
 
 const DEDUPE_WINDOW_MS = 4000;
 const activeToasts = new Map();
@@ -80,23 +80,25 @@ export const toastManager = {
   success: (message, options = {}) => {
     const key = generateDeterministicKey('success', message, options.id);
     if (isDuplicate(key)) return;
-    return toast.success(message, { id: key, duration: 3000, ...options });
+    toast.dismiss();
+    return toast.success(message, { id: key, duration: 2500, ...options });
   },
   
   error: (errorOrMessage, options = {}) => {
     const message = extractErrorMessage(errorOrMessage);
     const key = generateDeterministicKey('error', message, options.id);
     if (isDuplicate(key)) return;
-    return toast.error(message, { id: key, duration: 5000, ...options });
+    toast.dismiss();
+    return toast.error(message, { id: key, duration: 3000, ...options });
   },
   
   info: (message, options = {}) => {
     const key = generateDeterministicKey('info', message, options.id);
     if (isDuplicate(key)) return;
-    // react-hot-toast doesn't have an explicit .info(), so we use custom styling or just default toast
+    toast.dismiss();
     return toast(message, { 
       id: key, 
-      duration: 4000, 
+      duration: 3000, 
       icon: 'ℹ️',
       ...options 
     });
@@ -105,9 +107,10 @@ export const toastManager = {
   warning: (message, options = {}) => {
     const key = generateDeterministicKey('warning', message, options.id);
     if (isDuplicate(key)) return;
+    toast.dismiss();
     return toast(message, { 
       id: key, 
-      duration: 4000,
+      duration: 3000,
       icon: '⚠️',
       style: {
         background: '#fff3cd',
@@ -119,9 +122,11 @@ export const toastManager = {
   },
   
   loading: (message, options = {}) => {
+    toast.dismiss();
     return toast.loading(message, options);
   },
 
   // Helper to clear all toasts
-  dismiss: (toastId) => toast.dismiss(toastId)
+  dismiss: (toastId) => toast.dismiss(toastId),
+  dismissAll: () => toast.dismiss()
 };

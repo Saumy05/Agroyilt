@@ -433,8 +433,8 @@ const WorkerRequestForm = () => {
       if (formData.startTime && formData.endTime) {
         const [sh, sm] = formData.startTime.split(':').map(Number);
         const [eh, em] = formData.endTime.split(':').map(Number);
-        if (sh === eh && sm === em) {
-          e.endTime = 'Start time and end time cannot be the same.';
+        if (eh * 60 + em <= sh * 60 + sm) {
+          e.endTime = 'End time must be after start time.';
         }
       }
     }
@@ -453,7 +453,7 @@ const WorkerRequestForm = () => {
     const validationErrors = validate();
     if (Object.keys(validationErrors).length) {
       setErrors(validationErrors);
-      toast.error(Object.values(validationErrors)[0]);
+      toast.error(Object.values(validationErrors)[0], { id: 'worker-req-toast' });
       return;
     }
 
@@ -499,11 +499,11 @@ const WorkerRequestForm = () => {
       }
 
       await workerBookingService.createFarmerRequest(payload);
-      toast.success('Request submitted! Finding workers near you...');
+      toast.success('Request submitted! Finding workers near you...', { id: 'worker-req-toast' });
       navigate('/user/my-worker-requests', { replace: true });
     } catch (err) {
       const msg = err?.response?.data?.message || 'Failed to submit request. Please try again.';
-      toast.error(msg);
+      toast.error(msg, { id: 'worker-req-toast' });
     } finally {
       setLoading(false);
     }
