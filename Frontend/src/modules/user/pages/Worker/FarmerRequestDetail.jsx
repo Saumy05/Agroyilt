@@ -457,7 +457,8 @@ const FarmerRequestDetail = () => {
                     {offers.map((offer, idx) => {
                       const worker = offer.workerId || {};
                       const isSelected = selectedWorkerIds.includes(worker._id);
-                      const isSelectable = offer.status === 'pending' || offer.status === 'selected';
+                      // 'accepted' = dropped from an earlier selection; the worker's acceptance still stands
+                      const isSelectable = ['pending', 'selected', 'accepted'].includes(offer.status);
 
                       return (
                         <div 
@@ -485,6 +486,11 @@ const FarmerRequestDetail = () => {
                               <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-md uppercase tracking-wide">
                                 Privacy Hidden
                               </span>
+                              {offer.offeredRate > 0 && (
+                                <span className="text-[11px] font-black text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-md">
+                                  ₹{offer.offeredRate}/{request.bookingType === 'DAILY' ? 'day' : 'hr'}
+                                </span>
+                              )}
                             </div>
                           </div>
                           

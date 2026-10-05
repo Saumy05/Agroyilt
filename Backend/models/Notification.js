@@ -124,6 +124,10 @@ const notificationSchema = new mongoose.Schema({
       'worker_request_no_match',
       'worker_request_cancelled',
       'worker_request_slot_lost',
+      'worker_request_accepted',   // farmer: one worker accepted (per acceptance)
+      'worker_selected',           // worker: farmer picked you, waiting for confirmation
+      'worker_selection_changed',  // worker: farmer dropped you from the current selection
+      'worker_not_selected',       // worker: booking confirmed with other workers
       'worker_request_expired',
       'worker_decreased',
       'worker_withdrew',

@@ -487,6 +487,21 @@ export const SocketProvider = ({ children }) => {
       newSocket.on('worker_booking_update', (data) => {
         window.dispatchEvent(new Event('workerJobsUpdated'));
       });
+
+      // A booking the worker is part of was confirmed → the job now exists in their list
+      newSocket.on('assignment_confirmed', () => {
+        window.dispatchEvent(new Event('workerJobsUpdated'));
+      });
+      newSocket.on('workerJobsUpdated', () => {
+        window.dispatchEvent(new Event('workerJobsUpdated'));
+      });
+
+      // The request was filled by other workers → silently close a still-ringing alert for it
+      newSocket.on('booking_request_taken', (data) => {
+        const requestId = data?.requestId;
+        window.dispatchEvent(new CustomEvent('workerRequestCancelled', { detail: { requestId } }));
+        window.dispatchEvent(new Event('workerJobsUpdated'));
+      });
     }
 
     // Listen for special Farmer / User events
@@ -496,6 +511,11 @@ export const SocketProvider = ({ children }) => {
           toastManager.info(data.message);
         }
         window.dispatchEvent(new CustomEvent('team_member_status_updated', { detail: data }));
+        window.dispatchEvent(new Event('userBookingsUpdated'));
+      });
+
+      // Live accept/decline counts on a worker request (declines carry no notification)
+      newSocket.on('worker_request_progress', () => {
         window.dispatchEvent(new Event('userBookingsUpdated'));
       });
     }

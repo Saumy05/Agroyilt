@@ -2720,20 +2720,39 @@ exports.workerRespondToFarmerRequest = async (req, res) => {
     );
     const statusChanged = !!moved && nextStatus !== updated.status;
 
+    // The farmer is told about EVERY acceptance (who, at what rate, how far) — not only when the crew is full.
+    let acceptedLine = '';
+    if (action === 'accept') {
+      const workerName = acceptingWorker?.name || 'A worker';
+      const rateLabel = `₹${offeredRate}/${updated.bookingType === 'DAILY' ? 'day' : 'hr'}`;
+      let distLabel = '';
+      const coord = (v) => (v === null || v === undefined || v === '' ? NaN : Number(v)); // Number(null) would be 0
+      const wLat = coord(acceptingWorker?.location?.lat), wLng = coord(acceptingWorker?.location?.lng);
+      const fLat = coord(updated.location?.lat), fLng = coord(updated.location?.lng);
+      if ([wLat, wLng, fLat, fLng].every(Number.isFinite)) {
+        distLabel = `, ${calculateDistance({ lat: fLat, lng: fLng }, { lat: wLat, lng: wLng }).toFixed(1)} km away`;
+      }
+      acceptedLine = isTeamLeader
+        ? `Team Leader ${workerName} accepted at ${rateLabel}${distLabel} and is assembling the team.`
+        : `${workerName} accepted at ${rateLabel}${distLabel}.`;
+    }
+    const progressData = { requestId: updated._id, acceptedCount, requiredWorkers: updated.requiredWorkers, workerId };
+
     if (statusChanged && kind === 'full') {
       await notify({
         recipientType: 'user', recipientId: updated.farmerId, type: 'worker_booking_accepted',
-        title: '✅ Workers Available!', message: `${acceptedCount} worker(s) accepted your request for ${updated.workTitle}`,
+        title: '✅ Workers Available!',
+        message: `${acceptedLine} ${acceptedCount} of ${updated.requiredWorkers} worker(s) ready for "${updated.workTitle}". Select workers to confirm the booking.`,
         relatedId: updated._id, relatedType: 'WorkerBookingRequest',
-        data: { requestId: updated._id, acceptedCount, requiredWorkers: updated.requiredWorkers }
+        data: progressData
       });
     } else if (statusChanged && kind === 'partial') {
       await notify({
         recipientType: 'user', recipientId: updated.farmerId, type: 'worker_booking_partial',
         title: '⚠️ Partial Worker Availability',
-        message: `Only ${acceptedCount} of ${updated.requiredWorkers} requested workers are available for ${updated.workTitle}`,
+        message: `${acceptedLine ? `${acceptedLine} ` : ''}Only ${acceptedCount} of ${updated.requiredWorkers} requested workers are available for "${updated.workTitle}". You can book them now.`,
         relatedId: updated._id, relatedType: 'WorkerBookingRequest',
-        data: { requestId: updated._id, acceptedCount, requiredWorkers: updated.requiredWorkers }
+        data: progressData
       });
     } else if (statusChanged && kind === 'none') {
       await notify({
@@ -2741,14 +2760,24 @@ exports.workerRespondToFarmerRequest = async (req, res) => {
         title: '❌ No Workers Available', message: `No workers accepted your request for ${updated.workTitle}. Please try again later.`,
         relatedId: updated._id, relatedType: 'WorkerBookingRequest', data: { requestId: updated._id }
       });
-    } else {
-      try {
-        getIO().to(`user_${updated.farmerId}`).emit('worker_request_progress', {
-          requestId: updated._id, acceptedCount, rejectedCount, pendingCount,
-          requiredWorkers: updated.requiredWorkers, status: moved ? moved.status : updated.status
-        });
-      } catch (_) { /* socket not critical */ }
+    } else if (action === 'accept' && moved) {
+      await notify({
+        recipientType: 'user', recipientId: updated.farmerId, type: 'worker_request_accepted',
+        title: '👷 Worker Accepted Your Request',
+        message: isTeamLeader
+          ? `${acceptedLine} You'll be able to select workers once members respond.`
+          : `${acceptedLine} ${acceptedCount} of ${updated.requiredWorkers} accepted so far for "${updated.workTitle}". You can select and book now.`,
+        relatedId: updated._id, relatedType: 'WorkerBookingRequest',
+        data: progressData
+      });
     }
+
+    try {
+      getIO().to(`user_${updated.farmerId}`).emit('worker_request_progress', {
+        requestId: updated._id, acceptedCount, rejectedCount, pendingCount,
+        requiredWorkers: updated.requiredWorkers, status: moved ? moved.status : updated.status
+      });
+    } catch (_) { /* socket not critical */ }
 
     return res.json({
       success: true,
@@ -3184,6 +3213,32 @@ exports.farmerSelectWorkers = async (req, res) => {
       return res.status(409).json({ success: false, message: 'The request changed while selecting workers. Please retry.' });
     }
 
+    // Tell workers where they stand: newly selected workers hold the slot; workers dropped from a previous
+    // selection must not keep believing they were picked.
+    const previous = new Set((request.selectedWorkerIds || []).map(String));
+    const current = new Set(selectedWorkerIds);
+    const dateLabel = isDaily
+      ? `${new Date(request.startDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} (${request.numberOfDays || 1} day${(request.numberOfDays || 1) > 1 ? 's' : ''})`
+      : `${new Date(request.scheduledDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}${request.startTime ? `, ${request.startTime}` : ''}`;
+    for (const wId of selectedWorkerIds.filter(w => !previous.has(w))) {
+      await notify({
+        recipientType: 'worker', recipientId: wId, type: 'worker_selected',
+        title: '⭐ You have been selected!',
+        message: `The farmer selected you for "${request.workTitle}" on ${dateLabel}. You'll get the job as soon as the farmer confirms the booking. Keep this time free.`,
+        relatedId: request._id, relatedType: 'WorkerBookingRequest',
+        data: { requestId: request._id, link: '/worker/jobs' }
+      });
+    }
+    for (const wId of [...previous].filter(w => !current.has(w))) {
+      await notify({
+        recipientType: 'worker', recipientId: wId, type: 'worker_selection_changed',
+        title: 'Selection updated',
+        message: `The farmer changed their selection for "${request.workTitle}". You are not in the current selection.`,
+        relatedId: request._id, relatedType: 'WorkerBookingRequest',
+        data: { requestId: request._id, link: '/worker/booking-requests' }
+      });
+    }
+
     return res.json({
       success: true,
       message: 'Workers selected. Please proceed to payment.',
@@ -3285,12 +3340,35 @@ const announceConfirmation = async ({ request, assignments, bookings, method }) 
         link: `/worker/job/${a._id}`
       }
     });
-    if (isCash) {
-      emitSafe(`worker_${a.workerId}`, 'assignment_confirmed', {
-        assignmentId: a._id, requestId: request._id, bookingType: request.bookingType, paymentMethod: 'cash', serverTimestamp: new Date()
-      });
-      emitSafe(`worker_${a.workerId}`, 'workerJobsUpdated', {});
-    }
+    // both payment methods: the worker's job list must refresh the moment the job exists
+    emitSafe(`worker_${a.workerId}`, 'assignment_confirmed', {
+      assignmentId: a._id, requestId: request._id, bookingType: request.bookingType, paymentMethod: isCash ? 'cash' : 'online', serverTimestamp: new Date()
+    });
+    emitSafe(`worker_${a.workerId}`, 'workerJobsUpdated', {});
+  }
+
+  // Workers who accepted but were not booked are released (they were holding this slot); workers who never
+  // answered just have the stale alert withdrawn.
+  const bookedIds = new Set(assignments.map(a => String(a.workerId)));
+  const acceptedIds = new Set([
+    ...(request.dispatchedTo || []).filter(d => d.status === 'accepted').map(d => String(d.workerId)),
+    ...(request.memberInvitations || []).filter(m => m.status === 'member_accepted').map(m => String(m.workerId))
+  ]);
+  for (const wId of acceptedIds) {
+    if (bookedIds.has(wId)) continue;
+    await notify({
+      recipientType: 'worker', recipientId: wId, type: 'worker_not_selected',
+      title: 'Booking filled',
+      message: `The farmer booked other workers for "${request.workTitle}". You are free for this time slot. Thank you for responding!`,
+      relatedId: request._id, relatedType: 'WorkerBookingRequest',
+      data: { requestId: request._id, link: '/worker/booking-requests' }
+    });
+  }
+  for (const d of (request.dispatchedTo || [])) {
+    const wId = String(d.workerId);
+    if (d.status !== 'pending' || bookedIds.has(wId)) continue;
+    emitSafe(`worker_${wId}`, 'booking_request_taken', { requestId: request._id });
+    emitSafe(`worker_${wId}`, 'workerJobsUpdated', {});
   }
 
   await notify({
