@@ -161,6 +161,13 @@ const BillingPage = () => {
       ? Number(booking.amount)
       : parseFloat((originalBase + originalServiceGST + visitingCharges).toFixed(2));
 
+    const advancePaid = Number(booking.advancePaidAmount || 0);
+    const amountToCollect = (booking.balanceDue !== undefined && booking.balanceDue !== null && Number(booking.balanceDue) > 0)
+      ? Number(booking.balanceDue)
+      : advancePaid > 0
+      ? Math.max(0, parseFloat((finalBillAmount - advancePaid).toFixed(2)))
+      : finalBillAmount;
+
     // Vendor Earnings (90% Payout on Base Rental)
     const effectivePayoutPct = servicePayoutPct || 90;
     const vendorServiceEarnings = parseFloat(((originalBase * effectivePayoutPct) / 100).toFixed(2));
@@ -174,6 +181,8 @@ const BillingPage = () => {
       totalGST: originalServiceGST,
       visitingCharges,
       finalBillAmount,
+      advancePaid,
+      amountToCollect,
       totalVendorEarnings,
       vendorServiceEarnings,
       servicePayoutPct: effectivePayoutPct,
@@ -225,7 +234,7 @@ const BillingPage = () => {
 
       const res = await vendorWalletService.initiateCashCollection(
         id,
-        calculations.finalBillAmount,
+        calculations.amountToCollect,
         []
       );
 
@@ -249,7 +258,7 @@ const BillingPage = () => {
       setOtpLoading(true);
       const res = await vendorWalletService.confirmCashCollection(
         id,
-        calculations.finalBillAmount,
+        calculations.amountToCollect,
         code,
         []
       );
@@ -307,13 +316,19 @@ const BillingPage = () => {
               </div>
               
               <p className="text-emerald-100/70 text-[10px] font-bold uppercase tracking-wider mb-0.5">
-                Total Cash to Collect from Farmer
+                {calculations.advancePaid > 0 ? 'Remaining Cash Balance to Collect' : 'Total Cash to Collect from Farmer'}
               </p>
               
               <h2 className="text-3xl font-black tracking-tight text-white flex items-center justify-center gap-1">
                 <span className="text-emerald-300 font-bold text-2xl">₹</span>
-                {calculations.finalBillAmount.toFixed(2)}
+                {calculations.amountToCollect.toFixed(2)}
               </h2>
+
+              {calculations.advancePaid > 0 && (
+                <div className="mt-1 text-xs text-emerald-200/90 font-medium">
+                  Total Bill: ₹{calculations.finalBillAmount.toFixed(2)} • Advance Paid Online: -₹{calculations.advancePaid.toFixed(2)}
+                </div>
+              )}
 
               <div className="mt-2.5 pt-2.5 border-t border-white/10 flex items-center justify-center gap-3 text-xs">
                 <div className="flex items-center gap-1.5 text-emerald-200/90 font-medium">
@@ -409,6 +424,23 @@ const BillingPage = () => {
                   </div>
                   <span className="text-lg font-black text-emerald-800">₹{calculations.finalBillAmount.toFixed(2)}</span>
                 </div>
+
+                {calculations.advancePaid > 0 && (
+                  <div className="flex justify-between items-center pt-1.5 text-xs text-emerald-700">
+                    <span className="font-bold">Advance Paid Online</span>
+                    <span className="font-black">- ₹{calculations.advancePaid.toFixed(2)}</span>
+                  </div>
+                )}
+
+                {calculations.advancePaid > 0 && (
+                  <div className="flex justify-between items-center pt-2 mt-1 border-t border-dashed border-slate-200 text-amber-900">
+                    <div>
+                      <span className="text-[11px] font-black uppercase tracking-wider block">Cash Balance Due</span>
+                      <span className="text-[9px] font-semibold text-amber-700">Collect this remaining balance from farmer</span>
+                    </div>
+                    <span className="text-xl font-black text-amber-800">₹{calculations.amountToCollect.toFixed(2)}</span>
+                  </div>
+                )}
               </div>
             </div>
 

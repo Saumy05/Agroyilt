@@ -479,35 +479,35 @@ export default function BookingDetails() {
   };
 
   const canCollectCash = (booking) => {
-    // Hide if already collected or paid online
-    if (booking?.cashCollected || booking?.paymentStatus === 'collected_by_vendor') {
+    // Hide if already collected or fully settled
+    if (booking?.cashCollected || booking?.paymentStatus === 'collected_by_vendor' || booking?.paymentStatus === 'SUCCESS' || booking?.paymentStatus === 'success' || booking?.paymentStatus === 'paid') {
       return false;
     }
 
-    // Cash can be collected when booking is completed/work_done and payment was cash/at home
-    const isSelfJob = booking?.assignedTo?.name === 'You (Self)';
+    // Cash can be collected when booking is completed/work_done/awaiting_payment
+    const isSelfJob = booking?.assignedTo?.name === 'You (Self)' || !booking?.assignedTo;
     const validStatus = isSelfJob
-      ? (booking?.status === 'work_done' || booking?.status === 'completed')
-      : booking?.status === 'completed';
+      ? (['work_done', 'completed', 'awaiting_payment'].includes(booking?.status))
+      : (['work_done', 'completed'].includes(booking?.status));
 
     if (!validStatus) return false;
+
+    // Allow if balance is due (including prepaid bookings with overtime)
+    if (booking?.balanceDue > 0 || booking?.paymentStatus === 'partial') {
+      return true;
+    }
     
-    // If online payment and bill is already generated, hide the button (no OTP required)
-    if (booking?.vendorBillId && booking?.paymentMethod !== 'cash' && booking?.paymentMethod !== 'pay_at_home' && booking?.paymentMethod !== 'plan_benefit') {
+    // If online payment, no balance due, and bill is already generated, hide the button
+    if (booking?.vendorBillId && !['cash', 'pay_at_home', 'plan_benefit'].includes(booking?.paymentMethod)) {
       return false;
     }
 
-    // CRITICAL FIX: Allow bill preparation for Plan Benefit bookings
-    // Even if base is pre-paid (SUCCESS), vendor must generate final bill (for extras etc.)
+    // Allow bill preparation for Plan Benefit bookings
     if (booking?.paymentMethod === 'plan_benefit') {
       return true;
     }
 
-    if (booking?.paymentStatus === 'SUCCESS' || booking?.paymentStatus === 'paid') {
-      return false;
-    }
-
-    // IMPORTANT: Only for Cash/Pay at Home methods.
+    // Cash/Pay at Home methods
     return (booking?.paymentMethod === 'cash' || booking?.paymentMethod === 'pay_at_home');
   };
 

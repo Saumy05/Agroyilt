@@ -498,6 +498,30 @@ export const LiveServiceTimer = ({
           </div>
         </div>
 
+        {Number(booking?.advancePaidAmount) > 0 && (
+          <div className="p-3 bg-white/90 rounded-2xl border border-emerald-100 space-y-1.5 text-xs">
+            <div className="flex justify-between text-gray-600">
+              <span>Advance Paid Online:</span>
+              <span className="font-bold text-emerald-700">₹{Number(booking.advancePaidAmount).toFixed(2)}</span>
+            </div>
+            {Number(summary.finalPayable) > Number(booking.advancePaidAmount) ? (
+              <div className="flex justify-between items-center text-amber-900 font-bold pt-1 border-t border-dashed border-gray-200">
+                <span>Remaining Balance Due:</span>
+                <span className="text-sm font-black text-amber-700">
+                  ₹{(booking.balanceDue || (Number(summary.finalPayable) - Number(booking.advancePaidAmount))).toFixed(2)}
+                </span>
+              </div>
+            ) : Number(booking.advancePaidAmount) > Number(summary.finalPayable) ? (
+              <div className="flex justify-between items-center text-emerald-800 font-bold pt-1 border-t border-dashed border-gray-200">
+                <span>Refunded to Wallet:</span>
+                <span className="text-sm font-black text-emerald-600">
+                  ₹{(Number(booking.advancePaidAmount) - Number(summary.finalPayable)).toFixed(2)}
+                </span>
+              </div>
+            ) : null}
+          </div>
+        )}
+
         {summary.partialEndReason && (
           <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-800">
             <strong>Note:</strong> {summary.partialEndReason}

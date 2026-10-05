@@ -476,49 +476,29 @@ const BookingDetails = () => {
     });
   };
 
+  const handleWalletPayment = async () => {
+    if (paying) return;
+    try {
+      setPaying(true);
+      toastManager.info('Processing wallet payment...');
+      const res = await paymentService.processWalletPayment(booking._id || booking.id);
+      toastManager.dismiss();
+      if (res.success) {
+        toastManager.success('Payment successful via AgroYilt Wallet!');
+        loadBooking();
+      } else {
+        toastManager.error(res.message || 'Wallet payment failed');
+      }
+    } catch (err) {
+      toastManager.dismiss();
+      toastManager.error(err.response?.data?.message || 'Wallet payment failed');
+    } finally {
+      setPaying(false);
+    }
+  };
+
   const handleOnlinePayment = async () => {
     if (paying) return;
-
-    // If a Razorpay order already exists for this booking and hasn't been used, skip creating a new one
-    if (booking.razorpayOrderId) {
-      // Open Razorpay with existing order
-      const options = {
-        key: import.meta.env.VITE_RAZORPAY_KEY_ID,
-        amount: Math.round((booking.finalAmount || 0) * 100),
-        currency: 'INR',
-        order_id: booking.razorpayOrderId,
-        name: 'Groo',
-        description: `Payment for ${booking.serviceName}`,
-        handler: async function (response) {
-          toastManager.info('Verifying payment...');
-          const verifyResponse = await paymentService.verifyPayment({
-            razorpay_order_id: response.razorpay_order_id,
-            razorpay_payment_id: response.razorpay_payment_id,
-            razorpay_signature: response.razorpay_signature
-          });
-          toastManager.dismiss();
-
-          if (verifyResponse.success) {
-            toastManager.success('Payment successful!');
-            loadBooking();
-          } else {
-            toastManager.error('Payment verification failed');
-          }
-          setPaying(false);
-        },
-        modal: {
-          ondismiss: function () {
-            setPaying(false);
-          }
-        },
-        prefill: { name: booking.userId?.name || 'User', contact: booking.userId?.phone || '' },
-        theme: { color: themeColors.button }
-      };
-      setPaying(true);
-      const razorpay = new window.Razorpay(options);
-      razorpay.open();
-      return;
-    }
 
     try {
       setPaying(true);
@@ -2157,7 +2137,7 @@ const BookingDetails = () => {
                     )}
 
                     <div className="pt-4 mt-2 border-t border-gray-100 flex justify-between items-center">
-                      <span className="font-bold text-gray-900 text-lg">Total Payable</span>
+                      <span className="font-bold text-gray-900 text-lg">Total Bill</span>
                       <span className="font-black text-gray-900 text-xl">
                         ₹{(booking.paymentMethod === 'plan_benefit'
                           ? (booking.userPayableAmount || booking.extraChargesTotal || 0)
@@ -2165,6 +2145,25 @@ const BookingDetails = () => {
                         ).toLocaleString('en-IN')}
                       </span>
                     </div>
+
+                    {Number(booking.advancePaidAmount) > 0 && (
+                      <div className="flex justify-between text-sm pt-2 text-emerald-700">
+                        <span className="font-medium">Advance Paid Online</span>
+                        <span className="font-bold">-₹{Number(booking.advancePaidAmount).toLocaleString('en-IN')}</span>
+                      </div>
+                    )}
+
+                    {Number(booking.advancePaidAmount) > 0 && (booking.balanceDue > 0 || booking.paymentStatus === 'partial') && (
+                      <div className="pt-2 mt-1 border-t border-dashed border-gray-200 flex justify-between items-center text-amber-900">
+                        <span className="font-bold text-base">Remaining Balance Due</span>
+                        <span className="font-black text-xl text-amber-600">
+                          ₹{(booking.balanceDue !== undefined && booking.balanceDue !== null && Number(booking.balanceDue) > 0
+                            ? Number(booking.balanceDue)
+                            : Math.max(0, (Number(booking.finalAmount) || 0) - Number(booking.advancePaidAmount))
+                          ).toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                    )}
                   </>
                 )}
               </div>
@@ -2174,9 +2173,11 @@ const BookingDetails = () => {
             <div className="bg-gray-50 px-5 py-3 border-t border-gray-100 flex justify-between items-center">
               <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">Payment Status</span>
               <span className={`px-2.5 py-1 rounded-md text-xs font-bold capitalize ${booking.paymentStatus === 'success' ? 'bg-green-100 text-green-700' :
+                booking.paymentStatus === 'partial' ? 'bg-amber-100 text-amber-800' :
                 booking.paymentStatus === 'pending' || booking.paymentStatus === 'plan_covered' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
                 }`}>
                 {booking.paymentStatus === 'success' ? 'Paid' :
+                  booking.paymentStatus === 'partial' ? 'Partially Paid (Balance Due)' :
                   booking.paymentStatus === 'plan_covered' ? 'Processing Bill' :
                     booking.paymentStatus || 'Pending'}
               </span>
@@ -2186,7 +2187,7 @@ const BookingDetails = () => {
           {/* Action Card for Payment — shows when online payment is pending or bill is awaiting payment */}
           {booking.paymentStatus !== 'success' && booking.paymentMethod !== 'plan_benefit' && !['cancelled', 'rejected'].includes(booking.status) && (
             booking.status === 'awaiting_payment' || 
-            (booking.status === 'work_done' && !booking.isCashBooking && booking.paymentMethod !== 'cash') ||
+            booking.status === 'work_done' ||
             ['online', 'razorpay'].includes(booking.paymentMethod)
           ) && (
             <div className="bg-white rounded-3xl shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-gray-100 p-6 space-y-4">
@@ -2194,10 +2195,16 @@ const BookingDetails = () => {
                 <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-3">
                   <FiDollarSign className="w-8 h-8 text-orange-600" />
                 </div>
-                <h3 className="text-lg font-bold text-black">Payment Required</h3>
+                <h3 className="text-lg font-bold text-black">
+                  {booking.paymentStatus === 'partial' || (booking.advancePaidAmount > 0 && booking.balanceDue > 0)
+                    ? 'Remaining Balance Due'
+                    : 'Payment Required'}
+                </h3>
                 <p className="text-sm text-gray-500">
-                  {!booking.vendorId && booking.workerId
-                    ? `The worker has completed the job. Pay ₹${booking.finalAmount || booking.totalAmount || booking.basePrice || '—'} to settle.`
+                  {booking.paymentStatus === 'partial' || (booking.advancePaidAmount > 0 && booking.balanceDue > 0)
+                    ? `Service completed. Please pay the remaining balance of ₹${(booking.balanceDue || Math.max(0, (booking.finalAmount || 0) - (booking.advancePaidAmount || 0))).toLocaleString('en-IN')} to settle.`
+                    : !booking.vendorId && booking.workerId
+                    ? `The worker has completed the job. Pay ₹${(booking.finalAmount || booking.totalAmount || booking.basePrice || 0).toLocaleString('en-IN')} to settle.`
                     : 'The service is complete. Please choose a payment method to settle the bill.'}
                 </p>
               </div>
@@ -2205,26 +2212,42 @@ const BookingDetails = () => {
               <div className="grid grid-cols-1 gap-3">
                 <button
                   onClick={handleOnlinePayment}
+                  disabled={paying}
                   className="w-full py-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform"
                   style={{ background: themeColors.button }}
                 >
                   <FiDollarSign className="w-5 h-5" />
-                  Pay Online (Razorpay/UPI)
+                  Pay Online (Razorpay/UPI) - ₹{(
+                    booking.paymentStatus === 'partial' || (booking.advancePaidAmount > 0 && booking.balanceDue > 0)
+                      ? (booking.balanceDue || Math.max(0, (booking.finalAmount || 0) - (booking.advancePaidAmount || 0)))
+                      : (booking.finalAmount || booking.totalAmount || booking.basePrice || 0)
+                  ).toLocaleString('en-IN')}
+                </button>
+
+                <button
+                  onClick={handleWalletPayment}
+                  disabled={paying}
+                  className="w-full py-3.5 rounded-xl font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 flex items-center justify-center gap-2 active:scale-95 transition-transform hover:bg-emerald-100"
+                >
+                  <FiCheckSquare className="w-5 h-5 text-emerald-600" />
+                  Pay with AgroYilt Wallet
                 </button>
 
                 <button
                   onClick={handlePayAtHome}
-                  className="w-full py-4 rounded-xl font-bold text-gray-700 bg-gray-100 flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                  disabled={paying}
+                  className="w-full py-3.5 rounded-xl font-bold text-gray-700 bg-gray-100 flex items-center justify-center gap-2 active:scale-95 transition-transform hover:bg-gray-200"
                 >
                   <FiHome className="w-5 h-5" />
-                  Pay Offline (Cash)
+                  Pay Offline (Cash to Operator)
                 </button>
               </div>
               
-              {/* Show OTP for Offline Payment */}
-              {(booking.paymentMethod === 'cash' || booking.paymentMethod === 'pay_at_home' || booking.status === 'awaiting_payment' || booking.status === 'work_done') && (booking.customerConfirmationOTP || booking.paymentOtp) && (
+              {/* Show OTP for Offline / Cash Payment */}
+              {(booking.customerConfirmationOTP || booking.paymentOtp) && (
                 <div className="mt-4 p-4 bg-teal-50 border border-teal-200 rounded-2xl text-center">
-                   <p className="text-sm font-bold text-teal-800 mb-2">Share this OTP with the operator / vendor to confirm cash payment</p>
+                   <p className="text-sm font-bold text-teal-800 mb-1">Cash Payment Confirmation OTP</p>
+                   <p className="text-xs text-teal-600 mb-2">Share this OTP with the operator / vendor ONLY after paying cash</p>
                    <div className="text-3xl tracking-[0.5em] font-black text-teal-600">{booking.customerConfirmationOTP || booking.paymentOtp}</div>
                 </div>
               )}
