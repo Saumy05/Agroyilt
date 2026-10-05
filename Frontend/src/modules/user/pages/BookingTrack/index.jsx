@@ -79,6 +79,13 @@ const STATUS_CONFIG = {
     icon: FiTool,
     description: 'Worker is actively working on your farm'
   },
+  WORK_SUBMITTED: {
+    label: 'Work Stopped',
+    bgColor: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+    dotColor: 'bg-indigo-500',
+    icon: FiKey,
+    description: 'Worker has stopped. Check the work and share the End OTP.'
+  },
   COMPLETED: {
     label: 'Work Completed',
     bgColor: 'bg-emerald-50 text-emerald-800 border-emerald-300',
@@ -401,6 +408,12 @@ const BookingTrack = () => {
       toastManager.success('Worker marked the job as completed!');
     };
 
+    // E2. Worker tapped Stop Work → reload so the freshly issued End OTP appears
+    const handleWorkStopped = () => {
+      fetchSnapshot(false);
+      toastManager.success('Worker has stopped work. Check the work, then share the End OTP.');
+    };
+
     // F. Legacy single location fallback
     const handleLegacyLocation = (data) => {
       if (data.lat && data.lng) {
@@ -445,7 +458,7 @@ const BookingTrack = () => {
     socket.on('assignment_visit_otp_verified', handleOtpVerified);
     socket.on('assignment_work_started', handleOtpVerified);
     socket.on('worker_work_completed', handleWorkCompleted);
-    socket.on('assignment_work_submitted', handleWorkCompleted);
+    socket.on('assignment_work_submitted', handleWorkStopped);
     socket.on('assignment_day_completed', () => fetchSnapshot(false));
     socket.on('live_location_update', handleLegacyLocation);
     socket.on('booking_completed', handleBookingCompleted);
@@ -474,7 +487,7 @@ const BookingTrack = () => {
       socket.off('assignment_visit_otp_verified', handleOtpVerified);
       socket.off('assignment_work_started', handleOtpVerified);
       socket.off('worker_work_completed', handleWorkCompleted);
-      socket.off('assignment_work_submitted', handleWorkCompleted);
+      socket.off('assignment_work_submitted', handleWorkStopped);
       socket.off('assignment_day_completed');
       socket.off('live_location_update', handleLegacyLocation);
       socket.off('booking_completed', handleBookingCompleted);
@@ -1292,6 +1305,14 @@ const BookingTrack = () => {
                     </div>
                   )}
 
+                  {/* ── Working: End OTP is issued only after the worker taps Stop ── */}
+                  {worker.journeyStatus === 'IN_PROGRESS' && !worker.completionOtp && !isAllCompleted && (
+                    <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-2 text-xs text-slate-500 font-medium">
+                      <FiClock className="w-4 h-4 text-amber-500 shrink-0" />
+                      <span>{worker.workerName?.split(' ')[0]} is working. The End OTP will appear here when they tap Stop Work.</span>
+                    </div>
+                  )}
+
                   {/* ── Completion OTP Banner for Farmer ── */}
                   {worker.completionOtp &&
                     ['IN_PROGRESS', 'WORK_SUBMITTED', 'ARRIVED'].includes(worker.journeyStatus) &&
@@ -1306,7 +1327,7 @@ const BookingTrack = () => {
                           </div>
                           <div>
                             <div className="flex items-center gap-1.5 mb-0.5">
-                              <p className="text-[10px] font-black uppercase tracking-wider text-emerald-900">Completion OTP</p>
+                              <p className="text-[10px] font-black uppercase tracking-wider text-emerald-900">End OTP</p>
                               <span className="text-[9px] font-bold bg-emerald-200/70 text-emerald-800 px-1.5 py-0.2 rounded-md">Unique</span>
                             </div>
                             <p className="text-xs text-emerald-700 font-medium leading-tight">
@@ -1324,7 +1345,7 @@ const BookingTrack = () => {
                             onClick={(e) => {
                               e.stopPropagation();
                               navigator.clipboard?.writeText(worker.completionOtp);
-                              toastManager.success(`Completion OTP ${worker.completionOtp} copied!`);
+                              toastManager.success(`End OTP ${worker.completionOtp} copied!`);
                             }}
                             className="p-2.5 bg-white text-emerald-700 hover:bg-emerald-100 rounded-2xl border border-emerald-200 transition-colors shadow-sm active:scale-95"
                             title="Copy OTP"

@@ -113,6 +113,7 @@ describe('decrease worker', () => {
     const r = await post(`/${b.request._id}/decrease-worker`, { assignmentId: String(a1._id) });
     assert.equal(r.status, 200);
     assert.equal((await A(a1._id)).assignmentStatus, 'CONFIRMED', 'still working today');
+    await W.post(`/${a1._id}/daily/submit-proof`); // Stop Work → End OTP
     const gen = await post(`/${b.request._id}/assignment/${a1._id}/daily-completion-otp`);
     const done = await Promise.all([1, 2].map(() => W.post(`/${a1._id}/daily/verify-completion-otp`, { otp: gen.body.data.completionOtp })));
     assert.ok(done.some(d => d.status === 200));

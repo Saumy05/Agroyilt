@@ -83,14 +83,23 @@ const startWork = async (ctx, worker, assignment) => {
   return W.post(`/${assignment._id}/verify-visit-otp`, { otp: a.visitOtpCode });
 };
 
+/** Worker taps Stop Work (submit-proof) — required before the farmer can issue the End OTP. */
+const stopWork = async (ctx, assignment) => {
+  const a = await h.M('IndWorkerAssignment').findById(assignment._id).select('workerId bookingType');
+  const path = a.bookingType === 'DAILY' ? 'daily/submit-proof' : 'submit-proof';
+  return ctx.api.post(`/api/workers/assignments/${assignment._id}/${path}`).set(h.auth({ _id: a.workerId }, 'WORKER')).send({});
+};
+
+/** Worker stops, then the farmer issues the End OTP. */
 const farmerCompletionOtp = async (ctx, farmer, request, assignment) => {
+  await stopWork(ctx, assignment);
   const res = await ctx.api.post(`/api/users/farmer-worker-request/${request._id}/assignment/${assignment._id}/completion-otp`).set(h.auth(farmer, 'USER')).send({});
   return res;
 };
 
 const workerWallet = async (worker) => (await h.M('Worker').findById(worker._id)).wallet?.balance || 0;
 
-module.exports = { ...module.exports, today, confirmedBooking, secretOf, startWork, farmerCompletionOtp, workerWallet };
+module.exports = { ...module.exports, today, confirmedBooking, secretOf, startWork, stopWork, farmerCompletionOtp, workerWallet };
 
 // ── DAILY fixtures ────────────────────────────────────────────────────────────────────────────────
 const daysAgo = (n) => { const d = today(); d.setDate(d.getDate() - n); return d; };
@@ -115,6 +124,7 @@ const workDay = async (ctx, farmer, worker, request, assignment) => {
   const log = cur.dailyLogs.find(l => l.dayNumber === cur.currentDayIndex);
   const v = await W.post(`/${assignment._id}/daily/verify-visit-otp`, { otp: log.visitOtpCode });
   if (v.status !== 200) return v;
+  await W.post(`/${assignment._id}/daily/submit-proof`);
   const gen = await ctx.api.post(`/api/users/farmer-worker-request/${request._id}/assignment/${assignment._id}/daily-completion-otp`).set(h.auth(farmer, 'USER')).send({});
   if (gen.status !== 200) return gen;
   return W.post(`/${assignment._id}/daily/verify-completion-otp`, { otp: gen.body.data.completionOtp });

@@ -3595,12 +3595,13 @@ exports.generateFarmerCompletionOtp = async (req, res) => {
 
     const otp = issueFreshOtp();
     const assignment = await IndWorkerAssignment.findOneAndUpdate(
-      { _id: assignmentId, parentRequestId: id, farmerId: req.user._id, ...A_OPEN, visitOtpStatus: 'VERIFIED', completionStatus: 'PENDING' },
+      // End OTP only once the worker has STOPPED work (submit-proof → workStatus SUBMITTED)
+      { _id: assignmentId, parentRequestId: id, farmerId: req.user._id, ...A_OPEN, visitOtpStatus: 'VERIFIED', workStatus: 'SUBMITTED', completionStatus: 'PENDING' },
       { $set: { completionOtpCode: otp.code, completionOtpHash: otp.hash, completionOtpExpiresAt: otp.expiresAt, completionOtpAttempts: 0 } },
       { new: true }
     );
     if (!assignment) {
-      return res.status(409).json({ success: false, message: 'The completion OTP can only be generated after the worker has started work.' });
+      return res.status(409).json({ success: false, message: 'The End OTP is available once the worker taps Stop Work.' });
     }
 
     return res.json({
@@ -3960,13 +3961,14 @@ exports.generateDailyCompletionOtp = async (req, res) => {
     const updated = await IndWorkerAssignment.findOneAndUpdate(
       {
         _id: assignmentId, parentRequestId: id, farmerId: req.user._id, ...A_OPEN,
+        workStatus: 'SUBMITTED', // the worker has stopped today's work
         dailyLogs: { $elemMatch: { dayNumber: targetDay, visitOtpStatus: 'VERIFIED', workStatus: { $ne: 'COMPLETED' } } }
       },
       { $set: { 'dailyLogs.$.completionOtpCode': otp.code, 'dailyLogs.$.completionOtpHash': otp.hash, 'dailyLogs.$.completionOtpExpiresAt': otp.expiresAt, 'dailyLogs.$.completionOtpAttempts': 0 } },
       { new: true }
     );
     if (!updated) {
-      return res.status(409).json({ success: false, message: `Day ${targetDay} work has not started or is already completed.` });
+      return res.status(409).json({ success: false, message: `Day ${targetDay} End OTP is available once the worker taps Stop Work.` });
     }
 
     return res.json({

@@ -41,6 +41,14 @@ const emitSafe = (room, event, data) => {
   }
 };
 
+/** A DAILY day-log without OTP codes/hashes (subdocuments bypass the model's default-deny serializer). */
+const OTP_SECRET_FIELDS = ['visitOtpCode', 'visitOtpHash', 'completionOtpCode', 'completionOtpHash'];
+const withoutOtpSecrets = (log) => {
+  const plain = log && typeof log.toObject === 'function' ? log.toObject() : { ...log };
+  OTP_SECRET_FIELDS.forEach(k => { delete plain[k]; });
+  return plain;
+};
+
 /**
  * Map raw MongoDB booking status to canonical tracking status
  */
@@ -307,11 +315,14 @@ exports.getTrackingSnapshot = async (req, res) => {
       }
       const visitOtp = isVisitOtpEligible ? (b.visitOtpCode || b.visitOtp || null) : null;
 
-      // Completion OTP: exposed to Farmer whenever work is in progress or submitted
+      // Completion (End) OTP: exposed to the Farmer only after the worker has STOPPED work (WORK_SUBMITTED),
+      // so work cannot be closed while it is still running. DAILY uses the current day's log below.
+      const isDailyAssignment = (b.bookingType === 'DAILY') || (parentRequest?.bookingType === 'DAILY');
       const isCompletionOtpEligible = isFarmer &&
+        !isDailyAssignment &&
         b.completionStatus !== 'OTP_VERIFIED' &&
         b.settlementStatus !== 'SETTLED' &&
-        ['IN_PROGRESS', 'WORK_SUBMITTED'].includes(canonical);
+        canonical === 'WORK_SUBMITTED';
 
       let completionOtp = null;
       if (isCompletionOtpEligible) {
@@ -342,7 +353,8 @@ exports.getTrackingSnapshot = async (req, res) => {
         if (currentDayLog && currentDayLog.visitOtpStatus !== 'VERIFIED') {
           finalVisitOtp = currentDayLog.visitOtpCode || null;
         }
-        if (currentDayLog && currentDayLog.workStatus === 'IN_PROGRESS') {
+        // top-level workStatus tracks the current day: SUBMITTED = worker stopped today's work
+        if (currentDayLog && currentDayLog.workStatus === 'IN_PROGRESS' && b.workStatus === 'SUBMITTED') {
           const staleDay = currentDayLog.completionOtpExpiresAt && currentDayLog.completionOtpExpiresAt <= new Date();
           if ((!currentDayLog.completionOtpCode || staleDay) && b.save) {
             const o = issueOtp(4 * 60 * 60 * 1000);
@@ -377,8 +389,9 @@ exports.getTrackingSnapshot = async (req, res) => {
         isDecreased: Boolean(b.isDecreased),
         decreasedAt: b.decreasedAt || null,
         decreaseReason: b.decreaseReason || null,
-        dailyLogs: b.dailyLogs || [],
-        currentDayLog,
+        // OTP codes reach the farmer only through visitOtp / completionOtp below — never via raw day logs
+        dailyLogs: (b.dailyLogs || []).map(withoutOtpSecrets),
+        currentDayLog: currentDayLog ? withoutOtpSecrets(currentDayLog) : currentDayLog,
         // Statuses
         journeyStatus: canonical,
         workStatus: b.workStatus || null,

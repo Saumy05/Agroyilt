@@ -115,12 +115,14 @@ const DailyTrackingView = ({
             const isDecreased = Boolean(w.isDecreased);
             const isFinished = w.journeyStatus === 'COMPLETED' || w.settlementStatus === 'SETTLED';
             const isInProgress = w.journeyStatus === 'IN_PROGRESS' || w.workStatus === 'IN_PROGRESS';
+            // worker tapped Stop Work for today → the End OTP can be shared
+            const isStopped = !isFinished && (w.journeyStatus === 'WORK_SUBMITTED' || w.workStatus === 'SUBMITTED');
             const isArrived = w.journeyStatus === 'ARRIVED';
             const isJourneyStarted = w.journeyStatus === 'JOURNEY_STARTED';
 
-            // OTPs
-            const visitOtp = w.visitOtp || w.currentDayLog?.visitOtpCode;
-            const completionOtp = w.completionOtp || w.currentDayLog?.completionOtpCode;
+            // OTPs (the server sends them to the farmer only when they may be shared)
+            const visitOtp = w.visitOtp;
+            const completionOtp = w.completionOtp;
 
             return (
               <div
@@ -171,6 +173,8 @@ const DailyTrackingView = ({
                     <span className={`font-black uppercase text-[10px] px-2 py-0.5 rounded-full ${
                       isFinished
                         ? 'bg-emerald-100 text-emerald-800'
+                        : isStopped
+                        ? 'bg-indigo-100 text-indigo-800'
                         : isInProgress
                         ? 'bg-blue-100 text-blue-800'
                         : isArrived
@@ -212,12 +216,19 @@ const DailyTrackingView = ({
                     </div>
                   )}
 
-                  {/* Completion OTP Box */}
-                  {isInProgress && completionOtp && (
+                  {/* Working: today's End OTP is issued only after the worker taps Stop */}
+                  {isInProgress && !isStopped && (
+                    <p className="mt-2 text-[11px] text-slate-500 font-medium">
+                      Working now. Today’s End OTP will appear here when {w.workerName?.split(' ')[0] || 'the worker'} taps Stop Work.
+                    </p>
+                  )}
+
+                  {/* End OTP Box */}
+                  {isStopped && completionOtp && (
                     <div className="mt-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <FiShield className="text-emerald-600" size={14} />
-                        <span className="text-xs text-emerald-900 font-bold">Today’s Completion OTP:</span>
+                        <span className="text-xs text-emerald-900 font-bold">Today’s End OTP:</span>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <span className="text-base font-black font-mono tracking-widest text-emerald-700 bg-white px-2.5 py-0.5 rounded-lg border border-emerald-200">
@@ -237,12 +248,12 @@ const DailyTrackingView = ({
                     </div>
                   )}
 
-                  {/* Generate Completion OTP Button if In Progress and not yet generated */}
-                  {isInProgress && !completionOtp && onGenerateCompletionOtp && (
+                  {/* Generate End OTP if the worker stopped and none was issued yet */}
+                  {isStopped && !completionOtp && onGenerateCompletionOtp && (
                     <div className="mt-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <FiShield className="text-emerald-600" size={14} />
-                        <span className="text-xs text-emerald-900 font-bold">Today’s Completion OTP:</span>
+                        <span className="text-xs text-emerald-900 font-bold">Today’s End OTP:</span>
                       </div>
                       <button
                         type="button"

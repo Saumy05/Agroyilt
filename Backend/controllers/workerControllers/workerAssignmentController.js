@@ -560,8 +560,10 @@ exports.submitProof = async (req, res) => {
     });
     await notify({
       recipientType: 'user', recipientId: assignment.farmerId, type: 'worker_work_submitted',
-      title: 'Work Proof Submitted!', message: 'Worker has submitted completion proof. Please verify work and share Completion OTP to release payment.',
-      relatedId: assignment.parentRequestId, relatedType: 'WorkerBookingRequest', data: { assignmentId: assignment._id }
+      title: 'Worker has stopped work',
+      message: 'Please check the work. If you are satisfied, share the End OTP from your tracking screen with the worker.',
+      relatedId: assignment.parentRequestId, relatedType: 'WorkerBookingRequest',
+      data: { assignmentId: assignment._id }
     });
 
     return res.json({ success: true, message: 'Work proof submitted. Please ask farmer for Completion OTP.', data: assignment });
@@ -620,6 +622,12 @@ exports.verifyCompletionOtp = async (req, res) => {
       }
     } else if (assignment.completionStatus !== 'OTP_VERIFIED' && assignment.visitOtpStatus !== 'VERIFIED') {
       return res.status(409).json({ success: false, message: 'Visit OTP must be verified before completing the work.' });
+    }
+
+    // Stop → End OTP: work must be stopped (submit-proof) before it can be closed. For DAILY the top-level
+    // workStatus describes the current day. An HOURLY retry after a failed settlement is already past this.
+    if (assignment.completionStatus !== 'OTP_VERIFIED' && assignment.workStatus !== 'SUBMITTED') {
+      return res.status(409).json({ success: false, message: 'Tap Stop Work first, then ask the farmer for the End OTP.' });
     }
 
     // HOURLY retry of a settlement that previously failed (OTP was already accepted)
