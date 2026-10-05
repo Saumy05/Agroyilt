@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import {
   FiArrowLeft, FiMapPin, FiCalendar, FiClock,
-  FiUsers, FiTag, FiFileText, FiDollarSign, FiCheckCircle, FiUser
+  FiUsers, FiTag, FiFileText, FiDollarSign, FiCheckCircle, FiUser,
+  FiChevronDown, FiCheck
 } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import workerBookingService from '../../../../services/workerBookingService';
@@ -98,6 +99,83 @@ const COMMON_SKILLS = [
   'Weeding', 'Fertilizing', 'Pesticide Spraying',
   'Tractor Driving', 'General Farm Labour', 'Threshing'
 ];
+
+const WorkCategorySelect = ({ value, onChange, error, categories, categoryData }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setIsOpen(false);
+      }
+    };
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen]);
+
+  const selectedData = categoryData[value];
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        type="button"
+        id="work-category-dropdown-btn"
+        onClick={() => setIsOpen(prev => !prev)}
+        className={`w-full bg-slate-50/80 border rounded-xl px-3 py-2 text-xs sm:text-sm flex items-center justify-between transition-all text-left focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white ${
+          isOpen ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-white' : ''
+        } ${error ? 'border-red-300' : 'border-slate-200 hover:border-slate-300'}`}
+      >
+        <span className={`flex items-center gap-2 ${value ? 'text-slate-800 font-semibold' : 'text-slate-400 font-normal'}`}>
+          {value ? (
+            <>
+              <span className="text-sm">{selectedData?.icon}</span>
+              <span>{value}</span>
+            </>
+          ) : (
+            'Select work category *'
+          )}
+        </span>
+        <FiChevronDown
+          size={16}
+          className={`text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180 text-emerald-600' : ''}`}
+        />
+      </button>
+
+      {isOpen && (
+        <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white border border-slate-100 rounded-xl shadow-xl shadow-slate-200/50 max-h-60 overflow-y-auto p-1.5 space-y-0.5">
+          {categories.map(c => {
+            const isSelected = value === c;
+            const data = categoryData[c];
+            return (
+              <button
+                key={c}
+                type="button"
+                onClick={() => {
+                  onChange({ target: { name: 'workCategory', value: c } });
+                  setIsOpen(false);
+                }}
+                className={`w-full px-2.5 py-1.5 rounded-lg flex items-center justify-between text-xs sm:text-sm text-left transition-colors ${
+                  isSelected
+                    ? 'bg-emerald-50 text-emerald-800 font-bold'
+                    : 'text-slate-700 hover:bg-slate-50 hover:text-emerald-700'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-sm">{data?.icon}</span>
+                  <span>{c}</span>
+                </div>
+                {isSelected && <FiCheck size={14} className="text-emerald-600" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const formatToDDMMYYYY = (isoDateStr) => {
   if (!isoDateStr) return '';
@@ -538,21 +616,13 @@ const WorkerRequestForm = () => {
                 <label className="text-[11px] font-bold text-slate-600 mb-1 block">
                   Work Category <span className="text-red-500">*</span>
                 </label>
-                <select
-                  name="workCategory"
+                <WorkCategorySelect
                   value={formData.workCategory}
                   onChange={handleChange}
-                  className={`w-full bg-slate-50/80 border rounded-xl px-3 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all ${
-                    errors.workCategory ? 'border-red-300' : 'border-slate-200'
-                  }`}
-                >
-                  <option value="">Select work category *</option>
-                  {WORK_CATEGORIES.map(c => (
-                    <option key={c} value={c}>
-                      {WORK_CATEGORY_DATA[c]?.icon} {c}
-                    </option>
-                  ))}
-                </select>
+                  error={!!errors.workCategory}
+                  categories={WORK_CATEGORIES}
+                  categoryData={WORK_CATEGORY_DATA}
+                />
                 <FieldError name="workCategory" />
               </div>
 
