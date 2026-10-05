@@ -304,11 +304,31 @@ const MachineryExplorer = () => {
     return Number(num.toFixed(2)).toString();
   };
 
+  const getDurationHumanReadable = (qty) => {
+    const num = parseFloat(qty);
+    if (isNaN(num) || num <= 0) return '0 mins';
+    const totalMinutes = Math.round(num * 60);
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    if (h === 0) return `${m} min${m !== 1 ? 's' : ''}`;
+    if (m === 0) return `${h} hr${h !== 1 ? 's' : ''}`;
+    return `${h} hr${h !== 1 ? 's' : ''} ${m} min${m !== 1 ? 's' : ''}`;
+  };
+
+  const getLandAreaEquivalent = (qty) => {
+    const num = parseFloat(qty);
+    if (isNaN(num) || num <= 0) return '';
+    const bigha = (num * 1.61).toFixed(2).replace(/\.00$/, '');
+    const guntha = (num * 40).toFixed(1).replace(/\.0$/, '');
+    return `≈ ${bigha} Bigha • ${guntha} Guntha`;
+  };
+
   const formatScopeDisplay = (qty, type) => {
     const num = parseFloat(qty) || 1;
     const formatted = formatQtyDisplay(num);
     if (type === 'hourly') {
-      return `${formatted} ${num === 1 ? 'Hour' : 'Hours'} • Hourly Metered`;
+      const human = getDurationHumanReadable(num);
+      return `${formatted} ${num === 1 ? 'Hour' : 'Hours'} (${human}) • Hourly Metered`;
     }
     if (type === 'land_based') {
       return `${formatted} ${num === 1 ? 'Acre' : 'Acres'} • Land Acreage`;
@@ -978,6 +998,33 @@ const MachineryExplorer = () => {
                         </div>
                       </div>
 
+                      {/* Live Human-Readable Helper Banner */}
+                      {rentalType === 'hourly' && (
+                        <div className="flex items-center justify-between bg-emerald-50/80 border border-emerald-200/80 rounded-xl px-3 py-1.5 shadow-2xs">
+                          <span className="text-[11px] font-bold text-emerald-900/80 flex items-center gap-1.5">
+                            <FiClock size={12} className="text-emerald-600" />
+                            Work Duration:
+                          </span>
+                          <span className="font-black text-emerald-800 text-xs flex items-center gap-1.5">
+                            <span>{getDurationHumanReadable(quantity)}</span>
+                            <span className="text-[10px] text-emerald-600 font-bold bg-white/80 px-1.5 py-0.5 rounded border border-emerald-200/50">
+                              {Math.round((parseFloat(quantity) || 0) * 60)} mins
+                            </span>
+                          </span>
+                        </div>
+                      )}
+
+                      {rentalType === 'land_based' && (
+                        <div className="flex items-center justify-between bg-amber-50/80 border border-amber-200/80 rounded-xl px-3 py-1.5 shadow-2xs">
+                          <span className="text-[11px] font-bold text-amber-900/80 flex items-center gap-1.5">
+                            🌾 Equivalent Size:
+                          </span>
+                          <span className="font-black text-amber-800 text-xs">
+                            {getLandAreaEquivalent(quantity)}
+                          </span>
+                        </div>
+                      )}
+
                       {/* Preset Pills */}
                       <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-0.5">
                         {(rentalType === 'hourly' 
@@ -1202,7 +1249,7 @@ const MachineryExplorer = () => {
                             </p>
                             <p className="text-xs font-black text-slate-900 truncate">
                               {rentalType === 'hourly' 
-                                ? `${formatTime12Hour(startTime)} – ${formatTime12Hour(endTime)} (${formatQtyDisplay(quantity)} ${parseFloat(quantity) === 1 ? 'Hour' : 'Hours'})`
+                                ? `${formatTime12Hour(startTime)} – ${formatTime12Hour(endTime)} (${formatQtyDisplay(quantity)} ${parseFloat(quantity) === 1 ? 'Hour' : 'Hours'} • ${getDurationHumanReadable(quantity)})`
                                 : rentalType === 'land_based'
                                 ? `Starts at ${formatTime12Hour(startTime)} • ${formatQtyDisplay(quantity)} ${parseFloat(quantity) === 1 ? 'Acre' : 'Acres'} Workload`
                                 : `${formatQtyDisplay(quantity)} ${parseFloat(quantity) === 1 ? 'Day' : 'Days'} • Starts at ${formatTime12Hour(startTime)}`}

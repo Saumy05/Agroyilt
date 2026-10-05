@@ -783,6 +783,40 @@ export default function BookingDetails() {
       <Header title="Booking Details" />
 
       <main className="px-3.5 py-3 space-y-2.5 max-w-lg mx-auto">
+        {/* Cancelled Banner */}
+        {['cancelled', 'rejected'].includes(booking.status?.toLowerCase()) && (
+          <div className="bg-red-50 border border-red-200/90 rounded-xl p-3.5 shadow-2xs">
+            <div className="flex items-start gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-red-100 text-red-600 flex items-center justify-center shrink-0">
+                <FiXCircle className="w-4 h-4" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-1">
+                  <h3 className="font-bold text-red-950 text-xs uppercase tracking-wide">Booking Cancelled</h3>
+                  <span className="text-[9px] font-black uppercase tracking-wider bg-red-100 text-red-700 px-2 py-0.5 rounded-full border border-red-200">
+                    Closed
+                  </span>
+                </div>
+                <p className="text-[11px] text-red-800 font-medium mt-1 leading-snug">
+                  {booking.cancellationReason
+                    ? `Reason: "${booking.cancellationReason}"`
+                    : 'This booking was cancelled by the customer.'}
+                </p>
+                {booking.cancelledAt && (
+                  <p className="text-[10px] text-red-500 font-semibold mt-1.5">
+                    Cancelled on {new Date(booking.cancelledAt).toLocaleString('en-IN', {
+                      day: 'numeric',
+                      month: 'short',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Action Required: Incoming Request Banner */}
         {['requested', 'pending', 'searching'].includes(booking.status?.toLowerCase()) && (
           <div className="bg-gradient-to-br from-emerald-50 via-teal-50/70 to-emerald-50 border border-emerald-500/30 rounded-xl p-3 shadow-xs relative overflow-hidden">
@@ -839,11 +873,19 @@ export default function BookingDetails() {
               </h2>
             </div>
             <span
-              className="px-2.5 py-0.5 rounded-full text-xs font-bold shrink-0 capitalize"
-              style={{
-                background: `${themeColors.button}15`,
-                color: themeColors.button,
-              }}
+              className={`px-2.5 py-0.5 rounded-full text-xs font-bold shrink-0 capitalize ${
+                ['cancelled', 'rejected'].includes(booking.status?.toLowerCase())
+                  ? 'bg-red-50 text-red-700 border border-red-200'
+                  : ''
+              }`}
+              style={
+                ['cancelled', 'rejected'].includes(booking.status?.toLowerCase())
+                  ? {}
+                  : {
+                      background: `${themeColors.button}15`,
+                      color: themeColors.button,
+                    }
+              }
             >
               {booking.status}
             </span>
@@ -1596,18 +1638,24 @@ export default function BookingDetails() {
             className="w-full py-2.5 px-3.5 rounded-xl bg-white border border-slate-200/90 hover:border-emerald-300 text-slate-700 text-xs font-semibold flex items-center justify-between shadow-2xs transition-all active:scale-[0.99] cursor-pointer"
           >
             <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold text-xs">
+              <div className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold text-xs ${
+                ['cancelled', 'rejected'].includes(booking?.status?.toLowerCase())
+                  ? 'bg-red-50 text-red-600'
+                  : 'bg-emerald-50 text-emerald-700'
+              }`}>
                 <FiClock className="w-3.5 h-3.5" />
               </div>
               <span className="text-slate-800 font-semibold">Booking Timeline</span>
-              <span className="text-[10px] text-slate-400 font-normal">• Step-by-step progress</span>
+              <span className="text-[10px] text-slate-400 font-normal">
+                {['cancelled', 'rejected'].includes(booking?.status?.toLowerCase()) ? '• Booking was cancelled' : '• Step-by-step progress'}
+              </span>
             </div>
             <FiChevronRight className="w-4 h-4 text-slate-400" />
           </button>
         </div>
 
         {/* Action Button for non-timer services */}
-        {!hasLiveTimer && (
+        {!hasLiveTimer && !['cancelled', 'rejected'].includes(booking?.status?.toLowerCase()) && (
           <div className="space-y-2 mb-3">
             {['confirmed', 'accepted', 'assigned', 'visited'].includes(booking?.status?.toLowerCase()) && (
               <button

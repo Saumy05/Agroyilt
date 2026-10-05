@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { FiCheck, FiClock, FiUser, FiUsers, FiMapPin, FiTool, FiDollarSign, FiFileText, FiCheckCircle, FiX, FiNavigation, FiPackage } from 'react-icons/fi';
+import { FiCheck, FiClock, FiUser, FiUsers, FiMapPin, FiTool, FiDollarSign, FiFileText, FiCheckCircle, FiX, FiNavigation, FiPackage, FiXCircle, FiAlertCircle } from 'react-icons/fi';
 import { vendorTheme as themeColors } from '../../../../theme';
 import Header from '../../components/layout/Header';
 import BottomNav from '../../components/layout/BottomNav';
@@ -185,6 +185,8 @@ const BookingTimeline = () => {
     /agri|tractor|machin|equip|harvester|rotavator/i.test(booking.categoryId?.name || '')
   ) : false;
 
+  const isCancelled = booking ? ['cancelled', 'rejected'].includes((booking.status || '').toLowerCase()) : false;
+
   const serviceLabel = useMemo(() => {
     if (!booking) return 'Equipment';
     const name = booking.serviceName || booking.equipmentId?.name || booking.categoryId?.name || '';
@@ -247,7 +249,12 @@ const BookingTimeline = () => {
         setBooking(mappedBooking);
 
         // Determine current stage based on status
-        // Determine current stage based on status
+        const isCancelledBooking = ['cancelled', 'rejected'].includes((apiData.status || '').toLowerCase());
+        if (isCancelledBooking) {
+          setCurrentStage(-1);
+          return;
+        }
+
         const statusMap = {
           'requested': 1,
           'searching': 1,
@@ -485,7 +492,38 @@ const BookingTimeline = () => {
     }
   };
 
-  const timelineStages = [
+  const timelineStages = isCancelled ? [
+    {
+      id: 1,
+      title: 'Booking Requested',
+      icon: FiClock,
+      action: null,
+      description: 'Booking request received',
+      timestamp: booking?.createdAt,
+      isCompleted: true,
+    },
+    ...(booking?.acceptedAt ? [{
+      id: 2,
+      title: 'Booking Accepted',
+      icon: FiCheck,
+      action: null,
+      description: 'You accepted the booking',
+      timestamp: booking.acceptedAt,
+      isCompleted: true,
+    }] : []),
+    {
+      id: 'cancelled',
+      title: 'Booking Cancelled',
+      icon: FiXCircle,
+      action: null,
+      description: booking?.cancellationReason 
+        ? `Cancelled by customer: "${booking.cancellationReason}"` 
+        : 'Customer cancelled this booking.',
+      timestamp: booking?.cancelledAt,
+      isCompleted: true,
+      isCancelledStep: true,
+    }
+  ] : [
     {
       id: 1,
       title: 'Booking Requested',
@@ -659,7 +697,44 @@ const BookingTimeline = () => {
       <Header title="Booking Timeline" />
 
       <main className="px-4 py-6">
-        {(booking?.serviceTimer || booking?.equipmentId || booking?.rental_type || ['visited', 'in_progress', 'completed'].includes(booking?.status) || isAgriBooking) ? (
+        {/* Cancelled Banner */}
+        {isCancelled && (
+          <div className="mb-6 bg-red-50/90 border border-red-200/90 rounded-[2rem] p-5 shadow-xs">
+            <div className="flex items-start gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center shrink-0 shadow-2xs">
+                <FiXCircle className="w-6 h-6" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-base font-black text-red-950">Booking Cancelled</h3>
+                  <span className="text-[10px] font-black uppercase tracking-wider bg-red-100 text-red-700 px-2.5 py-0.5 rounded-full border border-red-200">
+                    Closed
+                  </span>
+                </div>
+                <p className="text-xs text-red-800 font-medium mt-1 leading-relaxed">
+                  {booking.cancellationReason
+                    ? `Reason: "${booking.cancellationReason}"`
+                    : 'This booking was cancelled by the customer.'}
+                </p>
+                <div className="mt-3 pt-2.5 border-t border-red-200/60 flex items-center justify-between text-[11px] text-red-700 font-semibold">
+                  <span>Service operations and live timer are disabled.</span>
+                  {booking.cancelledAt && (
+                    <span className="text-red-500 font-medium">
+                      {new Date(booking.cancelledAt).toLocaleString('en-IN', {
+                        day: 'numeric',
+                        month: 'short',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!isCancelled && (booking?.serviceTimer || booking?.equipmentId || booking?.rental_type || ['visited', 'in_progress', 'completed'].includes(booking?.status) || isAgriBooking) ? (
           <div className="mb-6">
             <LiveServiceTimer
               booking={booking}
@@ -684,8 +759,8 @@ const BookingTimeline = () => {
           <div className="relative">
             {timelineStages.map((stage, index) => {
               const IconComponent = stage.icon;
-              const isCompleted = stage.id < currentStage;
-              const isCurrent = stage.id === currentStage;
+              const isCompleted = stage.isCompleted !== undefined ? stage.isCompleted : (stage.id < currentStage);
+              const isCurrent = stage.isCurrent !== undefined ? stage.isCurrent : (stage.id === currentStage);
               const isPending = stage.id > currentStage;
               const isSkipped = false; // We filter stages now, no need to skip visually in the flow unless needed for other reasons
 
@@ -696,7 +771,7 @@ const BookingTimeline = () => {
                     <div
                       className="absolute left-6 top-12 w-0.5 h-full"
                       style={{
-                        background: isCompleted ? themeColors.button : '#E5E7EB',
+                        background: stage.isCancelledStep ? '#EF4444' : isCompleted ? themeColors.button : '#E5E7EB',
                       }}
                     />
                   )}
@@ -705,14 +780,17 @@ const BookingTimeline = () => {
                   <div className="flex items-start gap-4">
                     {/* Icon Circle */}
                     <div
-                      className={`relative z-10 w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${isCompleted ? 'bg-white' : isCurrent ? 'bg-white' : 'bg-gray-100'
-                        }`}
+                      className={`relative z-10 w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${
+                        stage.isCancelledStep ? 'bg-red-50 text-red-600' : isCompleted ? 'bg-white' : isCurrent ? 'bg-white' : 'bg-gray-100'
+                      }`}
                       style={{
-                        border: `3px solid ${isCompleted || isCurrent ? themeColors.button : '#E5E7EB'}`,
-                        boxShadow: isCurrent ? `0 0 0 4px ${themeColors.button}20` : 'none',
+                        border: `3px solid ${stage.isCancelledStep ? '#EF4444' : isCompleted || isCurrent ? themeColors.button : '#E5E7EB'}`,
+                        boxShadow: stage.isCancelledStep ? '0 0 0 4px #FEE2E2' : isCurrent ? `0 0 0 4px ${themeColors.button}20` : 'none',
                       }}
                     >
-                      {isCompleted ? (
+                      {stage.isCancelledStep ? (
+                        <FiXCircle className="w-6 h-6 text-red-600" />
+                      ) : isCompleted ? (
                         <FiCheck className="w-6 h-6" style={{ color: themeColors.button }} />
                       ) : (
                         <IconComponent
@@ -728,8 +806,9 @@ const BookingTimeline = () => {
                     <div className="flex-1 pt-1">
                       <div className="flex items-center justify-between mb-1">
                         <h3
-                          className={`font-semibold ${isCompleted || isCurrent ? 'text-gray-800' : 'text-gray-400'
-                            }`}
+                          className={`font-semibold ${
+                            stage.isCancelledStep ? 'text-red-700' : isCompleted || isCurrent ? 'text-gray-800' : 'text-gray-400'
+                          }`}
                         >
                           {stage.title}
                         </h3>

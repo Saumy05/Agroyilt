@@ -14,7 +14,8 @@ import {
   FiShield,
   FiActivity,
   FiKey,
-  FiLock
+  FiLock,
+  FiXCircle
 } from 'react-icons/fi';
 import { FaRupeeSign } from 'react-icons/fa';
 import { toastManager } from '../../utils/toastManager';
@@ -426,6 +427,27 @@ export const LiveServiceTimer = ({
   const activeReasonObj = useMemo(() => {
     return PAUSE_REASONS.find(r => r.id === timerData.lastPauseReason) || PAUSE_REASONS[0];
   }, [timerData.lastPauseReason]);
+
+  // If cancelled or rejected, return clean cancelled card
+  if (['cancelled', 'rejected'].includes(booking?.status?.toLowerCase()) || timerData.status === 'CANCELLED') {
+    return (
+      <div className="bg-gradient-to-br from-red-50 via-rose-50/60 to-white rounded-3xl p-5 border border-red-200/80 shadow-xs space-y-2">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center shrink-0 shadow-2xs">
+            <FiXCircle className="w-5 h-5" />
+          </div>
+          <div>
+            <h4 className="font-black text-red-950 text-sm">Booking Cancelled</h4>
+            <p className="text-[11px] text-red-700 font-medium">
+              {booking?.cancellationReason 
+                ? `Customer cancelled: "${booking.cancellationReason}"` 
+                : 'This service was cancelled by the customer. Live timer and field operations are closed.'}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // If completed, show clean summary card
   if (timerData.status === 'COMPLETED' || booking?.status === 'completed') {

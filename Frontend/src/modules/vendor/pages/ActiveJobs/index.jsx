@@ -447,6 +447,7 @@ const ActiveJobs = memo(() => {
                 job.paymentMethod === 'plan_benefit' ||
                 job._raw?.paymentMethod === 'plan_benefit';
               const isCompleted = job.status?.toUpperCase() === 'COMPLETED';
+              const isCancelled = ['CANCELLED', 'REJECTED'].includes(job.status?.toUpperCase());
 
               return (
                 <div
@@ -485,11 +486,11 @@ const ActiveJobs = memo(() => {
                     {/* Price / Estimated Payout */}
                     <div className="flex items-center gap-1 flex-shrink-0 text-right">
                       <div>
-                        <div className="text-sm font-bold text-slate-900 leading-none">
+                        <div className={`text-sm font-bold leading-none ${isCancelled ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
                           ₹{Number(job.price || 0).toLocaleString('en-IN')}
                         </div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">
-                          {isCompleted ? 'Earned' : 'Est. Payout'}
+                        <div className={`text-[10px] mt-0.5 ${isCancelled ? 'text-red-500 font-semibold' : 'text-slate-400'}`}>
+                          {isCancelled ? 'Cancelled' : isCompleted ? 'Earned' : 'Est. Payout'}
                         </div>
                       </div>
                       <FiChevronRight className="w-4 h-4 text-slate-300 ml-0.5" />
@@ -555,6 +556,16 @@ const ActiveJobs = memo(() => {
                         >
                           Review & Accept →
                         </button>
+                      </div>
+                    ) : isCancelled ? (
+                      <div className="flex items-center justify-between w-full">
+                        <span className="text-red-600 font-medium flex items-center gap-1.5 text-[11px]">
+                          <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                          Booking Cancelled
+                        </span>
+                        <span className="text-slate-400 text-[10px] flex items-center gap-0.5">
+                          View details
+                        </span>
                       </div>
                     ) : (
                       <>
