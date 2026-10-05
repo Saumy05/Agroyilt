@@ -68,7 +68,8 @@ const JobTimeline = () => {
       case 'visited':
       case 'in_progress': setCurrentStage(3); break;
       case 'work_done':
-        if (customerPaid) setCurrentStage(6); // Move to Vendor Approval
+        if (jobData?.assignmentId) setCurrentStage(3); // stopped, waiting for the farmer's End OTP
+        else if (customerPaid) setCurrentStage(6); // Move to Vendor Approval
         else setCurrentStage(5); // Go to Customer Payment
         break;
       case 'completed':
@@ -242,8 +243,11 @@ const JobTimeline = () => {
       id: 3,
       title: 'Site Visit',
       icon: FiMapPin,
-      action: currentStage === 3 ? () => setIsWorkDoneModalOpen(true) : null,
-      actionLabel: 'Mark workdone',
+      // farmer-worker jobs stop and complete via the End OTP flow on the job screen
+      action: currentStage === 3
+        ? (job?.assignmentId ? () => navigate(`/worker/job/${id}`) : () => setIsWorkDoneModalOpen(true))
+        : null,
+      actionLabel: job?.assignmentId ? 'Stop Work / End OTP' : 'Mark workdone',
       description: 'Work in progress at site.',
       timestamp: job?.visitedAt
     },

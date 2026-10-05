@@ -69,6 +69,55 @@ const ActiveWorkStopwatch = ({ job }) => {
   );
 };
 
+// Events the assignment lifecycle broadcasts to `booking_req:<parentRequestId>`
+const ASSIGNMENT_LIFECYCLE_EVENTS = [
+  'assignment_journey_started',
+  'assignment_arrived',
+  'assignment_visit_otp_verified',
+  'assignment_work_submitted',
+  'assignment_completion_otp_verified',
+  'assignment_day_completed',
+  'assignment_settled'
+];
+
+const LIFECYCLE_STEPS = [
+  { key: 'confirmed', label: 'Start' },
+  { key: 'journey_started', label: 'On Way' },
+  { key: 'visited', label: 'Start OTP' },
+  { key: 'in_progress', label: 'Working' },
+  { key: 'work_done', label: 'End OTP' },
+  { key: 'completed', label: 'Done' }
+];
+
+// Step-by-step progress for farmer-worker (assignment-backed) jobs
+const LifecycleStepper = ({ status }) => {
+  const current = LIFECYCLE_STEPS.findIndex(s => s.key === status);
+  if (current === -1) return null;
+  return (
+    <div className="bg-white rounded-2xl p-4 mb-4 shadow-sm border border-gray-100">
+      <div className="flex items-start justify-between">
+        {LIFECYCLE_STEPS.map((step, i) => {
+          const done = i < current || status === 'completed';
+          const active = i === current && status !== 'completed';
+          return (
+            <div key={step.key} className="flex-1 flex flex-col items-center relative">
+              {i > 0 && (
+                <div className={`absolute top-3.5 right-1/2 w-full h-0.5 ${i <= current ? 'bg-emerald-500' : 'bg-gray-200'}`} />
+              )}
+              <div className={`relative z-10 w-7 h-7 rounded-full flex items-center justify-center text-xs font-black ${done ? 'bg-emerald-500 text-white' : active ? 'bg-amber-500 text-white ring-4 ring-amber-100' : 'bg-gray-200 text-gray-500'}`}>
+                {done ? <FiCheck className="w-4 h-4" /> : i + 1}
+              </div>
+              <span className={`mt-1.5 text-[10px] font-bold text-center leading-tight ${active ? 'text-amber-600' : done ? 'text-emerald-600' : 'text-gray-400'}`}>
+                {step.label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 const getDurationInfo = (job) => {
   if (!job) return null;
   let start = null;
@@ -96,6 +145,7 @@ const getDurationInfo = (job) => {
   let end = null;
   if (job.completedAt) end = new Date(job.completedAt);
   else if (job.workDoneAt) end = new Date(job.workDoneAt);
+  else if (job.workSubmittedAt) end = new Date(job.workSubmittedAt);
   else if (job.updatedAt && ['completed', 'work_done'].includes(job.status?.toLowerCase())) end = new Date(job.updatedAt);
 
   if (start && end && end >= start) {
@@ -235,13 +285,12 @@ const JobDetails = () => {
       socket.on('worker_booking_cancelled', handleCancelledJob);
       socket.on('job_cancelled', handleCancelledJob);
       socket.on('booking_cancelled', handleCancelledJob);
+      socket.on('assignment_cancelled', handleCancelledJob);
       socket.on('extension_requested', handleUpdate);
       socket.on('extension_status_changed', handleUpdate);
       socket.on('extension_confirmed', handleUpdate);
       socket.on('worker_decreased', handleUpdate);
-      socket.on('daily_day_started', handleUpdate);
-      socket.on('daily_visit_otp_verified', handleUpdate);
-      socket.on('daily_completion_otp_verified', handleUpdate);
+      ASSIGNMENT_LIFECYCLE_EVENTS.forEach(evt => socket.on(evt, handleUpdate));
     }
 
     return () => {
@@ -251,20 +300,48 @@ const JobDetails = () => {
         socket.off('worker_booking_cancelled', handleCancelledJob);
         socket.off('job_cancelled', handleCancelledJob);
         socket.off('booking_cancelled', handleCancelledJob);
+        socket.off('assignment_cancelled', handleCancelledJob);
         socket.off('extension_requested', handleUpdate);
         socket.off('extension_status_changed', handleUpdate);
         socket.off('extension_confirmed', handleUpdate);
         socket.off('worker_decreased', handleUpdate);
-        socket.off('daily_day_started', handleUpdate);
-        socket.off('daily_visit_otp_verified', handleUpdate);
-        socket.off('daily_completion_otp_verified', handleUpdate);
+        ASSIGNMENT_LIFECYCLE_EVENTS.forEach(evt => socket.off(evt, handleUpdate));
       }
     };
   }, [id, socket]);
 
+  // Lifecycle events are broadcast to the parent request's room; join it once we know the parent.
+  const parentRequestId = job?.parentRequestId?._id || job?.parentRequestId || job?.workerRequestId;
+  useEffect(() => {
+    if (socket?.emit && parentRequestId) socket.emit('join_tracking', String(parentRequestId));
+  }, [socket, parentRequestId]);
+
   const localWorker = authStorage.getUserData('worker') || {};
   const currentWorkerId = localWorker._id || localWorker.id || (typeof job?.workerId === 'string' ? job.workerId : job?.workerId?._id);
   const isDaily = job?.bookingType === 'DAILY' || job?.rateUnit === 'daily';
+  // Farmer-worker bookings are driven by the IndWorkerAssignment lifecycle (Start OTP → Stop → End OTP)
+  const isAssignmentJob = Boolean(job?.assignmentId);
+
+  const handleStopWork = async () => {
+    if (actionLoadingRef.current) return;
+    if (!window.confirm(isDaily ? "Stop today's work? The farmer will then give you the End OTP." : 'Stop work? The farmer will then give you the End OTP.')) return;
+    actionLoadingRef.current = true;
+    try {
+      setActionLoading(true);
+      const response = await workerService.submitAssignmentProof(job.assignmentId, {});
+      if (response?.success) {
+        toastManager.success('Work stopped. Ask the farmer for the End OTP.');
+        fetchJobDetails();
+      } else {
+        toastManager.error(response?.message || 'Failed to stop work');
+      }
+    } catch (error) {
+      toastManager.error(error.response?.data?.message || 'Failed to stop work');
+    } finally {
+      setActionLoading(false);
+      actionLoadingRef.current = false;
+    }
+  };
 
   const statusLower = job?.status?.toLowerCase() || '';
 
@@ -561,6 +638,32 @@ const JobDetails = () => {
       );
     }
 
+    if (statusLower === 'in_progress' && isAssignmentJob) {
+      return (
+        <button
+          onClick={handleStopWork}
+          disabled={actionLoading}
+          className={`w-full py-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 shadow-xl active:scale-95 transition-all text-lg ${isSticky ? '' : 'mb-4'}`}
+          style={{ background: 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)' }}
+        >
+          {actionLoading ? 'Loading...' : (isDaily ? <>STOP TODAY'S WORK <FiXCircle className="w-5 h-5" /></> : <>STOP WORK <FiXCircle className="w-5 h-5" /></>)}
+        </button>
+      );
+    }
+
+    if (statusLower === 'work_done' && isAssignmentJob) {
+      return (
+        <button
+          onClick={() => handleStatusUpdate('complete')}
+          disabled={actionLoading}
+          className={`w-full py-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 shadow-xl active:scale-95 transition-all text-lg ${isSticky ? '' : 'mb-4'}`}
+          style={{ background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)' }}
+        >
+          {actionLoading ? 'Loading...' : <>ENTER END OTP <FiCheckCircle className="w-5 h-5" /></>}
+        </button>
+      );
+    }
+
     if (statusLower === 'in_progress') {
       return (
         <button
@@ -735,6 +838,8 @@ const JobDetails = () => {
               <ActiveWorkStopwatch job={job} />
             )
           )}
+
+          {isAssignmentJob && <LifecycleStepper status={statusLower} />}
 
           {renderActionButtons(false)}
         </div>

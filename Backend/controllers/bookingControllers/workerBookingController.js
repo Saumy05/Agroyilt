@@ -8,16 +8,40 @@ const IndWorkerAssignment = require('../../models/IndWorkerAssignment');
 /**
  * Get assigned jobs for worker
  */
-// Helper: map IndWorkerAssignment statuses to a unified job status string the frontend can understand
-const mapAssignmentStatus = (assignmentStatus, workStatus, journeyStatus) => {
-  if (assignmentStatus === 'CANCELLED') return 'cancelled';
-  if (assignmentStatus === 'COMPLETED') return 'completed';
-  if (workStatus === 'SUBMITTED' || workStatus === 'COMPLETED') return 'completed';
-  if (workStatus === 'IN_PROGRESS') return 'in_progress';
-  if (journeyStatus === 'STARTED' || journeyStatus === 'REACHED') return journeyStatus === 'STARTED' ? 'on_the_way' : 'visited';
-  if (assignmentStatus === 'CONFIRMED') return 'confirmed';
+/**
+ * The IndWorkerAssignment is the source of truth for a farmer-worker job. The mirror Booking's status is NOT
+ * advanced by the lifecycle (journey / arrival / visit OTP / proof), so any worker-facing job view must take its
+ * status from the assignment. For DAILY bookings the top-level dimensions describe the current day.
+ *
+ * confirmed → journey_started → visited → in_progress → work_done (stopped, awaiting End OTP) → completed
+ */
+const assignmentJobStatus = (a) => {
+  if (!a) return null;
+  if (['CANCELLED', 'REPLACED'].includes(a.assignmentStatus)) return 'cancelled';
+  if (a.assignmentStatus === 'COMPLETED' || a.settlementStatus === 'SETTLED') return 'completed';
+  if (a.completionStatus === 'OTP_VERIFIED' || a.workStatus === 'SUBMITTED') return 'work_done';
+  if (a.workStatus === 'IN_PROGRESS') return 'in_progress';
+  if (a.journeyStatus === 'ARRIVED') return 'visited';
+  if (a.journeyStatus === 'JOURNEY_STARTED') return 'journey_started';
   return 'confirmed';
 };
+
+/** Lifecycle fields copied onto a worker job payload so the UI can render the stepper. */
+const assignmentLifecycleFields = (a) => ({
+  status: assignmentJobStatus(a),
+  assignmentId: a._id,
+  assignmentStatus: a.assignmentStatus,
+  journeyStatus: a.journeyStatus,
+  visitOtpStatus: a.visitOtpStatus,
+  workStatus: a.workStatus,
+  completionStatus: a.completionStatus,
+  settlementStatus: a.settlementStatus,
+  journeyStartedAt: a.journeyStartedAt,
+  arrivedAt: a.arrivedAt,
+  workStartedAt: a.workStartedAt,
+  workSubmittedAt: a.workSubmittedAt,
+  completedAt: a.workCompletedAt || a.completionOtpVerifiedAt || null
+});
 
 const getAssignedJobs = async (req, res) => {
   try {
@@ -90,6 +114,7 @@ const getAssignedJobs = async (req, res) => {
             b.workerNetEarning = gross - comm;
             b.finalAmount = gross - comm;
           }
+          if (assignment) Object.assign(b, assignmentLifecycleFields(assignment));
         } catch (e) {
           const gross = b.workerGrossEarning || b.agreedRate || b.workerOfferedRate || b.finalAmount || 0;
           const comm = Math.round((gross * 10) / 100);
@@ -114,17 +139,18 @@ const getAssignedJobs = async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(parseInt(limit));
 
-    // Track legacy booking IDs already included to avoid duplicates
-    const existingLegacyIds = new Set(
-      enrichedBookings.filter(b => b.legacyBookingId).map(b => b.legacyBookingId.toString())
-    );
+    // Track mirror bookings / assignments already included to avoid showing the same job twice
     const existingBookingIds = new Set(enrichedBookings.map(b => b._id.toString()));
+    const existingAssignmentIds = new Set(
+      enrichedBookings.filter(b => b.assignmentId).map(b => b.assignmentId.toString())
+    );
 
     for (const aDoc of assignments) {
       const a = aDoc.toObject ? aDoc.toObject() : { ...aDoc };
 
-      // Skip if this assignment's legacy booking is already in list
-      if (a.legacyBookingId && existingLegacyIds.has(a.legacyBookingId.toString())) continue;
+      // Skip if this assignment is already represented by its mirror Booking
+      if (a.legacyBookingId && existingBookingIds.has(a.legacyBookingId.toString())) continue;
+      if (existingAssignmentIds.has(a._id.toString())) continue;
       // Skip if the assignment _id is already in list (shouldn't happen but be safe)
       if (existingBookingIds.has(a._id.toString())) continue;
 
@@ -146,10 +172,7 @@ const getAssignedJobs = async (req, res) => {
         userId: a.farmerId,
         serviceName: parent.workTitle || parent.workCategory || 'Farm Work',
         serviceCategory: parent.workCategory || 'Worker',
-        status: mapAssignmentStatus(a.assignmentStatus, a.workStatus, a.journeyStatus),
-        assignmentStatus: a.assignmentStatus,
-        workStatus: a.workStatus,
-        journeyStatus: a.journeyStatus,
+        ...assignmentLifecycleFields(a),
         scheduledDate: parent.scheduledDate || a.createdAt,
         scheduledTime: parent.startTime || '',
         address: parent.location || {},
@@ -252,13 +275,8 @@ const getJobById = async (req, res) => {
           } : null,
           scheduledDate: parent?.startDate || parent?.scheduledDate,
           scheduledTime: parent?.startTime,
-          status: assignDoc.completionStatus === 'OTP_VERIFIED' || assignDoc.settlementStatus === 'SETTLED'
-            ? 'completed'
-            : (assignDoc.workStatus === 'IN_PROGRESS' || assignDoc.visitOtpStatus === 'VERIFIED'
-              ? 'in_progress'
-              : (assignDoc.journeyStatus === 'ARRIVED'
-                ? 'visited'
-                : (assignDoc.journeyStatus === 'JOURNEY_STARTED' ? 'journey_started' : 'confirmed'))),
+          ...assignmentLifecycleFields(assignDoc),
+          paymentMethod: assignDoc.paymentMethod || (assignDoc.isCashBooking ? 'cash' : 'online'),
           bookingType: assignDoc.bookingType || parent?.bookingType || 'HOURLY',
           bookedDays: assignDoc.bookedDays || parent?.numberOfDays || 1,
           workedDays: assignDoc.workedDays || 0,
@@ -368,7 +386,7 @@ const getJobById = async (req, res) => {
         }
 
         if (assignment) {
-          jobData.assignmentId = assignment._id;
+          Object.assign(jobData, assignmentLifecycleFields(assignment));
           jobData.bookingType = assignment.bookingType || booking.bookingType || 'HOURLY';
           jobData.bookedDays = assignment.bookedDays;
           jobData.workedDays = assignment.workedDays;

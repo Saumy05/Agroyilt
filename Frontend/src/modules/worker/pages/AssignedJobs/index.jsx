@@ -71,6 +71,7 @@ const AssignedJobs = () => {
       'visited': '#8B5CF6',
       'in_progress': '#F59E0B',
       'on_the_way': '#F59E0B',
+      'journey_started': '#F59E0B',
       'work_done': '#10B981',
       'awaiting_payment': '#EF6820',
       'completed': '#10B981',
@@ -86,6 +87,8 @@ const AssignedJobs = () => {
       'confirmed': 'Assigned',
       'in_progress': 'In Progress',
       'on_the_way': 'On The Way',
+      'journey_started': 'On The Way',
+      'visited': 'Reached',
       'work_done': 'Work Done',
       'awaiting_payment': 'Awaiting Payment',
       'completed': 'Completed',
@@ -111,7 +114,7 @@ const AssignedJobs = () => {
     } else if (filter === 'confirmed') {
       matchesFilter = ['confirmed', 'assigned', 'pending'].includes(status);
     } else if (filter === 'in_progress') {
-      matchesFilter = ['in_progress', 'started', 'reached', 'visited', 'work_done', 'on_the_way', 'awaiting_payment'].includes(status);
+      matchesFilter = ['in_progress', 'started', 'reached', 'visited', 'work_done', 'on_the_way', 'journey_started', 'awaiting_payment'].includes(status);
     } else if (filter === 'completed') {
       matchesFilter = ['completed', 'worker_paid', 'paid'].includes(status);
     }
