@@ -703,8 +703,8 @@ const validateRequestPayload = (body) => {
     errors.push('Start time must be in HH:mm format.');
   if (!endTime || !/^\d{2}:\d{2}$/.test(endTime))
     errors.push('End time must be in HH:mm format.');
-  if (startTime && endTime && toMins(endTime) <= toMins(startTime))
-    errors.push('End time must be after start time.');
+  if (startTime && endTime && toMins(endTime) === toMins(startTime))
+    errors.push('End time cannot be the same as start time.');
 
   if (!location || (!location.city && !location.addressLine1))
     errors.push('Work location (city or address) is required.');

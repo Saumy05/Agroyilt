@@ -89,6 +89,29 @@ const WORK_CATEGORY_DATA = {
 
 const WORK_CATEGORIES = Object.keys(WORK_CATEGORY_DATA);
 
+const formatToDDMMYYYY = (isoDateStr) => {
+  if (!isoDateStr) return '';
+  const parts = isoDateStr.split('-');
+  if (parts.length !== 3) return isoDateStr;
+  const [y, m, d] = parts;
+  return `${d.padStart(2, '0')}/${m.padStart(2, '0')}/${y}`;
+};
+
+const formatFriendlyDay = (isoDateStr) => {
+  if (!isoDateStr) return '';
+  const parts = isoDateStr.split('-');
+  if (parts.length !== 3) return '';
+  const [y, m, d] = parts.map(Number);
+  const dateObj = new Date(y, m - 1, d);
+  if (isNaN(dateObj.getTime())) return '';
+  return dateObj.toLocaleDateString('en-IN', {
+    weekday: 'short',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
+  });
+};
+
 const GroupRequestForm = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -177,6 +200,11 @@ const GroupRequestForm = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (formData.rateUnit === 'hourly' && formData.startTime && formData.endTime && formData.startTime === formData.endTime) {
+      toast.error('Start time and end time cannot be the same.');
+      return;
+    }
+
     if (Number(formData.requiredWorkers) > (leader.teamId?.memberCount || 0)) {
       toast.error(`Team only has ${leader.teamId?.memberCount} members. Cannot request ${formData.requiredWorkers}.`);
       return;
@@ -207,48 +235,72 @@ const GroupRequestForm = () => {
 
   const currentLeaderRate = formData.rateUnit === 'hourly' ? (leader.hourlyRate || 0) : (leader.dailyRate || 0);
 
+  const shiftSummary = getShiftSummary(
+    formData.startTime,
+    formData.endTime,
+    formData.farmerOfferedRatePerWorker || currentLeaderRate,
+    formData.requiredWorkers
+  );
+
   return (
     <div className="min-h-screen bg-slate-50 pb-20">
       <Helmet>
         <title>Request Group Workers | Agroyilt</title>
       </Helmet>
 
-      <div className="bg-white sticky top-0 z-40 border-b border-slate-100 px-5 py-4">
-        <div className="max-w-xl mx-auto flex items-center gap-4">
-          <button onClick={() => navigate(-1)} className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-600 active:scale-95">
-            <FiArrowLeft size={20} />
+      <div className="bg-white sticky top-0 z-40 border-b border-slate-100 px-4 py-3 shadow-xs">
+        <div className="max-w-xl mx-auto flex items-center gap-3">
+          <button
+            onClick={() => navigate(-1)}
+            className="w-8 h-8 rounded-xl bg-slate-100/80 hover:bg-slate-200/80 flex items-center justify-center text-slate-600 transition-colors active:scale-95"
+          >
+            <FiArrowLeft size={18} />
           </button>
           <div>
-            <h1 className="text-xl font-black text-slate-800">New Group Request</h1>
-            <p className="text-xs text-slate-500 font-medium">To {leader.teamId?.name || leader.name}</p>
+            <h1 className="text-base sm:text-lg font-bold text-slate-800 leading-tight">New Group Request</h1>
+            <p className="text-[11px] text-slate-500 font-medium">To {leader.teamId?.name || leader.name}</p>
           </div>
         </div>
       </div>
 
-      <div className="max-w-xl mx-auto p-5">
-        <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="max-w-xl mx-auto px-3.5 py-3 sm:px-4 sm:py-4">
+        <form onSubmit={handleSubmit} className="space-y-3">
           
-          <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-            <h3 className="font-black text-slate-800 mb-4">Team Requirements</h3>
-            <div className="space-y-4">
+          <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-100 shadow-xs">
+            <h3 className="text-xs sm:text-sm font-bold text-slate-800 mb-2.5 flex items-center gap-1.5">
+              <FiUsers size={14} className="text-emerald-600" /> Team Requirements
+            </h3>
+            <div className="space-y-3">
               <div>
-                <label className="text-xs font-bold text-slate-500 mb-1 flex justify-between">
+                <label className="text-[11px] font-bold text-slate-600 mb-1 flex justify-between">
                   Workers Required *
-                  <span className="text-emerald-600">Max available: {leader.teamId?.memberCount || 0}</span>
+                  <span className="text-emerald-600 font-semibold">Max available: {leader.teamId?.memberCount || 0}</span>
                 </label>
                 <div className="relative">
-                  <FiUsers className="absolute left-4 top-3.5 text-slate-400" />
-                  <input required type="number" min="1" max={leader.teamId?.memberCount || 100} name="requiredWorkers" value={formData.requiredWorkers} onChange={handleChange} placeholder="e.g. 5" className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-11 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                  <FiUsers className="absolute left-3 top-2.5 text-slate-400" size={14} />
+                  <input
+                    required
+                    type="number"
+                    min="1"
+                    max={leader.teamId?.memberCount || 100}
+                    name="requiredWorkers"
+                    value={formData.requiredWorkers}
+                    onChange={handleChange}
+                    placeholder="e.g. 5"
+                    className="w-full bg-slate-50/80 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs sm:text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
+                  />
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-            <h3 className="font-black text-slate-800 mb-4">Work Details</h3>
-            <div className="space-y-4">
+          <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-100 shadow-xs">
+            <h3 className="text-xs sm:text-sm font-bold text-slate-800 mb-2.5 flex items-center gap-1.5">
+              <FiFileText size={14} className="text-emerald-600" /> Work Details
+            </h3>
+            <div className="space-y-3">
               <div>
-                <label className="text-xs font-bold text-slate-700 mb-1.5 block">
+                <label className="text-[11px] font-bold text-slate-600 mb-1 block">
                   Work Category <span className="text-red-500">*</span>
                 </label>
                 <select
@@ -256,7 +308,7 @@ const GroupRequestForm = () => {
                   name="workCategory"
                   value={formData.workCategory}
                   onChange={handleChange}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full bg-slate-50/80 border border-slate-200 rounded-xl px-3 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
                 >
                   <option value="">Select work category *</option>
                   {WORK_CATEGORIES.map(c => (
@@ -268,12 +320,12 @@ const GroupRequestForm = () => {
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-bold text-slate-700">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] font-bold text-slate-600">
                     Work Title <span className="text-red-500">*</span>
                   </label>
                   {formData.workCategory && (
-                    <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-2 py-0.5 rounded-full">
+                    <span className="text-[9px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.5 rounded-md">
                       ✨ Auto-filled • Edit if needed
                     </span>
                   )}
@@ -285,17 +337,17 @@ const GroupRequestForm = () => {
                   value={formData.workTitle}
                   onChange={handleTitleChange}
                   placeholder={formData.workCategory ? 'e.g. Wheat Harvesting' : 'Select a category above to auto-fill'}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full bg-slate-50/80 border border-slate-200 rounded-xl px-3 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
                 />
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-bold text-slate-700">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] font-bold text-slate-600">
                     Description <span className="text-red-500">*</span>
                   </label>
                   {formData.workCategory && (
-                    <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-2 py-0.5 rounded-full">
+                    <span className="text-[9px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.5 rounded-md">
                       ✨ Auto-filled • Edit if needed
                     </span>
                   )}
@@ -306,72 +358,193 @@ const GroupRequestForm = () => {
                   value={formData.workDescription}
                   onChange={handleDescChange}
                   placeholder="Describe the work: What needs to be done, field size, tools needed, etc."
-                  rows={3}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  rows={2}
+                  className="w-full bg-slate-50/80 border border-slate-200 rounded-xl px-3 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
                 />
               </div>
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-            <h3 className="font-black text-slate-800 mb-4">Schedule & Location</h3>
-            <div className="space-y-4">
+          <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-100 shadow-xs">
+            <h3 className="text-xs sm:text-sm font-bold text-slate-800 mb-2.5 flex items-center gap-1.5">
+              <FiCalendar size={14} className="text-emerald-600" /> Schedule & Location
+            </h3>
+            <div className="space-y-3">
               <div>
-                <label className="text-xs font-bold text-slate-500 mb-1 block">Date *</label>
-                <div className="relative">
-                  <FiCalendar className="absolute left-4 top-3.5 text-slate-400" />
-                  <input required type="date" name="scheduledDate" min={new Date().toISOString().split('T')[0]} value={formData.scheduledDate} onChange={handleChange} className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-11 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                <label className="text-[11px] font-bold text-slate-600 mb-1 block">Date *</label>
+                <div
+                  className="relative cursor-pointer group"
+                  onClick={(e) => {
+                    const input = e.currentTarget.querySelector('input[type="date"]');
+                    try { input?.showPicker(); } catch (err) { input?.focus(); }
+                  }}
+                >
+                  {/* Visible formatted DD/MM/YYYY display */}
+                  <div className="w-full bg-slate-50/80 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs sm:text-sm flex items-center justify-between transition-all group-hover:border-emerald-300 group-focus-within:ring-2 group-focus-within:ring-emerald-500 group-focus-within:border-emerald-500">
+                    <FiCalendar className="absolute left-3 top-2.5 text-slate-400 group-hover:text-emerald-600 transition-colors" size={14} />
+                    <span className={formData.scheduledDate ? 'text-slate-800 font-bold tracking-wide' : 'text-slate-400 font-normal'}>
+                      {formatToDDMMYYYY(formData.scheduledDate) || 'DD/MM/YYYY'}
+                    </span>
+                    <span className="text-xs opacity-60 group-hover:opacity-100 transition-opacity">📅</span>
+                  </div>
+                  <input
+                    required
+                    type="date"
+                    name="scheduledDate"
+                    id="group-scheduled-date"
+                    min={new Date().toISOString().split('T')[0]}
+                    value={formData.scheduledDate}
+                    onChange={handleChange}
+                    onClick={(e) => {
+                      try { e.target.showPicker(); } catch (err) {}
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        try { e.target.showPicker(); } catch (err) {}
+                      }
+                    }}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                  />
+                </div>
+                {formData.scheduledDate && (
+                  <p className="text-[10px] sm:text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200/60 rounded-md px-2 py-0.5 flex items-center gap-1 mt-1 w-fit">
+                    <span>🗓️</span>
+                    <span>{formatFriendlyDay(formData.scheduledDate)}</span>
+                  </p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-600 mb-1 block">Start Time *</label>
+                  <input
+                    required
+                    type="time"
+                    name="startTime"
+                    value={formData.startTime}
+                    onChange={handleChange}
+                    className="w-full bg-slate-50/80 border border-slate-200 rounded-xl px-2.5 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-600 mb-1 block">End Time *</label>
+                  <input
+                    required
+                    type="time"
+                    name="endTime"
+                    value={formData.endTime}
+                    onChange={handleChange}
+                    className="w-full bg-slate-50/80 border border-slate-200 rounded-xl px-2.5 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
+                  />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-bold text-slate-500 mb-1 block">Start Time *</label>
-                  <input required type="time" name="startTime" value={formData.startTime} onChange={handleChange} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+
+              {/* Live Shift Summary Badge */}
+              {shiftSummary && !shiftSummary.isZero && (
+                <div className={`p-2.5 rounded-xl border text-xs flex items-center justify-between transition-all ${
+                  shiftSummary.isOvernight
+                    ? 'bg-indigo-50/70 border-indigo-200 text-indigo-900'
+                    : 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">{shiftSummary.isOvernight ? '🌙' : '⏱️'}</span>
+                    <div>
+                      <span className="font-bold text-xs">
+                        {shiftSummary.isOvernight ? 'Overnight: ' : 'Shift: '}
+                        {shiftSummary.durationText}
+                      </span>
+                      {shiftSummary.isOvernight && (
+                        <span className="block text-[10px] text-indigo-600 font-medium">Finishes next day</span>
+                      )}
+                    </div>
+                  </div>
+                  {shiftSummary.estimatedCost && (
+                    <span className="font-bold text-xs bg-white/90 px-2 py-0.5 rounded-lg shadow-xs">
+                      ~₹{shiftSummary.estimatedCost} est.
+                    </span>
+                  )}
                 </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-500 mb-1 block">End Time *</label>
-                  <input required type="time" name="endTime" value={formData.endTime} onChange={handleChange} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                </div>
-              </div>
+              )}
+
               <div>
-                <label className="text-xs font-bold text-slate-500 mb-1 block">Location / City *</label>
+                <label className="text-[11px] font-bold text-slate-600 mb-1 block">Location / City *</label>
                 <div className="relative">
-                  <FiMapPin className="absolute left-4 top-3.5 text-slate-400" />
-                  <input required type="text" name="city" value={formData.city} onChange={handleChange} className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-11 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                  <FiMapPin className="absolute left-3 top-2.5 text-slate-400" size={14} />
+                  <input
+                    required
+                    type="text"
+                    name="city"
+                    value={formData.city}
+                    onChange={handleChange}
+                    placeholder="e.g. Indore, Madhya Pradesh"
+                    className="w-full bg-slate-50/80 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
+                  />
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-            <h3 className="font-black text-slate-800 mb-4 flex items-center justify-between">
-              Rate Offer
-              <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded-lg">
+          <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-100 shadow-xs">
+            <h3 className="text-xs sm:text-sm font-bold text-slate-800 mb-2 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <FiDollarSign size={14} className="text-emerald-600" /> Rate Offer
+              </span>
+              <span className="text-[10px] sm:text-xs font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
                 Leader asks: ₹{currentLeaderRate}/{formData.rateUnit}
               </span>
             </h3>
             
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <button type="button" onClick={() => setFormData({...formData, rateUnit: 'daily'})} className={`py-3 rounded-2xl text-sm font-bold border transition-all ${formData.rateUnit === 'daily' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200'}`}>Daily Rate</button>
-              <button type="button" onClick={() => setFormData({...formData, rateUnit: 'hourly'})} className={`py-3 rounded-2xl text-sm font-bold border transition-all ${formData.rateUnit === 'hourly' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200'}`}>Hourly Rate</button>
+            <div className="grid grid-cols-2 gap-2 mb-2.5">
+              <button
+                type="button"
+                onClick={() => setFormData({...formData, rateUnit: 'daily'})}
+                className={`py-2 rounded-xl text-xs sm:text-sm font-bold border transition-all ${
+                  formData.rateUnit === 'daily'
+                    ? 'bg-slate-800 text-white border-slate-800 shadow-xs'
+                    : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                Daily Rate
+              </button>
+              <button
+                type="button"
+                onClick={() => setFormData({...formData, rateUnit: 'hourly'})}
+                className={`py-2 rounded-xl text-xs sm:text-sm font-bold border transition-all ${
+                  formData.rateUnit === 'hourly'
+                    ? 'bg-slate-800 text-white border-slate-800 shadow-xs'
+                    : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                Hourly Rate
+              </button>
             </div>
 
             <div>
-              <label className="text-xs font-bold text-slate-500 mb-1 block">Offer PER WORKER (₹) *</label>
+              <label className="text-[11px] font-bold text-slate-600 mb-1 block">Offer PER WORKER (₹) *</label>
               <div className="relative">
-                <FiDollarSign className="absolute left-4 top-3.5 text-slate-400" />
-                <input required type="number" min="1" name="farmerOfferedRatePerWorker" value={formData.farmerOfferedRatePerWorker} onChange={handleChange} placeholder={`e.g. ${currentLeaderRate}`} className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-11 pr-4 py-3 text-sm font-black focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                <span className="absolute left-3 top-2 text-slate-400 text-xs sm:text-sm font-bold">₹</span>
+                <input
+                  required
+                  type="number"
+                  min="1"
+                  name="farmerOfferedRatePerWorker"
+                  value={formData.farmerOfferedRatePerWorker}
+                  onChange={handleChange}
+                  placeholder={`e.g. ${currentLeaderRate}`}
+                  className="w-full bg-slate-50/80 border border-slate-200 rounded-xl pl-7 pr-3 py-2 text-xs sm:text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
+                />
               </div>
               
               {formData.requiredWorkers && formData.farmerOfferedRatePerWorker && (
-                <div className="mt-4 p-4 bg-emerald-50 border border-emerald-100 rounded-2xl">
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-emerald-700 font-medium">Estimated Total:</span>
-                    <span className="font-black text-emerald-700 text-lg">
+                <div className="mt-2.5 p-2.5 bg-emerald-50/80 border border-emerald-100 rounded-xl">
+                  <div className="flex justify-between items-center text-xs sm:text-sm">
+                    <span className="text-emerald-800 font-medium">Estimated Total:</span>
+                    <span className="font-bold text-emerald-800 text-base">
                       ₹{Number(formData.requiredWorkers) * Number(formData.farmerOfferedRatePerWorker)}
                     </span>
                   </div>
-                  <p className="text-[10px] text-emerald-600/70 mt-1">Total based on your requested {formData.requiredWorkers} workers.</p>
+                  <p className="text-[10px] text-emerald-600/80 mt-0.5">Total based on your requested {formData.requiredWorkers} workers.</p>
                 </div>
               )}
             </div>
@@ -380,7 +553,7 @@ const GroupRequestForm = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black text-sm active:scale-[0.98] transition-all disabled:opacity-70 flex items-center justify-center gap-2"
+            className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm sm:text-base shadow-md shadow-emerald-600/20 active:scale-[0.99] transition-all disabled:opacity-70 flex items-center justify-center gap-2"
           >
             {loading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : null}
             {loading ? 'Sending Request...' : 'Send Group Request'}

@@ -3,7 +3,7 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import {
   FiArrowLeft, FiMapPin, FiCalendar, FiClock,
-  FiUsers, FiTag, FiFileText, FiDollarSign, FiInfo, FiCheckCircle, FiUser
+  FiUsers, FiTag, FiFileText, FiDollarSign, FiCheckCircle, FiUser
 } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import workerBookingService from '../../../../services/workerBookingService';
@@ -99,6 +99,67 @@ const COMMON_SKILLS = [
   'Tractor Driving', 'General Farm Labour', 'Threshing'
 ];
 
+const formatToDDMMYYYY = (isoDateStr) => {
+  if (!isoDateStr) return '';
+  const parts = isoDateStr.split('-');
+  if (parts.length !== 3) return isoDateStr;
+  const [y, m, d] = parts;
+  return `${d.padStart(2, '0')}/${m.padStart(2, '0')}/${y}`;
+};
+
+const formatFriendlyDay = (isoDateStr) => {
+  if (!isoDateStr) return '';
+  const parts = isoDateStr.split('-');
+  if (parts.length !== 3) return '';
+  const [y, m, d] = parts.map(Number);
+  const dateObj = new Date(y, m - 1, d);
+  if (isNaN(dateObj.getTime())) return '';
+  return dateObj.toLocaleDateString('en-IN', {
+    weekday: 'short',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
+  });
+};
+
+const getShiftSummary = (startTime, endTime, hourlyRate, workersCount) => {
+  if (!startTime || !endTime) return null;
+  const [sh, sm] = startTime.split(':').map(Number);
+  const [eh, em] = endTime.split(':').map(Number);
+  if (isNaN(sh) || isNaN(sm) || isNaN(eh) || isNaN(em)) return null;
+
+  const startMins = sh * 60 + sm;
+  const endMins = eh * 60 + em;
+
+  if (startMins === endMins) {
+    return { isZero: true };
+  }
+
+  let isOvernight = false;
+  let diff = endMins - startMins;
+  if (diff < 0) {
+    diff += 24 * 60;
+    isOvernight = true;
+  }
+
+  const hours = Math.floor(diff / 60);
+  const mins = diff % 60;
+  const durationText = mins > 0 ? `${hours} hr ${mins} mins` : `${hours} hr${hours > 1 ? 's' : ''}`;
+  const totalHours = diff / 60;
+  const rate = Number(hourlyRate) || 0;
+  const workers = parseInt(workersCount, 10) || 1;
+  const estimatedCost = rate > 0 ? Math.round(totalHours * rate * workers) : null;
+
+  return {
+    diff,
+    hours,
+    mins,
+    durationText,
+    isOvernight,
+    estimatedCost
+  };
+};
+
 const WorkerRequestForm = () => {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -160,6 +221,13 @@ const WorkerRequestForm = () => {
   }, [targetedWorker]);
 
   const [errors, setErrors] = useState({});
+
+  const shiftSummary = getShiftSummary(
+    formData.startTime,
+    formData.endTime,
+    formData.minRate,
+    formData.requiredWorkers
+  );
 
   const selectCategory = (category) => {
     if (!category) {
@@ -287,8 +355,9 @@ const WorkerRequestForm = () => {
       if (formData.startTime && formData.endTime) {
         const [sh, sm] = formData.startTime.split(':').map(Number);
         const [eh, em] = formData.endTime.split(':').map(Number);
-        if (eh * 60 + em <= sh * 60 + sm)
-          e.endTime = 'End time must be after start time.';
+        if (sh === eh && sm === em) {
+          e.endTime = 'Start time and end time cannot be the same.';
+        }
       }
     }
 
@@ -373,75 +442,65 @@ const WorkerRequestForm = () => {
       </Helmet>
 
       {/* Header */}
-      <div className="bg-white sticky top-0 z-40 border-b border-slate-100 px-5 py-4">
-        <div className="max-w-xl mx-auto flex items-center gap-4">
+      <div className="bg-white sticky top-0 z-40 border-b border-slate-100 px-4 py-3 shadow-xs">
+        <div className="max-w-xl mx-auto flex items-center gap-3">
           <button
             onClick={() => navigate('/user/worker-explorer')}
-            className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-600 active:scale-95"
+            className="w-8 h-8 rounded-xl bg-slate-100/80 hover:bg-slate-200/80 flex items-center justify-center text-slate-600 transition-colors active:scale-95"
           >
-            <FiArrowLeft size={20} />
+            <FiArrowLeft size={18} />
           </button>
           <div>
-            <h1 className="text-xl font-black text-slate-800">New Work Request</h1>
-            <p className="text-xs text-slate-500 font-medium">We'll find workers for you</p>
+            <h1 className="text-base sm:text-lg font-bold text-slate-800 leading-tight">New Work Request</h1>
+            <p className="text-[11px] text-slate-500 font-medium">We'll find workers for you</p>
           </div>
         </div>
       </div>
 
-      <div className="max-w-xl mx-auto p-5">
-        <form onSubmit={handleSubmit} className="space-y-5">
+      <div className="max-w-xl mx-auto px-3.5 py-3 sm:px-4 sm:py-4">
+        <form onSubmit={handleSubmit} className="space-y-3">
 
           {/* Targeted Worker Hiring Banner */}
           {targetedWorker && (
-            <div className="bg-gradient-to-r from-emerald-600 to-teal-700 text-white rounded-2xl p-4 flex items-center justify-between shadow-md">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center font-black text-lg">
-                  {targetedWorker.name?.[0]?.toUpperCase() || <FiUser />}
+            <div className="bg-gradient-to-r from-emerald-600 to-teal-700 text-white rounded-xl p-3 flex items-center justify-between shadow-xs">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-white/20 backdrop-blur-md flex items-center justify-center font-bold text-sm">
+                  {targetedWorker.name?.[0]?.toUpperCase() || <FiUser size={14} />}
                 </div>
                 <div>
-                  <h4 className="font-black text-sm">Hiring {targetedWorker.name}</h4>
-                  <p className="text-[11px] text-emerald-100">
+                  <h4 className="font-bold text-xs sm:text-sm">Hiring {targetedWorker.name}</h4>
+                  <p className="text-[10px] text-emerald-100">
                     {targetedWorker.skills?.join(', ') || 'Agricultural Worker'} • {targetedWorker.address?.city || 'Verified'}
                   </p>
                 </div>
               </div>
-              <span className="text-[10px] bg-white/20 px-2.5 py-1 rounded-full font-bold">
+              <span className="text-[9px] bg-white/20 px-2 py-0.5 rounded-md font-bold">
                 Direct Hire
               </span>
             </div>
           )}
 
-          {/* Info note */}
-          <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 flex gap-3 items-start">
-            <FiInfo size={16} className="text-blue-500 mt-0.5 shrink-0" />
-            <p className="text-xs text-blue-700 leading-relaxed">
-              {targetedWorker
-                ? `You are sending a direct booking request to ${targetedWorker.name}. If they are unavailable, the request will automatically help you find another matching worker.`
-                : "Fill in your requirements below. Based on the number of workers needed, the system will automatically match independent workers or a team."}
-            </p>
-          </div>
-
           {/* ── Booking Mode Selection ────────────────────────────────────────── */}
-          <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
-            <h3 className="font-black text-slate-800 mb-3 flex items-center gap-2">
-              <FiTag size={16} className="text-emerald-600" /> Booking Mode *
+          <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-100 shadow-xs">
+            <h3 className="text-xs sm:text-sm font-bold text-slate-800 mb-2 flex items-center gap-1.5">
+              <FiTag size={14} className="text-emerald-600" /> Booking Mode *
             </h3>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 id="booking-mode-hourly"
                 onClick={() => setFormData(prev => ({ ...prev, bookingType: 'HOURLY', rateUnit: 'hourly' }))}
-                className={`p-4 rounded-2xl border-2 text-left transition-all ${
+                className={`p-2.5 sm:p-3 rounded-xl border text-left transition-all ${
                   formData.bookingType === 'HOURLY'
-                    ? 'border-emerald-600 bg-emerald-50/50 shadow-sm'
+                    ? 'border-emerald-500 bg-emerald-50/40 shadow-xs'
                     : 'border-slate-200 bg-white hover:border-slate-300'
                 }`}
               >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-black text-sm text-slate-800">Hourly Booking</span>
-                  {formData.bookingType === 'HOURLY' && <FiCheckCircle className="text-emerald-600" size={16} />}
+                <div className="flex items-center justify-between mb-0.5">
+                  <span className="font-bold text-xs sm:text-sm text-slate-800">Hourly Booking</span>
+                  {formData.bookingType === 'HOURLY' && <FiCheckCircle className="text-emerald-600" size={14} />}
                 </div>
-                <p className="text-[11px] text-slate-500 leading-tight">
+                <p className="text-[10px] sm:text-[11px] text-slate-500 leading-tight">
                   For short shifts by the hour. Timer starts with Reach OTP.
                 </p>
               </button>
@@ -450,17 +509,17 @@ const WorkerRequestForm = () => {
                 type="button"
                 id="booking-mode-daily"
                 onClick={() => setFormData(prev => ({ ...prev, bookingType: 'DAILY', rateUnit: 'daily' }))}
-                className={`p-4 rounded-2xl border-2 text-left transition-all ${
+                className={`p-2.5 sm:p-3 rounded-xl border text-left transition-all ${
                   formData.bookingType === 'DAILY'
-                    ? 'border-emerald-600 bg-emerald-50/50 shadow-sm'
+                    ? 'border-emerald-500 bg-emerald-50/40 shadow-xs'
                     : 'border-slate-200 bg-white hover:border-slate-300'
                 }`}
               >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-black text-sm text-slate-800">Daily Booking</span>
-                  {formData.bookingType === 'DAILY' && <FiCheckCircle className="text-emerald-600" size={16} />}
+                <div className="flex items-center justify-between mb-0.5">
+                  <span className="font-bold text-xs sm:text-sm text-slate-800">Daily Booking</span>
+                  {formData.bookingType === 'DAILY' && <FiCheckCircle className="text-emerald-600" size={14} />}
                 </div>
-                <p className="text-[11px] text-slate-500 leading-tight">
+                <p className="text-[10px] sm:text-[11px] text-slate-500 leading-tight">
                   Multi-day farm work. Fresh Reach OTP every working day.
                 </p>
               </button>
@@ -468,22 +527,22 @@ const WorkerRequestForm = () => {
           </div>
 
           {/* ── Work Details ─────────────────────────────────────────────────── */}
-          <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
-            <h3 className="font-black text-slate-800 mb-4 flex items-center gap-2">
-              <FiFileText size={16} className="text-emerald-600" /> Work Details
+          <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-100 shadow-xs">
+            <h3 className="text-xs sm:text-sm font-bold text-slate-800 mb-2.5 flex items-center gap-1.5">
+              <FiFileText size={14} className="text-emerald-600" /> Work Details
             </h3>
-            <div className="space-y-4">
+            <div className="space-y-3">
 
               {/* Work Category */}
               <div>
-                <label className="text-xs font-bold text-slate-700 mb-1.5 block">
+                <label className="text-[11px] font-bold text-slate-600 mb-1 block">
                   Work Category <span className="text-red-500">*</span>
                 </label>
                 <select
                   name="workCategory"
                   value={formData.workCategory}
                   onChange={handleChange}
-                  className={`w-full bg-slate-50 border rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
+                  className={`w-full bg-slate-50/80 border rounded-xl px-3 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all ${
                     errors.workCategory ? 'border-red-300' : 'border-slate-200'
                   }`}
                 >
@@ -499,12 +558,12 @@ const WorkerRequestForm = () => {
 
               {/* Work Title */}
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-bold text-slate-700">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] font-bold text-slate-600">
                     Work Title <span className="text-red-500">*</span>
                   </label>
                   {formData.workCategory && (
-                    <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-2 py-0.5 rounded-full">
+                    <span className="text-[9px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.5 rounded-md">
                       ✨ Auto-filled • Edit if needed
                     </span>
                   )}
@@ -515,19 +574,19 @@ const WorkerRequestForm = () => {
                   value={formData.workTitle}
                   onChange={handleTitleChange}
                   placeholder={formData.workCategory ? 'e.g. Wheat Harvesting' : 'Select a category above to auto-fill'}
-                  className={`w-full bg-slate-50 border rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${errors.workTitle ? 'border-red-300' : 'border-slate-200'}`}
+                  className={`w-full bg-slate-50/80 border rounded-xl px-3 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all ${errors.workTitle ? 'border-red-300' : 'border-slate-200'}`}
                 />
                 <FieldError name="workTitle" />
               </div>
 
               {/* Description */}
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-bold text-slate-700">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] font-bold text-slate-600">
                     Description <span className="text-red-500">*</span>
                   </label>
                   {formData.workCategory && (
-                    <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-2 py-0.5 rounded-full">
+                    <span className="text-[9px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.5 rounded-md">
                       ✨ Auto-filled • Edit if needed
                     </span>
                   )}
@@ -537,43 +596,43 @@ const WorkerRequestForm = () => {
                   value={formData.workDescription}
                   onChange={handleDescChange}
                   placeholder="Describe the work: What needs to be done, field size, tools needed, etc."
-                  rows={3}
-                  className={`w-full bg-slate-50 border rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${errors.workDescription ? 'border-red-300' : 'border-slate-200'}`}
+                  rows={2}
+                  className={`w-full bg-slate-50/80 border rounded-xl px-3 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all ${errors.workDescription ? 'border-red-300' : 'border-slate-200'}`}
                 />
                 <FieldError name="workDescription" />
               </div>
 
               {/* Required Skills */}
               <div>
-                <label className="text-xs font-bold text-slate-500 mb-1 block">
-                  <FiTag size={12} className="inline mr-1" />
+                <label className="text-[11px] font-bold text-slate-600 mb-1 block">
+                  <FiTag size={11} className="inline mr-1" />
                   Required Skills (optional)
                 </label>
-                <div className="flex gap-2 mb-2">
+                <div className="flex gap-1.5 mb-1.5">
                   <input
                     type="text"
                     value={skillInput}
                     onChange={e => setSkillInput(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSkill(skillInput); } }}
-                    placeholder="Type a skill and press Enter"
-                    className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="Type skill & press Enter"
+                    className="flex-1 bg-slate-50/80 border border-slate-200 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
                   />
                   <button
                     type="button"
                     onClick={() => addSkill(skillInput)}
-                    className="px-4 py-2.5 bg-emerald-600 text-white rounded-2xl text-sm font-bold"
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors"
                   >
                     Add
                   </button>
                 </div>
                 {/* Quick-add common skills */}
-                <div className="flex flex-wrap gap-2 mb-2">
+                <div className="flex flex-wrap gap-1.5 mb-1.5">
                   {COMMON_SKILLS.filter(s => !formData.requiredSkills.includes(s)).slice(0, 6).map(s => (
                     <button
                       key={s}
                       type="button"
                       onClick={() => addSkill(s)}
-                      className="text-xs px-3 py-1 bg-slate-100 text-slate-600 rounded-full border border-slate-200 hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-700 transition-all"
+                      className="text-[11px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded-lg border border-slate-200 hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-700 transition-all"
                     >
                       + {s}
                     </button>
@@ -581,17 +640,17 @@ const WorkerRequestForm = () => {
                 </div>
                 {/* Added skills */}
                 {formData.requiredSkills.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-1.5">
                     {formData.requiredSkills.map(s => (
                       <span
                         key={s}
-                        className="flex items-center gap-1 text-xs px-3 py-1.5 bg-emerald-100 text-emerald-800 rounded-full font-semibold"
+                        className="flex items-center gap-1 text-[11px] px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-lg font-medium"
                       >
                         {s}
                         <button
                           type="button"
                           onClick={() => removeSkill(s)}
-                          className="ml-1 text-emerald-500 hover:text-red-500 font-black text-xs"
+                          className="ml-0.5 text-emerald-600 hover:text-red-500 font-bold"
                         >
                           ×
                         </button>
@@ -603,8 +662,8 @@ const WorkerRequestForm = () => {
 
               {/* Workers Required */}
               <div>
-                <label className="text-xs font-bold text-slate-500 mb-1 block">
-                  <FiUsers size={12} className="inline mr-1" />
+                <label className="text-[11px] font-bold text-slate-600 mb-1 block">
+                  <FiUsers size={11} className="inline mr-1" />
                   Number of Workers Required *
                 </label>
                 <input
@@ -616,42 +675,59 @@ const WorkerRequestForm = () => {
                   max="100"
                   step="1"
                   placeholder="e.g. 3"
-                  className={`w-full bg-slate-50 border rounded-2xl px-4 py-3 text-sm font-black focus:outline-none focus:ring-2 focus:ring-emerald-500 ${errors.requiredWorkers ? 'border-red-300' : 'border-slate-200'}`}
+                  className={`w-full bg-slate-50/80 border rounded-xl px-3 py-2 text-xs sm:text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white ${errors.requiredWorkers ? 'border-red-300' : 'border-slate-200'}`}
                 />
                 <FieldError name="requiredWorkers" />
-                <p className="text-[10px] text-slate-400 mt-1 ml-1">
-                  The system automatically decides whether to match individual workers or a Team Leader based on this number.
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  The system automatically decides whether to match individual workers or a Team Leader.
                 </p>
               </div>
 
               {/* Additional Instructions */}
               <div>
-                <label className="text-xs font-bold text-slate-500 mb-1 block">Additional Instructions (optional)</label>
+                <label className="text-[11px] font-bold text-slate-600 mb-1 block">Additional Instructions (optional)</label>
                 <textarea
                   name="additionalInstructions"
                   value={formData.additionalInstructions}
                   onChange={handleChange}
-                  placeholder="Any specific instructions, tools to bring, dress code, etc."
+                  placeholder="Any specific instructions, tools to bring, etc."
                   rows={2}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full bg-slate-50/80 border border-slate-200 rounded-xl px-3 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
                 />
               </div>
             </div>
           </div>
 
           {/* ── Schedule ──────────────────────────────────────────────────────── */}
-          <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
-            <h3 className="font-black text-slate-800 mb-4 flex items-center gap-2">
-              <FiCalendar size={16} className="text-emerald-600" /> Schedule ({formData.bookingType === 'DAILY' ? 'Daily Farm Work' : 'Hourly Shift'})
+          <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-100 shadow-xs">
+            <h3 className="text-xs sm:text-sm font-bold text-slate-800 mb-2.5 flex items-center gap-1.5">
+              <FiCalendar size={14} className="text-emerald-600" /> Schedule ({formData.bookingType === 'DAILY' ? 'Daily Farm Work' : 'Hourly Shift'})
             </h3>
-            <div className="space-y-4">
+            <div className="space-y-3">
               {formData.bookingType === 'DAILY' ? (
                 /* DAILY SCHEDULE */
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-2.5">
                   <div>
-                    <label className="text-xs font-bold text-slate-500 mb-1 block">Start Date *</label>
-                    <div className="relative">
-                      <FiCalendar className="absolute left-4 top-3.5 text-slate-400" size={16} />
+                    <label className="text-[11px] font-bold text-slate-600 mb-1 block">Start Date *</label>
+                    <div
+                      className="relative cursor-pointer group"
+                      onClick={(e) => {
+                        const input = e.currentTarget.querySelector('input[type="date"]');
+                        try { input?.showPicker(); } catch (err) { input?.focus(); }
+                      }}
+                    >
+                      {/* Visible formatted DD/MM/YYYY display */}
+                      <div
+                        className={`w-full bg-slate-50/80 border rounded-xl pl-9 pr-3 py-2 text-xs sm:text-sm flex items-center justify-between transition-all group-hover:border-emerald-300 group-focus-within:ring-2 group-focus-within:ring-emerald-500 group-focus-within:border-emerald-500 ${
+                          errors.startDate ? 'border-red-300' : 'border-slate-200'
+                        }`}
+                      >
+                        <FiCalendar className="absolute left-3 top-2.5 text-slate-400 group-hover:text-emerald-600 transition-colors" size={14} />
+                        <span className={formData.startDate ? 'text-slate-800 font-bold tracking-wide' : 'text-slate-400 font-normal'}>
+                          {formatToDDMMYYYY(formData.startDate) || 'DD/MM/YYYY'}
+                        </span>
+                        <span className="text-xs opacity-60 group-hover:opacity-100 transition-opacity">📅</span>
+                      </div>
                       <input
                         type="date"
                         name="startDate"
@@ -659,14 +735,29 @@ const WorkerRequestForm = () => {
                         min={today}
                         value={formData.startDate}
                         onChange={handleChange}
-                        className={`w-full bg-slate-50 border rounded-2xl pl-11 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${errors.startDate ? 'border-red-300' : 'border-slate-200'}`}
+                        onClick={(e) => {
+                          try { e.target.showPicker(); } catch (err) {}
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            try { e.target.showPicker(); } catch (err) {}
+                          }
+                        }}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                       />
                     </div>
+                    {formData.startDate && (
+                      <p className="text-[10px] sm:text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200/60 rounded-md px-2 py-0.5 flex items-center gap-1 mt-1 w-fit">
+                        <span>🗓️</span>
+                        <span>{formatFriendlyDay(formData.startDate)}</span>
+                      </p>
+                    )}
                     <FieldError name="startDate" />
                   </div>
 
                   <div>
-                    <label className="text-xs font-bold text-slate-500 mb-1 block">Number of Days *</label>
+                    <label className="text-[11px] font-bold text-slate-600 mb-1 block">Number of Days *</label>
                     <input
                       type="number"
                       name="numberOfDays"
@@ -676,7 +767,7 @@ const WorkerRequestForm = () => {
                       value={formData.numberOfDays}
                       onChange={handleChange}
                       placeholder="e.g. 3"
-                      className={`w-full bg-slate-50 border rounded-2xl px-4 py-3 text-sm font-black focus:outline-none focus:ring-2 focus:ring-emerald-500 ${errors.numberOfDays ? 'border-red-300' : 'border-slate-200'}`}
+                      className={`w-full bg-slate-50/80 border rounded-xl px-3 py-2 text-xs sm:text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white ${errors.numberOfDays ? 'border-red-300' : 'border-slate-200'}`}
                     />
                     <FieldError name="numberOfDays" />
                   </div>
@@ -685,9 +776,26 @@ const WorkerRequestForm = () => {
                 /* HOURLY SCHEDULE */
                 <>
                   <div>
-                    <label className="text-xs font-bold text-slate-500 mb-1 block">Date *</label>
-                    <div className="relative">
-                      <FiCalendar className="absolute left-4 top-3.5 text-slate-400" size={16} />
+                    <label className="text-[11px] font-bold text-slate-600 mb-1 block">Date *</label>
+                    <div
+                      className="relative cursor-pointer group"
+                      onClick={(e) => {
+                        const input = e.currentTarget.querySelector('input[type="date"]');
+                        try { input?.showPicker(); } catch (err) { input?.focus(); }
+                      }}
+                    >
+                      {/* Visible formatted DD/MM/YYYY display */}
+                      <div
+                        className={`w-full bg-slate-50/80 border rounded-xl pl-9 pr-3 py-2 text-xs sm:text-sm flex items-center justify-between transition-all group-hover:border-emerald-300 group-focus-within:ring-2 group-focus-within:ring-emerald-500 group-focus-within:border-emerald-500 ${
+                          errors.scheduledDate ? 'border-red-300' : 'border-slate-200'
+                        }`}
+                      >
+                        <FiCalendar className="absolute left-3 top-2.5 text-slate-400 group-hover:text-emerald-600 transition-colors" size={14} />
+                        <span className={formData.scheduledDate ? 'text-slate-800 font-bold tracking-wide' : 'text-slate-400 font-normal'}>
+                          {formatToDDMMYYYY(formData.scheduledDate) || 'DD/MM/YYYY'}
+                        </span>
+                        <span className="text-xs opacity-60 group-hover:opacity-100 transition-opacity">📅</span>
+                      </div>
                       <input
                         type="date"
                         name="scheduledDate"
@@ -695,56 +803,98 @@ const WorkerRequestForm = () => {
                         min={today}
                         value={formData.scheduledDate}
                         onChange={handleChange}
-                        className={`w-full bg-slate-50 border rounded-2xl pl-11 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${errors.scheduledDate ? 'border-red-300' : 'border-slate-200'}`}
+                        onClick={(e) => {
+                          try { e.target.showPicker(); } catch (err) {}
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            try { e.target.showPicker(); } catch (err) {}
+                          }
+                        }}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                       />
                     </div>
+                    {formData.scheduledDate && (
+                      <p className="text-[10px] sm:text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200/60 rounded-md px-2 py-0.5 flex items-center gap-1 mt-1 w-fit">
+                        <span>🗓️</span>
+                        <span>{formatFriendlyDay(formData.scheduledDate)}</span>
+                      </p>
+                    )}
                     <FieldError name="scheduledDate" />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-2.5">
                     <div>
-                      <label className="text-xs font-bold text-slate-500 mb-1 block">Start Time *</label>
+                      <label className="text-[11px] font-bold text-slate-600 mb-1 block">Start Time *</label>
                       <div className="relative">
-                        <FiClock className="absolute left-4 top-3.5 text-slate-400" size={14} />
+                        <FiClock className="absolute left-3 top-2.5 text-slate-400" size={14} />
                         <input
                           type="time"
                           name="startTime"
                           id="hourly-start-time"
                           value={formData.startTime}
                           onChange={handleChange}
-                          className={`w-full bg-slate-50 border rounded-2xl pl-10 pr-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${errors.startTime ? 'border-red-300' : 'border-slate-200'}`}
+                          className={`w-full bg-slate-50/80 border rounded-xl pl-9 pr-2.5 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white ${errors.startTime ? 'border-red-300' : 'border-slate-200'}`}
                         />
                       </div>
                       <FieldError name="startTime" />
                     </div>
                     <div>
-                      <label className="text-xs font-bold text-slate-500 mb-1 block">End Time *</label>
+                      <label className="text-[11px] font-bold text-slate-600 mb-1 block">End Time *</label>
                       <div className="relative">
-                        <FiClock className="absolute left-4 top-3.5 text-slate-400" size={14} />
+                        <FiClock className="absolute left-3 top-2.5 text-slate-400" size={14} />
                         <input
                           type="time"
                           name="endTime"
                           id="hourly-end-time"
                           value={formData.endTime}
                           onChange={handleChange}
-                          className={`w-full bg-slate-50 border rounded-2xl pl-10 pr-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${errors.endTime ? 'border-red-300' : 'border-slate-200'}`}
+                          className={`w-full bg-slate-50/80 border rounded-xl pl-9 pr-2.5 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white ${errors.endTime ? 'border-red-300' : 'border-slate-200'}`}
                         />
                       </div>
                       <FieldError name="endTime" />
                     </div>
                   </div>
+
+                  {/* Live Shift Summary Badge */}
+                  {shiftSummary && !shiftSummary.isZero && (
+                    <div className={`p-2.5 rounded-xl border text-xs flex items-center justify-between transition-all ${
+                      shiftSummary.isOvernight
+                        ? 'bg-indigo-50/70 border-indigo-200 text-indigo-900'
+                        : 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
+                    }`}>
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">{shiftSummary.isOvernight ? '🌙' : '⏱️'}</span>
+                        <div>
+                          <span className="font-bold text-xs">
+                            {shiftSummary.isOvernight ? 'Overnight: ' : 'Shift: '}
+                            {shiftSummary.durationText}
+                          </span>
+                          {shiftSummary.isOvernight && (
+                            <span className="block text-[10px] text-indigo-600 font-medium">Finishes next day</span>
+                          )}
+                        </div>
+                      </div>
+                      {shiftSummary.estimatedCost && (
+                        <span className="font-bold text-xs bg-white/90 px-2 py-0.5 rounded-lg shadow-xs">
+                          ~₹{shiftSummary.estimatedCost} est.
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </>
               )}
             </div>
           </div>
 
           {/* ── Location ──────────────────────────────────────────────────────── */}
-          <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
-            <h3 className="font-black text-slate-800 mb-4 flex items-center gap-2">
-              <FiMapPin size={16} className="text-emerald-600" /> Work Location
+          <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-100 shadow-xs">
+            <h3 className="text-xs sm:text-sm font-bold text-slate-800 mb-2.5 flex items-center gap-1.5">
+              <FiMapPin size={14} className="text-emerald-600" /> Work Location
             </h3>
             
-            <div className="mb-5 rounded-2xl overflow-hidden border border-slate-200">
+            <div className="mb-2.5 rounded-xl overflow-hidden border border-slate-200">
               <LocationPicker 
                 onLocationSelect={(loc) => {
                   let city = '';
@@ -767,18 +917,18 @@ const WorkerRequestForm = () => {
               />
             </div>
             
-            <div className="space-y-3">
+            <div className="space-y-2">
               <div>
-                <label className="text-xs font-bold text-slate-500 mb-1 block">City / Village *</label>
+                <label className="text-[11px] font-bold text-slate-600 mb-1 block">City / Village *</label>
                 <div className="relative">
-                  <FiMapPin className="absolute left-4 top-3.5 text-slate-400" size={14} />
+                  <FiMapPin className="absolute left-3 top-2.5 text-slate-400" size={14} />
                   <input
                     type="text"
                     name="city"
                     value={formData.city}
                     onChange={handleChange}
                     placeholder="e.g. Indore, Madhya Pradesh"
-                    className={`w-full bg-slate-50 border rounded-2xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${errors.city ? 'border-red-300' : 'border-slate-200'}`}
+                    className={`w-full bg-slate-50/80 border rounded-xl pl-9 pr-3 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white ${errors.city ? 'border-red-300' : 'border-slate-200'}`}
                   />
                 </div>
                 <FieldError name="city" />
@@ -790,7 +940,7 @@ const WorkerRequestForm = () => {
                   value={formData.addressLine1}
                   onChange={handleChange}
                   placeholder="Farm address / landmark (optional)"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full bg-slate-50/80 border border-slate-200 rounded-xl px-3 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
                 />
               </div>
               <div>
@@ -800,10 +950,10 @@ const WorkerRequestForm = () => {
                   value={formData.state}
                   onChange={handleChange}
                   placeholder="State (optional)"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full bg-slate-50/80 border border-slate-200 rounded-xl px-3 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2">
                 <input
                   type="number"
                   name="lat"
@@ -811,7 +961,7 @@ const WorkerRequestForm = () => {
                   onChange={handleChange}
                   placeholder="Latitude (optional)"
                   step="any"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full bg-slate-50/80 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
                 />
                 <input
                   type="number"
@@ -820,39 +970,39 @@ const WorkerRequestForm = () => {
                   onChange={handleChange}
                   placeholder="Longitude (optional)"
                   step="any"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full bg-slate-50/80 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
                 />
               </div>
-              <p className="text-[10px] text-slate-400 ml-1">
-                Providing coordinates improves radius-based worker matching accuracy.
+              <p className="text-[10px] text-slate-400">
+                Coordinates improve radius matching accuracy.
               </p>
             </div>
           </div>
 
           {/* ── Budget ────────────────────────────────────────────────────────── */}
-          <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
+          <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-100 shadow-xs">
             <div className="flex items-center justify-between mb-1">
-              <h3 className="font-black text-slate-800 flex items-center gap-2">
-                <FiDollarSign size={16} className="text-emerald-600" /> Budget / Rate per Worker
+              <h3 className="text-xs sm:text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                <FiDollarSign size={14} className="text-emerald-600" /> Budget / Rate per Worker
               </h3>
-              <span className="text-xs px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded-full font-bold">
+              <span className="text-[10px] sm:text-xs px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full font-bold">
                 {formData.bookingType === 'DAILY' ? '₹ / Day' : '₹ / Hour'}
               </span>
             </div>
-            <p className="text-xs text-slate-500 mb-4">
+            <p className="text-[11px] text-slate-500 mb-2.5">
               {formData.bookingType === 'DAILY' 
                 ? 'Specify expected daily wage per worker for each working day' 
                 : 'Specify expected hourly wage per worker'}
             </p>
 
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2.5">
+              <div className="grid grid-cols-2 gap-2.5">
                 <div>
-                  <label className="text-xs font-bold text-slate-500 mb-1 block">
+                  <label className="text-[11px] font-bold text-slate-600 mb-1 block">
                     Min {formData.bookingType === 'DAILY' ? 'Daily' : 'Hourly'} Rate (₹) *
                   </label>
                   <div className="relative">
-                    <span className="absolute left-4 top-3 text-slate-400 text-sm font-bold">₹</span>
+                    <span className="absolute left-3 top-2 text-slate-400 text-xs sm:text-sm font-bold">₹</span>
                     <input
                       type="number"
                       name="minRate"
@@ -861,17 +1011,17 @@ const WorkerRequestForm = () => {
                       onChange={handleChange}
                       min="1"
                       placeholder={formData.bookingType === 'DAILY' ? '500' : '150'}
-                      className={`w-full bg-slate-50 border rounded-2xl pl-8 pr-4 py-3 text-sm font-black focus:outline-none focus:ring-2 focus:ring-emerald-500 ${errors.minRate ? 'border-red-300' : 'border-slate-200'}`}
+                      className={`w-full bg-slate-50/80 border rounded-xl pl-7 pr-3 py-2 text-xs sm:text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white ${errors.minRate ? 'border-red-300' : 'border-slate-200'}`}
                     />
                   </div>
                   <FieldError name="minRate" />
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-slate-500 mb-1 block">
+                  <label className="text-[11px] font-bold text-slate-600 mb-1 block">
                     Max {formData.bookingType === 'DAILY' ? 'Daily' : 'Hourly'} Rate (₹)
                   </label>
                   <div className="relative">
-                    <span className="absolute left-4 top-3 text-slate-400 text-sm font-bold">₹</span>
+                    <span className="absolute left-3 top-2 text-slate-400 text-xs sm:text-sm font-bold">₹</span>
                     <input
                       type="number"
                       name="maxRate"
@@ -879,15 +1029,15 @@ const WorkerRequestForm = () => {
                       value={formData.maxRate}
                       onChange={handleChange}
                       min="1"
-                      placeholder={formData.bookingType === 'DAILY' ? '600 (optional)' : '200 (optional)'}
-                      className={`w-full bg-slate-50 border rounded-2xl pl-8 pr-4 py-3 text-sm font-black focus:outline-none focus:ring-2 focus:ring-emerald-500 ${errors.maxRate ? 'border-red-300' : 'border-slate-200'}`}
+                      placeholder={formData.bookingType === 'DAILY' ? '600' : '200'}
+                      className={`w-full bg-slate-50/80 border rounded-xl pl-7 pr-3 py-2 text-xs sm:text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white ${errors.maxRate ? 'border-red-300' : 'border-slate-200'}`}
                     />
                   </div>
                   <FieldError name="maxRate" />
                 </div>
               </div>
-              <p className="text-[10px] text-slate-400 ml-1">
-                Workers within radius will receive requests in this range. If maximum rate is left empty, the minimum rate will be used for the payment reserve.
+              <p className="text-[10px] text-slate-400">
+                Workers within radius will receive requests in this range.
               </p>
             </div>
           </div>
@@ -897,12 +1047,12 @@ const WorkerRequestForm = () => {
             id="submit-farmer-request-btn"
             type="submit"
             disabled={loading}
-            className="w-full py-4 bg-gradient-to-r from-emerald-600 to-green-600 text-white rounded-3xl font-black text-base shadow-lg shadow-emerald-200/60 active:scale-[0.98] transition-all disabled:opacity-70 flex items-center justify-center gap-2"
+            className="w-full py-3 bg-gradient-to-r from-emerald-600 to-green-600 text-white rounded-xl font-bold text-sm sm:text-base shadow-md shadow-emerald-600/20 active:scale-[0.99] transition-all disabled:opacity-70 flex items-center justify-center gap-2"
           >
             {loading ? (
               <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
             ) : (
-              <FiCheckCircle size={18} />
+              <FiCheckCircle size={16} />
             )}
             {loading ? 'Submitting...' : 'Submit Request'}
           </button>
