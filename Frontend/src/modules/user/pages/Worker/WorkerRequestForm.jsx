@@ -9,13 +9,89 @@ import toast from 'react-hot-toast';
 import workerBookingService from '../../../../services/workerBookingService';
 import LocationPicker from '../Checkout/components/LocationPicker';
 
-// Common work categories for quick selection
-const WORK_CATEGORIES = [
-  'Harvesting', 'Sowing', 'Planting', 'Irrigation',
-  'Weeding', 'Fertilizing', 'Pesticide Spraying',
-  'Land Preparation', 'Threshing', 'Loading & Unloading',
-  'General Farm Labour', 'Tractor Operation', 'Other'
-];
+// Work categories with rich metadata and templates for auto-filling
+const WORK_CATEGORY_DATA = {
+  'Harvesting': {
+    icon: '🌾',
+    title: 'Harvesting Work',
+    description: 'Looking for farm workers for crop harvesting and field clearing.',
+    skill: 'Harvesting'
+  },
+  'Sowing': {
+    icon: '🌱',
+    title: 'Sowing Work',
+    description: 'Looking for farm workers for seed sowing and field planting.',
+    skill: 'Sowing'
+  },
+  'Planting': {
+    icon: '🌿',
+    title: 'Planting Work',
+    description: 'Looking for farm workers for sapling planting and crop transplantation.',
+    skill: 'Planting'
+  },
+  'Irrigation': {
+    icon: '💧',
+    title: 'Irrigation Work',
+    description: 'Looking for farm workers for field irrigation and water channel management.',
+    skill: 'Irrigation'
+  },
+  'Weeding': {
+    icon: '🪴',
+    title: 'Weeding Work',
+    description: 'Looking for farm workers for manual weed removal and crop maintenance.',
+    skill: 'Weeding'
+  },
+  'Fertilizing': {
+    icon: '🧪',
+    title: 'Fertilizing Work',
+    description: 'Looking for farm workers for fertilizer application and crop nutrition.',
+    skill: 'Fertilizing'
+  },
+  'Pesticide Spraying': {
+    icon: '🧴',
+    title: 'Pesticide Spraying',
+    description: 'Looking for experienced workers for crop pesticide and insecticide spraying.',
+    skill: 'Pesticide Spraying'
+  },
+  'Land Preparation': {
+    icon: '🚜',
+    title: 'Land Preparation',
+    description: 'Looking for farm workers for land tilling, levelling, and soil bed preparation.',
+    skill: 'Land Preparation'
+  },
+  'Threshing': {
+    icon: '🌾',
+    title: 'Threshing Work',
+    description: 'Looking for farm workers for post-harvest crop threshing and grain separation.',
+    skill: 'Threshing'
+  },
+  'Loading & Unloading': {
+    icon: '📦',
+    title: 'Loading & Unloading',
+    description: 'Looking for workers for farm produce loading, unloading, and cartage.',
+    skill: 'Loading & Unloading'
+  },
+  'Tractor Operation': {
+    icon: '🚜',
+    title: 'Tractor Operation',
+    description: 'Need skilled operator for tractor ploughing and farm equipment handling.',
+    skill: 'Tractor Driving'
+  },
+  'General Farm Labour': {
+    icon: '👨‍🌾',
+    title: 'General Farm Labour',
+    description: 'Looking for workers for general farm chores, maintenance, and field assistance.',
+    skill: 'General Farm Labour'
+  },
+  'Other': {
+    icon: '✨',
+    title: 'Agricultural Farm Work',
+    description: 'Looking for dedicated farm workers for agricultural field work.',
+    skill: 'General Farm Labour'
+  }
+};
+
+const WORK_CATEGORIES = Object.keys(WORK_CATEGORY_DATA);
 
 const COMMON_SKILLS = [
   'Harvesting', 'Sowing', 'Planting', 'Irrigation',
@@ -32,15 +108,20 @@ const WorkerRequestForm = () => {
 
   const [loading, setLoading] = useState(false);
   const [skillInput, setSkillInput] = useState('');
+  const [hasUserEditedTitle, setHasUserEditedTitle] = useState(false);
+  const [hasUserEditedDesc, setHasUserEditedDesc] = useState(false);
 
   const today = new Date().toISOString().split('T')[0];
 
+  const initialCat = targetedWorker?.skills?.[0] || targetedWorker?.primaryService || '';
+  const initialTemplate = WORK_CATEGORY_DATA[initialCat];
+
   const [formData, setFormData] = useState({
     bookingType:     'HOURLY', // 'HOURLY' | 'DAILY'
-    workCategory:    targetedWorker?.skills?.[0] || targetedWorker?.primaryService || '',
-    workTitle:       targetedWorker ? `Hire ${targetedWorker.name}` : '',
-    workDescription: '',
-    requiredSkills:  targetedWorker?.skills?.length ? targetedWorker.skills : [],
+    workCategory:    initialCat,
+    workTitle:       targetedWorker ? `Hire ${targetedWorker.name}` : (initialTemplate?.title || ''),
+    workDescription: initialTemplate?.description || (targetedWorker ? `Need farm assistance from ${targetedWorker.name} for farm work.` : ''),
+    requiredSkills:  targetedWorker?.skills?.length ? targetedWorker.skills : (initialTemplate?.skill ? [initialTemplate.skill] : []),
     requiredWorkers: '1',
     // HOURLY fields
     scheduledDate:   '',
@@ -63,11 +144,14 @@ const WorkerRequestForm = () => {
 
   useEffect(() => {
     if (targetedWorker) {
+      const cat = targetedWorker.skills?.[0] || targetedWorker.primaryService || '';
+      const tmpl = WORK_CATEGORY_DATA[cat];
       setFormData(prev => ({
         ...prev,
         requiredWorkers: '1',
-        workCategory: targetedWorker.skills?.[0] || targetedWorker.primaryService || prev.workCategory,
+        workCategory: cat || prev.workCategory,
         workTitle: prev.workTitle || `Hire ${targetedWorker.name}`,
+        workDescription: prev.workDescription || (tmpl?.description || `Need farm assistance from ${targetedWorker.name} for farm work.`),
         requiredSkills: targetedWorker.skills?.length ? targetedWorker.skills : prev.requiredSkills,
         minRate: targetedWorker.dailyRate || targetedWorker.hourlyRate || prev.minRate,
         maxRate: targetedWorker.dailyRate || targetedWorker.hourlyRate || prev.maxRate,
@@ -77,10 +161,76 @@ const WorkerRequestForm = () => {
 
   const [errors, setErrors] = useState({});
 
+  const selectCategory = (category) => {
+    if (!category) {
+      setFormData(prev => {
+        const prevAutoSkill = WORK_CATEGORY_DATA[prev.workCategory]?.skill;
+        return {
+          ...prev,
+          workCategory: '',
+          requiredSkills: prev.requiredSkills.filter(
+            s => !prevAutoSkill || s.toLowerCase() !== prevAutoSkill.toLowerCase()
+          )
+        };
+      });
+      return;
+    }
+
+    const template = WORK_CATEGORY_DATA[category] || {
+      title: `${category} Work`,
+      description: `Looking for farm workers for ${category.toLowerCase()} work.`,
+      skill: category
+    };
+
+    setFormData(prev => {
+      const prevAutoSkill = WORK_CATEGORY_DATA[prev.workCategory]?.skill;
+      // Remove the skill added by the previous category, keep user's other manual skills
+      const nextSkills = prev.requiredSkills.filter(
+        s => !prevAutoSkill || s.toLowerCase() !== prevAutoSkill.toLowerCase()
+      );
+      if (template.skill && !nextSkills.some(s => s.toLowerCase() === template.skill.toLowerCase())) {
+        nextSkills.push(template.skill);
+      }
+
+      return {
+        ...prev,
+        workCategory: category,
+        workTitle: hasUserEditedTitle && prev.workTitle.trim()
+          ? prev.workTitle
+          : (targetedWorker ? `Hire ${targetedWorker.name}` : template.title),
+        workDescription: hasUserEditedDesc && prev.workDescription.trim()
+          ? prev.workDescription
+          : template.description,
+        requiredSkills: nextSkills
+      };
+    });
+
+    setErrors(prev => {
+      const nextErr = { ...prev, workCategory: '' };
+      if (!hasUserEditedTitle) nextErr.workTitle = '';
+      if (!hasUserEditedDesc) nextErr.workDescription = '';
+      return nextErr;
+    });
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
+    if (name === 'workCategory') {
+      selectCategory(value);
+      return;
+    }
     setFormData(prev => ({ ...prev, [name]: value }));
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
+  };
+
+  const handleTitleChange = (e) => {
+    setHasUserEditedTitle(true);
+    handleChange(e);
+  };
+
+  const handleDescChange = (e) => {
+    setHasUserEditedDesc(true);
+    handleChange(e);
   };
 
   const addSkill = (skill) => {
@@ -110,6 +260,8 @@ const WorkerRequestForm = () => {
 
   const validate = () => {
     const e = {};
+    if (!formData.workCategory || !formData.workCategory.trim())
+      e.workCategory = 'Please select a work category.';
     if (!formData.workTitle.trim() || formData.workTitle.trim().length < 3)
       e.workTitle = 'Work title must be at least 3 characters.';
     if (!formData.workDescription.trim() || formData.workDescription.trim().length < 10)
@@ -324,29 +476,45 @@ const WorkerRequestForm = () => {
 
               {/* Work Category */}
               <div>
-                <label className="text-xs font-bold text-slate-500 mb-1 block">Work Category</label>
+                <label className="text-xs font-bold text-slate-700 mb-1.5 block">
+                  Work Category <span className="text-red-500">*</span>
+                </label>
                 <select
                   name="workCategory"
                   value={formData.workCategory}
                   onChange={handleChange}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className={`w-full bg-slate-50 border rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
+                    errors.workCategory ? 'border-red-300' : 'border-slate-200'
+                  }`}
                 >
-                  <option value="">Select category (optional)</option>
+                  <option value="">Select work category *</option>
                   {WORK_CATEGORIES.map(c => (
-                    <option key={c} value={c}>{c}</option>
+                    <option key={c} value={c}>
+                      {WORK_CATEGORY_DATA[c]?.icon} {c}
+                    </option>
                   ))}
                 </select>
+                <FieldError name="workCategory" />
               </div>
 
               {/* Work Title */}
               <div>
-                <label className="text-xs font-bold text-slate-500 mb-1 block">Work Title *</label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-700">
+                    Work Title <span className="text-red-500">*</span>
+                  </label>
+                  {formData.workCategory && (
+                    <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-2 py-0.5 rounded-full">
+                      ✨ Auto-filled • Edit if needed
+                    </span>
+                  )}
+                </div>
                 <input
                   type="text"
                   name="workTitle"
                   value={formData.workTitle}
-                  onChange={handleChange}
-                  placeholder="e.g. Wheat Harvesting"
+                  onChange={handleTitleChange}
+                  placeholder={formData.workCategory ? 'e.g. Wheat Harvesting' : 'Select a category above to auto-fill'}
                   className={`w-full bg-slate-50 border rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${errors.workTitle ? 'border-red-300' : 'border-slate-200'}`}
                 />
                 <FieldError name="workTitle" />
@@ -354,11 +522,20 @@ const WorkerRequestForm = () => {
 
               {/* Description */}
               <div>
-                <label className="text-xs font-bold text-slate-500 mb-1 block">Description *</label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-700">
+                    Description <span className="text-red-500">*</span>
+                  </label>
+                  {formData.workCategory && (
+                    <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-2 py-0.5 rounded-full">
+                      ✨ Auto-filled • Edit if needed
+                    </span>
+                  )}
+                </div>
                 <textarea
                   name="workDescription"
                   value={formData.workDescription}
-                  onChange={handleChange}
+                  onChange={handleDescChange}
                   placeholder="Describe the work: What needs to be done, field size, tools needed, etc."
                   rows={3}
                   className={`w-full bg-slate-50 border rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${errors.workDescription ? 'border-red-300' : 'border-slate-200'}`}

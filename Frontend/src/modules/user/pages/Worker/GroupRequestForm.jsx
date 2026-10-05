@@ -1,15 +1,101 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { FiArrowLeft, FiMapPin, FiCalendar, FiClock, FiDollarSign, FiUsers } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import workerBookingService from '../../../../services/workerBookingService';
 
+// Work categories with rich metadata and templates for auto-filling
+const WORK_CATEGORY_DATA = {
+  'Harvesting': {
+    icon: '🌾',
+    title: 'Harvesting Work',
+    description: 'Looking for farm workers for crop harvesting and field clearing.',
+    skill: 'Harvesting'
+  },
+  'Sowing': {
+    icon: '🌱',
+    title: 'Sowing Work',
+    description: 'Looking for farm workers for seed sowing and field planting.',
+    skill: 'Sowing'
+  },
+  'Planting': {
+    icon: '🌿',
+    title: 'Planting Work',
+    description: 'Looking for farm workers for sapling planting and crop transplantation.',
+    skill: 'Planting'
+  },
+  'Irrigation': {
+    icon: '💧',
+    title: 'Irrigation Work',
+    description: 'Looking for farm workers for field irrigation and water channel management.',
+    skill: 'Irrigation'
+  },
+  'Weeding': {
+    icon: '🪴',
+    title: 'Weeding Work',
+    description: 'Looking for farm workers for manual weed removal and crop maintenance.',
+    skill: 'Weeding'
+  },
+  'Fertilizing': {
+    icon: '🧪',
+    title: 'Fertilizing Work',
+    description: 'Looking for farm workers for fertilizer application and crop nutrition.',
+    skill: 'Fertilizing'
+  },
+  'Pesticide Spraying': {
+    icon: '🧴',
+    title: 'Pesticide Spraying',
+    description: 'Looking for experienced workers for crop pesticide and insecticide spraying.',
+    skill: 'Pesticide Spraying'
+  },
+  'Land Preparation': {
+    icon: '🚜',
+    title: 'Land Preparation',
+    description: 'Looking for farm workers for land tilling, levelling, and soil bed preparation.',
+    skill: 'Land Preparation'
+  },
+  'Threshing': {
+    icon: '🌾',
+    title: 'Threshing Work',
+    description: 'Looking for farm workers for post-harvest crop threshing and grain separation.',
+    skill: 'Threshing'
+  },
+  'Loading & Unloading': {
+    icon: '📦',
+    title: 'Loading & Unloading',
+    description: 'Looking for workers for farm produce loading, unloading, and cartage.',
+    skill: 'Loading & Unloading'
+  },
+  'Tractor Operation': {
+    icon: '🚜',
+    title: 'Tractor Operation',
+    description: 'Need skilled operator for tractor ploughing and farm equipment handling.',
+    skill: 'Tractor Driving'
+  },
+  'General Farm Labour': {
+    icon: '👨‍🌾',
+    title: 'General Farm Labour',
+    description: 'Looking for workers for general farm chores, maintenance, and field assistance.',
+    skill: 'General Farm Labour'
+  },
+  'Other': {
+    icon: '✨',
+    title: 'Agricultural Farm Work',
+    description: 'Looking for dedicated farm workers for agricultural field work.',
+    skill: 'General Farm Labour'
+  }
+};
+
+const WORK_CATEGORIES = Object.keys(WORK_CATEGORY_DATA);
+
 const GroupRequestForm = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const leader = location.state?.leader;
   const [loading, setLoading] = useState(false);
+  const [hasUserEditedTitle, setHasUserEditedTitle] = useState(false);
+  const [hasUserEditedDesc, setHasUserEditedDesc] = useState(false);
 
   const [formData, setFormData] = useState({
     requiredWorkers: '',
@@ -31,7 +117,63 @@ const GroupRequestForm = () => {
     return null;
   }
 
-  const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+  const selectCategory = (category) => {
+    if (!category) {
+      setFormData(prev => {
+        const prevAutoSkill = WORK_CATEGORY_DATA[prev.workCategory]?.skill;
+        const skillsArr = (prev.requiredSkills || '').split(',').map(s => s.trim()).filter(Boolean);
+        const filtered = skillsArr.filter(s => !prevAutoSkill || s.toLowerCase() !== prevAutoSkill.toLowerCase());
+        return {
+          ...prev,
+          workCategory: '',
+          requiredSkills: filtered.join(', ')
+        };
+      });
+      return;
+    }
+
+    const template = WORK_CATEGORY_DATA[category] || {
+      title: `${category} Work`,
+      description: `Looking for farm workers for ${category.toLowerCase()} work.`,
+      skill: category
+    };
+
+    setFormData(prev => {
+      const prevAutoSkill = WORK_CATEGORY_DATA[prev.workCategory]?.skill;
+      let skillsArr = (prev.requiredSkills || '').split(',').map(s => s.trim()).filter(Boolean);
+      skillsArr = skillsArr.filter(s => !prevAutoSkill || s.toLowerCase() !== prevAutoSkill.toLowerCase());
+      if (template.skill && !skillsArr.some(s => s.toLowerCase() === template.skill.toLowerCase())) {
+        skillsArr.push(template.skill);
+      }
+
+      return {
+        ...prev,
+        workCategory: category,
+        workTitle: hasUserEditedTitle && prev.workTitle.trim() ? prev.workTitle : template.title,
+        workDescription: hasUserEditedDesc && prev.workDescription.trim() ? prev.workDescription : template.description,
+        requiredSkills: skillsArr.join(', ')
+      };
+    });
+  };
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    if (name === 'workCategory') {
+      selectCategory(value);
+      return;
+    }
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleTitleChange = (e) => {
+    setHasUserEditedTitle(true);
+    handleChange(e);
+  };
+
+  const handleDescChange = (e) => {
+    setHasUserEditedDesc(true);
+    handleChange(e);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -106,12 +248,67 @@ const GroupRequestForm = () => {
             <h3 className="font-black text-slate-800 mb-4">Work Details</h3>
             <div className="space-y-4">
               <div>
-                <label className="text-xs font-bold text-slate-500 mb-1 block">Work Title *</label>
-                <input required type="text" name="workTitle" value={formData.workTitle} onChange={handleChange} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                <label className="text-xs font-bold text-slate-700 mb-1.5 block">
+                  Work Category <span className="text-red-500">*</span>
+                </label>
+                <select
+                  required
+                  name="workCategory"
+                  value={formData.workCategory}
+                  onChange={handleChange}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="">Select work category *</option>
+                  {WORK_CATEGORIES.map(c => (
+                    <option key={c} value={c}>
+                      {WORK_CATEGORY_DATA[c]?.icon} {c}
+                    </option>
+                  ))}
+                </select>
               </div>
+
               <div>
-                <label className="text-xs font-bold text-slate-500 mb-1 block">Description *</label>
-                <textarea required name="workDescription" value={formData.workDescription} onChange={handleChange} rows="3" className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-700">
+                    Work Title <span className="text-red-500">*</span>
+                  </label>
+                  {formData.workCategory && (
+                    <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-2 py-0.5 rounded-full">
+                      ✨ Auto-filled • Edit if needed
+                    </span>
+                  )}
+                </div>
+                <input
+                  required
+                  type="text"
+                  name="workTitle"
+                  value={formData.workTitle}
+                  onChange={handleTitleChange}
+                  placeholder={formData.workCategory ? 'e.g. Wheat Harvesting' : 'Select a category above to auto-fill'}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-700">
+                    Description <span className="text-red-500">*</span>
+                  </label>
+                  {formData.workCategory && (
+                    <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-2 py-0.5 rounded-full">
+                      ✨ Auto-filled • Edit if needed
+                    </span>
+                  )}
+                </div>
+                <textarea
+                  required
+                  name="workDescription"
+                  value={formData.workDescription}
+                  onChange={handleDescChange}
+                  placeholder="Describe the work: What needs to be done, field size, tools needed, etc."
+                  rows={3}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
               </div>
             </div>
           </div>
