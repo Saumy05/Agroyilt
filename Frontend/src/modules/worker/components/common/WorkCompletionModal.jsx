@@ -1,5 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { FiX, FiTrash, FiCamera, FiImage, FiDollarSign, FiCheckCircle, FiKey } from 'react-icons/fi';
+import { FaRupeeSign } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
 import flutterBridge from '../../../../utils/flutterBridge';
 import { toastManager } from '../../../../utils/toastManager';
@@ -10,6 +11,7 @@ const WorkCompletionModal = ({ isOpen, onClose, job, onComplete, loading }) => {
   const [completionOtp, setCompletionOtp] = useState(['', '', '', '']);
   const [isUploading, setIsUploading] = useState(false);
   const [showSourceSheet, setShowSourceSheet] = useState(false);
+  const [cashCollectedConfirmed, setCashCollectedConfirmed] = useState(false);
 
   const galleryInputRef = useRef(null);
   const cameraInputRef = useRef(null);
@@ -86,6 +88,13 @@ const WorkCompletionModal = ({ isOpen, onClose, job, onComplete, loading }) => {
     flutterBridge.hapticFeedback('light');
   };
 
+  useEffect(() => {
+    if (isOpen) {
+      setCashCollectedConfirmed(false);
+      setCompletionOtp(['', '', '', '']);
+    }
+  }, [isOpen]);
+
   const calculateTotal = () => {
     // For Plan Benefit, user only pays for Extra Charges
     if (job?.paymentMethod === 'plan_benefit') {
@@ -100,10 +109,28 @@ const WorkCompletionModal = ({ isOpen, onClose, job, onComplete, loading }) => {
     return ((job?.basePrice || 0) + (job?.tax || 0) - (job?.discount || 0));
   };
 
+  const isCashBooking = job?.paymentMethod === 'cash' || Boolean(job?.isCashBooking) || Boolean(job?.cashCollection?.isCashBooking);
+  const cashToCollect = typeof job?.cashCollection?.totalToCollect === 'number'
+    ? job.cashCollection.totalToCollect
+    : (typeof job?.cashToCollect === 'number'
+      ? job.cashToCollect
+      : (isCashBooking ? ((job?.finalAmount || 0) + (job?.platformFee || (Math.round((job?.finalAmount || 0) * 0.1)))) : 0));
+  const workerWage = typeof job?.cashCollection?.workerWage === 'number'
+    ? job.cashCollection.workerWage
+    : (typeof job?.finalAmount === 'number' ? job.finalAmount : calculateTotal());
+  const platformFee = typeof job?.cashCollection?.platformFee === 'number'
+    ? job.cashCollection.platformFee
+    : Math.max(0, cashToCollect - workerWage);
+  const farmerName = job?.userId?.name || job?.customerName || job?.farmerName || 'the farmer';
+
   const handleSubmit = () => {
     const otpCode = completionOtp.join('').trim();
     if (otpCode.length < 4) {
       toastManager.error('Please enter the 4-digit Completion OTP given by the farmer');
+      return;
+    }
+    if (isCashBooking && !cashCollectedConfirmed) {
+      toastManager.error(`Please confirm you have collected ₹${cashToCollect.toFixed(2)} cash from ${farmerName}`);
       return;
     }
     onComplete(workPhotos, otpCode);
@@ -258,15 +285,77 @@ const WorkCompletionModal = ({ isOpen, onClose, job, onComplete, loading }) => {
               </div>
 
               {/* Payment Info */}
-              <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-bold text-gray-400 uppercase">Total Bill Value</p>
-                  <p className="text-lg font-black text-gray-800">₹{calculateTotal().toFixed(2)}</p>
+              {isCashBooking ? (
+                <div className="bg-gradient-to-br from-emerald-50 via-teal-50 to-emerald-100/70 rounded-2xl p-4 space-y-3 border-2 border-emerald-400 shadow-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black shadow-md shadow-emerald-600/20 shrink-0">
+                        <FaRupeeSign className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-200/70 px-2 py-0.5 rounded-md">
+                          Cash On Service
+                        </span>
+                        <h4 className="text-xs font-bold text-slate-700 mt-0.5">Collect Cash Directly in Hand</h4>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Collect From Farmer</p>
+                      <p className="text-2xl font-black text-emerald-900">₹{cashToCollect.toFixed(2)}</p>
+                    </div>
+                  </div>
+
+                  {/* Cash Breakdown */}
+                  <div className="bg-white rounded-xl p-3 border border-emerald-200/80 text-xs space-y-1.5 shadow-xs">
+                    <div className="flex justify-between text-slate-600 font-medium">
+                      <span>Your Work Earnings:</span>
+                      <span className="font-bold text-slate-800">₹{workerWage.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-600 font-medium">
+                      <span>Platform Fee (collect for app):</span>
+                      <span className="font-bold text-emerald-700">+₹{platformFee.toFixed(2)}</span>
+                    </div>
+                    <div className="pt-1.5 border-t border-slate-100 flex justify-between font-black text-emerald-900 text-xs">
+                      <span>Total Cash to Collect in Hand:</span>
+                      <span>₹{cashToCollect.toFixed(2)}</span>
+                    </div>
+                    <p className="text-[10px] text-amber-700 font-semibold pt-1 border-t border-dashed border-slate-100 leading-tight">
+                      ℹ️ The ₹{platformFee.toFixed(2)} platform fee will be adjusted from your wallet balance upon completion.
+                    </p>
+                  </div>
+
+                  {/* Mandatory Cash Collection Confirmation Checkbox */}
+                  <label className="flex items-start gap-3 p-3 bg-white rounded-xl border-2 border-emerald-500 cursor-pointer select-none hover:bg-emerald-50/50 transition-colors shadow-xs">
+                    <input
+                      type="checkbox"
+                      checked={cashCollectedConfirmed}
+                      onChange={(e) => {
+                        setCashCollectedConfirmed(e.target.checked);
+                        flutterBridge.hapticFeedback('medium');
+                      }}
+                      className="w-5 h-5 mt-0.5 rounded-lg border-2 border-emerald-500 text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600 shrink-0"
+                    />
+                    <div className="flex-1 text-xs">
+                      <span className="font-black text-slate-900 block leading-tight">
+                        I confirm I have received ₹{cashToCollect.toFixed(2)} cash from {farmerName}
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-medium mt-0.5 block">
+                        Do not complete without receiving physical cash in hand.
+                      </span>
+                    </div>
+                  </label>
                 </div>
-                <div className="w-10 h-10 rounded-full bg-white border border-gray-100 flex items-center justify-center text-green-600 shadow-sm">
-                  <FiDollarSign className="w-5 h-5" />
+              ) : (
+                <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-gray-400 uppercase">Total Bill Value</p>
+                    <p className="text-lg font-black text-gray-800">₹{calculateTotal().toFixed(2)}</p>
+                  </div>
+                  <div className="w-10 h-10 rounded-full bg-white border border-gray-100 flex items-center justify-center text-green-600 shadow-sm">
+                    <FiDollarSign className="w-5 h-5" />
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Action Buttons */}
               <div className="grid grid-cols-2 gap-3 pt-2">
@@ -278,11 +367,11 @@ const WorkCompletionModal = ({ isOpen, onClose, job, onComplete, loading }) => {
                 </button>
                 <button
                   onClick={handleSubmit}
-                  disabled={loading || isUploading}
+                  disabled={loading || isUploading || (isCashBooking && !cashCollectedConfirmed) || completionOtp.join('').trim().length < 4}
                   className="py-4 rounded-xl font-bold text-white shadow-lg shadow-green-500/30 active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100"
                   style={{ background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)' }}
                 >
-                  {loading ? 'Confirming...' : 'Complete Work'}
+                  {loading ? 'Confirming...' : (isCashBooking && !cashCollectedConfirmed ? 'Collect Cash First' : 'Complete Work')}
                 </button>
               </div>
 

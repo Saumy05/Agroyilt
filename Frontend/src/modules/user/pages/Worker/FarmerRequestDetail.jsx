@@ -533,8 +533,8 @@ const FarmerRequestDetail = () => {
           </div>
         )}
 
-        {/* ── Active Booking Banner (Confirmed, pending payment) ─────────────── */}
-        {request.status === 'confirmed' && request.paymentStatus !== 'success' && (
+        {/* ── Active Booking Banner (Confirmed, fallback when worker list not yet populated) ─────────────── */}
+        {request.status === 'confirmed' && request.paymentStatus !== 'success' && (!request.finalWorkers || request.finalWorkers.length === 0) && (
           <div className="bg-gradient-to-r from-emerald-500 to-teal-600 rounded-3xl p-5 shadow-lg shadow-emerald-400/20 relative overflow-hidden">
             <div className="absolute -top-6 -right-6 w-24 h-24 bg-white/10 rounded-full" />
             <div className="absolute -bottom-6 -left-6 w-20 h-20 bg-white/10 rounded-full" />
@@ -558,8 +558,8 @@ const FarmerRequestDetail = () => {
           </div>
         )}
 
-        {/* Confirmed Workers (Post-confirmation) */}
-        {(request.status === 'confirmed' || request.paymentStatus === 'success') && request.finalWorkers?.length > 0 && (
+        {/* Confirmed Workers (Post-confirmation & In-Progress) */}
+        {(['confirmed', 'in_progress', 'partially_completed', 'completed'].includes(request.status) || request.paymentStatus === 'success') && request.finalWorkers?.length > 0 && (
           <div className="bg-white rounded-3xl border-2 border-emerald-500 shadow-sm p-5 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-bl-full -z-10 opacity-50" />
             
@@ -569,7 +569,7 @@ const FarmerRequestDetail = () => {
                   <FiCheck size={16} className="stroke-[3]" />
                 </div>
                 <h3 className="font-black text-emerald-800 text-sm uppercase tracking-wide">
-                  Booking Confirmed
+                  {request.status === 'in_progress' ? 'Workers On The Way / Active' : request.status === 'completed' ? 'Work Completed' : 'Booking Confirmed'}
                 </h3>
               </div>
 
@@ -659,7 +659,7 @@ const FarmerRequestDetail = () => {
 
             {(() => {
               const isCash = request.paymentMethod === 'cash';
-              const isConfirmed = request.status === 'confirmed';
+              const isConfirmed = ['confirmed', 'in_progress', 'partially_completed', 'completed'].includes(request.status);
               const isPaid = request.paymentStatus === 'success' || (isCash && isConfirmed);
               const isDaily = request.bookingType === 'DAILY' || request.rateUnit === 'daily';
               const effectiveWorkerCount = (isPaid || isConfirmed)
@@ -809,16 +809,36 @@ const FarmerRequestDetail = () => {
 
                   <div className="border-t border-dashed border-slate-200 my-1" />
 
-                  <div className={`flex justify-between items-center p-3 rounded-2xl border ${isCash ? 'bg-amber-50/60 border-amber-200' : 'bg-teal-50/60 border-teal-100'}`}>
+                  <div className={`flex justify-between items-center p-3 rounded-2xl border ${
+                    isCash
+                      ? (request.status === 'completed' ? 'bg-emerald-50/80 border-emerald-300' : 'bg-amber-50/60 border-amber-200')
+                      : 'bg-teal-50/60 border-teal-100'
+                  }`}>
                     <div>
-                      <span className={`font-black text-sm block ${isCash ? 'text-amber-900' : 'text-teal-900'}`}>
-                        {isCash ? 'Pay on Completion (Cash)' : (isPaid ? 'Total Paid' : 'Total Payable')}
+                      <span className={`font-black text-sm block ${
+                        isCash
+                          ? (request.status === 'completed' ? 'text-emerald-900' : 'text-amber-900')
+                          : 'text-teal-900'
+                      }`}>
+                        {isCash
+                          ? (request.status === 'completed' ? 'Paid in Cash upon Completion' : 'Pay on Completion (Cash)')
+                          : (isPaid ? 'Total Paid' : 'Total Payable')}
                       </span>
-                      <span className={`text-[10px] font-medium ${isCash ? 'text-amber-700' : 'text-teal-700'}`}>
-                        {isCash ? 'Pay worker directly upon completion' : 'Reserve + Platform Fee'}
+                      <span className={`text-[10px] font-medium ${
+                        isCash
+                          ? (request.status === 'completed' ? 'text-emerald-700' : 'text-amber-700')
+                          : 'text-teal-700'
+                      }`}>
+                        {isCash
+                          ? (request.status === 'completed' ? 'Paid directly to worker • Work Completed' : 'Pay worker directly upon completion')
+                          : 'Reserve + Platform Fee'}
                       </span>
                     </div>
-                    <span className={`text-xl font-black ${isCash ? 'text-amber-700' : 'text-teal-700'}`}>
+                    <span className={`text-xl font-black ${
+                      isCash
+                        ? (request.status === 'completed' ? 'text-emerald-800' : 'text-amber-700')
+                        : 'text-teal-700'
+                    }`}>
                       ₹{totalAmount.toLocaleString('en-IN')}
                     </span>
                   </div>

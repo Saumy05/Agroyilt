@@ -216,7 +216,7 @@ const JobTimeline = () => {
     if (value && index < 3) document.getElementById(`otp-${index + 1}`).focus();
   };
 
-  const isPending = (job?.status === 'assigned' || job?.status === 'confirmed' || job?.status === 'pending') && job?.workerResponse !== 'ACCEPTED';
+  const isPending = !job?.assignmentId && job?.status !== 'confirmed' && (job?.status === 'assigned' || job?.status === 'pending') && job?.workerResponse !== 'ACCEPTED';
 
   const timelineStages = [
     {

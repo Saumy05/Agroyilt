@@ -6,7 +6,7 @@ import {
   FiUser, FiStar, FiShield, FiKey, FiCheckCircle, FiLoader,
   FiMaximize, FiMinimize, FiClock, FiRefreshCw, FiUsers,
   FiTool, FiAlertCircle, FiRadio, FiCheck, FiInfo,
-  FiCamera, FiCopy, FiX, FiEye
+  FiCamera, FiCopy, FiX, FiEye, FiChevronDown, FiChevronUp
 } from 'react-icons/fi';
 import { FaRupeeSign } from 'react-icons/fa';
 import L from 'leaflet';
@@ -16,6 +16,7 @@ import { toastManager } from '../../../../utils/toastManager';
 import { useSocket } from '../../../../context/SocketContext';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import DailyTrackingView from './components/DailyTrackingView';
+import ActiveWorkMonitoringHub from './components/ActiveWorkMonitoringHub';
 import DecreaseWorkerModal from './components/DecreaseWorkerModal';
 import ExtensionModal from './components/ExtensionModal';
 import AddWorkersModal from './components/AddWorkersModal';
@@ -122,6 +123,7 @@ const BookingTrack = () => {
   const [payingExtensionId, setPayingExtensionId] = useState(null);
   const [regeneratingVisitOtpId, setRegeneratingVisitOtpId] = useState(null);
   const [redirectCountdown, setRedirectCountdown] = useState(3);
+  const [isMapExpanded, setIsMapExpanded] = useState(false);
   // leafletLoaded state removed — L is now imported directly from npm
 
   const mapContainerRef = useRef(null);
@@ -571,10 +573,10 @@ const BookingTrack = () => {
   // Dynamic status counters
   const counters = useMemo(() => {
     const total = workersList.length;
-    const started = workersList.filter(w => ['JOURNEY_STARTED', 'ARRIVED', 'OTP_VERIFIED', 'IN_PROGRESS', 'COMPLETED'].includes(w.journeyStatus)).length;
+    const started = workersList.filter(w => ['JOURNEY_STARTED', 'ARRIVED', 'OTP_VERIFIED', 'IN_PROGRESS', 'WORK_SUBMITTED', 'COMPLETED'].includes(w.journeyStatus) || w.workStatus === 'IN_PROGRESS' || w.workStatus === 'SUBMITTED').length;
     const onJourney = workersList.filter(w => w.journeyStatus === 'JOURNEY_STARTED').length;
     const arrived = workersList.filter(w => w.journeyStatus === 'ARRIVED').length;
-    const inProgress = workersList.filter(w => ['OTP_VERIFIED', 'IN_PROGRESS'].includes(w.journeyStatus)).length;
+    const inProgress = workersList.filter(w => ['OTP_VERIFIED', 'IN_PROGRESS', 'WORK_SUBMITTED'].includes(w.journeyStatus) || w.workStatus === 'IN_PROGRESS' || w.workStatus === 'SUBMITTED').length;
     const completed = workersList.filter(w => w.journeyStatus === 'COMPLETED').length;
     const notStarted = workersList.filter(w => w.journeyStatus === 'NOT_STARTED').length;
 
@@ -587,6 +589,31 @@ const BookingTrack = () => {
     if (counters.total > 0 && counters.completed === counters.total) return true;
     return false;
   }, [trackingData, counters]);
+
+  // Active Work Status Check
+  const isWorkInProgress = useMemo(() => {
+    return !isAllCompleted && (
+      counters.inProgress > 0 ||
+      trackingData?.parentStatus === 'in_progress' ||
+      workersList.some(w => ['IN_PROGRESS', 'WORK_SUBMITTED'].includes(w.journeyStatus) || w.workStatus === 'IN_PROGRESS' || w.workStatus === 'SUBMITTED')
+    );
+  }, [isAllCompleted, counters.inProgress, trackingData?.parentStatus, workersList]);
+
+  // Expand map by default if workers are traveling, otherwise keep compact during active work
+  useEffect(() => {
+    if (!isWorkInProgress && counters.onJourney > 0) {
+      setIsMapExpanded(true);
+    }
+  }, [isWorkInProgress, counters.onJourney]);
+
+  // Invalidate Leaflet map size on expand/collapse
+  useEffect(() => {
+    if (mapInstanceRef.current && isMapExpanded) {
+      setTimeout(() => {
+        try { mapInstanceRef.current.invalidateSize(); } catch (e) {}
+      }, 200);
+    }
+  }, [isMapExpanded]);
 
   // Auto-Redirect Timer on Completion
   useEffect(() => {
@@ -876,7 +903,13 @@ const BookingTrack = () => {
             <div className="min-w-0">
               <h1 className="font-black text-base text-slate-800 truncate flex items-center gap-2">
                 <FiNavigation className="text-emerald-600 shrink-0" />
-                <span>{isAllCompleted ? 'Booking Completed' : 'Live Journey Tracking'}</span>
+                <span>
+                  {isAllCompleted
+                    ? 'Booking Completed'
+                    : isWorkInProgress
+                    ? 'Live Work Monitoring'
+                    : 'Live Journey Tracking'}
+                </span>
               </h1>
               <p className="text-xs text-slate-500 font-medium truncate">
                 {trackingData?.workTitle || 'Worker Booking'}
@@ -893,8 +926,14 @@ const BookingTrack = () => {
                   : 'bg-amber-50 text-amber-700 border-amber-200'
               }`}
             >
-              <span className={`w-2 h-2 rounded-full ${socketConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
-              <span className="hidden sm:inline">{socketConnected ? 'Live Tracking' : 'Reconnecting...'}</span>
+              <span className={`w-2 h-2 rounded-full ${socketConnected ? (isWorkInProgress ? 'bg-emerald-500 animate-ping' : 'bg-emerald-500 animate-pulse') : 'bg-amber-500'}`} />
+              <span className="hidden sm:inline">
+                {socketConnected
+                  ? isWorkInProgress
+                    ? 'Live Work Active'
+                    : 'Live Tracking'
+                  : 'Reconnecting...'}
+              </span>
               <FiRadio className="sm:hidden" />
             </div>
 
@@ -960,6 +999,15 @@ const BookingTrack = () => {
               </button>
             </div>
           </motion.div>
+        )}
+
+        {/* ── Active Work Monitoring Hub (When work is IN PROGRESS) ── */}
+        {isWorkInProgress && !isAllCompleted && (
+          <ActiveWorkMonitoringHub
+            trackingData={trackingData}
+            workers={workersList}
+            onOpenExtensionModal={() => setIsExtensionModalOpen(true)}
+          />
         )}
 
         {/* ── Dynamic Summary & Progress Counters ── */}
@@ -1099,34 +1147,97 @@ const BookingTrack = () => {
           />
         )}
 
-        {/* ── Interactive Live Map Section ── */}
-        <div className={`bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden relative ${isFullScreen ? 'fixed inset-0 z-50 rounded-none' : 'h-[360px] sm:h-[420px]'}`}>
-          <div ref={mapContainerRef} className="w-full h-full min-h-[360px]" style={{ zIndex: 1 }} />
-
-          {/* Floating Map Controls */}
-          <div className="absolute top-4 right-4 z-[400] flex flex-col gap-2">
-            <button
-              onClick={handleCenterMap}
-              className="w-10 h-10 rounded-2xl bg-white shadow-lg border border-slate-100 text-slate-700 flex items-center justify-center hover:bg-slate-50 active:scale-95 transition-all"
-              title="Re-center all workers"
-            >
-              <FiCrosshair size={18} />
-            </button>
-            <button
-              onClick={() => setIsFullScreen(!isFullScreen)}
-              className="w-10 h-10 rounded-2xl bg-white shadow-lg border border-slate-100 text-slate-700 flex items-center justify-center hover:bg-slate-50 active:scale-95 transition-all"
-              title={isFullScreen ? 'Exit Fullscreen' : 'Fullscreen'}
-            >
-              {isFullScreen ? <FiMinimize size={18} /> : <FiMaximize size={18} />}
-            </button>
+        {/* ── Interactive Live Map Section (Smart Collapsible) ── */}
+        <div className="space-y-2.5">
+          <div className="flex items-center justify-between px-1">
+            <h4 className="text-xs font-black uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+              <FiMapPin className="text-emerald-600" />
+              <span>Farm Location Map {isWorkInProgress && '(Workers On Site)'}</span>
+            </h4>
+            {isWorkInProgress && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMapExpanded(prev => !prev);
+                  setTimeout(() => {
+                    if (mapInstanceRef.current) mapInstanceRef.current.invalidateSize();
+                  }, 150);
+                }}
+                className="text-xs font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-3 py-1 rounded-xl transition-all flex items-center gap-1 border border-emerald-200 shadow-2xs cursor-pointer"
+              >
+                {isMapExpanded ? (
+                  <><span>Hide Map</span> <FiChevronUp size={13} /></>
+                ) : (
+                  <><span>Show Live Map</span> <FiChevronDown size={13} /></>
+                )}
+              </button>
+            )}
           </div>
 
-          {/* Map Status Badge Overlay */}
-          <div className="absolute bottom-4 left-4 z-[400] bg-white/90 backdrop-blur-md px-3.5 py-2 rounded-2xl border border-slate-100 shadow-lg flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-xs font-bold text-slate-700">
-              {workersList.filter(w => w.currentLocation?.lat).length} of {counters.total} Workers Live on Map
-            </span>
+          {/* Compact summary bar if map is collapsed during active work */}
+          {isWorkInProgress && !isMapExpanded && !isFullScreen && (
+            <div className="bg-white rounded-3xl p-4 border border-slate-100 shadow-sm flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                  <FiMapPin size={20} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-black text-slate-800">Farm Location • Workers On Site</p>
+                  <p className="text-[11px] text-slate-500 truncate">
+                    {[destination?.addressLine1, destination?.city].filter(Boolean).join(', ') || 'Registered Farm Location'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMapExpanded(true);
+                  setTimeout(() => {
+                    if (mapInstanceRef.current) mapInstanceRef.current.invalidateSize();
+                  }, 200);
+                }}
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shrink-0 active:scale-95 cursor-pointer"
+              >
+                <FiMaximize size={13} />
+                <span>Expand Map</span>
+              </button>
+            </div>
+          )}
+
+          <div className={`bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden relative transition-all duration-300 ${
+            isFullScreen
+              ? 'fixed inset-0 z-50 rounded-none'
+              : (isWorkInProgress && !isMapExpanded)
+              ? 'h-0 opacity-0 pointer-events-none -m-0 p-0 border-0'
+              : 'h-[320px] sm:h-[400px] opacity-100'
+          }`}>
+            <div ref={mapContainerRef} className="w-full h-full min-h-[300px]" style={{ zIndex: 1 }} />
+
+            {/* Floating Map Controls */}
+            <div className="absolute top-4 right-4 z-[400] flex flex-col gap-2">
+              <button
+                onClick={handleCenterMap}
+                className="w-10 h-10 rounded-2xl bg-white shadow-lg border border-slate-100 text-slate-700 flex items-center justify-center hover:bg-slate-50 active:scale-95 transition-all"
+                title="Re-center all workers"
+              >
+                <FiCrosshair size={18} />
+              </button>
+              <button
+                onClick={() => setIsFullScreen(!isFullScreen)}
+                className="w-10 h-10 rounded-2xl bg-white shadow-lg border border-slate-100 text-slate-700 flex items-center justify-center hover:bg-slate-50 active:scale-95 transition-all"
+                title={isFullScreen ? 'Exit Fullscreen' : 'Fullscreen'}
+              >
+                {isFullScreen ? <FiMinimize size={18} /> : <FiMaximize size={18} />}
+              </button>
+            </div>
+
+            {/* Map Status Badge Overlay */}
+            <div className="absolute bottom-4 left-4 z-[400] bg-white/90 backdrop-blur-md px-3.5 py-2 rounded-2xl border border-slate-100 shadow-lg flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-xs font-bold text-slate-700">
+                {workersList.filter(w => w.currentLocation?.lat).length} of {counters.total} Workers Live on Map
+              </span>
+            </div>
           </div>
         </div>
 
@@ -1147,7 +1258,12 @@ const BookingTrack = () => {
             </div>
           ) : (
             workersList.map((worker, idx) => {
-              const statusCfg = STATUS_CONFIG[worker.journeyStatus] || STATUS_CONFIG.NOT_STARTED;
+              const statusCfg = STATUS_CONFIG[
+                // If workStatus is more specific than journeyStatus, prefer it
+                (worker.workStatus === 'SUBMITTED' ? 'WORK_SUBMITTED' :
+                  worker.workStatus === 'IN_PROGRESS' ? 'IN_PROGRESS' :
+                  worker.journeyStatus) || 'NOT_STARTED'
+              ] || STATUS_CONFIG.NOT_STARTED;
               const StatusIcon = statusCfg.icon;
               const workerKey = worker.assignmentId || worker.bookingId || worker.workerId;
               const isSelected = selectedWorkerId === workerKey;
@@ -1213,11 +1329,19 @@ const BookingTrack = () => {
 
                       {/* Location Freshness Indicator */}
                       <div className="flex items-center gap-1.5 mt-2.5 text-xs text-slate-400 font-semibold">
-                        <FiRadio size={12} className={hasLiveGps ? 'text-emerald-500' : 'text-slate-300'} />
+                        <FiRadio size={12} className={hasLiveGps || ['IN_PROGRESS', 'WORK_SUBMITTED', 'ARRIVED'].includes(worker.journeyStatus) || worker.workStatus === 'IN_PROGRESS' || worker.workStatus === 'SUBMITTED' ? 'text-emerald-500' : 'text-slate-300'} />
                         <span>
-                          {hasLiveGps
-                            ? formatRelativeTime(worker.lastLocationAt)
-                            : 'Waiting for GPS location...'}
+                          {['IN_PROGRESS', 'WORK_SUBMITTED'].includes(worker.journeyStatus) || worker.workStatus === 'IN_PROGRESS' || worker.workStatus === 'SUBMITTED' ? (
+                            <strong className="text-emerald-700 font-bold">🟢 On Site — Working on Farm</strong>
+                          ) : worker.journeyStatus === 'ARRIVED' ? (
+                            <strong className="text-emerald-700 font-bold">🟢 On Site — Arrived at Farm</strong>
+                          ) : worker.journeyStatus === 'COMPLETED' ? (
+                            <strong className="text-slate-600 font-bold">✅ Work Completed</strong>
+                          ) : hasLiveGps ? (
+                            formatRelativeTime(worker.lastLocationAt)
+                          ) : (
+                            'Waiting for GPS location...'
+                          )}
                         </span>
                       </div>
                     </div>
@@ -1306,16 +1430,23 @@ const BookingTrack = () => {
                   )}
 
                   {/* ── Working: End OTP is issued only after the worker taps Stop ── */}
-                  {worker.journeyStatus === 'IN_PROGRESS' && !worker.completionOtp && !isAllCompleted && (
+                  {/* Show this hint when worker is actively in progress and no End OTP yet */}
+                  {(worker.journeyStatus === 'IN_PROGRESS' || worker.workStatus === 'IN_PROGRESS') &&
+                    !worker.completionOtp &&
+                    worker.workStatus !== 'SUBMITTED' &&
+                    !isAllCompleted && (
                     <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-2 text-xs text-slate-500 font-medium">
                       <FiClock className="w-4 h-4 text-amber-500 shrink-0" />
-                      <span>{worker.workerName?.split(' ')[0]} is working. The End OTP will appear here when they tap Stop Work.</span>
+                      <span>{worker.workerName?.split(' ')[0]} is working. The End OTP will appear here when they tap <strong>Stop Work</strong>.</span>
                     </div>
                   )}
 
                   {/* ── Completion OTP Banner for Farmer ── */}
                   {worker.completionOtp &&
-                    ['IN_PROGRESS', 'WORK_SUBMITTED', 'ARRIVED'].includes(worker.journeyStatus) &&
+                    (
+                      ['IN_PROGRESS', 'WORK_SUBMITTED', 'ARRIVED'].includes(worker.journeyStatus) ||
+                      ['IN_PROGRESS', 'SUBMITTED'].includes(worker.workStatus)
+                    ) &&
                     worker.completionStatus !== 'OTP_VERIFIED' &&
                     !['COMPLETED', 'CANCELLED'].includes(worker.journeyStatus) &&
                     !isAllCompleted && (

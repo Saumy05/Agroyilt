@@ -171,6 +171,9 @@ const buildDocs = (request, { method, orderId, paymentId }) => {
         lat: addr.lat || null, lng: addr.lng || null
       },
       status: 'confirmed',
+      workerResponse: 'ACCEPTED',
+      acceptedAt: new Date(),
+      workerAcceptedAt: new Date(),
       paymentStatus: isCash ? 'pending' : 'success',
       paymentMethod: isCash ? 'cash' : 'online',
       // (no razorpayOrderId on the mirror Booking: the Booking-order payment routes must never match a worker-booking order)

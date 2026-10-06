@@ -23,11 +23,9 @@ const ActiveWorkStopwatch = ({ job }) => {
 
   useEffect(() => {
     let start = null;
-    if (job?.startedAt) start = new Date(job.startedAt);
-    else if (job?.workStartedAt) start = new Date(job.workStartedAt);
+    if (job?.workStartedAt) start = new Date(job.workStartedAt);
+    else if (job?.startedAt) start = new Date(job.startedAt);
     else if (job?.inProgressAt) start = new Date(job.inProgressAt);
-    else if (job?.journeyStartedAt) start = new Date(job.journeyStartedAt);
-    else if (job?.createdAt) start = new Date(job.createdAt);
 
     const startTime = start ? start.getTime() : Date.now();
 
@@ -45,7 +43,7 @@ const ActiveWorkStopwatch = ({ job }) => {
     return () => clearInterval(interval);
   }, [job]);
 
-  const startDisplay = job?.scheduledTime || (job?.startedAt ? new Date(job.startedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'Recently');
+  const startDisplay = (job?.workStartedAt ? new Date(job.workStartedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : null) || (job?.startedAt ? new Date(job.startedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'Recently');
 
   return (
     <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white rounded-2xl p-4 mb-4 shadow-lg flex items-center justify-between border border-amber-300/30 animate-fadeIn">
@@ -573,8 +571,13 @@ const JobDetails = () => {
     return colors[status.toLowerCase()] || '#6B7280';
   };
 
-  const isAccepted = job?.workerResponse === 'ACCEPTED' || (job?.workerId && !['requested', 'searching', 'pending'].includes(statusLower));
-  const isPendingAcceptance = !isAccepted && job?.workerResponse !== 'REJECTED' && ['requested', 'searching', 'pending', 'confirmed', 'assigned'].includes(statusLower);
+  const isAccepted = Boolean(
+    isAssignmentJob ||
+    job?.workerResponse === 'ACCEPTED' ||
+    ['confirmed', 'journey_started', 'visited', 'arrived', 'in_progress', 'work_done', 'completed'].includes(statusLower) ||
+    (job?.workerId && !['requested', 'searching', 'pending'].includes(statusLower))
+  );
+  const isPendingAcceptance = !isAssignmentJob && !isAccepted && job?.workerResponse !== 'REJECTED' && (['requested', 'searching', 'pending'].includes(statusLower) || (statusLower === 'assigned' && job?.workerResponse === 'PENDING'));
 
   const renderActionButtons = (isSticky = false) => {
     if (isPendingAcceptance) {
@@ -625,7 +628,9 @@ const JobDetails = () => {
       );
     }
 
-    if (statusLower === 'visited' || statusLower === 'arrived') {
+    // FIX 2: Only show arrival OTP if work has NOT yet started.
+    // If workStatus is already IN_PROGRESS, skip this block — status will be 'in_progress' not 'visited'.
+    if ((statusLower === 'visited' || statusLower === 'arrived') && job?.workStatus !== 'IN_PROGRESS') {
       return (
         <button
           onClick={() => handleStatusUpdate('visit')}
@@ -633,12 +638,15 @@ const JobDetails = () => {
           className={`w-full py-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 shadow-xl active:scale-95 transition-all text-lg ${isSticky ? '' : 'mb-4'}`}
           style={{ background: 'linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%)' }}
         >
-          {actionLoading ? 'Loading...' : (isDaily ? <>ENTER TODAY'S REACH OTP <FiCheck className="w-5 h-5" /></> : <>ENTER VISIT OTP <FiCheck className="w-5 h-5" /></>)}
+          {actionLoading ? 'Loading...' : (isDaily ? <>ENTER TODAY'S REACH OTP <FiCheck className="w-5 h-5" /></> : <>ENTER START OTP <FiCheck className="w-5 h-5" /></>)}
         </button>
       );
     }
 
-    if (statusLower === 'in_progress' && isAssignmentJob) {
+    // FIX 3: in_progress — always show "Stop Work" for any job that has an assignmentId
+    // (Fix 1 on backend guarantees assignmentId is always set for assignment jobs).
+    // Also guard with raw workStatus as a belt-and-braces fallback.
+    if (statusLower === 'in_progress' && (isAssignmentJob || job?.workStatus === 'IN_PROGRESS')) {
       return (
         <button
           onClick={handleStopWork}
@@ -651,7 +659,8 @@ const JobDetails = () => {
       );
     }
 
-    if (statusLower === 'work_done' && isAssignmentJob) {
+    // work_done = worker pressed Stop → waiting for farmer's End OTP
+    if (statusLower === 'work_done' && (isAssignmentJob || job?.workStatus === 'SUBMITTED')) {
       return (
         <button
           onClick={() => handleStatusUpdate('complete')}
@@ -660,19 +669,6 @@ const JobDetails = () => {
           style={{ background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)' }}
         >
           {actionLoading ? 'Loading...' : <>ENTER END OTP <FiCheckCircle className="w-5 h-5" /></>}
-        </button>
-      );
-    }
-
-    if (statusLower === 'in_progress') {
-      return (
-        <button
-          onClick={() => handleStatusUpdate('complete')}
-          disabled={actionLoading}
-          className={`w-full py-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 shadow-xl active:scale-95 transition-all text-lg ${isSticky ? '' : 'mb-4'}`}
-          style={{ background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)' }}
-        >
-          {actionLoading ? 'Loading...' : (isDaily ? <>COMPLETE TODAY'S WORK <FiCheckCircle className="w-5 h-5" /></> : <>COMPLETE WORK <FiCheckCircle className="w-5 h-5" /></>)}
         </button>
       );
     }
@@ -834,7 +830,7 @@ const JobDetails = () => {
               </div>
             </div>
           ) : (
-            ['in_progress', 'journey_started', 'visited'].includes(statusLower) && (
+            statusLower === 'in_progress' && (
               <ActiveWorkStopwatch job={job} />
             )
           )}
@@ -1151,17 +1147,43 @@ const JobDetails = () => {
             style={{ boxShadow: '0 4px 20px rgba(0, 0, 0, 0.05)' }}
           >
             {/* Header */}
-            <div className="flex items-center gap-2 mb-4 pb-2 border-b border-gray-100">
-              <div className="p-2 rounded-lg bg-emerald-50">
-                <FiDollarSign className="w-5 h-5 text-emerald-600" />
+            <div className="flex items-center justify-between gap-2 mb-4 pb-2 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-emerald-50">
+                  <FiDollarSign className="w-5 h-5 text-emerald-600" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-800">Job Payment Breakdown</h3>
+                  <span className="text-[11px] text-gray-400">Worker Rate Details</span>
+                </div>
               </div>
-              <div>
-                <h3 className="font-bold text-gray-800">Job Payment Breakdown</h3>
-                <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
-                  New Flow · Upfront Paid
-                </span>
-              </div>
+              <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${
+                (job.paymentMethod === 'cash' || job.isCashBooking || job.cashCollection?.isCashBooking)
+                  ? 'text-amber-800 bg-amber-50 border-amber-200'
+                  : 'text-emerald-700 bg-emerald-50 border-emerald-100'
+              }`}>
+                {(job.paymentMethod === 'cash' || job.isCashBooking || job.cashCollection?.isCashBooking)
+                  ? '💵 Cash on Service'
+                  : '💳 Paid Online / Escrow'}
+              </span>
             </div>
+
+            {/* Cash on Service Callout */}
+            {(job.paymentMethod === 'cash' || job.isCashBooking || job.cashCollection?.isCashBooking) && (
+              <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-3.5 mb-3 space-y-1.5 shadow-2xs">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-black text-amber-900 uppercase tracking-wide">
+                    Total Cash to Collect From Farmer
+                  </span>
+                  <span className="text-lg font-black text-amber-900">
+                    ₹{(job.cashCollection?.totalToCollect || job.cashToCollect || ((job.workerGrossEarning || job.agreedRate || 0) + (job.cashCollection?.platformFee || Math.round((job.workerGrossEarning || job.agreedRate || 0) * 0.1)))).toLocaleString('en-IN')}
+                  </span>
+                </div>
+                <p className="text-[11px] text-amber-800 font-medium leading-relaxed">
+                  Collect this physical cash amount directly from the customer. Your work earning is ₹{(job.workerGrossEarning || job.agreedRate || 0).toLocaleString('en-IN')}; platform fee is adjusted via wallet.
+                </p>
+              </div>
+            )}
 
             <div className="space-y-3 text-sm">
               {job.paymentSummary?.extensionBreakdown?.hasExtension ? (
@@ -1231,7 +1253,21 @@ const JobDetails = () => {
 
               {/* Wallet status badge */}
               <div className="pt-1">
-                {job.walletCredited ? (
+                {(job.paymentMethod === 'cash' || job.isCashBooking || job.cashCollection?.isCashBooking) ? (
+                  <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                    <span className="text-amber-600 text-base">💵</span>
+                    <div>
+                      <p className="text-xs font-black text-amber-800">
+                        {job.status === 'completed' ? 'Cash Collected from Farmer' : 'Cash on Service Booking'}
+                      </p>
+                      <p className="text-[10px] text-amber-700 font-medium">
+                        {job.status === 'completed'
+                          ? `₹${(job.cashCollection?.totalToCollect || job.cashToCollect || (job.workerGrossEarning || 0)).toLocaleString('en-IN')} physical cash collected directly from farmer.`
+                          : `Collect ₹${(job.cashCollection?.totalToCollect || job.cashToCollect || ((job.workerGrossEarning || job.agreedRate || 0) + (job.cashCollection?.platformFee || Math.round((job.workerGrossEarning || job.agreedRate || 0) * 0.1)))).toLocaleString('en-IN')} cash in hand before submitting completion OTP.`}
+                      </p>
+                    </div>
+                  </div>
+                ) : job.walletCredited ? (
                   <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
                     <span className="text-emerald-600 text-base">&#10003;</span>
                     <div>

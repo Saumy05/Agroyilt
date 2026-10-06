@@ -169,6 +169,8 @@ const getAssignedJobs = async (req, res) => {
         bookingNumber: `ASGN-${a._id.toString().slice(-6).toUpperCase()}`,
         providerType: 'WORKER',
         workerId: a.workerId,
+        workerResponse: 'ACCEPTED',
+        workerAcceptedAt: a.createdAt,
         userId: a.farmerId,
         serviceName: parent.workTitle || parent.workCategory || 'Farm Work',
         serviceCategory: parent.workCategory || 'Worker',
@@ -257,6 +259,9 @@ const getJobById = async (req, res) => {
           assignmentId: assignDoc._id,
           parentRequestId: assignDoc.parentRequestId,
           providerType: 'WORKER',
+          workerId: assignDoc.workerId,
+          workerResponse: 'ACCEPTED',
+          workerAcceptedAt: assignDoc.createdAt,
           serviceName: parent?.workTitle || 'Farm Work',
           workTitle: parent?.workTitle || 'Farm Work',
           userId: parent?.farmerId ? {
@@ -328,6 +333,24 @@ const getJobById = async (req, res) => {
           }
         } catch (e) {}
 
+        const isCash = Boolean(assignDoc.isCashBooking) || assignDoc.paymentMethod === 'cash' || parent?.paymentMethod === 'cash';
+        if (isCash) {
+          const totalFarmerPayable = parent?.financialSnapshot?.totalPayable || (assignDoc.agreedRate ? assignDoc.agreedRate + (parent?.financialSnapshot?.platformChargeAmount || 0) : 0);
+          const workerWage = syntheticBooking.paymentSummary?.grossAmount || assignDoc.grossAmount || assignDoc.agreedRate || 0;
+          const platformFee = parent?.financialSnapshot?.platformChargeAmount || Math.max(0, totalFarmerPayable - workerWage);
+
+          syntheticBooking.cashCollection = {
+            isCashBooking: true,
+            totalToCollect: totalFarmerPayable > 0 ? totalFarmerPayable : workerWage,
+            workerWage: workerWage,
+            platformFee: platformFee,
+            commissionAmount: syntheticBooking.paymentSummary?.commissionAmount || assignDoc.commissionAmount || Math.round((workerWage * 0.1)),
+            netEarnings: syntheticBooking.paymentSummary?.netEarning || assignDoc.netEarning || (workerWage - (syntheticBooking.paymentSummary?.commissionAmount || Math.round((workerWage * 0.1)))),
+            instruction: `Collect ₹${totalFarmerPayable > 0 ? totalFarmerPayable : workerWage} cash from the farmer. Platform fee (₹${platformFee}) will be deducted from your wallet balance.`
+          };
+          syntheticBooking.cashToCollect = syntheticBooking.cashCollection.totalToCollect;
+        }
+
         return res.status(200).json({
           success: true,
           data: syntheticBooking
@@ -387,6 +410,10 @@ const getJobById = async (req, res) => {
 
         if (assignment) {
           Object.assign(jobData, assignmentLifecycleFields(assignment));
+          // ── FIX 1: Explicitly pin assignmentId so `isAssignmentJob` is always truthy ──
+          jobData.assignmentId = String(assignment._id);
+          jobData.workerResponse = 'ACCEPTED';
+          jobData.workerAcceptedAt = assignment.createdAt;
           jobData.bookingType = assignment.bookingType || booking.bookingType || 'HOURLY';
           jobData.bookedDays = assignment.bookedDays;
           jobData.workedDays = assignment.workedDays;
@@ -409,6 +436,28 @@ const getJobById = async (req, res) => {
             }
           } catch (e) {}
         }
+
+        try {
+          const WorkerBookingRequest = require('../../models/WorkerBookingRequest');
+          const pReq = pReqId ? await WorkerBookingRequest.findById(pReqId).select('financialSnapshot paymentMethod paymentStatus') : null;
+          const isCash = jobData.paymentMethod === 'cash' || Boolean(assignment?.isCashBooking) || (pReq && pReq.paymentMethod === 'cash');
+          if (isCash) {
+            const totalFarmerPayable = pReq?.financialSnapshot?.totalPayable || (booking.finalAmount ? booking.finalAmount + (pReq?.financialSnapshot?.platformChargeAmount || 0) : 0);
+            const workerWage = jobData.paymentSummary?.grossAmount || assignment?.grossAmount || booking.finalAmount || 0;
+            const platformFee = pReq?.financialSnapshot?.platformChargeAmount || Math.max(0, totalFarmerPayable - workerWage);
+
+            jobData.cashCollection = {
+              isCashBooking: true,
+              totalToCollect: totalFarmerPayable > 0 ? totalFarmerPayable : workerWage,
+              workerWage: workerWage,
+              platformFee: platformFee,
+              commissionAmount: jobData.paymentSummary?.commissionAmount || assignment?.commissionAmount || Math.round((workerWage * 0.1)),
+              netEarnings: jobData.paymentSummary?.netEarning || assignment?.netEarning || (workerWage - (jobData.paymentSummary?.commissionAmount || Math.round((workerWage * 0.1)))),
+              instruction: `Collect ₹${totalFarmerPayable > 0 ? totalFarmerPayable : workerWage} cash from the farmer. Platform fee (₹${platformFee}) will be deducted from your wallet balance.`
+            };
+            jobData.cashToCollect = jobData.cashCollection.totalToCollect;
+          }
+        } catch (cashErr) {}
 
         // STRICT ROLE ISOLATION: Worker must NEVER see Farmer total, Platform Fee, or other workers' financials
         delete jobData.farmerPaidAmount;

@@ -212,6 +212,24 @@ exports.getAssignmentDetails = async (req, res) => {
     assignmentData.paymentSummary = buildWorkerPaymentSummary(assignment);
 
     if (isAssignedWorker || isTeamLeader) {
+      const isCash = Boolean(assignment.isCashBooking) || assignment.paymentMethod === 'cash' || assignment.parentRequestId?.paymentMethod === 'cash';
+      if (isCash) {
+        const snap = assignment.parentRequestId?.financialSnapshot;
+        const totalToCollect = snap?.totalPayable || (assignment.grossAmount ? assignment.grossAmount + (snap?.platformChargeAmount || 0) : assignment.grossAmount);
+        const platformFee = snap?.platformChargeAmount || Math.max(0, totalToCollect - (assignment.grossAmount || 0));
+
+        assignmentData.cashCollection = {
+          isCashBooking: true,
+          totalToCollect,
+          workerWage: assignment.grossAmount,
+          platformFee,
+          commissionAmount: assignment.commissionAmount,
+          netEarnings: assignment.netEarning,
+          instruction: `Collect ₹${totalToCollect} cash from the farmer. Platform fee (₹${platformFee}) will be deducted from your wallet balance.`
+        };
+        assignmentData.cashToCollect = totalToCollect;
+      }
+
       // workers never see what the farmer paid in total, platform fees or other workers' offers
       if (assignmentData.parentRequestId && typeof assignmentData.parentRequestId === 'object') {
         ['financialSnapshot', 'razorpayOrderId', 'razorpayPaymentId', 'paymentOrders', 'workerOffers', 'refundAmount', 'auditLog']
@@ -494,7 +512,9 @@ exports.verifyVisitOtp = async (req, res) => {
     for (const room of [`booking_req:${verified.parentRequestId}`, `booking_req_${verified.parentRequestId}`]) {
       const p = {
         requestId: verified.parentRequestId, assignmentId: verified._id, workerId: verified.workerId,
-        ...(isDaily ? { dayNumber: dayIdx } : {}), visitOtpStatus: 'VERIFIED', workStatus: 'IN_PROGRESS', journeyStatus: 'IN_PROGRESS', serverTimestamp: new Date()
+        ...(isDaily ? { dayNumber: dayIdx } : {}), visitOtpStatus: 'VERIFIED', workStatus: 'IN_PROGRESS', journeyStatus: 'IN_PROGRESS',
+        workStartedAt: verified.workStartedAt || new Date(),
+        serverTimestamp: new Date()
       };
       emitSafe(room, 'assignment_visit_otp_verified', p);
       emitSafe(room, 'worker_otp_verified', p);
