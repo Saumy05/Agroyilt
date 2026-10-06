@@ -975,13 +975,15 @@ exports.createFarmerRequest = async (req, res) => {
       const effMaxRate = maxRate ? Number(maxRate) : effMinRate;
 
       let calcDurationMinutes = 60;
-      if (startTime && endTime) {
+      if (req.body.durationMinutes && Number(req.body.durationMinutes) > 0) {
+        calcDurationMinutes = Math.max(60, Math.round(Number(req.body.durationMinutes) / 60) * 60);
+      } else if (startTime && endTime) {
         const [sH, sM] = startTime.split(':').map(Number);
         const [eH, eM] = endTime.split(':').map(Number);
         if (!isNaN(sH) && !isNaN(eH)) {
           let diffMinutes = (eH * 60 + (eM || 0)) - (sH * 60 + (sM || 0));
           if (diffMinutes < 0) diffMinutes += 24 * 60;
-          if (diffMinutes > 0) calcDurationMinutes = diffMinutes;
+          if (diffMinutes > 0) calcDurationMinutes = Math.max(60, Math.round(diffMinutes / 60) * 60);
         }
       }
 
@@ -3164,14 +3166,14 @@ exports.farmerSelectWorkers = async (req, res) => {
       baseRate = Number(request.maxRate || request.minRate || 0);
       let durationHours = 1;
       if (request.durationMinutes && Number(request.durationMinutes) > 0) {
-        durationHours = Number(request.durationMinutes) / 60;
+        durationHours = Math.max(1, Math.round(Number(request.durationMinutes) / 60));
       } else if (request.startTime && request.endTime) {
         const [sH, sM] = request.startTime.split(':').map(Number);
         const [eH, eM] = request.endTime.split(':').map(Number);
         if (!isNaN(sH) && !isNaN(eH)) {
           let diffMinutes = (eH * 60 + (eM || 0)) - (sH * 60 + (sM || 0));
           if (diffMinutes < 0) diffMinutes += 24 * 60;
-          if (diffMinutes > 0) durationHours = diffMinutes / 60;
+          if (diffMinutes > 0) durationHours = Math.max(1, Math.round(diffMinutes / 60));
         }
       }
       maxWorkerPaise = Math.round(rupeesToPaise(baseRate) * selectedWorkerIds.length * durationHours);

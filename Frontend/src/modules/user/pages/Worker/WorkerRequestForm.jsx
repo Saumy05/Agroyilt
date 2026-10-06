@@ -200,7 +200,27 @@ const formatFriendlyDay = (isoDateStr) => {
   });
 };
 
-const getShiftSummary = (startTime, endTime, hourlyRate, workersCount) => {
+const calculateEndTime = (startTimeStr, hours) => {
+  if (!startTimeStr) return '';
+  const [sh, sm] = startTimeStr.split(':').map(Number);
+  if (isNaN(sh)) return '';
+  const totalMins = sh * 60 + (sm || 0) + (Number(hours) || 1) * 60;
+  const wrapped = totalMins % (24 * 60);
+  const eh = Math.floor(wrapped / 60);
+  const em = wrapped % 60;
+  return `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
+};
+
+const formatTime12H = (hhmm) => {
+  if (!hhmm) return '';
+  const [h, m] = hhmm.split(':').map(Number);
+  if (isNaN(h)) return hhmm;
+  const period = h >= 12 ? 'PM' : 'AM';
+  const displayH = h % 12 || 12;
+  return `${displayH}:${String(m || 0).padStart(2, '0')} ${period}`;
+};
+
+const getShiftSummary = (startTime, endTime, hourlyRate, workersCount, durationHours) => {
   if (!startTime || !endTime) return null;
   const [sh, sm] = startTime.split(':').map(Number);
   const [eh, em] = endTime.split(':').map(Number);
@@ -220,23 +240,21 @@ const getShiftSummary = (startTime, endTime, hourlyRate, workersCount) => {
     isOvernight = true;
   }
 
-  const hours = Math.floor(diff / 60);
-  const mins = diff % 60;
-  const durationText = mins > 0 ? `${hours} hr ${mins} mins` : `${hours} hr${hours > 1 ? 's' : ''}`;
-  const totalHours = diff / 60;
+  const hours = Number(durationHours) || Math.max(1, Math.round(diff / 60));
+  const durationText = `${hours} hr${hours > 1 ? 's' : ''}`;
   const rate = Number(hourlyRate) || 0;
   const workers = parseInt(workersCount, 10) || 1;
-  const estimatedCost = rate > 0 ? Math.round(totalHours * rate * workers) : null;
+  const estimatedCost = rate > 0 ? Math.round(hours * rate * workers) : null;
 
   return {
     diff,
     hours,
-    mins,
     durationText,
     isOvernight,
     estimatedCost
   };
 };
+
 
 const WorkerRequestForm = () => {
   const navigate = useNavigate();
@@ -264,8 +282,9 @@ const WorkerRequestForm = () => {
     requiredWorkers: '1',
     // HOURLY fields
     scheduledDate:   '',
-    startTime:       '',
-    endTime:         '',
+    startTime:       '09:00',
+    durationHours:   '1',
+    endTime:         '10:00',
     // DAILY fields
     startDate:       '',
     numberOfDays:    '1',
@@ -305,7 +324,8 @@ const WorkerRequestForm = () => {
     formData.startTime,
     formData.endTime,
     formData.minRate,
-    formData.requiredWorkers
+    formData.requiredWorkers,
+    formData.durationHours
   );
 
   const selectCategory = (category) => {
@@ -369,6 +389,30 @@ const WorkerRequestForm = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
   };
+
+  const handleStartTimeChange = (e) => {
+    const val = e.target.value;
+    const computedEnd = calculateEndTime(val, formData.durationHours || 1);
+    setFormData(prev => ({
+      ...prev,
+      startTime: val,
+      endTime: computedEnd
+    }));
+    if (errors.startTime) setErrors(prev => ({ ...prev, startTime: '' }));
+    if (errors.endTime) setErrors(prev => ({ ...prev, endTime: '' }));
+  };
+
+  const handleDurationSelect = (hours) => {
+    const hrsStr = String(hours);
+    const computedEnd = calculateEndTime(formData.startTime, hours);
+    setFormData(prev => ({
+      ...prev,
+      durationHours: hrsStr,
+      endTime: computedEnd
+    }));
+    if (errors.endTime) setErrors(prev => ({ ...prev, endTime: '' }));
+  };
+
 
   const handleTitleChange = (e) => {
     setHasUserEditedTitle(true);
@@ -494,6 +538,8 @@ const WorkerRequestForm = () => {
         payload.scheduledDate = formData.scheduledDate;
         payload.startTime     = formData.startTime;
         payload.endTime       = formData.endTime;
+        payload.durationMinutes = (Number(formData.durationHours) || 1) * 60;
+        payload.durationHours = Number(formData.durationHours) || 1;
         payload.minRate       = minR;
         payload.maxRate       = maxR;
       }
@@ -913,7 +959,7 @@ const WorkerRequestForm = () => {
                     <FieldError name="scheduledDate" />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2.5">
+                  <div className="space-y-3">
                     <div>
                       <label className="text-[11px] font-bold text-slate-600 mb-1 block">Start Time *</label>
                       <div className="relative">
@@ -923,27 +969,50 @@ const WorkerRequestForm = () => {
                           name="startTime"
                           id="hourly-start-time"
                           value={formData.startTime}
-                          onChange={handleChange}
+                          onChange={handleStartTimeChange}
+                          step="900"
                           className={`w-full bg-slate-50/80 border rounded-xl pl-9 pr-2.5 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white ${errors.startTime ? 'border-red-300' : 'border-slate-200'}`}
                         />
                       </div>
                       <FieldError name="startTime" />
                     </div>
+
                     <div>
-                      <label className="text-[11px] font-bold text-slate-600 mb-1 block">End Time *</label>
-                      <div className="relative">
-                        <FiClock className="absolute left-3 top-2.5 text-slate-400" size={14} />
-                        <input
-                          type="time"
-                          name="endTime"
-                          id="hourly-end-time"
-                          value={formData.endTime}
-                          onChange={handleChange}
-                          className={`w-full bg-slate-50/80 border rounded-xl pl-9 pr-2.5 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white ${errors.endTime ? 'border-red-300' : 'border-slate-200'}`}
-                        />
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-[11px] font-bold text-slate-600">
+                          Shift Duration (Hours) *
+                        </label>
+                        <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.5 rounded-md">
+                          Hourly Rate: ₹{formData.minRate || 0}/hr
+                        </span>
                       </div>
-                      <FieldError name="endTime" />
+                      <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5">
+                        {[1, 2, 3, 4, 5, 6, 8].map(h => (
+                          <button
+                            key={h}
+                            type="button"
+                            onClick={() => handleDurationSelect(h)}
+                            className={`py-2 px-1 rounded-xl text-xs font-bold border transition-all ${
+                              String(formData.durationHours) === String(h)
+                                ? 'border-emerald-600 bg-emerald-50 text-emerald-800 font-black shadow-xs'
+                                : 'border-slate-200 bg-slate-50/80 text-slate-600 hover:border-slate-300'
+                            }`}
+                          >
+                            {h} {h === 1 ? 'Hr' : 'Hrs'}
+                          </button>
+                        ))}
+                      </div>
                     </div>
+
+                    {/* Auto-calculated Scheduled Window */}
+                    {formData.startTime && formData.endTime && (
+                      <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50/70 flex items-center justify-between text-xs">
+                        <span className="text-slate-500 font-medium">Scheduled Window:</span>
+                        <span className="font-bold text-slate-800">
+                          {formatTime12H(formData.startTime)} – {formatTime12H(formData.endTime)} ({formData.durationHours} hr{Number(formData.durationHours) > 1 ? 's' : ''})
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Live Shift Summary Badge */}

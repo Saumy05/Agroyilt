@@ -82,7 +82,7 @@ exports.buildFarmerPaymentSummary = (request, assignments = [], booking = null, 
   if (!isDaily) {
     if (request?.durationMinutes && Number(request.durationMinutes) > 0) {
       diffMinutes = Number(request.durationMinutes);
-      durationHours = diffMinutes / 60;
+      durationHours = Math.max(1, Math.round(diffMinutes / 60));
     } else if (request?.startTime && request?.endTime) {
       const [sH, sM] = request.startTime.split(':').map(Number);
       const [eH, eM] = request.endTime.split(':').map(Number);
@@ -91,7 +91,7 @@ exports.buildFarmerPaymentSummary = (request, assignments = [], booking = null, 
         if (dm < 0) dm += 24 * 60;
         if (dm > 0) {
           diffMinutes = dm;
-          durationHours = dm / 60;
+          durationHours = Math.max(1, Math.round(dm / 60));
         }
       }
     }
@@ -102,14 +102,14 @@ exports.buildFarmerPaymentSummary = (request, assignments = [], booking = null, 
     ? Math.round(maxRatePerWorker * selectedWorkerCount * days)
     : Math.round(maxRatePerWorker * selectedWorkerCount * durationHours);
 
-  const workerReserveAmount = Number(snap.maximumWorkerAmount || defaultReserve);
-  const platformChargeRate = Number(snap.platformChargeRate ?? 1);
+  const workerReserveAmount = Math.round(Number(snap.maximumWorkerAmount || defaultReserve));
+  const platformChargeRate = Number(snap.platformChargeRate ?? 10);
   const platformFeeAmount = Number(
     snap.platformChargeAmount !== undefined && snap.platformChargeAmount !== null && snap.platformChargeAmount > 0
       ? snap.platformChargeAmount
-      : Math.round(((workerReserveAmount * platformChargeRate) / 100) * 100) / 100
+      : Math.round((workerReserveAmount * platformChargeRate) / 100)
   );
-  const totalPaidAmount = Number(snap.totalPayable || (workerReserveAmount + platformFeeAmount) || booking?.farmerPaidAmount || booking?.totalAmount || 0);
+  const totalPaidAmount = Math.round(Number(snap.totalPayable || (workerReserveAmount + platformFeeAmount) || booking?.farmerPaidAmount || booking?.totalAmount || 0));
 
   const validAssignments = (assignments && assignments.length > 0)
     ? assignments.filter(a => a && a.assignmentStatus !== 'CANCELLED')

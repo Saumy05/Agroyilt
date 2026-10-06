@@ -15,7 +15,7 @@ const ExtensionModal = ({ isOpen, onClose, requestId, bookingType = 'HOURLY', wo
   const isDaily = bookingType === 'DAILY';
 
   // Duration selection
-  const [extensionMinutes, setExtensionMinutes] = useState(30);
+  const [extensionMinutes, setExtensionMinutes] = useState(60);
   const [additionalDays, setAdditionalDays] = useState(1);
   const [selectedWorkerIds, setSelectedWorkerIds] = useState(
     workers.filter(w => !w.isDecreased && w.journeyStatus !== 'CANCELLED' && w.journeyStatus !== 'COMPLETED').map(w => w.workerId)
@@ -60,8 +60,8 @@ const ExtensionModal = ({ isOpen, onClose, requestId, bookingType = 'HOURLY', wo
       return;
     }
 
-    if (!isDaily && (!extensionMinutes || Number(extensionMinutes) < 5)) {
-      toast.error('Please select at least 5 minutes');
+    if (!isDaily && (!extensionMinutes || Number(extensionMinutes) < 60)) {
+      toast.error('Please select at least 1 hour (60 minutes)');
       return;
     }
 
@@ -110,7 +110,7 @@ const ExtensionModal = ({ isOpen, onClose, requestId, bookingType = 'HOURLY', wo
               {isDaily ? 'Extend Working Days' : 'Extend Work Time'}
             </h3>
             <p className="text-xs text-slate-500">
-              {isDaily ? 'Request additional working days' : 'Add extra minutes to current shift'}
+              {isDaily ? 'Request additional working days' : 'Add extra hours to current shift'}
             </p>
           </div>
         </div>
@@ -150,20 +150,23 @@ const ExtensionModal = ({ isOpen, onClose, requestId, bookingType = 'HOURLY', wo
             </div>
           ) : (
             <div className="grid grid-cols-4 gap-2">
-              {[15, 30, 45, 60].map(m => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setExtensionMinutes(m)}
-                  className={`py-3 rounded-2xl text-xs font-bold border transition-all ${
-                    extensionMinutes === m
-                      ? 'border-emerald-600 bg-emerald-50 text-emerald-800 font-black shadow-sm'
-                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                  }`}
-                >
-                  +{m} mins
-                </button>
-              ))}
+              {[60, 120, 180, 240].map(m => {
+                const hrs = m / 60;
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setExtensionMinutes(m)}
+                    className={`py-3 rounded-2xl text-xs font-bold border transition-all ${
+                      extensionMinutes === m
+                        ? 'border-emerald-600 bg-emerald-50 text-emerald-800 font-black shadow-sm'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                    }`}
+                  >
+                    +{hrs} {hrs === 1 ? 'Hour' : 'Hours'}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
