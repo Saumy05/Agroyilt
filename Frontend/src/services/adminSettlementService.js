@@ -5,6 +5,15 @@ import api from './api';
  * Manages vendor settlements from admin perspective
  */
 const adminSettlementService = {
+  // ── Worker dues (independent workers owing the platform) ──
+  getWorkerDues: async () => (await api.get('/admin/settlements/worker-dues')).data,
+  approveWorkerDuesPayment: async (paymentId, adminNote) =>
+    (await api.post(`/admin/settlements/worker-dues/${paymentId}/approve`, { adminNote })).data,
+  rejectWorkerDuesPayment: async (paymentId, reason) =>
+    (await api.post(`/admin/settlements/worker-dues/${paymentId}/reject`, { reason })).data,
+  recordWorkerDuesPayment: async (workerId, payload) =>
+    (await api.post(`/admin/settlements/worker-dues/workers/${workerId}/record`, payload)).data,
+
   /**
    * Get settlement dashboard summary
    */

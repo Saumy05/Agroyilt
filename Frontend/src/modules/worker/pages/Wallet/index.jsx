@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { FiDollarSign, FiArrowUp, FiArrowDown, FiClock, FiBell, FiX, FiImage, FiFileText, FiCreditCard, FiCalendar, FiInfo } from 'react-icons/fi';
 import { AnimatePresence, motion } from 'framer-motion';
 import { workerTheme as themeColors } from '../../../../theme';
@@ -9,12 +10,39 @@ import { toastManager } from '../../../../utils/toastManager';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import WithdrawalModal from '../../../../components/common/WithdrawalModal';
 import WithdrawalHistoryList from '../../../../components/common/WithdrawalHistoryList';
+import { useSocket } from '../../../../context/SocketContext';
+import PayDuesSheet from '../../components/common/PayDuesSheet';
+
+// Passbook entry types that take money OUT of the worker's wallet (everything else adds, except cash in hand)
+const DEBIT_TYPES = ['commission_deduction', 'commission', 'platform_fee', 'penalty', 'withdrawal', 'debit', 'tds_deduction', 'referral_reversal'];
+// Entries that don't move wallet money (cash in hand, dues paid online / to the admin)
+const NEUTRAL_TYPES = ['cash_collected', 'payment'];
+const TYPE_LABELS = {
+  earnings_credit: 'Earnings',
+  worker_payment: 'Payment Received',
+  refund: 'Refund',
+  referral_reward: 'Referral Reward',
+  credit: 'Credit',
+  settlement: 'Settlement',
+  cash_collected: 'Cash Received',
+  commission_deduction: 'App Commission',
+  commission: 'App Commission',
+  platform_fee: 'Platform Fee',
+  penalty: 'Penalty',
+  withdrawal: 'Withdrawal',
+  debit: 'Deduction',
+  payment: 'Dues Paid',
+  tds_deduction: 'TDS',
+  referral_reversal: 'Referral Reversed'
+};
 
 const Wallet = () => {
   const [loading, setLoading] = useState(true);
   const [payoutLoading, setPayoutLoading] = useState(false);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  const [showPayDues, setShowPayDues] = useState(false);
+  const [duesPayments, setDuesPayments] = useState([]);
   const [wallet, setWallet] = useState({
     balance: 0,
     pendingPayout: 0
@@ -42,17 +70,39 @@ const Wallet = () => {
     };
   }, []);
 
+  const socket = useSocket();
+  const navigate = useNavigate();
+
   useEffect(() => {
     loadWalletData();
   }, []);
 
-  const loadWalletData = async () => {
+  // Keep the wallet live: refresh when a job settles / a penalty applies, and whenever the screen comes back
+  useEffect(() => {
+    const refresh = () => loadWalletData({ silent: true });
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', refresh);
+    if (socket) socket.on('wallet_balance_updated', refresh);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', refresh);
+      if (socket) socket.off('wallet_balance_updated', refresh);
+    };
+  }, [socket]);
+
+  const loadWalletData = async ({ silent = false } = {}) => {
     try {
-      setLoading(true);
-      const [walletRes, txnRes] = await Promise.all([
+      if (!silent) setLoading(true);
+      const [walletRes, txnRes, duesRes] = await Promise.all([
         workerWalletService.getWallet(),
-        workerWalletService.getTransactions({ limit: 50 })
+        workerWalletService.getTransactions({ limit: 50 }),
+        workerWalletService.getDuesPayments().catch(() => null)
       ]);
+
+      if (duesRes?.success) {
+        setDuesPayments(duesRes.data || []);
+      }
 
       if (walletRes.success) {
         setWallet(walletRes.data);
@@ -63,7 +113,7 @@ const Wallet = () => {
       }
     } catch (error) {
       console.error('Error loading wallet:', error);
-      toastManager.error('Failed to load wallet data');
+      if (!silent) toastManager.error('Failed to load wallet data');
     } finally {
       setLoading(false);
     }
@@ -82,31 +132,55 @@ const Wallet = () => {
     }
   };
 
-  const filteredTransactions = transactions.filter(txn => {
+  // What an entry does to the wallet. Cash received is money in hand, not wallet money.
+  const effectOf = (type) => {
+    if (NEUTRAL_TYPES.includes(type)) return 'cash';
+    if (DEBIT_TYPES.includes(type)) return 'debit';
+    return 'credit';
+  };
+  const matchesFilter = (txn) => {
     if (filter === 'all') return true;
-    return txn.type === filter;
-  });
-
-  const getTransactionIcon = (type) => {
-    switch (type) {
-      case 'worker_payment':
-        return <FiArrowDown className="w-5 h-5 text-green-500" />;
-      case 'cash_collected':
-        return <FiArrowUp className="w-5 h-5 text-red-500" />;
-      default:
-        return <FiDollarSign className="w-5 h-5 text-gray-500" />;
-    }
+    const effect = effectOf(txn.type);
+    return filter === 'deductions' ? effect === 'debit' : effect !== 'debit';
   };
 
-  const getTransactionLabel = (type) => {
-    switch (type) {
-      case 'worker_payment':
-        return 'Payment Received';
-      case 'cash_collected':
-        return 'Cash Collected';
-      default:
-        return type.replace('_', ' ');
+  // One card per job (entries share metadata.assignmentId); everything else stays a single row
+  const historyItems = [];
+  const jobCards = new Map();
+  for (const txn of transactions.filter(matchesFilter)) {
+    const jobId = txn.metadata?.assignmentId;
+    if (!jobId) { historyItems.push({ kind: 'single', txn }); continue; }
+    if (!jobCards.has(jobId)) {
+      const card = { kind: 'job', id: jobId, title: txn.metadata?.workTitle || 'Job', date: txn.createdAt, entries: [] };
+      jobCards.set(jobId, card);
+      historyItems.push(card);
     }
+    jobCards.get(jobId).entries.push(txn);
+  }
+  const ENTRY_ORDER = ['cash_collected', 'earnings_credit', 'platform_fee', 'commission_deduction'];
+  const sortEntries = (entries) => [...entries].sort((x, y) => ENTRY_ORDER.indexOf(x.type) - ENTRY_ORDER.indexOf(y.type));
+  const amountText = (txn) => {
+    const effect = effectOf(txn.type);
+    const value = `₹${Math.abs(Number(txn.amount) || 0).toLocaleString('en-IN')}`;
+    if (effect === 'cash') return value;
+    return `${effect === 'debit' ? '−' : '+'}${value}`;
+  };
+  const amountColor = (txn) => {
+    const effect = effectOf(txn.type);
+    if (effect === 'cash') return 'text-gray-800';
+    return effect === 'debit' ? 'text-red-600' : 'text-green-600';
+  };
+
+  const getTransactionIcon = (type) => {
+    const effect = effectOf(type);
+    if (effect === 'debit') return <FiArrowUp className="w-5 h-5 text-red-500" />;
+    if (effect === 'cash') return <FiDollarSign className="w-5 h-5 text-gray-600" />;
+    return <FiArrowDown className="w-5 h-5 text-green-500" />;
+  };
+
+  const getTransactionLabel = (type, txn) => {
+    if (txn?.metadata?.type === 'dues_recovery') return 'Dues Paid from Balance';
+    return TYPE_LABELS[type] || String(type || '').replace(/_/g, ' ');
   };
 
   const formatDate = (dateStr) => {
@@ -160,7 +234,7 @@ const Wallet = () => {
 
   return (
     <div className="min-h-screen pb-24" style={{ background: themeColors.backgroundGradient }}>
-      <Header title="My Wallet" onBack={() => navigate('/worker/dashboard')} />
+      <Header title="My Wallet" onBack={() => navigate('/worker/dashboard', { replace: true })} />
 
       <main className="px-4 py-6">
         {/* Balance Card */}
@@ -172,6 +246,24 @@ const Wallet = () => {
                 <p className="text-3xl font-bold mb-1">
                   ₹{Number(wallet?.balance ?? wallet?.wallet?.balance ?? 0).toLocaleString('en-IN')}
                 </p>
+                {Number(wallet?.outstandingDues || 0) > 0 && (
+                  <div className="mt-2 mb-1 bg-red-500/25 border border-red-200/40 rounded-xl px-3 py-2">
+                    <p className="text-sm font-bold text-white">You owe the app ₹{Number(wallet.outstandingDues).toLocaleString('en-IN')}</p>
+                    <p className="text-[11px] text-red-50">
+                      Platform fees, commission or penalties your balance could not cover.
+                      {wallet?.maxDuesAllowed ? ` Above ₹${Number(wallet.maxDuesAllowed).toLocaleString('en-IN')} you cannot take new jobs.` : ''}
+                    </p>
+                    {wallet?.isRestricted && (
+                      <p className="text-[11px] font-bold text-white mt-1">Your account is restricted: {wallet.restrictionReason || 'dues limit crossed'}</p>
+                    )}
+                    <button
+                      onClick={() => setShowPayDues(true)}
+                      className="mt-2 w-full bg-white text-red-700 font-black py-2 rounded-lg text-sm active:scale-[0.98] transition-all"
+                    >
+                      Pay ₹{Number(wallet.outstandingDues).toLocaleString('en-IN')} Dues
+                    </button>
+                  </div>
+                )}
                 {Number(wallet?.reservedWithdrawal || wallet?.wallet?.reservedWithdrawal || 0) > 0 && (
                   <p className="text-xs text-teal-200 mb-2">
                     ₹{Number(wallet?.reservedWithdrawal || wallet?.wallet?.reservedWithdrawal || 0).toLocaleString('en-IN')} reserved in pending withdrawal
@@ -198,6 +290,18 @@ const Wallet = () => {
             </div>
           </div>
         </div>
+
+        {/* Dues payments waiting for / refused by the admin */}
+        {duesPayments.filter(p => p.status === 'PENDING_REVIEW' || p.status === 'REJECTED').slice(0, 3).map(p => (
+          <div key={p._id} className={`mb-3 rounded-xl px-4 py-3 border text-sm ${p.status === 'REJECTED' ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}>
+            <p className={`font-bold ${p.status === 'REJECTED' ? 'text-red-800' : 'text-amber-900'}`}>
+              {p.status === 'REJECTED' ? 'Dues payment not accepted' : 'Waiting for admin to confirm'} · ₹{Number(p.amount).toLocaleString('en-IN')} ({p.offlineMode === 'upi' ? 'UPI' : 'cash'})
+            </p>
+            <p className="text-xs text-gray-600">
+              {p.status === 'REJECTED' ? `Reason: ${p.adminNote || 'not given'}` : `Sent on ${formatDate(p.createdAt)}. Your dues update once the admin confirms.`}
+            </p>
+          </div>
+        ))}
 
         {/* Pending Payouts List */}
         {wallet.pendingBookings?.length > 0 && (
@@ -243,8 +347,8 @@ const Wallet = () => {
         <div className="flex gap-2 mb-4 overflow-x-auto pb-2 scrollbar-hide">
           {[
             { id: 'all', label: 'All' },
-            { id: 'worker_payment', label: 'Payments' },
-            { id: 'cash_collected', label: 'Cash Collected' },
+            { id: 'earnings', label: 'Earnings' },
+            { id: 'deductions', label: 'Deductions' },
           ].map((filterOption) => (
             <button
               key={filterOption.id}
@@ -272,7 +376,7 @@ const Wallet = () => {
         {/* Transactions/Ledger */}
         <div>
           <h3 className="font-bold text-gray-800 mb-4">Transaction History</h3>
-          {filteredTransactions.length === 0 ? (
+          {historyItems.length === 0 ? (
             <div className="bg-white rounded-xl p-8 text-center shadow-md">
               <FiDollarSign className="w-16 h-16 mx-auto mb-4 text-gray-300" />
               <p className="text-gray-600 font-semibold mb-2">No transactions yet</p>
@@ -280,53 +384,81 @@ const Wallet = () => {
             </div>
           ) : (
             <div className="space-y-3">
-              {filteredTransactions.map((txn) => (
-                <div
-                  key={txn._id}
-                  onClick={() => handleTransactionClick(txn)}
-                  className={`bg-white rounded-xl p-4 shadow-md border-l-4 ${txn.type === 'worker_payment' ? 'cursor-pointer hover:shadow-lg active:scale-[0.98] transition-all' : ''}`}
-                  style={{
-                    borderLeftColor: txn.type === 'cash_collected' ? '#DC2626' : '#10B981'
-                  }}
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
-                      style={{
-                        background: txn.type === 'cash_collected' ? '#FEE2E2' : '#D1FAE5'
-                      }}
-                    >
-                      {getTransactionIcon(txn.type)}
+              {historyItems.map((item) => {
+                if (item.kind === 'job') {
+                  const entries = sortEntries(item.entries);
+                  const cash = entries.find(e => e.type === 'cash_collected');
+                  const deducted = entries.filter(e => effectOf(e.type) === 'debit').reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+                  const credited = entries.filter(e => effectOf(e.type) === 'credit').reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+                  return (
+                    <div key={item.id} className="bg-white rounded-xl p-4 shadow-md border-l-4 border-l-teal-500">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="font-bold text-gray-900 text-sm truncate">{item.title}</p>
+                        <span className="text-xs text-gray-400 shrink-0 ml-2">{formatDate(item.date)}</span>
+                      </div>
+                      <div className="space-y-1.5 text-sm">
+                        {entries.map(e => (
+                          <div key={e._id} className="flex justify-between gap-3">
+                            <span className="text-gray-600">
+                              {getTransactionLabel(e.type, e)}
+                              {e.type === 'cash_collected' && <span className="text-[11px] text-gray-400"> (in hand)</span>}
+                            </span>
+                            <span className={`font-bold ${amountColor(e)}`}>{amountText(e)}</span>
+                          </div>
+                        ))}
+                      </div>
+                      {filter === 'all' && (cash || credited > 0) && (
+                        <div className="flex justify-between pt-2 mt-2 border-t border-dashed border-gray-200 text-sm">
+                          <span className="font-bold text-gray-800">{cash ? 'You kept' : 'Added to wallet'}</span>
+                          <span className="font-black text-teal-700">
+                            ₹{((cash ? Number(cash.amount) || 0 : credited) - (cash ? deducted : 0)).toLocaleString('en-IN')}
+                          </span>
+                        </div>
+                      )}
                     </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <p className="font-bold text-gray-900 text-sm">
-                          {getTransactionLabel(txn.type)}
-                        </p>
-                        <p className={`text-lg font-bold ${txn.type === 'cash_collected' ? 'text-red-600' : 'text-green-600'
-                          }`}>
-                          {txn.type === 'cash_collected' ? 'Collected' : '+'} ₹{Math.abs(txn.amount).toLocaleString()}
-                        </p>
+                  );
+                }
+                const txn = item.txn;
+                const effect = effectOf(txn.type);
+                return (
+                  <div
+                    key={txn._id}
+                    onClick={() => handleTransactionClick(txn)}
+                    className={`bg-white rounded-xl p-4 shadow-md border-l-4 ${txn.type === 'worker_payment' ? 'cursor-pointer hover:shadow-lg active:scale-[0.98] transition-all' : ''}`}
+                    style={{ borderLeftColor: effect === 'debit' ? '#DC2626' : effect === 'cash' ? '#6B7280' : '#10B981' }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
+                        style={{ background: effect === 'debit' ? '#FEE2E2' : effect === 'cash' ? '#F3F4F6' : '#D1FAE5' }}
+                      >
+                        {getTransactionIcon(txn.type)}
                       </div>
 
-                      <p className="text-xs text-gray-600 truncate mb-1">{txn.description}</p>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="font-bold text-gray-900 text-sm">{getTransactionLabel(txn.type, txn)}</p>
+                          <p className={`text-lg font-bold ${amountColor(txn)}`}>{amountText(txn)}</p>
+                        </div>
 
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-400">{formatDate(txn.createdAt)}</span>
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${txn.status === 'completed' ? 'bg-green-100 text-green-700' :
-                          txn.status === 'pending' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'
-                          }`}>
-                          {txn.status}
-                        </span>
-                        {txn.type === 'worker_payment' && (
-                          <span className="text-xs text-teal-600 font-medium">Tap for details →</span>
-                        )}
+                        <p className="text-xs text-gray-600 line-clamp-2 mb-1">{txn.description}</p>
+
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-400">{formatDate(txn.createdAt)}</span>
+                          {txn.status !== 'completed' && (
+                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${txn.status === 'pending' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>
+                              {txn.status}
+                            </span>
+                          )}
+                          {txn.type === 'worker_payment' && (
+                            <span className="text-xs text-teal-600 font-medium">Tap for details →</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -514,6 +646,14 @@ const Wallet = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <PayDuesSheet
+        isOpen={showPayDues}
+        onClose={() => setShowPayDues(false)}
+        dues={Number(wallet?.outstandingDues || 0)}
+        hasPendingOffline={duesPayments.some(p => p.status === 'PENDING_REVIEW')}
+        onDone={() => loadWalletData({ silent: true })}
+      />
 
       {/* Universal Withdrawal Modal */}
       <WithdrawalModal

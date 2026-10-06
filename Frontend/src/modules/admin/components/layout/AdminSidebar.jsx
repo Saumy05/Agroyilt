@@ -117,6 +117,7 @@ const getChildRoute = (parentRoute, childName) => {
       "Pending": "/admin/settlements/pending",
       "Owners with Due": "/admin/settlements/vendors",
       "History": "/admin/settlements/history",
+      "Worker Dues": "/admin/settlements/worker-dues",
     },
     "/admin/products": {
       "Equipment Approval": "/admin/products",

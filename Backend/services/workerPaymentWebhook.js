@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Gateway-webhook entry for payments belonging to independent-worker bookings and their extensions.
+ * Gateway-webhook entry for payments belonging to independent-worker bookings, their extensions and worker dues.
  * Matches by order id (WorkerBookingRequest.paymentOrders / IndWorkerExtension.razorpayOrderId) and runs the
  * SAME idempotent confirmation as the client's verify call, so a payment captured while the app was closed
  * is never lost and a duplicate delivery is harmless.
@@ -38,6 +38,17 @@ const handleCapturedPayment = async ({ orderId, paymentId, amountPaise }) => {
       catch (e) { console.warn('[workerPaymentWebhook] announce failed:', e.message); }
     }
     return { handled: true, retry: result.code === 500, note: result.ok ? undefined : result.reason };
+  }
+
+  // a worker paying their dues online (the order amount was fixed by the server when it was created)
+  const WorkerDuesPayment = require('../models/WorkerDuesPayment');
+  const dues = await WorkerDuesPayment.findOne({ razorpayOrderId: orderId, method: 'online' }).select('_id amount status razorpayPaymentId');
+  if (dues) {
+    if (amountPaise && amountPaise !== Math.round(Number(dues.amount) * 100)) {
+      return { handled: true, note: `Dues payment amount mismatch (${amountPaise} paise for order ${orderId})` };
+    }
+    const r = await require('./workerDuesService').applyDuesPayment(dues._id, { fromStatus: 'CREATED', set: { razorpayPaymentId: paymentId } });
+    return { handled: true, note: r.applied ? undefined : `Dues payment already ${r.payment?.status}` };
   }
   return { handled: false };
 };

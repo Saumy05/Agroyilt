@@ -85,17 +85,18 @@ const LIFECYCLE_STEPS = [
   { key: 'visited', label: 'Start OTP' },
   { key: 'in_progress', label: 'Working' },
   { key: 'work_done', label: 'End OTP' },
-  { key: 'completed', label: 'Done' }
+  { key: 'completed', label: 'Paid' }
 ];
 
 // Step-by-step progress for farmer-worker (assignment-backed) jobs
-const LifecycleStepper = ({ status }) => {
+const LifecycleStepper = ({ status, cash = null }) => {
   const current = LIFECYCLE_STEPS.findIndex(s => s.key === status);
   if (current === -1) return null;
+  const steps = cash ? LIFECYCLE_STEPS.map(s => (s.key === 'completed' ? { ...s, label: 'Cash Paid' } : s)) : LIFECYCLE_STEPS;
   return (
     <div className="bg-white rounded-2xl p-4 mb-4 shadow-sm border border-gray-100">
       <div className="flex items-start justify-between">
-        {LIFECYCLE_STEPS.map((step, i) => {
+        {steps.map((step, i) => {
           const done = i < current || status === 'completed';
           const active = i === current && status !== 'completed';
           return (
@@ -113,6 +114,13 @@ const LifecycleStepper = ({ status }) => {
           );
         })}
       </div>
+      {status === 'completed' && (
+        <p className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-600 text-center">
+          {cash
+            ? `₹${Number(cash.totalToCollect || 0).toLocaleString('en-IN')} cash received · ₹${Number(cash.walletDeduction || 0).toLocaleString('en-IN')} platform fee + commission taken from your wallet`
+            : 'Your earnings were added to your wallet'}
+        </p>
+      )}
     </div>
   );
 };
@@ -776,6 +784,8 @@ const JobDetails = () => {
       <main className="px-4 py-6">
         {/* View Timeline Button & Top Action Banner */}
         <div className="mb-6">
+          {/* The timeline page is the vendor-team flow (vendor approval / vendor payment); farmer jobs use the stepper */}
+          {!isAssignmentJob && (
           <button
             onClick={() => flutterBridge.navigateTo(`/worker/job/${id}/timeline`, navigate)}
             className="w-full bg-white border border-gray-200 py-3.5 rounded-2xl font-bold text-gray-700 flex items-center justify-center gap-2 shadow-sm active:scale-95 transition-all text-base mb-4"
@@ -783,6 +793,7 @@ const JobDetails = () => {
             <FiClock className="w-5 h-5 text-gray-500" />
             View Job Timeline
           </button>
+          )}
 
           {/* Extension Response Card (if requested by farmer) */}
           {job?.activeExtension && ['WORKER_EVALUATION', 'REQUESTED'].includes(job.activeExtension.status) && (
@@ -836,7 +847,7 @@ const JobDetails = () => {
             )
           )}
 
-          {isAssignmentJob && <LifecycleStepper status={statusLower} />}
+          {isAssignmentJob && <LifecycleStepper status={statusLower} cash={job?.cashCollection?.isCashBooking ? job.cashCollection : null} />}
 
           {renderActionButtons(false)}
         </div>

@@ -59,6 +59,13 @@ router.post(
 );
 
 // Withdrawals
+// Worker dues (what independent workers owe the platform)
+const workerDues = require('../../controllers/adminControllers/adminWorkerDuesController');
+router.get('/worker-dues', authenticate, isAdmin, workerDues.getWorkerDues);
+router.post('/worker-dues/:paymentId/approve', authenticate, isAdmin, workerDues.approveWorkerDuesPayment);
+router.post('/worker-dues/:paymentId/reject', authenticate, isAdmin, workerDues.rejectWorkerDuesPayment);
+router.post('/worker-dues/workers/:workerId/record', authenticate, isAdmin, workerDues.recordWorkerDuesPayment);
+
 router.get('/withdrawals', authenticate, isAdmin, getWithdrawalRequests);
 router.post('/withdrawals/:withdrawalId/approve', authenticate, isAdmin, approveWithdrawal);
 router.post('/withdrawals/:withdrawalId/reject', authenticate, isAdmin, rejectWithdrawal);

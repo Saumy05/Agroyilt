@@ -86,7 +86,7 @@ const settleAssignment = async (assignmentId, { useStoredAmounts = false } = {})
 
   const key = `settle_assign_${a._id}`;
   try {
-    const parent = await WorkerBookingRequest.findById(a.parentRequestId).select('paymentMethod paymentStatus financialSnapshot bookingType durationMinutes numberOfDays auditLog');
+    const parent = await WorkerBookingRequest.findById(a.parentRequestId).select('paymentMethod paymentStatus financialSnapshot bookingType durationMinutes numberOfDays auditLog workTitle');
     const isCash = Boolean(a.isCashBooking) || a.paymentMethod === 'cash' || (parent && parent.paymentMethod === 'cash');
 
     let gross = a.grossAmount, commission = a.commissionAmount, net = a.netEarning;
@@ -96,37 +96,54 @@ const settleAssignment = async (assignmentId, { useStoredAmounts = false } = {})
       gross = s.grossAmount; commission = s.commissionAmount; net = s.netEarning;
     }
 
+    // passbook entries of one job share `metadata.assignmentId` so the worker's wallet can show them together
+    const job = { assignmentId: String(a._id), workTitle: parent?.workTitle || null };
+    const forJob = parent?.workTitle ? ` for ${parent.workTitle}` : '';
+
     let cashPlatformFee = null;
     if (isCash) {
-      await deductCashCommissionOnce({ workerId: a.workerId, amount: commission || 0, key: `${key}_commission`, referenceId: a._id });
-      await ledger.recordPassbookOnce(`${key}_commission`, {
-        workerId: a.workerId, type: 'commission_deduction', amount: commission || 0, status: 'completed', paymentMethod: 'cash',
-        description: `Cash commission ₹${commission} for assignment ${a._id}`, referenceId: key,
-        metadata: { type: 'cash_collection_commission', grossAmount: gross, commissionAmount: commission, netEarning: net }
-      });
-
       // The farmer paid the platform fee to the worker in cash with the wages: give it back to the app, once.
+      // (cashPlatformFee is pre-set to 0 by the legacy cash / QR paths, which record their own cash entry.)
       cashPlatformFee = a.cashPlatformFee;
       if (cashPlatformFee === null || cashPlatformFee === undefined) {
         const { buildWorkerCashCollection } = require('./workerFinancialService');
         const exts = await IndWorkerExtension.find({ parentRequestId: a.parentRequestId, status: 'CONFIRMED' });
-        cashPlatformFee = buildWorkerCashCollection(a, parent, exts, { grossOverride: gross }).platformFee;
+        const cash = buildWorkerCashCollection(a, parent, exts, { grossOverride: gross });
+        cashPlatformFee = cash.platformFee;
+        // cash in hand is not wallet money: recorded so the worker sees what they received
+        await ledger.recordPassbookOnce(`${key}_cash`, {
+          workerId: a.workerId, type: 'cash_collected', amount: cash.totalToCollect, status: 'completed', paymentMethod: 'cash',
+          description: `Cash ₹${cash.totalToCollect} received from the farmer${forJob}`, referenceId: key,
+          metadata: { ...job, type: 'cash_received', workerAmount: gross, platformFee: cashPlatformFee }
+        });
       }
+
+      await deductCashCommissionOnce({ workerId: a.workerId, amount: commission || 0, key: `${key}_commission`, referenceId: a._id });
+      await ledger.recordPassbookOnce(`${key}_commission`, {
+        workerId: a.workerId, type: 'commission_deduction', amount: commission || 0, status: 'completed', paymentMethod: 'cash',
+        description: `App commission on your pay${forJob}`, referenceId: key,
+        metadata: { ...job, type: 'cash_collection_commission', grossAmount: gross, commissionAmount: commission, netEarning: net }
+      });
+
       if (cashPlatformFee > 0) {
         await deductCashCommissionOnce({ workerId: a.workerId, amount: cashPlatformFee, key: `${key}_platform_fee`, referenceId: a._id });
         await ledger.recordPassbookOnce(`${key}_platform_fee`, {
           workerId: a.workerId, type: 'platform_fee', amount: cashPlatformFee, status: 'completed', paymentMethod: 'cash',
-          description: `Platform fee ₹${cashPlatformFee} collected in cash for assignment ${a._id}`, referenceId: key,
-          metadata: { type: 'cash_collection_platform_fee', grossAmount: gross, platformFee: cashPlatformFee }
+          description: `Platform fee the farmer paid you in cash${forJob}`, referenceId: key,
+          metadata: { ...job, type: 'cash_collection_platform_fee', grossAmount: gross, platformFee: cashPlatformFee }
         });
       }
     } else {
       await ledger.applyOnce({ ownerId: a.workerId, ownerModel: 'Worker', amount: net, key: `${key}_credit`, reason: 'earnings_credit', referenceId: a._id });
       await ledger.recordPassbookOnce(`${key}_credit`, {
         workerId: a.workerId, type: 'earnings_credit', amount: net, status: 'completed', paymentMethod: 'wallet',
-        description: `Earnings for assignment ${a._id}`, referenceId: key
+        description: `Earnings${forJob} (after ₹${commission} app commission)`, referenceId: key,
+        metadata: { ...job, grossAmount: gross, commissionAmount: commission, netEarning: net }
       });
+      // money just landed in the wallet: pay any outstanding dues from it first
+      await require('./workerDuesService').recoverDuesFromWallet({ workerId: a.workerId, key: `${key}_dues_recovery`, referenceId: a._id });
     }
+    if (isCash) await require('./workerDuesService').syncDuesRestriction(a.workerId);
 
     const done = await IndWorkerAssignment.findOneAndUpdate(
       { _id: a._id, settlementStatus: 'PROCESSING' },
@@ -140,6 +157,10 @@ const settleAssignment = async (assignmentId, { useStoredAmounts = false } = {})
       },
       { new: true }
     );
+
+    // the worker's wallet/dues just changed: let an open Wallet screen refresh
+    emit(`worker_${a.workerId}`, 'wallet_balance_updated', { assignmentId: String(a._id), reason: 'settlement', timestamp: new Date() });
+    emit(`worker:${a.workerId}`, 'wallet_balance_updated', { assignmentId: String(a._id), reason: 'settlement', timestamp: new Date() });
 
     // a worker who finishes goes back online — unless the account is suspended/inactive
     await Worker.updateOne({ _id: a.workerId, status: { $nin: ['suspended', 'inactive'] } }, { $set: { status: 'ONLINE' } });

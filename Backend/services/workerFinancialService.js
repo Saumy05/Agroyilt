@@ -653,6 +653,12 @@ exports.applyWorkerPenalty = async (workerId, bookingId, penaltyEventId, penalty
   }).catch(e => { if (!e || e.code !== 11000) console.warn('[penalty] passbook failed:', e && e.message); });
 
   await WorkerPenalty.updateOne({ penaltyEventId }, { $set: { walletDeducted, addedToDues: !walletDeducted, status: 'applied' } });
+  // a penalty the balance could not fully cover went to dues whole: let the balance pay what it can
+  await require('./workerDuesService').recoverDuesFromWallet({ workerId, key: `penalty_${penaltyEventId}_dues_recovery`, referenceId: penaltyEventId });
+  try {
+    const io = require('../sockets').getIO();
+    for (const room of [`worker_${workerId}`, `worker:${workerId}`]) io.to(room).emit('wallet_balance_updated', { reason: 'penalty', timestamp: new Date() });
+  } catch (_) { /* sockets are best-effort */ }
   return WorkerPenalty.findOne({ penaltyEventId });
 };
 

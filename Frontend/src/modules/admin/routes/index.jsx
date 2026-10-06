@@ -28,6 +28,7 @@ const Notifications = lazy(() => import('../pages/Notifications'));
 
 const Withdrawals = lazy(() => import('../pages/Withdrawals'));
 const Settlements = lazy(() => import('../pages/Settlements'));
+const WorkerDues = lazy(() => import('../pages/Settlements/WorkerDues'));
 const Reviews = lazy(() => import('../pages/Reviews'));
 const Products = lazy(() => import('../pages/Products'));
 const EcommerceOrders = lazy(() => import('../pages/Products/Orders'));
@@ -99,6 +100,7 @@ const AdminRoutes = () => {
             <Route path="disputes" element={<Disputes />} />
             <Route path="withdrawals" element={<Withdrawals />} />
             <Route path="withdrawals/*" element={<Withdrawals />} />
+            <Route path="settlements/worker-dues" element={<WorkerDues />} />
             <Route path="settlements/*" element={<Settlements />} />
             <Route path="manage-website/*" element={<WebsiteSettings />} />
             <Route path="support" element={<Support />} />
