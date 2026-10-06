@@ -125,12 +125,12 @@ const Dashboard = () => {
       }
 
       if (statsRes.success) {
-        const { totalEarnings, activeJobs, completedJobs, rating, recentJobs: apiRecentJobs } = statsRes.data;
+        const { totalEarnings, thisMonthEarnings, activeJobs, completedJobs, rating, recentJobs: apiRecentJobs } = statsRes.data;
 
         setStats(prev => ({
           ...prev,
           totalEarnings: totalEarnings || 0,
-          thisMonthEarnings: totalEarnings || 0,
+          thisMonthEarnings: thisMonthEarnings || 0,
           pendingJobs: pendingCount > 0 ? pendingCount : (activeJobs || 0),
           acceptedJobs: activeJobs || 0,
           completedJobs: completedJobs || 0,

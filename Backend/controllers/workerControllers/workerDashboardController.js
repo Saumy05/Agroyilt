@@ -19,74 +19,63 @@ const getDashboardStats = async (req, res) => {
       });
     }
 
-    // 2. Calculate Total Net Earnings
+    // 2. Earnings = what the worker keeps (after app commission), all time and this calendar month.
+    //    Farmer jobs (cash AND online) come from settled assignments; vendor-team / older jobs from vendor payments
+    //    or, failing that, completed bookings that are not farmer jobs. Penalties are deductions, not shown here.
     let totalEarnings = 0;
+    let thisMonthEarnings = 0;
     try {
       const IndWorkerAssignment = require('../../models/IndWorkerAssignment');
       const Transaction = require('../../models/Transaction');
-
-      const [assignStats, txnStats, bookingStats] = await Promise.all([
-        IndWorkerAssignment.aggregate([
-          {
-            $match: {
-              workerId: worker._id,
-              $or: [
-                { assignmentStatus: 'COMPLETED' },
-                { settlementStatus: 'SETTLED' },
-                { journeyStatus: 'COMPLETED' }
-              ]
-            }
-          },
-          {
-            $group: {
-              _id: null,
-              total: { $sum: '$netEarning' }
-            }
+      const monthStart = new Date();
+      monthStart.setDate(1);
+      monthStart.setHours(0, 0, 0, 0);
+      const sumWithMonth = (dateExpr, amountExpr) => ([
+        {
+          $group: {
+            _id: null,
+            total: { $sum: amountExpr },
+            month: { $sum: { $cond: [{ $gte: [dateExpr, monthStart] }, amountExpr, 0] } }
           }
-        ]),
-        Transaction.aggregate([
-          {
-            $match: {
-              workerId: worker._id,
-              type: { $in: ['earnings_credit', 'worker_payment'] },
-              status: 'completed'
-            }
-          },
-          {
-            $group: {
-              _id: null,
-              total: { $sum: '$amount' }
-            }
-          }
-        ]),
-        Booking.aggregate([
-          {
-            $match: {
-              workerId: worker._id,
-              status: { $in: [BOOKING_STATUS.COMPLETED, BOOKING_STATUS.WORK_DONE] }
-            }
-          },
-          {
-            $group: {
-              _id: null,
-              total: {
-                $sum: {
-                  $ifNull: [
-                    '$workerNetEarning',
-                    { $multiply: [{ $ifNull: ['$finalAmount', '$agreedRate', 0] }, 0.9] }
-                  ]
-                }
-              }
-            }
-          }
-        ])
+        }
       ]);
 
-      const txnTotal = txnStats.length > 0 ? txnStats[0].total : 0;
-      const assignTotal = assignStats.length > 0 ? assignStats[0].total : 0;
-      const bookingTotal = bookingStats.length > 0 ? bookingStats[0].total : 0;
+      const [assignStats, vendorPayStats, farmerJobBookings] = await Promise.all([
+        IndWorkerAssignment.aggregate([
+          { $match: { workerId: worker._id, settlementStatus: 'SETTLED' } },
+          ...sumWithMonth({ $ifNull: ['$settledAt', { $ifNull: ['$workCompletedAt', '$updatedAt'] }] }, { $ifNull: ['$netEarning', 0] })
+        ]),
+        Transaction.aggregate([
+          { $match: { workerId: worker._id, type: 'worker_payment', status: 'completed' } },
+          ...sumWithMonth('$createdAt', { $ifNull: ['$amount', 0] })
+        ]),
+        IndWorkerAssignment.distinct('legacyBookingId', { workerId: worker._id, legacyBookingId: { $ne: null } })
+      ]);
 
-      totalEarnings = txnTotal > 0 ? txnTotal : (assignTotal > 0 ? assignTotal : bookingTotal);
+      // completed bookings that are not farmer jobs (those are counted through their assignment above)
+      let otherStats = [];
+      if (!(vendorPayStats[0]?.total > 0)) {
+        otherStats = await Booking.aggregate([
+          {
+            $match: {
+              workerId: worker._id,
+              status: { $in: [BOOKING_STATUS.COMPLETED, BOOKING_STATUS.WORK_DONE] },
+              _id: { $nin: farmerJobBookings },
+              workerRequestId: { $in: [null] },
+              bookingNumber: { $not: /^WRK-/ }
+            }
+          },
+          ...sumWithMonth(
+            { $ifNull: ['$completedAt', '$updatedAt'] },
+            { $ifNull: ['$workerNetEarning', { $multiply: [{ $ifNull: ['$finalAmount', { $ifNull: ['$agreedRate', 0] }] }, 0.9] }] }
+          )
+        ]);
+      }
+
+      const pick = (stats, k) => Number(stats[0]?.[k]) || 0;
+      const round2 = (n) => Math.round(n * 100) / 100;
+      totalEarnings = round2(pick(assignStats, 'total') + pick(vendorPayStats, 'total') + pick(otherStats, 'total'));
+      thisMonthEarnings = round2(pick(assignStats, 'month') + pick(vendorPayStats, 'month') + pick(otherStats, 'month'));
     } catch (err) {
       console.warn('[getDashboardStats] Earning calculation fallback:', err.message);
     }
@@ -155,6 +144,7 @@ const getDashboardStats = async (req, res) => {
       success: true,
       data: {
         totalEarnings,
+        thisMonthEarnings,
         activeJobs: activeJobsCount,
         completedJobs: completedJobsCount,
         rating: averageRating,
