@@ -81,15 +81,17 @@ const ActiveJobs = memo(() => {
           dot: 'bg-blue-500',
           accent: '#3b82f6',
         };
+      case 'ACCEPTED':
+      case 'CONFIRMED':
       case 'ASSIGNED':
       case 'WORKER_ACCEPTED':
         return {
-          label: 'Driver Assigned',
-          bg: 'bg-indigo-50',
-          text: 'text-indigo-700',
-          border: 'border-indigo-200/70',
-          dot: 'bg-indigo-500',
-          accent: '#6366f1',
+          label: 'Confirmed',
+          bg: 'bg-blue-50',
+          text: 'text-blue-700',
+          border: 'border-blue-200/70',
+          dot: 'bg-blue-500',
+          accent: '#3b82f6',
         };
       case 'COMPLETED':
       case 'PAID':
@@ -102,16 +104,6 @@ const ActiveJobs = memo(() => {
           border: 'border-emerald-200/70',
           dot: 'bg-emerald-500',
           accent: '#10b981',
-        };
-      case 'ACCEPTED':
-      case 'CONFIRMED':
-        return {
-          label: 'Confirmed',
-          bg: 'bg-amber-50',
-          text: 'text-amber-700',
-          border: 'border-amber-200/70',
-          dot: 'bg-amber-500',
-          accent: '#f59e0b',
         };
       case 'AWAITING_PAYMENT':
       case 'SETTLEMENT_PENDING':
@@ -290,7 +282,6 @@ const ActiveJobs = memo(() => {
     return [
       { id: 'requests', label: 'New Requests', badge: requestedCount },
       { id: 'in_progress', label: 'On Field' },
-      { id: 'assigned', label: 'Driver Assigned' },
       { id: 'completed', label: 'Completed' },
       { id: 'all', label: 'All' },
     ];
@@ -306,10 +297,6 @@ const ActiveJobs = memo(() => {
         matchesFilter = true;
       } else if (filter === 'requests') {
         matchesFilter = ['REQUESTED', 'SEARCHING'].includes(status);
-      } else if (filter === 'assigned') {
-        matchesFilter =
-          ['ASSIGNED', 'WORKER_ACCEPTED'].includes(status) ||
-          (!!job.assignedTo && ['ACCEPTED', 'CONFIRMED'].includes(status));
       } else if (filter === 'in_progress') {
         matchesFilter = [
           'ACCEPTED',
@@ -499,20 +486,12 @@ const ActiveJobs = memo(() => {
 
                   {/* Core Information Section - Clean, Compact Hierarchy */}
                   <div className="space-y-1.5 text-xs text-slate-600 pl-1.5">
-                    {/* Farmer & Driver Row */}
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5 truncate">
-                        <FiUser className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-                        <span className="font-medium text-slate-800 truncate">
-                          {job.user?.name || 'Farmer'}
-                        </span>
-                      </div>
-
-                      {job.assignedTo && (
-                        <span className="text-[10px] text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md font-medium flex-shrink-0">
-                          Driver: {job.assignedTo === 'SELF' ? 'Self' : job.assignedTo.name}
-                        </span>
-                      )}
+                    {/* Farmer Row */}
+                    <div className="flex items-center gap-1.5 text-slate-700 truncate">
+                      <FiUser className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                      <span className="font-medium text-slate-800 truncate">
+                        {job.user?.name || 'Farmer'}
+                      </span>
                     </div>
 
                     {/* Location Row */}
