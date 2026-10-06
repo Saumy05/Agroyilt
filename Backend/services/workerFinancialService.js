@@ -411,6 +411,58 @@ exports.buildWorkerCashCollection = (assignment, request, extensions = [], { gro
 };
 
 /**
+ * What the farmer pays for ONE worker of a booking — the per-worker Booking record the farmer's booking list and
+ * booking page show. Cash: exactly what that worker collects. Online: that worker's share of the booking payment
+ * plus the online extensions that worker took.
+ */
+exports.buildFarmerAmountForWorker = (request, assignment, extensions = []) => {
+  if (!request || !assignment) return null;
+  if (request.paymentMethod === 'cash') {
+    const cash = exports.buildWorkerCashCollection(assignment, request, extensions);
+    const paid = assignment.settlementStatus === 'SETTLED' || assignment.completionStatus === 'OTP_VERIFIED';
+    return { total: cash.totalToCollect, paymentMethod: 'cash', status: paid ? 'paid' : 'due' };
+  }
+  const snap = request.financialSnapshot || {};
+  let totalP = Math.round(toP(snap.totalPayable || 0) / (Number(snap.selectedWorkerCount) || 1));
+  for (const ext of (extensions || []).filter(e => e && e.status === 'CONFIRMED' && e.paymentMode !== 'cash')) {
+    const share = (ext.workerExtensions || []).find(w => w.status === 'ACCEPTED' && String(w.assignmentId) === String(assignment._id));
+    if (!share) continue;
+    const grossP = toP(share.extensionGrossAmount || 0);
+    totalP += grossP + Math.round((grossP * (Number(ext.platformFeeRate) || 0)) / 100);
+  }
+  const paid = ['success', 'paid', 'PAID', 'SUCCESS'].includes(request.paymentStatus);
+  return { total: toINR(totalP), paymentMethod: 'online', status: paid ? 'paid' : 'due' };
+};
+
+/**
+ * Batch version for booking lists: sets `farmerAmount` on each worker Booking (plain objects with workerRequestId).
+ * Three queries for the whole page, whatever its size.
+ */
+exports.attachFarmerAmounts = async (bookings = []) => {
+  const worker = bookings.filter(b => b && b.workerRequestId);
+  if (!worker.length) return bookings;
+  const WorkerBookingRequest = require('../models/WorkerBookingRequest');
+  const IndWorkerAssignment = require('../models/IndWorkerAssignment');
+  const IndWorkerExtension = require('../models/IndWorkerExtension');
+  const ids = [...new Set(worker.map(b => String(b.workerRequestId)))];
+  const [requests, assignments, extensions] = await Promise.all([
+    WorkerBookingRequest.find({ _id: { $in: ids } }).select('financialSnapshot paymentMethod paymentStatus bookingType durationMinutes numberOfDays auditLog').lean(),
+    IndWorkerAssignment.find({ parentRequestId: { $in: ids } }).lean(),
+    IndWorkerExtension.find({ parentRequestId: { $in: ids }, status: 'CONFIRMED' }).lean()
+  ]);
+  const reqById = new Map(requests.map(r => [String(r._id), r]));
+  for (const b of worker) {
+    const pid = String(b.workerRequestId);
+    const mine = assignments.filter(a => String(a.parentRequestId) === pid);
+    const own = mine.find(a => String(a.legacyBookingId) === String(b._id))
+      || mine.find(a => String(a.workerId) === String(b.workerId?._id || b.workerId));
+    const amount = exports.buildFarmerAmountForWorker(reqById.get(pid), own, extensions.filter(e => String(e.parentRequestId) === pid));
+    if (amount) b.farmerAmount = amount;
+  }
+  return bookings;
+};
+
+/**
  * What the farmer pays, line by line (the booked work, then each extension), and how: online (already paid) or
  * cash (paid to the workers at the end). On a cash booking every line is the sum of the workers' cash collections,
  * so the farmer's total always equals what the workers are told to collect.

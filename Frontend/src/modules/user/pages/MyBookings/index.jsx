@@ -456,10 +456,17 @@ const MyBookings = () => {
                     {/* Footer Section */}
                     <div className="relative z-10 flex items-center justify-between pt-4 border-t border-slate-200">
                       <div>
-                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">Total Amount</p>
+                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">
+                          {booking.farmerAmount
+                            ? (booking.farmerAmount.paymentMethod === 'cash'
+                              ? (booking.farmerAmount.status === 'paid' ? 'Paid in Cash' : 'Pay in Cash')
+                              : (booking.farmerAmount.status === 'paid' ? 'Paid Online' : 'Total Amount'))
+                            : 'Total Amount'}
+                        </p>
                         <p className="text-xl font-bold text-slate-900 flex items-baseline gap-0.5">
                           <span className="text-sm font-semibold text-slate-400">₹</span>
-                          {(booking.finalAmount || booking.totalAmount || 0).toLocaleString('en-IN')}
+                          {/* worker bookings: the backend's per-worker amount (pay + platform fee + extensions) */}
+                          {(booking.farmerAmount?.total ?? (booking.finalAmount || booking.totalAmount || 0)).toLocaleString('en-IN')}
                         </p>
                       </div>
   

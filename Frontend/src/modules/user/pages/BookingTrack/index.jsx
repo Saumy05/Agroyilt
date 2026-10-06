@@ -17,6 +17,7 @@ import { useSocket } from '../../../../context/SocketContext';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import DailyTrackingView from './components/DailyTrackingView';
 import ActiveWorkMonitoringHub from './components/ActiveWorkMonitoringHub';
+import { rupees, paymentLineLabel } from '../../../../utils/workerPayment';
 import DecreaseWorkerModal from './components/DecreaseWorkerModal';
 import ExtensionModal from './components/ExtensionModal';
 import AddWorkersModal from './components/AddWorkersModal';
@@ -122,7 +123,6 @@ const BookingTrack = () => {
   const [decreaseTargetWorker, setDecreaseTargetWorker] = useState(null);
   const [payingExtensionId, setPayingExtensionId] = useState(null);
   const [regeneratingVisitOtpId, setRegeneratingVisitOtpId] = useState(null);
-  const [redirectCountdown, setRedirectCountdown] = useState(3);
   const [isMapExpanded, setIsMapExpanded] = useState(false);
   // leafletLoaded state removed — L is now imported directly from npm
 
@@ -615,24 +615,6 @@ const BookingTrack = () => {
     }
   }, [isMapExpanded]);
 
-  // Auto-Redirect Timer on Completion
-  useEffect(() => {
-    if (isAllCompleted && !loading) {
-      const countdownInterval = setInterval(() => {
-        setRedirectCountdown(c => (c > 1 ? c - 1 : 1));
-      }, 1000);
-
-      const redirectTimer = setTimeout(() => {
-        navigate('/user', { replace: true });
-      }, 3000);
-
-      return () => {
-        clearInterval(countdownInterval);
-        clearTimeout(redirectTimer);
-      };
-    }
-  }, [isAllCompleted, loading, navigate]);
-
   // Destination Farm location
   const destination = trackingData?.destination;
 
@@ -966,36 +948,38 @@ const BookingTrack = () => {
               All assigned workers have finished their tasks and payments are settled.
             </p>
 
-            {/* Payment Breakdown Card */}
-            {trackingData?.paymentSummary && (
-              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 mb-4 text-left border border-white/10 space-y-2 text-xs">
-                <div className="flex justify-between font-medium text-emerald-100">
-                  <span>Total Paid by You</span>
-                  <span className="font-bold text-white">₹{trackingData.paymentSummary.totalPaidAmount?.toLocaleString('en-IN') || 0}</span>
-                </div>
-                <div className="flex justify-between font-medium text-emerald-100">
-                  <span>Worker Earnings</span>
-                  <span className="font-bold text-white">₹{trackingData.paymentSummary.workerReserveAmount?.toLocaleString('en-IN') || 0}</span>
-                </div>
-                <div className="flex justify-between font-medium text-emerald-100">
-                  <span>Platform Fee</span>
-                  <span className="font-bold text-white">₹{trackingData.paymentSummary.platformFeeAmount?.toLocaleString('en-IN') || 0}</span>
-                </div>
-                {trackingData.paymentSummary.refundAmount > 0 && (
-                  <div className="flex justify-between font-bold text-yellow-300 pt-1 border-t border-white/10">
-                    <span>Refund Credited to Wallet</span>
-                    <span>₹{trackingData.paymentSummary.refundAmount?.toLocaleString('en-IN')}</span>
+            {/* Payment summary — the backend bill, same figures the workers saw */}
+            {trackingData?.paymentSummary?.bill && (() => {
+              const bill = trackingData.paymentSummary.bill;
+              const isCash = bill.paymentMethod === 'cash';
+              return (
+                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 mb-4 text-left border border-white/10 space-y-2 text-xs">
+                  {bill.lines.map((line, i) => (
+                    <div key={i} className="flex justify-between font-medium text-emerald-100">
+                      <span>{paymentLineLabel(line)}</span>
+                      <span className="font-bold text-white">{rupees(line.total)}</span>
+                    </div>
+                  ))}
+                  <div className="flex justify-between font-black text-white pt-1 border-t border-white/10">
+                    <span>{isCash ? 'Paid in cash to workers' : 'Paid online'}</span>
+                    <span>{rupees(isCash ? bill.cashPaid + bill.cashDue : bill.paidOnline)}</span>
                   </div>
-                )}
-              </div>
-            )}
+                  {!isCash && bill.refund?.amount > 0 && (
+                    <div className="flex justify-between font-bold text-yellow-300">
+                      <span>Unused amount refunded to wallet</span>
+                      <span>{rupees(bill.refund.amount)}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             <div className="flex items-center justify-center gap-3">
               <button
                 onClick={() => navigate('/user', { replace: true })}
                 className="bg-white text-emerald-800 font-black px-6 py-3 rounded-2xl shadow-lg hover:bg-emerald-50 active:scale-95 transition-all text-sm"
               >
-                Return to Home ({redirectCountdown}s)
+                Return to Home
               </button>
             </div>
           </motion.div>

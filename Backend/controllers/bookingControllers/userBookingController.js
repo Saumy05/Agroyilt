@@ -1183,6 +1183,13 @@ const getUserBookings = async (req, res) => {
       return bObj;
     });
 
+    // Worker bookings: the amount the farmer actually pays that worker (incl. platform fee and extensions)
+    try {
+      await require('../../services/workerFinancialService').attachFarmerAmounts(enrichedBookings);
+    } catch (amountErr) {
+      console.warn('[getUserBookings] worker amount enrichment warning:', amountErr.message);
+    }
+
     res.status(200).json({
       success: true,
       data: enrichedBookings,
@@ -1275,6 +1282,35 @@ const getBookingById = async (req, res) => {
 
         bookingData.paymentSummary = buildFarmerPaymentSummary(parentRequest, assignments, booking, confirmedExtensions);
         bookingData.confirmedExtensions = confirmedExtensions;
+
+        // Real work time of THIS booking's worker: Start OTP → Stop Work (per day for DAILY).
+        // Worker jobs have no machinery service timer, so this is what the farmer sees instead.
+        const own = assignments.find(a => String(a.legacyBookingId) === String(booking._id))
+          || assignments.find(a => String(a.workerId) === String(booking.workerId?._id || booking.workerId));
+        if (own && parentRequest) {
+          bookingData.farmerAmount = require('../../services/workerFinancialService').buildFarmerAmountForWorker(parentRequest, own, confirmedExtensions);
+        }
+        if (own) {
+          const span = (from, to) => (from && to ? Math.max(0, Math.round((new Date(to) - new Date(from)) / 60000)) : 0);
+          const isDaily = own.bookingType === 'DAILY';
+          const days = isDaily ? (own.dailyLogs || []).filter(l => l.workStartedAt) : [];
+          bookingData.workTime = isDaily
+            ? {
+                bookingType: 'DAILY',
+                startedAt: days[0]?.workStartedAt || null,
+                stoppedAt: days.length && days[days.length - 1].completedAt ? days[days.length - 1].completedAt : null,
+                minutes: days.reduce((sum, l) => sum + span(l.workStartedAt, l.completedAt), 0),
+                workedDays: own.workedDays || 0,
+                bookedDays: own.bookedDays || null
+              }
+            : {
+                bookingType: 'HOURLY',
+                startedAt: own.workStartedAt || null,
+                stoppedAt: own.workSubmittedAt || own.workCompletedAt || null,
+                minutes: span(own.workStartedAt, own.workSubmittedAt || own.workCompletedAt),
+                bookedMinutes: parentRequest?.durationMinutes || null
+              };
+        }
         if (parentRequest) {
           bookingData.parentRequestId = parentRequest._id;
           bookingData.financialSnapshot = parentRequest.financialSnapshot;

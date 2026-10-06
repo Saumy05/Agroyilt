@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import WorkerPaymentBill from '../../components/booking/WorkerPaymentBill';
+import WorkerWorkTime from '../../components/booking/WorkerWorkTime';
 import { useNavigate, useParams, useLocation, useSearchParams } from 'react-router-dom';
 import { toastManager } from '../../../../utils/toastManager';
 import useAppNotifications from '../../../../hooks/useAppNotifications';
@@ -191,6 +192,8 @@ const BookingDetails = () => {
   const isPaid = ['success', 'paid', 'collected_by_vendor'].includes(booking?.paymentStatus?.toLowerCase());
   const isBookingCompleted = booking?.status?.toLowerCase() === 'completed';
   const showCompletionExit = Boolean(isBookingCompleted && isPaid && !isFromHistory && !stayOnPage);
+  // Worker bookings never leave on their own: the farmer must be able to check the final amount
+  const autoRedirect = showCompletionExit && booking?.providerType !== 'WORKER';
 
   const isAgri = useMemo(() => {
     if (!booking) return false;
@@ -218,7 +221,7 @@ const BookingDetails = () => {
 
   // Auto-redirect timer when work is completed and paid in active live flow
   useEffect(() => {
-    if (!showCompletionExit) return;
+    if (!autoRedirect) return;
 
     if (redirectCountdown <= 0) {
       navigate('/user', { replace: true });
@@ -230,7 +233,7 @@ const BookingDetails = () => {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [showCompletionExit, redirectCountdown, navigate]);
+  }, [autoRedirect, redirectCountdown, navigate]);
 
   // Fetch support settings
   useEffect(() => {
@@ -856,19 +859,23 @@ const BookingDetails = () => {
                   <div>
                     <h3 className="font-black text-base tracking-tight">Work Completed! 🎉</h3>
                     <p className="text-xs text-emerald-100 font-medium">
-                      Redirecting to Home in <span className="font-black text-white bg-white/20 px-1.5 py-0.5 rounded-md font-mono">{redirectCountdown}s</span>
+                      {autoRedirect ? (
+                        <>Redirecting to Home in <span className="font-black text-white bg-white/20 px-1.5 py-0.5 rounded-md font-mono">{redirectCountdown}s</span></>
+                      ) : 'Check the final amount below'}
                     </p>
                   </div>
                 </div>
               </div>
 
               {/* Progress bar */}
+              {autoRedirect && (
               <div className="w-full bg-white/20 h-1.5 rounded-full overflow-hidden">
                 <div 
                   className="bg-white h-full transition-all duration-1000 ease-linear rounded-full"
                   style={{ width: `${(redirectCountdown / 5) * 100}%` }}
                 />
               </div>
+              )}
 
               <div className="flex items-center gap-2 pt-1">
                 <button
@@ -888,8 +895,12 @@ const BookingDetails = () => {
             </div>
           )}
 
-          {/* Industry-Grade Agriculture Service Live Play/Pause Timer */}
-          {(booking.serviceTimer || booking.equipmentId || booking.rental_type || ['in_progress', 'visited', 'completed'].includes(booking.status?.toLowerCase())) ? (
+          {/* Worker bookings: real work time (price is fixed). Machinery: live play/pause billing timer */}
+          {booking.providerType === 'WORKER' ? (
+            <div className="mb-4">
+              <WorkerWorkTime workTime={booking.workTime} />
+            </div>
+          ) : (booking.serviceTimer || booking.equipmentId || booking.rental_type || ['in_progress', 'visited', 'completed'].includes(booking.status?.toLowerCase())) ? (
             <div className="mb-4">
               <LiveServiceTimer
                 booking={booking}
@@ -1284,8 +1295,38 @@ const BookingDetails = () => {
               </div>
             )}
 
+          {/* Worker bookings: what the farmer pays this worker, from the backend (same figure the worker collects) */}
+          {booking.providerType === 'WORKER' && booking.farmerAmount && ['work_done', 'completed'].includes(booking.status?.toLowerCase()) && (
+            <div className={`rounded-3xl border p-5 mb-4 flex items-center justify-between gap-3 ${
+              booking.farmerAmount.status === 'paid' ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'
+            }`}>
+              <div className="flex items-center gap-3 min-w-0">
+                <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${
+                  booking.farmerAmount.status === 'paid' ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white'
+                }`}>
+                  {booking.farmerAmount.status === 'paid' ? <FiCheckCircle className="w-5 h-5" /> : <span className="font-black">₹</span>}
+                </div>
+                <div className="min-w-0">
+                  <p className={`font-black text-base ${booking.farmerAmount.status === 'paid' ? 'text-emerald-900' : 'text-amber-900'}`}>
+                    {booking.farmerAmount.paymentMethod === 'cash'
+                      ? (booking.farmerAmount.status === 'paid' ? 'Paid in cash' : 'Pay in cash')
+                      : (booking.farmerAmount.status === 'paid' ? 'Paid online' : 'Payment pending')}
+                  </p>
+                  <p className="text-xs text-slate-600">
+                    {booking.farmerAmount.paymentMethod === 'cash'
+                      ? `To ${booking.workerId?.name || 'the worker'} · includes platform fee and extra time`
+                      : 'Paid when you booked · see the breakdown below'}
+                  </p>
+                </div>
+              </div>
+              <span className={`text-2xl font-black shrink-0 ${booking.farmerAmount.status === 'paid' ? 'text-emerald-800' : 'text-amber-800'}`}>
+                ₹{Number(booking.farmerAmount.total || 0).toLocaleString('en-IN')}
+              </span>
+            </div>
+          )}
+
           {/* Payment Card - Show when work is done AND bill is finalized (OTP exists) or paid */}
-          {(booking.vendorBillId || booking.customerConfirmationOTP || booking.paymentStatus === 'success' || booking.status?.toLowerCase() === 'completed') && ['work_done', 'completed'].includes(booking.status?.toLowerCase()) && !booking.cashCollected && (
+          {booking.providerType !== 'WORKER' && (booking.vendorBillId || booking.customerConfirmationOTP || booking.paymentStatus === 'success' || booking.status?.toLowerCase() === 'completed') && ['work_done', 'completed'].includes(booking.status?.toLowerCase()) && !booking.cashCollected && (
             <div
               onClick={() => setShowPaymentModal(true)}
               className={`relative overflow-hidden rounded-3xl shadow-lg border cursor-pointer active:scale-[0.98] transition-all ${booking.paymentStatus === 'success' ? 'border-green-100' : 'border-orange-100'
