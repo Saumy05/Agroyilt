@@ -23,6 +23,8 @@ export const bookingService = {
     if (params.endDate) queryParams.append('endDate', params.endDate);
     if (params.page) queryParams.append('page', params.page);
     if (params.limit) queryParams.append('limit', params.limit);
+    // Bookings page: farmer hiring requests come as one card each from the worker-requests list instead
+    if (params.excludeWorkerRequests) queryParams.append('excludeWorkerRequests', '1');
 
     const url = `/users/bookings${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
 

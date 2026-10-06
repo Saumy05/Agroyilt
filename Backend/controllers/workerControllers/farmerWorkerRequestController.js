@@ -1682,6 +1682,11 @@ exports.getMyFarmerRequests = async (req, res) => {
       Promise.all(autoExpirePromises).catch(() => {});
     }
 
+    // Bookings page: one ready-made card per request (status words, filter group, amount from the bill)
+    if (req.query.withCards === '1' || req.query.withCards === 'true') {
+      await require('../../services/farmerRequestCardService').attachRequestCards(result);
+    }
+
     return res.json({
       success: true,
       data: result,

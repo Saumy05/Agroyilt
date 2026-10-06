@@ -1124,6 +1124,18 @@ const getUserBookings = async (req, res) => {
       if (endDate) query.scheduledDate.$lte = new Date(endDate);
     }
 
+    // Opt-in (Bookings page): leave out the per-worker records of farmer hiring requests — those requests are listed
+    // as ONE card each from /users/farmer-worker-requests. Every other caller gets exactly what it got before.
+    if (req.query.excludeWorkerRequests === '1' || req.query.excludeWorkerRequests === 'true') {
+      const hiring = await WorkerBookingRequest.find({ farmerId: userId, requestType: { $in: ['independent_broadcast', 'team_leader'] } })
+        .select('_id finalBookingIds finalBookingId').lean();
+      if (hiring.length) {
+        const reqIds = hiring.map(r => r._id);
+        const bookingIds = hiring.flatMap(r => [...(r.finalBookingIds || []), ...(r.finalBookingId ? [r.finalBookingId] : [])]);
+        query.$nor = [{ workerRequestId: { $in: reqIds } }, { _id: { $in: bookingIds } }];
+      }
+    }
+
     // Pagination
     const pageNum = Math.max(1, parseInt(page) || 1);
     const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 10));
@@ -1313,6 +1325,8 @@ const getBookingById = async (req, res) => {
         }
         if (parentRequest) {
           bookingData.parentRequestId = parentRequest._id;
+          // farmer hiring requests are shown on Request Details; the app forwards these booking links there
+          bookingData.parentRequestType = parentRequest.requestType || null;
           bookingData.financialSnapshot = parentRequest.financialSnapshot;
           bookingData.refundAmount = parentRequest.refundAmount;
           bookingData.refundCredited = parentRequest.refundCredited;

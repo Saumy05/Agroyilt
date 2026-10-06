@@ -309,7 +309,7 @@ const GroupRequestForm = () => {
 
       await workerBookingService.createGroupRequest(payload);
       toast.success('Group work request sent successfully!', { id: 'group-req-toast' });
-      navigate('/user/my-worker-requests', { replace: true });
+      navigate('/user/my-worker-requests?tab=group', { replace: true });
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to send group request', { id: 'group-req-toast' });
     } finally {

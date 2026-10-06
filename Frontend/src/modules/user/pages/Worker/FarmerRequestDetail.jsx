@@ -9,6 +9,7 @@ import {
 import toast from 'react-hot-toast';
 import workerBookingService from '../../../../services/workerBookingService';
 import WorkerPaymentBill from '../../components/booking/WorkerPaymentBill';
+import BookedRequestView from './components/BookedRequestView';
 
 const STATUS_CONFIG = {
   pending:                    { color: 'bg-amber-100 text-amber-700 border-amber-200',    label: 'Waiting for Responses' },
@@ -37,7 +38,7 @@ const FarmerRequestDetail = () => {
       setIsCancelModalOpen(false);
       await workerBookingService.cancelFarmerRequest(id);
       toast.success('Request cancelled successfully');
-      navigate('/user/my-worker-requests', { replace: true });
+      navigate('/user/my-bookings', { replace: true });
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to cancel request');
     } finally {
@@ -132,7 +133,7 @@ const FarmerRequestDetail = () => {
       setCancelling(true);
       await workerBookingService.cancelFarmerRequest(id);
       toast.success('Request cancelled.');
-      navigate('/user/my-worker-requests', { replace: true });
+      navigate('/user/my-bookings', { replace: true });
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Failed to cancel request.');
     } finally {
@@ -174,13 +175,18 @@ const FarmerRequestDetail = () => {
         <h2 className="text-xl font-bold text-slate-800 mb-1">Request Not Found</h2>
         <p className="text-slate-500 text-sm mb-6">Could not load the work request details.</p>
         <button
-          onClick={() => navigate('/user/my-worker-requests')}
+          onClick={() => navigate('/user/my-bookings')}
           className="px-6 py-2.5 bg-slate-800 text-white rounded-xl text-sm font-bold"
         >
           My Requests
         </button>
       </div>
     );
+  }
+
+  // Once workers are booked, one page holds everything: codes, workers, schedule, bill, actions
+  if (['confirmed', 'in_progress', 'partially_completed', 'completed'].includes(request.status)) {
+    return <BookedRequestView request={request} onRefresh={() => fetchRequest(true)} />;
   }
 
   const statusConf = STATUS_CONFIG[request.status] || { color: 'bg-slate-100', label: request.status };
@@ -202,7 +208,7 @@ const FarmerRequestDetail = () => {
         <div className="max-w-2xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
-              onClick={() => navigate('/user/my-worker-requests')}
+              onClick={() => navigate('/user/my-bookings')}
               className="w-10 h-10 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition-colors"
             >
               <FiArrowLeft size={18} />

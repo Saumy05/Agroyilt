@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { FiArrowLeft, FiClock, FiMapPin, FiCheckCircle, FiXCircle, FiLoader, FiCalendar, FiChevronRight, FiSearch } from 'react-icons/fi';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { FiArrowLeft, FiClock, FiMapPin, FiCheckCircle, FiXCircle, FiLoader, FiCalendar, FiChevronRight, FiSearch, FiUsers, FiAlertCircle } from 'react-icons/fi';
 import { toastManager } from '../../../../utils/toastManager';
 import { themeColors } from '../../../../theme';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
@@ -8,12 +8,20 @@ import NotificationBell from '../../components/common/NotificationBell';
 import { motion } from 'framer-motion';
 import { bookingService } from '../../../../services/bookingService';
 import { apiCache } from '../../../../utils/apiCache';
+import workerBookingService from '../../../../services/workerBookingService';
+
+const FILTERS = ['all', 'pending', 'confirmed', 'in_progress', 'completed', 'cancelled'];
+// statuses of machinery/vendor orders that are still waiting on someone (shown under "Pending")
+const PENDING_BOOKING_STATUSES = 'pending,requested,searching,awaiting_payment';
 
 const MyBookings = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [bookings, setBookings] = useState([]);
+  // farmer hiring requests (one card per request, from the backend with status words + amount)
+  const [workerRequests, setWorkerRequests] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('all'); // all, confirmed, in-progress, completed, cancelled
+  const [filter, setFilter] = useState(() => (FILTERS.includes(searchParams.get('filter')) ? searchParams.get('filter') : 'all'));
   const [searchQuery, setSearchQuery] = useState('');
 
   const bookingsCacheRef = useRef({});
@@ -25,23 +33,35 @@ const MyBookings = () => {
     // Fast-path: If cached data exists for this filter, immediately render it (0ms latency!)
     if (bookingsCacheRef.current[filter]) {
       setBookings(bookingsCacheRef.current[filter]);
+      if (bookingsCacheRef.current.__requests) setWorkerRequests(bookingsCacheRef.current.__requests);
       if (!isSilent) setLoading(false);
     } else if (!isSilent) {
       setLoading(true);
     }
 
     try {
-      const params = { limit: 50 };
+      const params = { limit: 50, excludeWorkerRequests: true };
       if (isSilent) params.skipCache = true;
       if (filter !== 'all') {
         if (filter === 'in_progress') {
           // For Machinery/Farm orders, "In Progress" means anything from journey started to operation
           params.status = 'journey_started,visited,in_progress';
+        } else if (filter === 'pending') {
+          params.status = PENDING_BOOKING_STATUSES;
         } else {
           params.status = filter;
         }
       }
-      const response = await bookingService.getUserBookings(params);
+      const [response, requestsRes] = await Promise.all([
+        bookingService.getUserBookings(params),
+        workerBookingService.getMyFarmerRequests({ limit: 50, withCards: true }).catch(() => null)
+      ]);
+
+      if (requestId !== activeRequestIdRef.current) return;
+      if (requestsRes?.success) {
+        bookingsCacheRef.current.__requests = requestsRes.data || [];
+        setWorkerRequests(requestsRes.data || []);
+      }
 
       // Race-condition guard: Discard response if a newer filter was clicked in between
       if (requestId !== activeRequestIdRef.current) return;
@@ -162,6 +182,93 @@ const MyBookings = () => {
     navigate(`/user/booking/${booking._id || booking.id}`);
   };
 
+  // ── Farmer hiring requests ───────────────────────────────────────────────
+  const requestMatchesSearch = (r) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return [r._id, r.workTitle, r.workCategory, r.location?.city, r.location?.addressLine1]
+      .some(v => String(v || '').toLowerCase().includes(q));
+  };
+  const visibleRequests = workerRequests.filter(r => (filter === 'all' || r.card?.group === filter) && requestMatchesSearch(r));
+  const actionRequests = filter === 'all' ? visibleRequests.filter(r => r.card?.needsAction) : [];
+
+  const requestWhen = (r) => {
+    if (r.bookingType === 'DAILY') {
+      const days = Number(r.numberOfDays) || 1;
+      return `From ${formatDate(r.startDate)} · ${days} day${days === 1 ? '' : 's'}${r.reportingTime ? ` · report ${r.reportingTime}` : ''}`;
+    }
+    return `${formatDate(r.scheduledDate)}${r.startTime ? ` · ${r.startTime}` : ''}`;
+  };
+  const REQUEST_GROUP_STYLE = {
+    pending: { badge: 'bg-amber-500 text-white border-amber-600 ring-amber-500', border: '!border-l-amber-500' },
+    confirmed: { badge: 'bg-emerald-500 text-white border-emerald-600 ring-emerald-500', border: '!border-l-emerald-500' },
+    in_progress: { badge: 'bg-blue-500 text-white border-blue-600 ring-blue-500', border: '!border-l-blue-500' },
+    completed: { badge: 'bg-violet-500 text-white border-violet-600 ring-violet-500', border: '!border-l-violet-500' },
+    cancelled: { badge: 'bg-rose-500 text-white border-rose-600 ring-rose-500', border: '!border-l-rose-500' }
+  };
+
+  const renderRequestCard = (r, compact = false) => {
+    const style = REQUEST_GROUP_STYLE[r.card?.group] || REQUEST_GROUP_STYLE.pending;
+    return (
+      <div
+        key={`req-${r._id}`}
+        onClick={() => navigate(`/user/farmer-worker-request/${r._id}`)}
+        className={`group relative bg-white rounded-2xl ${compact ? 'p-4' : 'p-5'} border border-slate-200 border-l-4 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.04)] active:scale-[0.99] transition-all duration-300 cursor-pointer ${style.border}`}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 w-fit rounded-md uppercase tracking-wider mb-1 flex items-center gap-1">
+              <FiUsers className="w-3 h-3" /> Workers{r.workCategory ? ` · ${r.workCategory}` : ''}
+            </div>
+            <h3 className="text-lg font-bold text-slate-800 leading-tight line-clamp-2">{r.workTitle || 'Worker request'}</h3>
+            <p className="text-xs text-slate-500 mt-0.5">{r.card?.detail}</p>
+          </div>
+          <div className={`shrink-0 px-3 py-1 rounded-full border ring-1 ring-inset shadow-sm ${style.badge}`}>
+            <span className="text-[11px] font-bold uppercase tracking-wide">{r.card?.label || r.status}</span>
+          </div>
+        </div>
+
+        {!compact && (
+          <div className="mt-4 grid grid-cols-[auto_1fr] gap-x-3 gap-y-3 p-3 rounded-xl bg-slate-50/50 border border-slate-200">
+            <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center shadow-sm">
+              <FiCalendar className="w-4 h-4 text-blue-500" />
+            </div>
+            <div className="flex flex-col justify-center">
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">When</p>
+              <p className="text-sm font-bold text-slate-700">{requestWhen(r)}</p>
+            </div>
+            <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center shadow-sm">
+              <FiMapPin className="w-4 h-4 text-rose-500" />
+            </div>
+            <div className="flex flex-col justify-center min-w-0">
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Location</p>
+              <p className="text-sm font-medium text-slate-700 truncate">{getAddressString(r.location)}</p>
+            </div>
+          </div>
+        )}
+
+        <div className={`flex items-center justify-between ${compact ? 'mt-3' : 'pt-4 mt-4 border-t border-slate-200'}`}>
+          <div>
+            {r.card?.amount ? (
+              <>
+                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">{r.card.amount.label}</p>
+                <p className="text-xl font-bold text-slate-900">
+                  <span className="text-sm font-semibold text-slate-400">₹</span>{Number(r.card.amount.value || 0).toLocaleString('en-IN')}
+                </p>
+              </>
+            ) : (
+              <p className="text-xs text-slate-400">{compact ? requestWhen(r) : ''}</p>
+            )}
+          </div>
+          <span className={`flex items-center gap-1.5 pl-4 pr-3 py-2 rounded-lg font-bold text-sm border ${r.card?.needsAction ? 'bg-amber-500 border-amber-500 text-white' : 'bg-indigo-50 border-indigo-100 text-indigo-600'}`}>
+            {r.card?.needsAction ? r.card.label : 'View Details'}
+            <FiChevronRight className="w-4 h-4" />
+          </span>
+        </div>
+      </div>
+    );
+  };
+
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
@@ -237,6 +344,7 @@ const MyBookings = () => {
           <div className="flex overflow-x-auto px-4 py-3 gap-2.5 no-scrollbar scroll-smooth">
             {[
               { id: 'all', label: 'All Orders' },
+              { id: 'pending', label: `Pending${workerRequests.some(r => r.card?.needsAction) ? ' •' : ''}` },
               { id: 'confirmed', label: 'Confirmed' },
               { id: 'in_progress', label: 'In Progress' },
               { id: 'completed', label: 'Completed' },
@@ -327,7 +435,15 @@ const MyBookings = () => {
               return matchesId || matchesCategory || matchesName || matchesItems || matchesAddress;
             });
 
-            if (filteredBookings.length === 0) {
+            // one list, newest first: orders + hiring requests (requests needing action are shown on top instead)
+            const actionIds = new Set(actionRequests.map(r => String(r._id)));
+            const combined = [
+              ...filteredBookings.map(b => ({ kind: 'booking', at: new Date(b.createdAt || b.scheduledDate || 0).getTime(), item: b })),
+              ...visibleRequests.filter(r => !actionIds.has(String(r._id)))
+                .map(r => ({ kind: 'request', at: new Date(r.createdAt || 0).getTime(), item: r }))
+            ].sort((x, y) => y.at - x.at);
+
+            if (combined.length === 0 && actionRequests.length === 0) {
               return (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.9 }}
@@ -350,6 +466,20 @@ const MyBookings = () => {
             }
 
             return (
+              <>
+              {actionRequests.length > 0 && (
+                <section className="mb-6">
+                  <h2 className="text-xs font-black text-amber-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                    <FiAlertCircle className="w-4 h-4" /> Needs your action
+                  </h2>
+                  <div className="space-y-3">
+                    {actionRequests.map(r => renderRequestCard(r, true))}
+                  </div>
+                </section>
+              )}
+              {actionRequests.length > 0 && combined.length > 0 && (
+                <h2 className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Your bookings</h2>
+              )}
               <motion.div
                 initial="hidden"
                 animate="visible"
@@ -362,7 +492,17 @@ const MyBookings = () => {
                 }}
                 className="space-y-4"
               >
-                {filteredBookings.map((booking) => (
+                {combined.map(({ kind, item: booking }) => kind === 'request' ? (
+                  <motion.div
+                    key={`req-${booking._id}`}
+                    variants={{
+                      hidden: { opacity: 0, y: 20 },
+                      visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 100, damping: 15 } }
+                    }}
+                  >
+                    {renderRequestCard(booking)}
+                  </motion.div>
+                ) : (
                   <motion.div
                     key={booking._id || booking.id}
                     variants={{
@@ -480,6 +620,7 @@ const MyBookings = () => {
                   </motion.div>
                 ))}
               </motion.div>
+              </>
             );
           })()}
         </main>

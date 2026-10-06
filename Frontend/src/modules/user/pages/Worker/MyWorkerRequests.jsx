@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import {
   FiArrowLeft, FiClock, FiCheck, FiX,
@@ -44,8 +44,10 @@ const STATUS_LABELS = {
 const MyWorkerRequests = () => {
   const navigate = useNavigate();
 
-  // Tabs: 'farmer' = new farmer-first, 'single' = legacy, 'group' = legacy
-  const [tab, setTab] = useState('farmer');
+  // Tabs: 'single' = legacy direct requests, 'group' = group requests.
+  // Farmer hiring requests (the old 'farmer' tab) are listed on the Bookings page now.
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState(() => (searchParams.get('tab') === 'group' ? 'group' : 'single'));
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -301,7 +303,6 @@ const MyWorkerRequests = () => {
   };
 
   const TABS = [
-    { key: 'farmer', label: '🌾 My Requests' },
     { key: 'single', label: 'Single' },
     { key: 'group',  label: 'Group' },
   ];
@@ -356,6 +357,13 @@ const MyWorkerRequests = () => {
       </div>
 
       <div className="max-w-xl mx-auto px-4 pt-5">
+        <button
+          onClick={() => navigate('/user/my-bookings')}
+          className="w-full mb-4 flex items-center justify-between gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3 text-left"
+        >
+          <span className="text-xs font-bold text-emerald-900">Your worker hiring requests and bookings are in Bookings</span>
+          <span className="text-xs font-black text-emerald-700 shrink-0">Open ›</span>
+        </button>
         {loading ? (
           <div className="space-y-4">
             {[1, 2, 3].map(i => (

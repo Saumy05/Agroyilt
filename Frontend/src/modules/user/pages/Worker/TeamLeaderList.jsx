@@ -195,7 +195,7 @@ const TeamLeaderList = () => {
           <p className="text-sm font-bold text-slate-600">
             {loading ? 'Loading…' : `${filtered.length} teams available`}
           </p>
-          <button onClick={() => navigate('/user/my-worker-requests')} className="text-xs font-black text-emerald-600">
+          <button onClick={() => navigate('/user/my-worker-requests?tab=group')} className="text-xs font-black text-emerald-600">
             My Requests →
           </button>
         </div>

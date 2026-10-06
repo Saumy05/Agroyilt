@@ -502,9 +502,10 @@ const WorkerRequestForm = () => {
         payload.targetedWorkerId = targetedWorkerId;
       }
 
-      await workerBookingService.createFarmerRequest(payload);
+      const created = await workerBookingService.createFarmerRequest(payload);
       toast.success('Request submitted! Finding workers near you...', { id: 'worker-req-toast' });
-      navigate('/user/my-worker-requests', { replace: true });
+      const newId = created?.data?._id || created?.data?.request?._id;
+      navigate(newId ? `/user/farmer-worker-request/${newId}` : '/user/my-bookings?filter=pending', { replace: true });
     } catch (err) {
       const msg = err?.response?.data?.message || 'Failed to submit request. Please try again.';
       toast.error(msg, { id: 'worker-req-toast' });

@@ -24,6 +24,7 @@ export const workerBookingService = {
     if (params.status) qp.append('status', params.status);
     if (params.page)   qp.append('page',   params.page);
     if (params.limit)  qp.append('limit',  params.limit);
+    if (params.withCards) qp.append('withCards', '1');
     const response = await api.get(`/users/farmer-worker-requests${qp.toString() ? `?${qp.toString()}` : ''}`);
     return response.data;
   },

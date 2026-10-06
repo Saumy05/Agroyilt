@@ -105,12 +105,12 @@ const WorkerExplorer = () => {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2, duration: 0.35 }}
-          onClick={() => navigate('/user/my-worker-requests')}
+          onClick={() => navigate('/user/my-bookings')}
           whileTap={{ scale: 0.97 }}
           className="w-full bg-white border-2 border-slate-200 text-slate-700 py-4 rounded-3xl font-black text-base flex items-center justify-center gap-3 active:scale-[0.98] transition-all"
         >
           <FiList size={20} />
-          My Requests
+          My Requests & Bookings
         </motion.button>
 
         {/* Info note */}

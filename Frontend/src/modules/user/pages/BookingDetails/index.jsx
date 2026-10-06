@@ -219,6 +219,14 @@ const BookingDetails = () => {
     return booking.serviceName || 'Equipment';
   }, [booking]);
 
+  // A worker of a farmer hiring request: that job lives on Request Details (old links / notifications land here)
+  useEffect(() => {
+    if (booking?.providerType === 'WORKER' && booking.parentRequestId &&
+        ['independent_broadcast', 'team_leader'].includes(booking.parentRequestType)) {
+      navigate(`/user/farmer-worker-request/${booking.parentRequestId}`, { replace: true });
+    }
+  }, [booking, navigate]);
+
   // Auto-redirect timer when work is completed and paid in active live flow
   useEffect(() => {
     if (!autoRedirect) return;
