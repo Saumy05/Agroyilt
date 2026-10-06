@@ -22,7 +22,7 @@ exports.getWorkerFinancialSettings = async () => {
   }
   return {
     workerCommissionPercentage:      settings.workerCommissionPercentage      ?? 10,
-    workerPlatformChargePercentage:  settings.workerPlatformChargePercentage  ?? 0,
+    workerPlatformChargePercentage:  settings.workerPlatformChargePercentage  ?? 1, // same default as models/Settings
     extensionExpiryMinutes:          settings.extensionExpiryMinutes          ?? 30,
     workerPenaltyEnabled:            settings.workerPenaltyEnabled            ?? false,
     workerPenaltyType:               settings.workerPenaltyType               ?? 'fixed',
@@ -101,7 +101,7 @@ exports.buildFarmerPaymentSummary = (request, assignments = [], booking = null, 
     : Math.round(maxRatePerWorker * selectedWorkerCount * durationHours);
 
   const workerReserveAmount = Number(snap.maximumWorkerAmount || defaultReserve);
-  const platformChargeRate = Number(snap.platformChargeRate ?? 10);
+  const platformChargeRate = Number(snap.platformChargeRate ?? 1);
   const platformFeeAmount = Number(
     snap.platformChargeAmount !== undefined && snap.platformChargeAmount !== null && snap.platformChargeAmount > 0
       ? snap.platformChargeAmount
@@ -584,10 +584,31 @@ exports.addWorkerDues = async (workerId, amount, session = null) => {
 /**
  * Applies a penalty to a worker. Idempotent based on penaltyEventId.
  */
+/**
+ * Amount of an automatic penalty under the admin's rule (Admin → Settings → worker penalty):
+ *   per_minute : (minutes late after the grace period) × ₹/min, capped — lateness only; any other event uses the flat amount
+ *   percentage : % of the worker's pay for that job (flat amount if the pay is unknown)
+ *   fixed      : the flat amount
+ */
+exports.computeWorkerPenalty = (settings, { grossAmount = 0, lateMinutes = null } = {}) => {
+  const flat = Number(settings.workerPenaltyAmount) || 0;
+  if (settings.workerPenaltyType === 'per_minute' && lateMinutes !== null) {
+    return Math.min(Number(settings.workerPenaltyMaxAmount) || 500, Math.max(0, lateMinutes) * (Number(settings.workerPenaltyPerMinute) || 0));
+  }
+  if (settings.workerPenaltyType === 'percentage' && Number(grossAmount) > 0) {
+    return Math.round(((Number(grossAmount) * (Number(settings.workerPenaltyPercentage) || 0)) / 100) * 100) / 100;
+  }
+  return flat;
+};
+
+/**
+ * opts.amount — the exact amount (already priced by the caller, or typed by the admin)
+ * opts.manual — an admin decision (dispute): applies even when automatic penalties are switched off
+ */
 exports.applyWorkerPenalty = async (workerId, bookingId, penaltyEventId, penaltyType, reason, opts = {}) => {
   const settings = await exports.getWorkerFinancialSettings();
 
-  if (!settings.workerPenaltyEnabled) return null;
+  if (!settings.workerPenaltyEnabled && !opts.manual) return null;
 
   // Idempotency check
   const existingPenalty = await WorkerPenalty.findOne({ penaltyEventId });

@@ -68,6 +68,9 @@ exports.updateSettings = async (req, res, next) => {
       workerPenaltyMaxAmount,
       workerPenaltyPercentage,
       extensionExpiryMinutes,
+      // Worker dues & cash
+      maxWorkerDues,
+      workerCashPaymentEnabled,
       // Withdrawal settings
       minWithdrawalAmount,
       minWithdrawalAmountPaise
@@ -194,6 +197,9 @@ exports.updateSettings = async (req, res, next) => {
       if (workerPenaltyMaxAmount !== undefined) settings.workerPenaltyMaxAmount = Math.max(0, Number(workerPenaltyMaxAmount) || 0);
       if (workerPenaltyPercentage !== undefined) settings.workerPenaltyPercentage = Math.min(100, Math.max(0, Number(workerPenaltyPercentage) || 0));
       if (extensionExpiryMinutes !== undefined) settings.extensionExpiryMinutes = Math.max(1, Number(extensionExpiryMinutes) || 30);
+      // Dues above this block a worker from new jobs (see services/workerDuesService.syncDuesRestriction)
+      if (maxWorkerDues !== undefined) settings.maxWorkerDues = Math.max(0, Number(maxWorkerDues) || 0);
+      if (workerCashPaymentEnabled !== undefined) settings.workerCashPaymentEnabled = Boolean(workerCashPaymentEnabled);
 
       // Minimum withdrawal limit configuration
       if (minWithdrawalAmount !== undefined) {
@@ -210,6 +216,20 @@ exports.updateSettings = async (req, res, next) => {
       }
 
       await settings.save();
+
+      // A new dues limit applies to every worker now, not only at their next dues change
+      if (maxWorkerDues !== undefined) {
+        const Worker = require('../../models/Worker');
+        const max = settings.maxWorkerDues;
+        await Worker.updateMany(
+          { outstandingDues: { $gt: max }, isRestricted: { $ne: true } },
+          { $set: { isRestricted: true, restrictionReason: `Outstanding dues exceeded allowed limit (₹${max})` } }
+        );
+        await Worker.updateMany(
+          { isRestricted: true, outstandingDues: { $lte: max }, $or: [{ restrictionReason: null }, { restrictionReason: /^Outstanding dues/ }] },
+          { $set: { isRestricted: false, restrictionReason: null } }
+        );
+      }
 
       // Emit real-time branding update via Socket.io ONLY AFTER database save succeeds
       try {

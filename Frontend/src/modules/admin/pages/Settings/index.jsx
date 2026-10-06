@@ -66,7 +66,9 @@ const AdminSettings = () => {
     workerPenaltyFreeMinutes: 10,
     workerPenaltyMaxAmount: 500,
     workerPenaltyPercentage: 5,
-    extensionExpiryMinutes: 30
+    extensionExpiryMinutes: 30,
+    maxWorkerDues: 500,
+    workerCashPaymentEnabled: true
   });
   const [systemLoading, setSystemLoading] = useState(false);
 
@@ -359,7 +361,9 @@ const AdminSettings = () => {
             workerPenaltyFreeMinutes: res.settings.workerPenaltyFreeMinutes ?? 10,
             workerPenaltyMaxAmount: res.settings.workerPenaltyMaxAmount ?? 500,
             workerPenaltyPercentage: res.settings.workerPenaltyPercentage ?? 5,
-            extensionExpiryMinutes: res.settings.extensionExpiryMinutes ?? 30
+            extensionExpiryMinutes: res.settings.extensionExpiryMinutes ?? 30,
+            maxWorkerDues: res.settings.maxWorkerDues ?? 500,
+            workerCashPaymentEnabled: res.settings.workerCashPaymentEnabled ?? true
           });
           // Load support settings
           setSupportSettings({
@@ -577,7 +581,9 @@ const AdminSettings = () => {
         workerPenaltyFreeMinutes: Number(systemSettings.workerPenaltyFreeMinutes) || 0,
         workerPenaltyMaxAmount: Number(systemSettings.workerPenaltyMaxAmount) || 0,
         workerPenaltyPercentage: Number(systemSettings.workerPenaltyPercentage) || 0,
-        extensionExpiryMinutes: Number(systemSettings.extensionExpiryMinutes) || 30
+        extensionExpiryMinutes: Number(systemSettings.extensionExpiryMinutes) || 30,
+        maxWorkerDues: Math.max(0, Number(systemSettings.maxWorkerDues) || 0),
+        workerCashPaymentEnabled: Boolean(systemSettings.workerCashPaymentEnabled)
       };
       await updateSettings(payload);
       toastManager.success('System preferences & worker rules updated');
@@ -1545,6 +1551,40 @@ const AdminSettings = () => {
                         )}
                       </div>
                     )}
+                  </div>
+
+                  {/* Worker dues & cash bookings */}
+                  <div className="border border-gray-200 rounded-xl p-4 space-y-4">
+                    <h3 className="text-sm font-bold text-gray-800">Worker Dues & Cash Bookings</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 uppercase mb-1.5">Dues Limit (₹)</label>
+                        <input
+                          type="number"
+                          name="maxWorkerDues"
+                          value={systemSettings.maxWorkerDues}
+                          onChange={handleSystemChange}
+                          min="0"
+                          className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-gray-500 font-bold text-gray-800 text-sm"
+                        />
+                        <p className="text-[10px] text-gray-500 mt-1">
+                          A worker who owes more than this (platform fees, commission, penalties) cannot take new jobs until they pay. They are unblocked automatically once they are back under it.
+                        </p>
+                      </div>
+                      <label className="flex items-start gap-3 cursor-pointer pt-5">
+                        <input
+                          type="checkbox"
+                          name="workerCashPaymentEnabled"
+                          checked={Boolean(systemSettings.workerCashPaymentEnabled)}
+                          onChange={handleSystemChange}
+                          className="w-5 h-5 mt-0.5 accent-gray-800"
+                        />
+                        <span>
+                          <span className="block text-sm font-semibold text-gray-800">Allow cash payment for worker bookings</span>
+                          <span className="block text-[10px] text-gray-500">When off, farmers must pay online when booking workers.</span>
+                        </span>
+                      </label>
+                    </div>
                   </div>
 
                   <div className="flex justify-end pt-2">

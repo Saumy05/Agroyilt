@@ -408,7 +408,7 @@ exports.markArrived = async (req, res) => {
 /** Late-arrival penalty for HOURLY visits. One mechanism only: the wallet/dues penalty (never also netEarning). */
 const applyLatePenalty = async (assignment) => {
   try {
-    const { getWorkerFinancialSettings, applyWorkerPenalty } = require('../../services/workerFinancialService');
+    const { getWorkerFinancialSettings, applyWorkerPenalty, computeWorkerPenalty } = require('../../services/workerFinancialService');
     const settings = await getWorkerFinancialSettings();
     if (!settings.workerPenaltyEnabled) return;
     const parent = await WorkerBookingRequest.findById(assignment.parentRequestId).select('scheduledDate startTime');
@@ -421,15 +421,7 @@ const applyLatePenalty = async (assignment) => {
     const freeMins = Number(settings.workerPenaltyFreeMinutes) || 0;
     if (diffMins <= freeMins) return;
 
-    const lateMins = diffMins - freeMins;
-    let amount = 0;
-    if (settings.workerPenaltyType === 'per_minute') {
-      amount = Math.min(Number(settings.workerPenaltyMaxAmount) || 500, lateMins * (Number(settings.workerPenaltyPerMinute) || 5));
-    } else if (settings.workerPenaltyType === 'percentage') {
-      amount = Math.round(((Number(assignment.grossAmount) || 0) * (Number(settings.workerPenaltyPercentage) || 5)) / 100);
-    } else {
-      amount = Number(settings.workerPenaltyAmount) || 50;
-    }
+    const amount = computeWorkerPenalty(settings, { grossAmount: assignment.grossAmount, lateMinutes: diffMins - freeMins });
     if (!(amount > 0)) return;
 
     const claimed = await IndWorkerAssignment.findOneAndUpdate(
@@ -847,10 +839,11 @@ exports.workerWithdraw = async (req, res) => {
 
     // penalty per admin settings (idempotent by event id; never blocks the withdrawal)
     try {
-      const { getWorkerFinancialSettings, applyWorkerPenalty } = require('../../services/workerFinancialService');
+      const { getWorkerFinancialSettings, applyWorkerPenalty, computeWorkerPenalty } = require('../../services/workerFinancialService');
       const settings = await getWorkerFinancialSettings();
-      if (settings.workerPenaltyEnabled) {
-        await applyWorkerPenalty(workerId, assignment.legacyBookingId, `cancel_pen_${assignment._id}`, 'cancellation', `Withdrew from assignment ${assignment._id}`);
+      const amount = computeWorkerPenalty(settings, { grossAmount: assignment.grossAmount });
+      if (settings.workerPenaltyEnabled && amount > 0) {
+        await applyWorkerPenalty(workerId, assignment.legacyBookingId, `cancel_pen_${assignment._id}`, 'cancellation', 'Withdrew from a confirmed job', { amount });
       }
     } catch (penErr) { console.warn('[workerWithdraw penalty - non-fatal]', penErr.message); }
 

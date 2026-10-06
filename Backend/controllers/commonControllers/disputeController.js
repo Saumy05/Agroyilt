@@ -836,8 +836,10 @@ async function _applyWorkerPenaltyForDispute(dispute, amount, adminId, adminName
     workerId,
     dispute.workerRequestId || dispute.assignmentId,
     penaltyEventId,
-    'DISPUTE',
-    `Admin penalty for dispute #${dispute._id}`
+    'dispute',
+    `Admin penalty for dispute #${dispute._id}`,
+    // exactly the amount the admin decided, even if automatic penalties are switched off
+    { amount, manual: true }
   );
 
   // Notify worker

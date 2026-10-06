@@ -716,7 +716,7 @@ const FarmerRequestDetail = () => {
                 ? Number(request.paymentSummary?.workerReserveAmount || calculatedReserve)
                 : calculatedReserve;
 
-              const platformRate = Number(request.financialSnapshot?.platformChargeRate || request.paymentSummary?.platformChargeRate || 10);
+              const platformRate = Number(request.financialSnapshot?.platformChargeRate ?? request.paymentSummary?.platformChargeRate ?? 1);
               const platformFee = isPaid
                 ? Number(request.paymentSummary?.platformFeeAmount || request.financialSnapshot?.platformChargeAmount || Math.round((reserveAmount * platformRate) / 100))
                 : Math.round((reserveAmount * platformRate) / 100);
