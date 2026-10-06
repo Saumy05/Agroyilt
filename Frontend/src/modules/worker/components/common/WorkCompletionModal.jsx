@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import flutterBridge from '../../../../utils/flutterBridge';
 import { toastManager } from '../../../../utils/toastManager';
 import { compressImage, fileToBase64 } from '../../../../utils/imageCompression';
+import { rupees, paymentLineLabel } from '../../../../utils/workerPayment';
 
 const WorkCompletionModal = ({ isOpen, onClose, job, onComplete, loading }) => {
   const [workPhotos, setWorkPhotos] = useState([]);
@@ -122,6 +123,8 @@ const WorkCompletionModal = ({ isOpen, onClose, job, onComplete, loading }) => {
     ? job.cashCollection.platformFee
     : Math.max(0, cashToCollect - workerWage);
   const farmerName = job?.userId?.name || job?.customerName || job?.farmerName || 'the farmer';
+  // farmer ⇄ worker jobs: the backend's line-by-line cash breakdown (booked work + each extra-time part)
+  const cashLines = Array.isArray(job?.cashCollection?.lines) ? job.cashCollection.lines : [];
 
   const handleSubmit = () => {
     const otpCode = completionOtp.join('').trim();
@@ -306,6 +309,40 @@ const WorkCompletionModal = ({ isOpen, onClose, job, onComplete, loading }) => {
                   </div>
 
                   {/* Cash Breakdown */}
+                  {cashLines.length > 0 ? (
+                    <div className="bg-white rounded-xl p-3 border border-emerald-200/80 text-xs space-y-2 shadow-xs">
+                      {cashLines.map((line, i) => (
+                        <div key={i} className="flex justify-between gap-3">
+                          <div className="min-w-0">
+                            <span className="font-bold text-slate-800 block">{paymentLineLabel(line)}</span>
+                            <span className="text-[10px] text-slate-500">
+                              Your pay {rupees(line.workerAmount)} + platform fee {rupees(line.platformFee)}
+                            </span>
+                          </div>
+                          <span className="font-bold text-slate-800 shrink-0">{rupees(line.amount)}</span>
+                        </div>
+                      ))}
+                      <div className="pt-1.5 border-t border-slate-100 flex justify-between font-black text-emerald-900">
+                        <span>Total cash to collect</span>
+                        <span>{rupees(cashToCollect)}</span>
+                      </div>
+                      <div className="pt-1.5 border-t border-dashed border-slate-200 space-y-1 text-[11px]">
+                        <p className="font-bold text-slate-700">After the job, from your wallet:</p>
+                        <div className="flex justify-between text-slate-600">
+                          <span>Platform fee (collected above)</span>
+                          <span>−{rupees(platformFee)}</span>
+                        </div>
+                        <div className="flex justify-between text-slate-600">
+                          <span>App commission on your pay</span>
+                          <span>−{rupees(job?.cashCollection?.commissionAmount)}</span>
+                        </div>
+                        <div className="flex justify-between font-black text-emerald-800 pt-1">
+                          <span>You keep</span>
+                          <span>{rupees(job?.cashCollection?.netEarnings)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
                   <div className="bg-white rounded-xl p-3 border border-emerald-200/80 text-xs space-y-1.5 shadow-xs">
                     <div className="flex justify-between text-slate-600 font-medium">
                       <span>Your Work Earnings:</span>
@@ -323,6 +360,7 @@ const WorkCompletionModal = ({ isOpen, onClose, job, onComplete, loading }) => {
                       ℹ️ The ₹{platformFee.toFixed(2)} platform fee will be adjusted from your wallet balance upon completion.
                     </p>
                   </div>
+                  )}
 
                   {/* Mandatory Cash Collection Confirmation Checkbox */}
                   <label className="flex items-start gap-3 p-3 bg-white rounded-xl border-2 border-emerald-500 cursor-pointer select-none hover:bg-emerald-50/50 transition-colors shadow-xs">

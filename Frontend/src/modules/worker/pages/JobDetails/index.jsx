@@ -16,6 +16,7 @@ import { useAppNotifications } from '../../../../hooks/useAppNotifications';
 import { useLocationTracking } from '../../../../hooks/useLocationTracking';
 import authStorage from '../../../../utils/authStorage';
 import flutterBridge from '../../../../utils/flutterBridge';
+import { rupees, paymentLineLabel } from '../../../../utils/workerPayment';
 
 // Real-time Active Work Stopwatch component
 const ActiveWorkStopwatch = ({ job }) => {
@@ -1051,6 +1052,7 @@ const JobDetails = () => {
                 const extMins = extBreakdown?.extensionMinutes || 0;
                 const extDays = extBreakdown?.additionalDays || 0;
                 const extDurationLabel = extDays > 0 ? `+${extDays} Day(s)` : `+${extMins} Mins`;
+                const cash = job.cashCollection?.isCashBooking ? job.cashCollection : null;
 
                 return (
                   <>
@@ -1100,9 +1102,9 @@ const JobDetails = () => {
                         </div>
                       )}
 
-                      {/* Platform Fee */}
+                      {/* App commission (taken from the worker's pay — not the farmer's platform fee) */}
                       <div className="flex justify-between text-amber-600">
-                        <span className="font-medium">Platform Fee ({commRate}%)</span>
+                        <span className="font-medium">App Commission ({commRate}%)</span>
                         <span className="font-bold text-red-500">-₹{commAmount.toFixed(2)}</span>
                       </div>
 
@@ -1116,7 +1118,7 @@ const JobDetails = () => {
 
                     <div className="flex justify-between items-end pt-3 border-t border-gray-100">
                       <div>
-                        <span className="text-gray-900 font-bold block">Net Earnings (To Wallet)</span>
+                        <span className="text-gray-900 font-bold block">{cash ? 'You Keep' : 'Net Earnings (To Wallet)'}</span>
                         {hasExt && (
                           <span className="text-[10px] text-emerald-600 font-medium">
                             Includes ₹{Number(extBreakdown?.extensionNetAmount || 0).toFixed(2)} net from extension
@@ -1127,6 +1129,30 @@ const JobDetails = () => {
                         ₹{(netEarning + (job.extraChargesTotal || 0)).toFixed(2)}
                       </span>
                     </div>
+
+                    {/* Cash booking: what to collect from the farmer, part by part — same figures the farmer sees */}
+                    {cash && (
+                      <div className="mt-4 bg-amber-50 border border-amber-200 rounded-xl p-3.5 space-y-2 text-xs">
+                        <div className="flex justify-between items-center">
+                          <span className="font-black text-amber-900 uppercase tracking-wide">Collect in cash from farmer</span>
+                          <span className="text-lg font-black text-amber-900">{rupees(cash.totalToCollect)}</span>
+                        </div>
+                        {(cash.lines || []).map((line, i) => (
+                          <div key={i} className="flex justify-between gap-3 text-amber-900/90">
+                            <div className="min-w-0">
+                              <span className="font-semibold block">{paymentLineLabel(line)}</span>
+                              <span className="text-[10px] text-amber-800/80">
+                                Your pay {rupees(line.workerAmount)} + platform fee {rupees(line.platformFee)}
+                              </span>
+                            </div>
+                            <span className="font-bold shrink-0">{rupees(line.amount)}</span>
+                          </div>
+                        ))}
+                        <p className="text-[10px] text-amber-800 font-medium leading-relaxed pt-1.5 border-t border-amber-200">
+                          After the job, {rupees(cash.walletDeduction)} (platform fee {rupees(cash.platformFee)} + app commission {rupees(cash.commissionAmount)}) is taken from your wallet, so you keep {rupees(cash.netEarnings)}.
+                        </p>
+                      </div>
+                    )}
                   </>
                 );
               })()}
@@ -1176,11 +1202,11 @@ const JobDetails = () => {
                     Total Cash to Collect From Farmer
                   </span>
                   <span className="text-lg font-black text-amber-900">
-                    ₹{(job.cashCollection?.totalToCollect || job.cashToCollect || ((job.workerGrossEarning || job.agreedRate || 0) + (job.cashCollection?.platformFee || Math.round((job.workerGrossEarning || job.agreedRate || 0) * 0.1)))).toLocaleString('en-IN')}
+                    ₹{(job.cashCollection?.totalToCollect ?? job.cashToCollect ?? (job.workerGrossEarning || job.agreedRate || 0)).toLocaleString('en-IN')}
                   </span>
                 </div>
                 <p className="text-[11px] text-amber-800 font-medium leading-relaxed">
-                  Collect this physical cash amount directly from the customer. Your work earning is ₹{(job.workerGrossEarning || job.agreedRate || 0).toLocaleString('en-IN')}; platform fee is adjusted via wallet.
+                  {job.cashCollection?.instruction || 'Collect this cash amount directly from the farmer.'}
                 </p>
               </div>
             )}
@@ -1263,7 +1289,7 @@ const JobDetails = () => {
                       <p className="text-[10px] text-amber-700 font-medium">
                         {job.status === 'completed'
                           ? `₹${(job.cashCollection?.totalToCollect || job.cashToCollect || (job.workerGrossEarning || 0)).toLocaleString('en-IN')} physical cash collected directly from farmer.`
-                          : `Collect ₹${(job.cashCollection?.totalToCollect || job.cashToCollect || ((job.workerGrossEarning || job.agreedRate || 0) + (job.cashCollection?.platformFee || Math.round((job.workerGrossEarning || job.agreedRate || 0) * 0.1)))).toLocaleString('en-IN')} cash in hand before submitting completion OTP.`}
+                          : `Collect ₹${(job.cashCollection?.totalToCollect ?? job.cashToCollect ?? (job.workerGrossEarning || job.agreedRate || 0)).toLocaleString('en-IN')} cash in hand before submitting completion OTP.`}
                       </p>
                     </div>
                   </div>

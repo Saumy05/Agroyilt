@@ -9,6 +9,7 @@
  */
 
 const IndWorkerAssignment   = require('../../models/IndWorkerAssignment');
+const IndWorkerExtension    = require('../../models/IndWorkerExtension');
 const WorkerBookingRequest  = require('../../models/WorkerBookingRequest');
 const Worker                = require('../../models/Worker');
 const User                  = require('../../models/User');
@@ -214,20 +215,11 @@ exports.getAssignmentDetails = async (req, res) => {
     if (isAssignedWorker || isTeamLeader) {
       const isCash = Boolean(assignment.isCashBooking) || assignment.paymentMethod === 'cash' || assignment.parentRequestId?.paymentMethod === 'cash';
       if (isCash) {
-        const snap = assignment.parentRequestId?.financialSnapshot;
-        const totalToCollect = snap?.totalPayable || (assignment.grossAmount ? assignment.grossAmount + (snap?.platformChargeAmount || 0) : assignment.grossAmount);
-        const platformFee = snap?.platformChargeAmount || Math.max(0, totalToCollect - (assignment.grossAmount || 0));
-
-        assignmentData.cashCollection = {
-          isCashBooking: true,
-          totalToCollect,
-          workerWage: assignment.grossAmount,
-          platformFee,
-          commissionAmount: assignment.commissionAmount,
-          netEarnings: assignment.netEarning,
-          instruction: `Collect ₹${totalToCollect} cash from the farmer. Platform fee (₹${platformFee}) will be deducted from your wallet balance.`
-        };
-        assignmentData.cashToCollect = totalToCollect;
+        const { buildWorkerCashCollection } = require('../../services/workerFinancialService');
+        const parent = assignment.parentRequestId && typeof assignment.parentRequestId === 'object' ? assignment.parentRequestId : null;
+        const exts = await IndWorkerExtension.find({ parentRequestId: parent?._id || assignment.parentRequestId, status: 'CONFIRMED' });
+        assignmentData.cashCollection = buildWorkerCashCollection(assignment, parent, exts);
+        assignmentData.cashToCollect = assignmentData.cashCollection.totalToCollect;
       }
 
       // workers never see what the farmer paid in total, platform fees or other workers' offers

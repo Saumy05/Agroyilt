@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import WorkerPaymentBill from '../../components/booking/WorkerPaymentBill';
 import { useNavigate, useParams, useLocation, useSearchParams } from 'react-router-dom';
 import { toastManager } from '../../../../utils/toastManager';
 import useAppNotifications from '../../../../hooks/useAppNotifications';
@@ -1852,6 +1853,9 @@ const BookingDetails = () => {
                       </span>
                     </div>
                   </div>
+                ) : booking.paymentSummary?.bill ? (
+                  // INDEPENDENT WORKER BOOKING - line-by-line bill from the backend (same figures the workers see)
+                  <WorkerPaymentBill bill={booking.paymentSummary.bill} />
                 ) : (booking.providerType === 'WORKER' || booking.paymentSummary || booking.workerRequestId || (booking.bookingNumber && booking.bookingNumber.startsWith('WRK-'))) ? (
                   // INDEPENDENT WORKER BOOKING - AUTHORITATIVE FARMER PAYMENT BREAKDOWN
                   <div className="space-y-3.5">

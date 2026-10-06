@@ -217,6 +217,7 @@ exports.buildFarmerPaymentSummary = (request, assignments = [], booking = null, 
     paymentStatus: isPaid ? 'PAID' : (paymentStatusRaw ? paymentStatusRaw.toUpperCase() : 'PENDING'),
     paymentReference: request?.razorpayPaymentId || booking?.paymentId || null,
     currency: snap.currency || 'INR',
+    bill: request ? exports.buildFarmerBill(request, validAssignments, confirmedExts, { isPaid, refundAmount, refundStatus }) : null,
     extensionsSummary
   };
 };
@@ -316,6 +317,187 @@ exports.buildWorkerPaymentSummary = (assignment, booking = null, confirmedExtens
     settlementTransactionId,
     settledAt,
     extensionBreakdown
+  };
+};
+
+const sumP = (items, pick) => items.reduce((sum, x) => sum + pick(x), 0);
+
+/**
+ * Booked length of a booking before any extension: its current minutes/days minus the extensions that were applied
+ * to it (applyExtension moves the parent's endTime/durationMinutes/numberOfDays forward and logs `extension_applied`).
+ */
+const baseSchedule = (request, confirmedExtensions = []) => {
+  const appliedIds = new Set((request?.auditLog || []).filter(a => a && a.event === 'extension_applied').map(a => String(a.meta?.extensionId)));
+  const applied = confirmedExtensions.filter(e => (appliedIds.size ? appliedIds.has(String(e._id)) : true));
+  if (request?.bookingType === 'DAILY') {
+    const extDays = applied.reduce((s, e) => s + (Number(e.additionalDays) || 0), 0);
+    return { minutes: null, days: Math.max(1, (Number(request?.numberOfDays) || 1) - extDays) };
+  }
+  const extMinutes = applied.reduce((s, e) => s + (Number(e.extensionMinutes) || 0), 0);
+  return { minutes: Math.max(0, (Number(request?.durationMinutes) || 60) - extMinutes), days: null };
+};
+
+/**
+ * Cash a worker collects from the farmer on a cash booking — the ONE place this is computed (worker screens, farmer
+ * bill and settlement all use it). Per part of the job (the booked work, then each cash extension):
+ *   amount = worker's pay + platform fee on that pay.
+ * The worker keeps the cash and gives back platformFee + commission through the wallet at settlement.
+ * `grossOverride` lets settlement price a DAILY job by the days actually worked.
+ */
+exports.buildWorkerCashCollection = (assignment, request, extensions = [], { grossOverride = null } = {}) => {
+  if (!assignment) return null;
+  const isDaily = assignment.bookingType === 'DAILY' || request?.bookingType === 'DAILY';
+  const baseRate = Number(request?.financialSnapshot?.platformChargeRate) || 0;
+  const assignmentId = String(assignment._id);
+  const workerId = String(assignment.workerId?._id || assignment.workerId || '');
+  const appliedIds = new Set((assignment.appliedExtensionIds || []).map(String));
+  const confirmed = (extensions || []).filter(e => e && e.status === 'CONFIRMED');
+
+  const extParts = [];
+  for (const ext of confirmed) {
+    if (appliedIds.size && !appliedIds.has(String(ext._id))) continue;
+    const share = (ext.workerExtensions || []).find(w => w.status === 'ACCEPTED' &&
+      (String(w.assignmentId) === assignmentId || String(w.workerId?._id || w.workerId) === workerId));
+    if (!share) continue;
+    const grossP = toP(share.extensionGrossAmount || 0);
+    const rate = ext.platformFeeRate !== undefined && ext.platformFeeRate !== null ? Number(ext.platformFeeRate) : baseRate;
+    extParts.push({
+      extensionId: ext._id,
+      minutes: isDaily ? null : Number(share.extensionMinutes || ext.extensionMinutes || 0),
+      days: isDaily ? Number(share.additionalDays || ext.additionalDays || 0) : null,
+      grossP,
+      feeP: Math.round((grossP * rate) / 100),
+      inCash: ext.paymentMode === 'cash'
+    });
+  }
+
+  const grossP = toP(grossOverride ?? assignment.grossAmount ?? 0);
+  const baseGrossP = Math.max(0, grossP - sumP(extParts, e => e.grossP));
+  const baseFeeP = Math.round((baseGrossP * baseRate) / 100);
+  const extDays = sumP(extParts, e => e.days || 0);
+  const base = baseSchedule(request, confirmed);
+
+  const lines = [
+    {
+      kind: 'booking',
+      minutes: isDaily ? null : base.minutes,
+      days: isDaily ? Math.max(1, (Number(assignment.bookedDays) || base.days || 1) - extDays) : null,
+      workerAmount: toINR(baseGrossP), platformFee: toINR(baseFeeP), amount: toINR(baseGrossP + baseFeeP)
+    },
+    // an online-paid extension is not collected in cash (cash bookings only create cash extensions)
+    ...extParts.filter(e => e.inCash).map(e => ({
+      kind: 'extension', extensionId: e.extensionId, minutes: e.minutes, days: e.days,
+      workerAmount: toINR(e.grossP), platformFee: toINR(e.feeP), amount: toINR(e.grossP + e.feeP)
+    }))
+  ];
+
+  const totalP = sumP(lines, l => toP(l.amount));
+  const feeP = sumP(lines, l => toP(l.platformFee));
+  const commission = Number(assignment.commissionAmount) || 0;
+  const platformFee = toINR(feeP);
+
+  return {
+    isCashBooking: true,
+    totalToCollect: toINR(totalP),
+    workerWage: toINR(grossP),
+    platformFee,
+    platformFeeRate: baseRate,
+    commissionAmount: commission,
+    netEarnings: Number(assignment.netEarning ?? (toINR(grossP) - commission)),
+    walletDeduction: Math.round((platformFee + commission) * 100) / 100,
+    lines,
+    instruction: `Collect ₹${toINR(totalP)} cash from the farmer. After the job, the platform fee (₹${platformFee}) and app commission (₹${commission}) are taken from your wallet.`
+  };
+};
+
+/**
+ * What the farmer pays, line by line (the booked work, then each extension), and how: online (already paid) or
+ * cash (paid to the workers at the end). On a cash booking every line is the sum of the workers' cash collections,
+ * so the farmer's total always equals what the workers are told to collect.
+ */
+exports.buildFarmerBill = (request, assignments = [], extensions = [], { isPaid = false, refundAmount = null, refundStatus = null } = {}) => {
+  if (!request) return null;
+  const snap = request.financialSnapshot || {};
+  const isDaily = request.bookingType === 'DAILY';
+  const isCash = request.paymentMethod === 'cash';
+  const rateUnit = isDaily ? 'daily' : 'hourly';
+  const confirmed = (extensions || []).filter(e => e && e.status === 'CONFIRMED');
+  const base = baseSchedule(request, confirmed);
+  const active = (assignments || []).filter(a => a && a.parentRequestId && ['CONFIRMED', 'COMPLETED'].includes(a.assignmentStatus));
+  const common = { paymentMethod: isCash ? 'cash' : 'online', bookingType: isDaily ? 'DAILY' : 'HOURLY', platformFeeRate: Number(snap.platformChargeRate) || 0 };
+
+  if (isCash && active.length) {
+    const workers = active.map(a => ({
+      a,
+      cash: exports.buildWorkerCashCollection(a, request, confirmed),
+      paid: a.settlementStatus === 'SETTLED' || a.completionStatus === 'OTP_VERIFIED'
+    }));
+    const sumLines = (parts) => ({
+      workerAmount: toINR(sumP(parts, l => toP(l.workerAmount))),
+      platformFee: toINR(sumP(parts, l => toP(l.platformFee))),
+      total: toINR(sumP(parts, l => toP(l.amount)))
+    });
+    const rates = [...new Set(active.map(a => Number(a.agreedRate) || 0))];
+    const lines = [{
+      kind: 'booking', minutes: base.minutes, days: base.days, workerCount: active.length,
+      rate: rates.length === 1 ? rates[0] : null, rateUnit,
+      ...sumLines(workers.map(w => w.cash.lines.find(l => l.kind === 'booking'))),
+      payment: 'cash', status: workers.every(w => w.paid) ? 'paid' : 'due'
+    }];
+    for (const ext of confirmed) {
+      const shares = workers
+        .map(w => ({ w, line: w.cash.lines.find(l => l.kind === 'extension' && String(l.extensionId) === String(ext._id)) }))
+        .filter(x => x.line);
+      if (!shares.length) continue;
+      lines.push({
+        kind: 'extension', extensionId: ext._id,
+        minutes: isDaily ? null : Number(ext.extensionMinutes) || 0, days: isDaily ? Number(ext.additionalDays) || 0 : null,
+        workerCount: shares.length, rate: null, rateUnit,
+        ...sumLines(shares.map(x => x.line)),
+        payment: 'cash', status: shares.every(x => x.w.paid) ? 'paid' : 'due'
+      });
+    }
+    const cashDueP = sumP(workers.filter(w => !w.paid), w => toP(w.cash.totalToCollect));
+    const cashPaidP = sumP(workers.filter(w => w.paid), w => toP(w.cash.totalToCollect));
+    return {
+      ...common, lines,
+      total: toINR(cashDueP + cashPaidP), paidOnline: 0, cashDue: toINR(cashDueP), cashPaid: toINR(cashPaidP),
+      workers: workers.map(w => ({
+        assignmentId: w.a._id, workerId: w.a.workerId?._id || w.a.workerId, workerName: w.a.workerId?.name || null,
+        cashToPay: w.cash.totalToCollect, status: w.paid ? 'paid' : 'due'
+      })),
+      refund: null
+    };
+  }
+
+  // Online booking (or a cash booking that has no workers yet): priced at the farmer's maximum rate, as charged.
+  const lines = [{
+    kind: 'booking', minutes: base.minutes, days: base.days,
+    workerCount: Number(snap.selectedWorkerCount) || (request.selectedWorkerIds || []).length || 1,
+    rate: Number(snap.maximumBudget) || null, rateUnit,
+    workerAmount: Number(snap.maximumWorkerAmount) || 0, platformFee: Number(snap.platformChargeAmount) || 0,
+    total: Number(snap.totalPayable) || toINR(toP(snap.maximumWorkerAmount || 0) + toP(snap.platformChargeAmount || 0)),
+    payment: isCash ? 'cash' : 'online', status: !isCash && isPaid ? 'paid' : 'due'
+  }];
+  for (const ext of confirmed) {
+    const extCash = ext.paymentMode === 'cash';
+    lines.push({
+      kind: 'extension', extensionId: ext._id,
+      minutes: isDaily ? null : Number(ext.extensionMinutes) || 0, days: isDaily ? Number(ext.additionalDays) || 0 : null,
+      workerCount: Number(ext.acceptedWorkerCount) || 0, rate: null, rateUnit,
+      workerAmount: Number(ext.totalServiceAmount) || 0, platformFee: Number(ext.platformFeeAmount) || 0,
+      total: Number(ext.totalPayable || ext.totalPayableAmount) || 0,
+      payment: extCash ? 'cash' : 'online', status: !extCash && ext.paymentStatus === 'success' ? 'paid' : 'due'
+    });
+  }
+  const totalP = sumP(lines, l => toP(l.total));
+  const cashP = sumP(lines.filter(l => l.payment === 'cash'), l => toP(l.total));
+  return {
+    ...common, lines,
+    total: toINR(totalP),
+    paidOnline: toINR(sumP(lines.filter(l => l.payment === 'online' && l.status === 'paid'), l => toP(l.total))),
+    cashDue: toINR(cashP), cashPaid: 0, workers: [],
+    refund: isCash ? null : { amount: refundAmount, status: refundStatus }
   };
 };
 

@@ -405,6 +405,7 @@ exports.getTrackingSnapshot = async (req, res) => {
         arrivedAt: b.arrivedAt || b.visitedAt || null,
         otpVerifiedAt: b.visitOtpVerifiedAt || ((canonical === 'IN_PROGRESS' || canonical === 'COMPLETED') ? (b.startedAt || null) : null),
         workStartedAt: b.workStartedAt || b.visitOtpVerifiedAt || b.startedAt || null,
+        workSubmittedAt: b.workSubmittedAt || null,
         completedAt: b.workCompletedAt || b.completedAt || null,
         visitOtp: finalVisitOtp,
         completionOtp: finalCompletionOtp,

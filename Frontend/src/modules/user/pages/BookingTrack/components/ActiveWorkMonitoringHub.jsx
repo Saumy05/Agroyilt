@@ -5,6 +5,7 @@ import {
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toastManager } from '../../../../../utils/toastManager';
+import { workLength } from '../../../../../utils/workerPayment';
 
 /**
  * ActiveWorkMonitoringHub
@@ -30,6 +31,9 @@ const ActiveWorkMonitoringHub = ({
   }, [workers]);
 
   const primaryWorker = activeWorkers[0] || workers[0] || {};
+  const isStopped = (w) => w.journeyStatus === 'WORK_SUBMITTED' || w.workStatus === 'SUBMITTED';
+  // Every worker on site has tapped Stop Work: the clock stops and the farmer is asked to inspect
+  const allStopped = activeWorkers.length > 0 && activeWorkers.every(isStopped);
   const workerNames = activeWorkers.map(w => w.workerName).filter(Boolean);
   const workerNamesDisplay = workerNames.length > 0
     ? (workerNames.length === 1 ? workerNames[0] : workerNames.join(', '))
@@ -60,10 +64,17 @@ const ActiveWorkMonitoringHub = ({
   const durationMinutes = Number(trackingData?.durationMinutes) || 60;
   const isDaily = trackingData?.bookingType === 'DAILY';
 
-  // Live stopwatch ticking every 1 second
+  // When work has stopped, freeze the clock at the latest Stop Work time
+  const stopTimestamp = useMemo(() => {
+    if (!allStopped) return null;
+    const times = activeWorkers.map(w => new Date(w.workSubmittedAt).getTime()).filter(t => !isNaN(t));
+    return times.length ? Math.max(...times) : null;
+  }, [allStopped, activeWorkers]);
+
+  // Live stopwatch ticking every 1 second (frozen once work has stopped)
   useEffect(() => {
     const updateStopwatch = () => {
-      const now = Date.now();
+      const now = stopTimestamp || Date.now();
       const diffMs = Math.max(0, now - startTimestamp);
       const totalSecs = Math.floor(diffMs / 1000);
       setElapsedSeconds(totalSecs);
@@ -75,9 +86,10 @@ const ActiveWorkMonitoringHub = ({
     };
 
     updateStopwatch();
+    if (allStopped) return undefined;
     const interval = setInterval(updateStopwatch, 1000);
     return () => clearInterval(interval);
-  }, [startTimestamp]);
+  }, [startTimestamp, stopTimestamp, allStopped]);
 
   // Progress and schedule metrics
   const elapsedMinutes = Math.floor(elapsedSeconds / 60);
@@ -110,9 +122,16 @@ const ActiveWorkMonitoringHub = ({
     }
   }, [startTimestamp, durationMinutes]);
 
+  // Booked time + extra time from extensions, so the slot length is explained, not just a bigger number
+  const extraMinutes = isDaily ? 0 : Number(trackingData?.paymentSummary?.extensionsSummary?.totalExtensionMinutes) || 0;
+  const bookedMinutes = Math.max(0, durationMinutes - extraMinutes);
   const slotDescription = isDaily
     ? `Day Schedule (${trackingData?.startTime || '09:00'} - ${trackingData?.endTime || '17:00'})`
-    : `${durationMinutes >= 60 ? `${(durationMinutes / 60).toFixed(durationMinutes % 60 === 0 ? 0 : 1)} Hour` : `${durationMinutes} Mins`} (ends ~${endEstimatedDisplay})`;
+    : `${workLength({ minutes: bookedMinutes })}${extraMinutes ? ` + ${workLength({ minutes: extraMinutes })} extra` : ''} (ends ~${endEstimatedDisplay})`;
+
+  const stopDisplay = stopTimestamp
+    ? new Date(stopTimestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+    : '';
 
   // Any worker with End OTP generated (worker tapped Stop Work)
   const workerWithEndOtp = activeWorkers.find(w => Boolean(w.completionOtp)) || (primaryWorker.completionOtp ? primaryWorker : null);
@@ -133,17 +152,26 @@ const ActiveWorkMonitoringHub = ({
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center shadow-lg shadow-emerald-500/20 shrink-0">
-            <FiTool className="w-6 h-6 animate-pulse" />
+            <FiTool className={`w-6 h-6 ${allStopped ? '' : 'animate-pulse'}`} />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-                Active Work in Progress
-              </span>
+              {allStopped ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
+                  <FiCheckCircle className="w-3 h-3" />
+                  Work Stopped — Please Inspect
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                  Active Work in Progress
+                </span>
+              )}
             </div>
             <h3 className="text-base sm:text-lg font-black text-slate-900 mt-1">
-              {workerNamesDisplay} is actively working on your farm
+              {allStopped
+                ? `${workerNamesDisplay} has finished. Check the work, then share the End OTP`
+                : `${workerNamesDisplay} is actively working on your farm`}
             </h3>
           </div>
         </div>
@@ -164,17 +192,18 @@ const ActiveWorkMonitoringHub = ({
       {/* ── Two-Column Grid: Live Stopwatch + Schedule ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
         {/* Left Card: Live Work Stopwatch */}
-        <div className="bg-gradient-to-br from-amber-500 via-orange-500 to-amber-600 rounded-2xl p-4 sm:p-5 text-white shadow-lg shadow-orange-500/15 flex flex-col justify-between border border-amber-300/30 relative overflow-hidden">
+        <div className={`rounded-2xl p-4 sm:p-5 text-white shadow-lg flex flex-col justify-between border relative overflow-hidden ${
+          allStopped
+            ? 'bg-gradient-to-br from-slate-500 via-slate-600 to-slate-700 shadow-slate-500/15 border-slate-300/30'
+            : 'bg-gradient-to-br from-amber-500 via-orange-500 to-amber-600 shadow-orange-500/15 border-amber-300/30'
+        }`}>
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-300 animate-pulse shadow-sm" />
-              <span className="text-[11px] font-black uppercase tracking-wider text-amber-100">
-                Live Work Timer
+              <span className={`w-2.5 h-2.5 rounded-full shadow-sm ${allStopped ? 'bg-slate-300' : 'bg-emerald-300 animate-pulse'}`} />
+              <span className="text-[11px] font-black uppercase tracking-wider text-white/80">
+                {allStopped ? 'Total Work Time' : 'Work Time'}
               </span>
             </div>
-            <span className="text-[10px] bg-black/20 text-amber-100 px-2 py-0.5 rounded-md font-bold">
-              Real-time sync
-            </span>
           </div>
 
           <div className="my-1">
@@ -183,9 +212,9 @@ const ActiveWorkMonitoringHub = ({
             </p>
           </div>
 
-          <div className="flex items-center justify-between text-xs text-amber-100/90 pt-2 border-t border-white/20">
-            <span className="text-[11px] font-semibold">Ticking with worker app</span>
-            <span className="font-bold text-white text-[11px]">🟢 Active</span>
+          <div className="flex items-center justify-between text-xs text-white/80 pt-2 border-t border-white/20">
+            <span className="text-[11px] font-semibold">For information only — the price is fixed</span>
+            <span className="font-bold text-white text-[11px]">{allStopped ? `⏹ Stopped ${stopDisplay}` : '🟢 Running'}</span>
           </div>
         </div>
 
@@ -218,8 +247,10 @@ const ActiveWorkMonitoringHub = ({
           {!isDaily && (
             <div className="mt-3 pt-2.5 border-t border-slate-200/70">
               <div className="flex justify-between items-center text-[10px] font-bold mb-1">
-                <span className="text-slate-500">{elapsedMinutes}m / {durationMinutes}m elapsed</span>
-                {isOvertime ? (
+                <span className="text-slate-500">{allStopped ? `Worked ${elapsedMinutes}m of ${durationMinutes}m` : `${elapsedMinutes}m / ${durationMinutes}m elapsed`}</span>
+                {allStopped ? (
+                  <span className="text-slate-600 font-black">Stopped</span>
+                ) : isOvertime ? (
                   <span className="text-rose-600 font-black animate-pulse flex items-center gap-1">
                     <FiAlertTriangle size={11} /> Overtime (+{overtimeMinutes}m)
                   </span>
@@ -259,7 +290,7 @@ const ActiveWorkMonitoringHub = ({
               </div>
               <div>
                 <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-200/70 px-2 py-0.5 rounded-md">
-                  Work Stopped — Ready for Inspection
+                  {workerWithEndOtp.workerName || 'Worker'} stopped work
                 </span>
                 <h4 className="text-sm font-black text-slate-900 mt-0.5">
                   Farmer Completion OTP

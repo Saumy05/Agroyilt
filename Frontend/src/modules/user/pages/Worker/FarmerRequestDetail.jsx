@@ -8,6 +8,7 @@ import {
 } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import workerBookingService from '../../../../services/workerBookingService';
+import WorkerPaymentBill from '../../components/booking/WorkerPaymentBill';
 
 const STATUS_CONFIG = {
   pending:                    { color: 'bg-amber-100 text-amber-700 border-amber-200',    label: 'Waiting for Responses' },
@@ -184,6 +185,10 @@ const FarmerRequestDetail = () => {
 
   const statusConf = STATUS_CONFIG[request.status] || { color: 'bg-slate-100', label: request.status };
   const canCancel = ['pending', 'matching', 'awaiting_farmer_confirmation'].includes(request.status);
+  // Once booked, the payment card is the backend's line-by-line bill (same figures the workers see)
+  const bill = ['confirmed', 'in_progress', 'partially_completed', 'completed'].includes(request.status)
+    ? request.paymentSummary?.bill
+    : null;
 
   // Safely get available offers
   const offers = request.workerOffers || [];
@@ -652,12 +657,12 @@ const FarmerRequestDetail = () => {
               <div>
                 <h3 className="font-black text-slate-800 text-sm uppercase tracking-wide">Payment Summary</h3>
                 <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
-                  Authoritative Breakdown
+                  {bill ? (bill.paymentMethod === 'cash' ? '💵 Cash on Service' : '💳 Paid Online') : 'Estimate'}
                 </span>
               </div>
             </div>
 
-            {(() => {
+            {bill ? <WorkerPaymentBill bill={bill} /> : (() => {
               const isCash = request.paymentMethod === 'cash';
               const isConfirmed = ['confirmed', 'in_progress', 'partially_completed', 'completed'].includes(request.status);
               const isPaid = request.paymentStatus === 'success' || (isCash && isConfirmed);
@@ -847,7 +852,7 @@ const FarmerRequestDetail = () => {
             })()}
 
               {/* ── TIME EXTENSION BREAKDOWN (If extensions exist) ── */}
-              {(() => {
+              {!bill && (() => {
                 const extSum = request.paymentSummary?.extensionsSummary;
                 const hasExt = Boolean(extSum?.hasExtension || (request.confirmedExtensions && request.confirmedExtensions.length > 0));
                 if (!hasExt) return null;
@@ -892,6 +897,7 @@ const FarmerRequestDetail = () => {
               })()}
 
               {/* Settlement & Refund Section */}
+              {!bill && (
               <div className="pt-2 space-y-2">
                 <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3 space-y-2">
                   <div className="flex justify-between items-center text-slate-600">
@@ -959,6 +965,7 @@ const FarmerRequestDetail = () => {
                   </p>
                 </div>
               </div>
+              )}
 
               {/* Payment Reference ID(s) */}
               <div className="space-y-1 pt-1 text-xs text-slate-400">

@@ -241,7 +241,8 @@ exports.confirmCashCollection = async (req, res) => {
               {
                 $set: {
                   completionStatus: 'OTP_VERIFIED', workStatus: 'SUBMITTED', isCashBooking: true, paymentMethod: 'cash',
-                  grossAmount: grandTotal, commissionAmount, netEarning: workerNetEarning, workCompletedAt: new Date()
+                  grossAmount: grandTotal, commissionAmount, netEarning: workerNetEarning, workCompletedAt: new Date(),
+                  cashPlatformFee: 0 // the worker collected only the entered amount here, no platform fee
                 }
               },
               { new: true }

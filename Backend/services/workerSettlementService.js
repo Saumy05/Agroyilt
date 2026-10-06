@@ -86,7 +86,7 @@ const settleAssignment = async (assignmentId, { useStoredAmounts = false } = {})
 
   const key = `settle_assign_${a._id}`;
   try {
-    const parent = await WorkerBookingRequest.findById(a.parentRequestId).select('paymentMethod paymentStatus');
+    const parent = await WorkerBookingRequest.findById(a.parentRequestId).select('paymentMethod paymentStatus financialSnapshot bookingType durationMinutes numberOfDays auditLog');
     const isCash = Boolean(a.isCashBooking) || a.paymentMethod === 'cash' || (parent && parent.paymentMethod === 'cash');
 
     let gross = a.grossAmount, commission = a.commissionAmount, net = a.netEarning;
@@ -96,6 +96,7 @@ const settleAssignment = async (assignmentId, { useStoredAmounts = false } = {})
       gross = s.grossAmount; commission = s.commissionAmount; net = s.netEarning;
     }
 
+    let cashPlatformFee = null;
     if (isCash) {
       await deductCashCommissionOnce({ workerId: a.workerId, amount: commission || 0, key: `${key}_commission`, referenceId: a._id });
       await ledger.recordPassbookOnce(`${key}_commission`, {
@@ -103,6 +104,22 @@ const settleAssignment = async (assignmentId, { useStoredAmounts = false } = {})
         description: `Cash commission ₹${commission} for assignment ${a._id}`, referenceId: key,
         metadata: { type: 'cash_collection_commission', grossAmount: gross, commissionAmount: commission, netEarning: net }
       });
+
+      // The farmer paid the platform fee to the worker in cash with the wages: give it back to the app, once.
+      cashPlatformFee = a.cashPlatformFee;
+      if (cashPlatformFee === null || cashPlatformFee === undefined) {
+        const { buildWorkerCashCollection } = require('./workerFinancialService');
+        const exts = await IndWorkerExtension.find({ parentRequestId: a.parentRequestId, status: 'CONFIRMED' });
+        cashPlatformFee = buildWorkerCashCollection(a, parent, exts, { grossOverride: gross }).platformFee;
+      }
+      if (cashPlatformFee > 0) {
+        await deductCashCommissionOnce({ workerId: a.workerId, amount: cashPlatformFee, key: `${key}_platform_fee`, referenceId: a._id });
+        await ledger.recordPassbookOnce(`${key}_platform_fee`, {
+          workerId: a.workerId, type: 'platform_fee', amount: cashPlatformFee, status: 'completed', paymentMethod: 'cash',
+          description: `Platform fee ₹${cashPlatformFee} collected in cash for assignment ${a._id}`, referenceId: key,
+          metadata: { type: 'cash_collection_platform_fee', grossAmount: gross, platformFee: cashPlatformFee }
+        });
+      }
     } else {
       await ledger.applyOnce({ ownerId: a.workerId, ownerModel: 'Worker', amount: net, key: `${key}_credit`, reason: 'earnings_credit', referenceId: a._id });
       await ledger.recordPassbookOnce(`${key}_credit`, {
@@ -116,9 +133,10 @@ const settleAssignment = async (assignmentId, { useStoredAmounts = false } = {})
       {
         $set: {
           settlementStatus: 'SETTLED', assignmentStatus: 'COMPLETED', settledAt: new Date(), settlementTransactionId: key,
-          grossAmount: gross, commissionAmount: commission, netEarning: net, workCompletedAt: a.workCompletedAt || new Date()
+          grossAmount: gross, commissionAmount: commission, netEarning: net, workCompletedAt: a.workCompletedAt || new Date(),
+          ...(isCash ? { cashPlatformFee } : {})
         },
-        $push: { auditLog: audit('settled', 'system', null, { key, net, commission, cash: isCash }) }
+        $push: { auditLog: audit('settled', 'system', null, { key, net, commission, cash: isCash, cashPlatformFee }) }
       },
       { new: true }
     );

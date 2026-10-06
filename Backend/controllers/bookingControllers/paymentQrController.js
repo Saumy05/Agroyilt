@@ -366,7 +366,7 @@ exports.confirmAdminQrPayment = async (req, res) => {
         {
           $set: {
             completionStatus: 'OTP_VERIFIED', workStatus: 'SUBMITTED', paymentMethod: 'qr_online', isCashBooking: false,
-            grossAmount, commissionAmount, netEarning: workerNetEarning, workCompletedAt: new Date(),
+            grossAmount, commissionAmount, netEarning: workerNetEarning, workCompletedAt: new Date(), cashPlatformFee: 0,
             qrPayment: {
               refId: assignment.qrPayment?.refId || idempotencyKey, amount: grossAmount, adminUpiId, status: 'COMPLETED',
               utr: cleanUtr, confirmedAt: new Date()

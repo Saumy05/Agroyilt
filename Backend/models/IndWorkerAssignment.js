@@ -288,6 +288,12 @@ const indWorkerAssignmentSchema = new mongoose.Schema(
       required: true,
       min: 0
     },
+    // Cash bookings: platform fee the worker collected in cash and gave back through the wallet at settlement.
+    // null = not settled yet (computed then); 0 = the cash path collected no platform fee (legacy cash / QR).
+    cashPlatformFee: {
+      type: Number,
+      default: null
+    },
     settlementTransactionId: {
       type: String,
       default: null,
