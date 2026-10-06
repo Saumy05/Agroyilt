@@ -1,16 +1,33 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { FiArrowLeft, FiClock, FiMapPin, FiCheckCircle, FiXCircle, FiLoader, FiCalendar, FiChevronRight, FiSearch, FiUsers, FiAlertCircle } from 'react-icons/fi';
+import {
+  FiArrowLeft,
+  FiClock,
+  FiMapPin,
+  FiCalendar,
+  FiChevronRight,
+  FiSearch,
+  FiUsers,
+  FiAlertCircle,
+  FiBriefcase,
+  FiX
+} from 'react-icons/fi';
 import { toastManager } from '../../../../utils/toastManager';
-import { themeColors } from '../../../../theme';
-import LoadingSpinner from '../../components/common/LoadingSpinner';
 import NotificationBell from '../../components/common/NotificationBell';
 import { motion } from 'framer-motion';
 import { bookingService } from '../../../../services/bookingService';
 import { apiCache } from '../../../../utils/apiCache';
 import workerBookingService from '../../../../services/workerBookingService';
 
-const FILTERS = ['all', 'pending', 'confirmed', 'in_progress', 'completed', 'cancelled'];
+const FILTERS = [
+  { id: 'all', label: 'All Orders' },
+  { id: 'pending', label: 'Pending' },
+  { id: 'confirmed', label: 'Confirmed' },
+  { id: 'in_progress', label: 'In Progress' },
+  { id: 'completed', label: 'Completed' },
+  { id: 'cancelled', label: 'Cancelled' },
+];
+
 // statuses of machinery/vendor orders that are still waiting on someone (shown under "Pending")
 const PENDING_BOOKING_STATUSES = 'pending,requested,searching,awaiting_payment';
 
@@ -21,7 +38,7 @@ const MyBookings = () => {
   // farmer hiring requests (one card per request, from the backend with status words + amount)
   const [workerRequests, setWorkerRequests] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState(() => (FILTERS.includes(searchParams.get('filter')) ? searchParams.get('filter') : 'all'));
+  const [filter, setFilter] = useState(() => (FILTERS.some(f => f.id === searchParams.get('filter')) ? searchParams.get('filter') : 'all'));
   const [searchQuery, setSearchQuery] = useState('');
 
   const bookingsCacheRef = useRef({});
@@ -66,12 +83,12 @@ const MyBookings = () => {
       // Race-condition guard: Discard response if a newer filter was clicked in between
       if (requestId !== activeRequestIdRef.current) return;
 
-      if (response.success) {
+      if (response?.success) {
         const data = response.data || [];
         bookingsCacheRef.current[filter] = data;
         setBookings(data);
       } else {
-        if (!isSilent) toastManager.error(response.message || 'Failed to load bookings');
+        if (!isSilent) toastManager.error(response?.message || 'Failed to load bookings');
       }
     } catch (error) {
       if (!isSilent && requestId === activeRequestIdRef.current) {
@@ -106,167 +123,88 @@ const MyBookings = () => {
     };
   }, [loadBookings, filter]);
 
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case 'confirmed':
-        return <FiCheckCircle className="w-3.5 h-3.5" />;
-      case 'in_progress':
-      case 'in-progress':
-        return <FiLoader className="w-3.5 h-3.5 animate-spin" />;
-      case 'journey_started':
-      case 'visited':
-        return <FiMapPin className="w-3.5 h-3.5 text-blue-500" />;
-      case 'completed':
-        return <FiCheckCircle className="w-3.5 h-3.5" />;
-      case 'cancelled':
-      case 'rejected':
-        return <FiXCircle className="w-3.5 h-3.5" />;
-      case 'awaiting_payment':
+  // Unified status styling matching the vendor app design system
+  const getUnifiedStatusConfig = (status, group) => {
+    const s = (status || group || '').toUpperCase();
+    switch (s) {
+      case 'PENDING':
+      case 'REQUESTED':
+      case 'SEARCHING':
+        return {
+          label: 'Pending',
+          bg: 'bg-amber-50',
+          text: 'text-amber-700 font-bold',
+          border: 'border-amber-200/80',
+          dot: 'bg-amber-500',
+          accent: '#f59e0b',
+        };
+      case 'AWAITING_PAYMENT':
+        return {
+          label: 'Awaiting Payment',
+          bg: 'bg-amber-50',
+          text: 'text-amber-800 font-bold',
+          border: 'border-amber-300',
+          dot: 'bg-amber-600 animate-pulse',
+          accent: '#d97706',
+        };
+      case 'CONFIRMED':
+      case 'ASSIGNED':
+      case 'ACCEPTED':
+        return {
+          label: 'Confirmed',
+          bg: 'bg-blue-50',
+          text: 'text-blue-700 font-bold',
+          border: 'border-blue-200/80',
+          dot: 'bg-blue-500',
+          accent: '#3b82f6',
+        };
+      case 'IN_PROGRESS':
+      case 'IN-PROGRESS':
+      case 'JOURNEY_STARTED':
+      case 'VISITED':
+        return {
+          label: s === 'JOURNEY_STARTED' ? 'On The Way' : s === 'VISITED' ? 'Arrived' : 'In Progress',
+          bg: 'bg-emerald-50',
+          text: 'text-emerald-700 font-bold',
+          border: 'border-emerald-200/80',
+          dot: 'bg-emerald-500 animate-pulse',
+          accent: '#10b981',
+        };
+      case 'COMPLETED':
+      case 'WORK_DONE':
+        return {
+          label: 'Completed',
+          bg: 'bg-slate-50',
+          text: 'text-slate-700 font-semibold',
+          border: 'border-slate-200',
+          dot: 'bg-slate-400',
+          accent: '#64748b',
+        };
+      case 'CANCELLED':
+      case 'REJECTED':
+      case 'TIMED_OUT':
+        return {
+          label: s === 'CANCELLED' ? 'Cancelled' : 'Rejected',
+          bg: 'bg-rose-50',
+          text: 'text-rose-700 font-bold',
+          border: 'border-rose-200/70',
+          dot: 'bg-rose-400',
+          accent: '#f43f5e',
+        };
       default:
-        return <FiClock className="w-3.5 h-3.5" />;
-    }
-  };
-
-  const getStatusBorderColor = (status) => {
-    switch (status) {
-      case 'confirmed': return '!border-l-emerald-500';
-      case 'in_progress':
-      case 'in-progress':
-      case 'journey_started':
-      case 'visited':
-        return '!border-l-blue-500';
-      case 'completed': return '!border-l-violet-500';
-      case 'cancelled':
-      case 'rejected': return '!border-l-rose-500';
-      case 'awaiting_payment': return '!border-l-amber-500';
-      default: return '!border-l-gray-300';
-    }
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'confirmed':
-        return 'bg-emerald-500 text-white border-emerald-600 ring-emerald-500';
-      case 'in_progress':
-      case 'in-progress':
-      case 'journey_started':
-      case 'visited':
-        return 'bg-blue-500 text-white border-blue-600 ring-blue-500';
-      case 'completed':
-        return 'bg-violet-500 text-white border-violet-600 ring-violet-500';
-      case 'cancelled':
-      case 'rejected':
-        return 'bg-rose-500 text-white border-rose-600 ring-rose-500';
-      case 'awaiting_payment':
-        return 'bg-amber-500 text-white border-amber-600 ring-amber-500';
-      default:
-        return 'bg-gray-500 text-white border-gray-600 ring-gray-500';
-    }
-  };
-
-  const getStatusLabel = (status) => {
-    if (!status) return 'Unknown';
-    switch (status) {
-      case 'in_progress':
-      case 'in-progress':
-        return 'In Progress';
-      case 'journey_started': return 'On The Way';
-      case 'visited': return 'Arrived';
-      case 'awaiting_payment': return 'Request Accepted';
-      case 'work_done': return 'Work Completed';
-      default: return status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' ');
+        return {
+          label: (s.replace(/_/g, ' ') || 'Pending').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()),
+          bg: 'bg-slate-50',
+          text: 'text-slate-600 font-medium',
+          border: 'border-slate-200',
+          dot: 'bg-slate-400',
+          accent: '#94a3b8',
+        };
     }
   };
 
   const handleBookingClick = (booking) => {
     navigate(`/user/booking/${booking._id || booking.id}`);
-  };
-
-  // ── Farmer hiring requests ───────────────────────────────────────────────
-  const requestMatchesSearch = (r) => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    return [r._id, r.workTitle, r.workCategory, r.location?.city, r.location?.addressLine1]
-      .some(v => String(v || '').toLowerCase().includes(q));
-  };
-  const visibleRequests = workerRequests.filter(r => (filter === 'all' || r.card?.group === filter) && requestMatchesSearch(r));
-  const actionRequests = filter === 'all' ? visibleRequests.filter(r => r.card?.needsAction) : [];
-
-  const requestWhen = (r) => {
-    if (r.bookingType === 'DAILY') {
-      const days = Number(r.numberOfDays) || 1;
-      return `From ${formatDate(r.startDate)} · ${days} day${days === 1 ? '' : 's'}${r.reportingTime ? ` · report ${r.reportingTime}` : ''}`;
-    }
-    return `${formatDate(r.scheduledDate)}${r.startTime ? ` · ${r.startTime}` : ''}`;
-  };
-  const REQUEST_GROUP_STYLE = {
-    pending: { badge: 'bg-amber-500 text-white border-amber-600 ring-amber-500', border: '!border-l-amber-500' },
-    confirmed: { badge: 'bg-emerald-500 text-white border-emerald-600 ring-emerald-500', border: '!border-l-emerald-500' },
-    in_progress: { badge: 'bg-blue-500 text-white border-blue-600 ring-blue-500', border: '!border-l-blue-500' },
-    completed: { badge: 'bg-violet-500 text-white border-violet-600 ring-violet-500', border: '!border-l-violet-500' },
-    cancelled: { badge: 'bg-rose-500 text-white border-rose-600 ring-rose-500', border: '!border-l-rose-500' }
-  };
-
-  const renderRequestCard = (r, compact = false) => {
-    const style = REQUEST_GROUP_STYLE[r.card?.group] || REQUEST_GROUP_STYLE.pending;
-    return (
-      <div
-        key={`req-${r._id}`}
-        onClick={() => navigate(`/user/farmer-worker-request/${r._id}`)}
-        className={`group relative bg-white rounded-2xl ${compact ? 'p-4' : 'p-5'} border border-slate-200 border-l-4 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.04)] active:scale-[0.99] transition-all duration-300 cursor-pointer ${style.border}`}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 w-fit rounded-md uppercase tracking-wider mb-1 flex items-center gap-1">
-              <FiUsers className="w-3 h-3" /> Workers{r.workCategory ? ` · ${r.workCategory}` : ''}
-            </div>
-            <h3 className="text-lg font-bold text-slate-800 leading-tight line-clamp-2">{r.workTitle || 'Worker request'}</h3>
-            <p className="text-xs text-slate-500 mt-0.5">{r.card?.detail}</p>
-          </div>
-          <div className={`shrink-0 px-3 py-1 rounded-full border ring-1 ring-inset shadow-sm ${style.badge}`}>
-            <span className="text-[11px] font-bold uppercase tracking-wide">{r.card?.label || r.status}</span>
-          </div>
-        </div>
-
-        {!compact && (
-          <div className="mt-4 grid grid-cols-[auto_1fr] gap-x-3 gap-y-3 p-3 rounded-xl bg-slate-50/50 border border-slate-200">
-            <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center shadow-sm">
-              <FiCalendar className="w-4 h-4 text-blue-500" />
-            </div>
-            <div className="flex flex-col justify-center">
-              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">When</p>
-              <p className="text-sm font-bold text-slate-700">{requestWhen(r)}</p>
-            </div>
-            <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center shadow-sm">
-              <FiMapPin className="w-4 h-4 text-rose-500" />
-            </div>
-            <div className="flex flex-col justify-center min-w-0">
-              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Location</p>
-              <p className="text-sm font-medium text-slate-700 truncate">{getAddressString(r.location)}</p>
-            </div>
-          </div>
-        )}
-
-        <div className={`flex items-center justify-between ${compact ? 'mt-3' : 'pt-4 mt-4 border-t border-slate-200'}`}>
-          <div>
-            {r.card?.amount ? (
-              <>
-                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">{r.card.amount.label}</p>
-                <p className="text-xl font-bold text-slate-900">
-                  <span className="text-sm font-semibold text-slate-400">₹</span>{Number(r.card.amount.value || 0).toLocaleString('en-IN')}
-                </p>
-              </>
-            ) : (
-              <p className="text-xs text-slate-400">{compact ? requestWhen(r) : ''}</p>
-            )}
-          </div>
-          <span className={`flex items-center gap-1.5 pl-4 pr-3 py-2 rounded-lg font-bold text-sm border ${r.card?.needsAction ? 'bg-amber-500 border-amber-500 text-white' : 'bg-indigo-50 border-indigo-100 text-indigo-600'}`}>
-            {r.card?.needsAction ? r.card.label : 'View Details'}
-            <FiChevronRight className="w-4 h-4" />
-          </span>
-        </div>
-      </div>
-    );
   };
 
   const formatDate = (dateString) => {
@@ -277,11 +215,6 @@ const MyBookings = () => {
       month: 'short',
       year: 'numeric'
     });
-  };
-
-  const formatTime = (timeString) => {
-    if (!timeString) return 'N/A';
-    return timeString;
   };
 
   const getAddressString = (address) => {
@@ -297,121 +230,386 @@ const MyBookings = () => {
     return 'Detailed Address';
   };
 
-  return (
-    <div className="min-h-screen pb-24 relative bg-white">
-      {/* Refined Brand Mesh Gradient Background */}
-      <div className="fixed inset-0 z-0 pointer-events-none">
-        <div className="absolute inset-0"
-          style={{
-            background: `
-              radial-gradient(at 0% 0%, ${themeColors?.brand?.teal || '#347989'}25 0%, transparent 70%),
-              radial-gradient(at 100% 0%, ${themeColors?.brand?.yellow || '#D68F35'}20 0%, transparent 70%),
-              radial-gradient(at 100% 100%, ${themeColors?.brand?.orange || '#BB5F36'}15 0%, transparent 75%),
-              radial-gradient(at 0% 100%, ${themeColors?.brand?.teal || '#347989'}10 0%, transparent 70%),
-              radial-gradient(at 50% 50%, ${themeColors?.brand?.teal || '#347989'}03 0%, transparent 100%),
-              #FFFFFF
-            `
-          }}
+  // ── Farmer hiring requests ───────────────────────────────────────────────
+  const requestMatchesSearch = (r) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return [r._id, r.workTitle, r.workCategory, r.location?.city, r.location?.addressLine1]
+      .some(v => String(v || '').toLowerCase().includes(q));
+  };
+  const visibleRequests = workerRequests.filter(r => (filter === 'all' || r.card?.group === filter) && requestMatchesSearch(r));
+  const actionRequests = filter === 'all' ? visibleRequests.filter(r => r.card?.needsAction) : [];
+
+  const requestWhen = (r) => {
+    if (r.bookingType === 'DAILY') {
+      const days = Number(r.numberOfDays) || 1;
+      return `From ${formatDate(r.startDate || r.scheduledDate)} · ${days} day${days === 1 ? '' : 's'}${r.reportingTime ? ` · ${r.reportingTime}` : ''}`;
+    }
+    return `${formatDate(r.scheduledDate)}${r.startTime ? ` · ${r.startTime}` : ''}`;
+  };
+
+  // Modern Vendor-styled Request Card
+  const renderRequestCard = (r, compact = false) => {
+    const statusConfig = getUnifiedStatusConfig(r.card?.group || r.status, r.card?.group);
+    if (r.card?.needsAction) {
+      statusConfig.label = r.card.label || 'Action Required';
+      statusConfig.dot = 'bg-amber-500 animate-ping';
+      statusConfig.accent = '#f59e0b';
+    } else if (r.card?.label) {
+      statusConfig.label = r.card.label;
+    }
+
+    const isCancelled = ['cancelled', 'rejected'].includes((r.card?.group || r.status || '').toLowerCase());
+    const amountVal = r.card?.amount?.value || 0;
+    const amountLabel = r.card?.amount?.label || 'Pay in Cash';
+
+    const durationLabel = r.bookingType === 'DAILY'
+      ? `${Number(r.numberOfDays) || 1} Day${(Number(r.numberOfDays) || 1) > 1 ? 's' : ''}`
+      : `${r.durationHours || 1} Hr${Number(r.durationHours || 1) > 1 ? 's' : ''}`;
+
+    return (
+      <div
+        key={`req-${r._id}`}
+        onClick={() => navigate(`/user/farmer-worker-request/${r._id}`)}
+        className="bg-white rounded-xl border border-slate-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-md hover:border-slate-300 transition-all duration-150 p-3.5 relative overflow-hidden cursor-pointer active:scale-[0.99]"
+      >
+        {/* Subtle left status accent */}
+        <div
+          className="absolute left-0 top-0 bottom-0 w-1"
+          style={{ backgroundColor: statusConfig.accent }}
         />
-        {/* Elegant Dot Grid Pattern */}
-        <div className="absolute inset-0 opacity-[0.04]"
+
+        {/* Header Row: Category Badge + Status Pill & Price */}
+        <div className="flex items-start justify-between gap-2 mb-2 pl-1.5">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 flex-wrap mb-1">
+              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50/90 border border-emerald-200/60 px-1.5 py-0.5 rounded uppercase tracking-wider flex items-center gap-1">
+                <FiUsers className="w-3 h-3" /> Workers{r.workCategory ? ` · ${r.workCategory}` : ''}
+              </span>
+              <span
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${statusConfig.bg} ${statusConfig.text} ${statusConfig.border}`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.dot}`} />
+                {statusConfig.label}
+              </span>
+            </div>
+            <h3 className="font-bold text-slate-900 text-sm leading-snug truncate">
+              {r.workTitle || 'Worker Hiring'}
+            </h3>
+            <p className="text-[11px] text-slate-500 font-medium truncate mt-0.5">
+              {r.card?.detail || `${r.numberOfWorkers || 1} worker${(r.numberOfWorkers || 1) > 1 ? 's' : ''}`}
+            </p>
+          </div>
+
+          {/* Price / Estimated Cost */}
+          <div className="flex items-center gap-1 flex-shrink-0 text-right">
+            <div>
+              <div className={`text-sm font-black leading-none ${isCancelled ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
+                ₹{Number(amountVal).toLocaleString('en-IN')}
+              </div>
+              <div className={`text-[10px] mt-1 font-medium ${isCancelled ? 'text-rose-500 font-semibold' : 'text-slate-400'}`}>
+                {isCancelled ? 'Cancelled' : amountLabel}
+              </div>
+            </div>
+            <FiChevronRight className="w-4 h-4 text-slate-300 ml-0.5" />
+          </div>
+        </div>
+
+        {/* Core Information Section - Clean, Compact Hierarchy */}
+        <div className="space-y-1.5 text-xs text-slate-600 pl-1.5 pt-2 border-t border-slate-100">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 text-slate-600 truncate">
+              <FiCalendar className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+              <span className="truncate">{requestWhen(r)}</span>
+            </div>
+            {durationLabel && (
+              <span className="text-[10px] font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md flex-shrink-0">
+                {durationLabel}
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5 text-slate-500">
+            <FiMapPin className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+            <span className="truncate">{getAddressString(r.location)}</span>
+          </div>
+        </div>
+
+        {/* Footer Row: Action button or Status */}
+        <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] pl-1.5">
+          {r.card?.needsAction ? (
+            <div className="flex items-center justify-between w-full">
+              <span className="text-amber-800 font-bold flex items-center gap-1.5 text-[11px]">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+                {r.card?.detail || 'Worker applied — Action required'}
+              </span>
+              <button
+                type="button"
+                className="text-white bg-amber-600 hover:bg-amber-700 active:scale-95 transition-all font-bold text-xs px-2.5 py-1 rounded-lg shadow-xs flex items-center gap-1 cursor-pointer"
+              >
+                {r.card?.label || 'Select Workers'} →
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-1.5">
+                <span
+                  className={`inline-flex items-center gap-1 font-medium ${
+                    isCancelled ? 'text-slate-400' : 'text-emerald-700'
+                  }`}
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      isCancelled ? 'bg-slate-400' : 'bg-emerald-500'
+                    }`}
+                  />
+                  {isCancelled ? 'Request Cancelled' : amountLabel}
+                </span>
+              </div>
+              <span className="text-slate-400 text-[10px] flex items-center gap-0.5">
+                View details →
+              </span>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // Modern Vendor-styled Booking Card (Equipment & Farm Services)
+  const renderBookingCard = (booking) => {
+    const statusConfig = getUnifiedStatusConfig(booking.status);
+    const isCancelled = ['cancelled', 'rejected'].includes((booking.status || '').toLowerCase());
+    const isPaid = (booking.farmerAmount?.status === 'paid') || ['paid', 'success'].includes((booking.paymentStatus || '').toLowerCase());
+    const isCash = booking.farmerAmount?.paymentMethod === 'cash' || booking.paymentMethod === 'cash';
+    
+    const amountVal = booking.farmerAmount?.total ?? (booking.finalAmount || booking.totalAmount || 0);
+    const paymentSubtitle = isCancelled
+      ? 'Cancelled'
+      : isPaid
+      ? (isCash ? 'Paid in Cash' : 'Paid Online')
+      : (isCash ? 'Pay in Cash' : 'Payment Pending');
+
+    const durationLabel = booking.rental_type === 'daily'
+      ? `${booking.estimatedDuration || 1} Day${Number(booking.estimatedDuration) > 1 ? 's' : ''}`
+      : booking.rental_type === 'hourly'
+      ? `${booking.estimatedDuration || 1} Hr${Number(booking.estimatedDuration) > 1 ? 's' : ''}`
+      : booking.rental_type === 'land_based'
+      ? `${booking.landSize || 1} Acres`
+      : null;
+
+    const itemsSummary = booking.bookedItems && booking.bookedItems.length > 0
+      ? booking.bookedItems.map(item => item.card?.title || item.title).filter(Boolean).join(', ')
+      : null;
+
+    const bookingNum = booking.bookingNumber || (booking._id || booking.id || '').substring(0, 8);
+
+    return (
+      <div
+        key={booking._id || booking.id}
+        onClick={() => handleBookingClick(booking)}
+        className="bg-white rounded-xl border border-slate-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-md hover:border-slate-300 transition-all duration-150 p-3.5 relative overflow-hidden cursor-pointer active:scale-[0.99]"
+      >
+        {/* Subtle left status accent */}
+        <div
+          className="absolute left-0 top-0 bottom-0 w-1"
+          style={{ backgroundColor: statusConfig.accent }}
+        />
+
+        {/* Header Row: Category Badge + Status Pill & Price */}
+        <div className="flex items-start justify-between gap-2 mb-2 pl-1.5">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 flex-wrap mb-1">
+              <span className="text-[10px] font-bold text-blue-700 bg-blue-50/90 border border-blue-200/60 px-1.5 py-0.5 rounded uppercase tracking-wider flex items-center gap-1">
+                <FiBriefcase className="w-3 h-3" /> {booking.serviceCategory || 'Equipment Rental'}
+              </span>
+              <span
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${statusConfig.bg} ${statusConfig.text} ${statusConfig.border}`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.dot}`} />
+                {statusConfig.label}
+              </span>
+            </div>
+            <h3 className="font-bold text-slate-900 text-sm leading-snug truncate">
+              {booking.serviceName || 'Equipment Order'}
+            </h3>
+            <p className="text-[11px] text-slate-500 font-medium truncate mt-0.5">
+              {itemsSummary ? itemsSummary : `#${bookingNum}`}
+            </p>
+          </div>
+
+          {/* Price / Total Amount */}
+          <div className="flex items-center gap-1 flex-shrink-0 text-right">
+            <div>
+              <div className={`text-sm font-black leading-none ${isCancelled ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
+                ₹{Number(amountVal).toLocaleString('en-IN')}
+              </div>
+              <div className={`text-[10px] mt-1 font-medium ${isCancelled ? 'text-rose-500 font-semibold' : 'text-slate-400'}`}>
+                {paymentSubtitle}
+              </div>
+            </div>
+            <FiChevronRight className="w-4 h-4 text-slate-300 ml-0.5" />
+          </div>
+        </div>
+
+        {/* Core Information Section - Clean, Compact Hierarchy */}
+        <div className="space-y-1.5 text-xs text-slate-600 pl-1.5 pt-2 border-t border-slate-100">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 text-slate-600 truncate">
+              <FiCalendar className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+              <span className="truncate">
+                {formatDate(booking.scheduledDate)}
+                {booking.scheduledTime || booking.timeSlot?.start ? ` • ${booking.scheduledTime || booking.timeSlot?.start}` : ''}
+              </span>
+            </div>
+            {durationLabel && (
+              <span className="text-[10px] font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md flex-shrink-0">
+                {durationLabel}
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5 text-slate-500">
+            <FiMapPin className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+            <span className="truncate">{getAddressString(booking.address)}</span>
+          </div>
+        </div>
+
+        {/* Footer Row: Payment Status & View Details */}
+        <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] pl-1.5">
+          <div className="flex items-center gap-1.5">
+            <span
+              className={`inline-flex items-center gap-1 font-medium ${
+                isCancelled ? 'text-slate-400' : isPaid ? 'text-emerald-700' : 'text-amber-700'
+              }`}
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  isCancelled ? 'bg-slate-400' : isPaid ? 'bg-emerald-500' : 'bg-amber-500'
+                }`}
+              />
+              {isCancelled ? 'Order Cancelled' : isPaid ? (isCash ? 'Paid in Cash' : 'Paid Online') : (isCash ? 'Pay in Cash' : 'Payment Pending')}
+            </span>
+          </div>
+          <span className="text-slate-400 text-[10px] flex items-center gap-0.5">
+            View details →
+          </span>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="min-h-screen pb-24 relative bg-slate-50/50">
+      {/* Background Ambience */}
+      <div className="fixed inset-0 z-0 pointer-events-none">
+        <div
+          className="absolute inset-0"
           style={{
-            backgroundImage: `radial-gradient(${themeColors?.brand?.teal || '#347989'} 0.8px, transparent 0.8px)`,
-            backgroundSize: '32px 32px'
+            background: 'radial-gradient(at 0% 0%, rgba(52, 121, 137, 0.08) 0%, transparent 60%), radial-gradient(at 100% 100%, rgba(187, 95, 54, 0.05) 0%, transparent 60%)'
           }}
         />
       </div>
 
       <div className="relative z-10">
-        {/* Modern Glassmorphism Header */}
-        <header className="sticky top-0 z-40 backdrop-blur-xl bg-white/40 border-b border-black/[0.03] px-4 py-4 flex items-center justify-between">
+        {/* Modern Glass Header */}
+        <header className="sticky top-0 z-40 backdrop-blur-xl bg-white/80 border-b border-slate-200/80 px-4 py-3 flex items-center justify-between shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate(-1)}
-              className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm border border-black/[0.02]"
+              className="w-9 h-9 bg-white rounded-xl flex items-center justify-center shadow-xs border border-slate-200/80 active:scale-95 transition-all"
             >
-              <FiArrowLeft className="w-5 h-5 text-gray-800" />
+              <FiArrowLeft className="w-4 h-4 text-slate-700" />
             </button>
-            <h1 className="text-xl font-extrabold text-gray-900 tracking-tight">My Farm Orders</h1>
+            <div>
+              <h1 className="text-base font-bold text-slate-900 tracking-tight leading-tight">My Farm Orders</h1>
+              <p className="text-[11px] text-slate-500 font-medium">Track your machinery & workers</p>
+            </div>
           </div>
-          <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm border border-black/[0.02] relative">
+          <div className="w-9 h-9 bg-white rounded-xl flex items-center justify-center shadow-xs border border-slate-200/80 relative">
             <NotificationBell />
           </div>
         </header>
 
         {/* Filter Tabs */}
-        <div className="bg-white border-b border-slate-100 sticky top-[61px] z-20 shadow-[0_4px_20px_-16px_rgba(0,0,0,0.1)]">
-          <div className="flex overflow-x-auto px-4 py-3 gap-2.5 no-scrollbar scroll-smooth">
-            {[
-              { id: 'all', label: 'All Orders' },
-              { id: 'pending', label: `Pending${workerRequests.some(r => r.card?.needsAction) ? ' •' : ''}` },
-              { id: 'confirmed', label: 'Confirmed' },
-              { id: 'in_progress', label: 'In Progress' },
-              { id: 'completed', label: 'Completed' },
-              { id: 'cancelled', label: 'Cancelled' },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setFilter(tab.id)}
-                className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-all duration-200 border ${filter === tab.id
-                  ? 'border-transparent text-white shadow-lg shadow-blue-500/25 active:scale-95'
-                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:border-slate-300'
+        <div className="bg-white/90 backdrop-blur-md border-b border-slate-200/80 sticky top-[57px] z-20 shadow-[0_2px_8px_-4px_rgba(0,0,0,0.04)]">
+          <div className="flex gap-1.5 px-3.5 py-2.5 overflow-x-auto no-scrollbar scroll-smooth">
+            {FILTERS.map((tab) => {
+              const isActive = filter === tab.id;
+              const badgeCount = tab.id === 'pending' ? workerRequests.filter(r => r.card?.needsAction).length : 0;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setFilter(tab.id)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all duration-150 active:scale-95 flex items-center gap-1.5 ${
+                    isActive
+                      ? 'bg-emerald-800 text-white shadow-xs'
+                      : 'bg-white text-slate-600 border border-slate-200/90 hover:bg-slate-50'
                   }`}
-                style={filter === tab.id ? { backgroundColor: themeColors.button } : {}}
-              >
-                {tab.label}
-              </button>
-            ))}
+                >
+                  <span>{tab.label}</span>
+                  {badgeCount > 0 && (
+                    <span
+                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-black leading-tight ${
+                        isActive ? 'bg-white text-emerald-900' : 'bg-amber-500 text-white animate-pulse'
+                      }`}
+                    >
+                      {badgeCount}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {/* Bookings List */}
-        <main className="px-4 py-5 max-w-lg mx-auto w-full">
-          {/* Search Bar */}
-          {(!loading || bookings.length > 0) && (
-            <div className="mb-6">
+        {/* Bookings & Requests Main List */}
+        <main className="px-3.5 py-3 max-w-lg mx-auto w-full">
+          {/* Sleek Compact Search Bar */}
+          {(!loading || bookings.length > 0 || workerRequests.length > 0) && (
+            <div className="mb-2.5">
               <div className="relative">
-                <FiSearch className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
+                <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
                   type="text"
                   placeholder="Search orders (ID, category, service, address)..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3 bg-white rounded-2xl border border-slate-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-xs font-bold text-slate-800 placeholder-slate-400"
+                  className="w-full pl-9 pr-8 py-2 text-xs md:text-sm bg-white rounded-xl border border-slate-200/90 text-slate-800 placeholder-slate-400 shadow-[0_1px_2px_rgba(0,0,0,0.04)] focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 transition-all font-medium"
                 />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full"
+                    aria-label="Clear search"
+                  >
+                    <FiX className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             </div>
           )}
 
+          {/* Skeleton Loader */}
           {loading ? (
-            <div className="space-y-4">
+            <div className="space-y-2.5">
               {[1, 2, 3].map((i) => (
-                <div key={i} className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm animate-pulse">
-                  <div className="flex justify-between mb-4 border-b border-slate-100 pb-4">
-                    <div className="space-y-2">
-                      <div className="h-3 w-20 bg-slate-200 rounded"></div>
-                      <div className="h-5 w-48 bg-slate-200 rounded"></div>
-                    </div>
-                    <div className="h-6 w-24 bg-slate-200 rounded-full"></div>
+                <div
+                  key={i}
+                  className="bg-white rounded-xl p-3.5 border border-slate-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.04)] animate-pulse"
+                >
+                  <div className="flex justify-between items-center mb-2.5">
+                    <div className="h-4 w-36 bg-slate-100 rounded"></div>
+                    <div className="h-4 w-16 bg-slate-100 rounded"></div>
                   </div>
-                  <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-4 mb-5 p-3 rounded-xl bg-slate-50 border border-slate-200">
-                    <div className="w-8 h-8 rounded-full bg-slate-200"></div>
-                    <div className="space-y-1.5 py-1">
-                      <div className="h-2.5 w-16 bg-slate-200 rounded"></div>
-                      <div className="h-3.5 w-32 bg-slate-200 rounded"></div>
-                    </div>
-                    <div className="w-8 h-8 rounded-full bg-slate-200"></div>
-                    <div className="space-y-1.5 py-1">
-                      <div className="h-2.5 w-16 bg-slate-200 rounded"></div>
-                      <div className="h-3.5 w-40 bg-slate-200 rounded"></div>
-                    </div>
+                  <div className="space-y-2 pt-2 border-t border-slate-100">
+                    <div className="h-3 w-48 bg-slate-100 rounded"></div>
+                    <div className="h-3 w-56 bg-slate-100 rounded"></div>
                   </div>
-                  <div className="flex justify-between pt-4 border-t border-slate-200">
-                    <div className="space-y-1">
-                      <div className="h-2.5 w-16 bg-slate-200 rounded"></div>
-                      <div className="h-6 w-24 bg-slate-200 rounded"></div>
-                    </div>
-                    <div className="h-9 w-28 bg-slate-200 rounded-lg"></div>
+                  <div className="mt-2.5 pt-2 border-t border-slate-100 flex justify-between items-center">
+                    <div className="h-3 w-24 bg-slate-100 rounded"></div>
+                    <div className="h-3 w-16 bg-slate-100 rounded"></div>
                   </div>
                 </div>
               ))}
@@ -435,7 +633,7 @@ const MyBookings = () => {
               return matchesId || matchesCategory || matchesName || matchesItems || matchesAddress;
             });
 
-            // one list, newest first: orders + hiring requests (requests needing action are shown on top instead)
+            // Unified chronological list: newest first
             const actionIds = new Set(actionRequests.map(r => String(r._id)));
             const combined = [
               ...filteredBookings.map(b => ({ kind: 'booking', at: new Date(b.createdAt || b.scheduledDate || 0).getTime(), item: b })),
@@ -445,181 +643,53 @@ const MyBookings = () => {
 
             if (combined.length === 0 && actionRequests.length === 0) {
               return (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="flex flex-col items-center justify-center py-24 text-center px-6"
-                >
-                  <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-6 border border-slate-100 shadow-sm">
-                    <FiClock className="w-8 h-8 text-slate-300" />
+                <div className="bg-white rounded-xl p-8 text-center border border-slate-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.04)] my-4">
+                  <div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center mx-auto mb-2.5">
+                    <FiBriefcase className="w-5 h-5 text-slate-400" />
                   </div>
-                  <h3 className="text-slate-900 text-lg font-bold mb-2">No Orders Found</h3>
-                  <p className="text-slate-500 text-sm max-w-xs leading-relaxed">
+                  <h3 className="text-slate-800 font-semibold text-sm mb-1">No Orders Found</h3>
+                  <p className="text-slate-500 text-xs max-w-xs mx-auto leading-relaxed">
                     {searchQuery.trim()
                       ? `No orders matching "${searchQuery}" were found.`
                       : filter === 'all'
-                        ? "Looks like you haven't ordered any equipment or services yet. Explore the marketplace to get started!"
-                        : `You don't have any ${filter.replace('-', ' ')} orders at the moment.`}
+                        ? "You haven't booked any farm machinery or workers yet."
+                        : `No ${filter.replace('_', ' ')} orders found under this tab.`}
                   </p>
-                </motion.div>
+                </div>
               );
             }
 
             return (
               <>
-              {actionRequests.length > 0 && (
-                <section className="mb-6">
-                  <h2 className="text-xs font-black text-amber-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                    <FiAlertCircle className="w-4 h-4" /> Needs your action
-                  </h2>
-                  <div className="space-y-3">
-                    {actionRequests.map(r => renderRequestCard(r, true))}
-                  </div>
-                </section>
-              )}
-              {actionRequests.length > 0 && combined.length > 0 && (
-                <h2 className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Your bookings</h2>
-              )}
-              <motion.div
-                initial="hidden"
-                animate="visible"
-                variants={{
-                  hidden: { opacity: 0 },
-                  visible: {
-                    opacity: 1,
-                    transition: { staggerChildren: 0.1 }
-                  }
-                }}
-                className="space-y-4"
-              >
-                {combined.map(({ kind, item: booking }) => kind === 'request' ? (
-                  <motion.div
-                    key={`req-${booking._id}`}
-                    variants={{
-                      hidden: { opacity: 0, y: 20 },
-                      visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 100, damping: 15 } }
-                    }}
-                  >
-                    {renderRequestCard(booking)}
-                  </motion.div>
-                ) : (
-                  <motion.div
-                    key={booking._id || booking.id}
-                    variants={{
-                      hidden: { opacity: 0, y: 20 },
-                      visible: {
-                        opacity: 1,
-                        y: 0,
-                        transition: { type: "spring", stiffness: 100, damping: 15 }
-                      }
-                    }}
-                    onClick={() => handleBookingClick(booking)}
-                    className={`group relative bg-white rounded-2xl p-5 border border-slate-200 border-l-4 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.08)] hover:border-blue-300 active:scale-[0.99] transition-all duration-300 cursor-pointer overflow-hidden ${getStatusBorderColor(booking.status)}`}
-                  >
-                    {/* Decorative Elements */}
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-slate-50 via-transparent to-transparent -z-0 opacity-50" />
-  
-                    {/* Header Section */}
-                    <div className="relative z-10 flex items-start justify-between mb-4 border-b border-slate-100 pb-4">
-                      <div className="pr-4 flex-1">
-                        <p className="text-[10px] font-bold tracking-wider text-slate-400 uppercase mb-1.5 flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
-                          #{booking.bookingNumber || (booking._id || booking.id).substring(0, 8)}
-                        </p>
-  
-                        {/* Detailed Booking Info */}
-                        <div className="space-y-1">
-                          {/* 1. Category */}
-                          {booking.serviceCategory && (
-                            <div className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 w-fit rounded-md uppercase tracking-wider mb-1">
-                              {booking.serviceCategory}
-                            </div>
-                          )}
-  
-                          {/* 2. Brand / Section (if available from booked items) */}
-                          {booking.bookedItems && booking.bookedItems.length > 0 && booking.bookedItems[0].sectionTitle && (
-                            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                              {booking.bookedItems.map(item => item.sectionTitle).filter((v, i, a) => a.indexOf(v) === i).join(', ')}
-                            </div>
-                          )}
-  
-                          {/* 3. Service Name */}
-                          <h3 className="text-lg font-bold text-slate-800 leading-tight line-clamp-2 group-hover:text-blue-600 transition-colors">
-                            {booking.serviceName || 'Order Request'}
-                          </h3>
-  
-                          {/* Item Details (Preview) */}
-                          {booking.bookedItems && booking.bookedItems.length > 0 && (
-                            <p className="text-xs text-slate-400 line-clamp-1">
-                              {booking.bookedItems.map(item => item.card?.title || item.title).join(', ')}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-  
-                      {/* Status Badge */}
-                      <div className={`shrink-0 px-3 py-1 pb-1.5 rounded-full border ring-1 ring-inset flex items-center gap-1.5 shadow-sm ${getStatusColor(booking.status)}`}>
-                        {getStatusIcon(booking.status)}
-                        <span className="text-[11px] font-bold uppercase tracking-wide">
-                          {getStatusLabel(booking.status)}
-                        </span>
-                      </div>
+                {/* Needs Your Action Priority Section */}
+                {actionRequests.length > 0 && (
+                  <section className="mb-3.5">
+                    <h2 className="text-[11px] font-bold text-amber-800 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                      <FiAlertCircle className="w-3.5 h-3.5 text-amber-600" /> Needs your action
+                    </h2>
+                    <div className="space-y-2.5">
+                      {actionRequests.map(r => renderRequestCard(r, true))}
                     </div>
-  
-                    {/* Details Grid */}
-                    <div className="relative z-10 grid grid-cols-[auto_1fr] gap-x-3 gap-y-4 mb-5 p-3 rounded-xl bg-slate-50/50 border border-slate-200">
-                      {/* Schedule */}
-                      <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center shrink-0 shadow-sm">
-                        <FiCalendar className="w-4 h-4 text-blue-500" />
-                      </div>
-                      <div className="flex flex-col justify-center">
-                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Slot</p>
-                        <div className="flex items-center gap-1.5 text-sm font-bold text-slate-700">
-                          <span>{formatDate(booking.scheduledDate)}</span>
-                          <span className="text-slate-300">?</span>
-                          <span>{booking.scheduledTime || booking.timeSlot?.start || 'N/A'}</span>
-                        </div>
-                      </div>
-  
-                      {/* Location */}
-                      <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center shrink-0 shadow-sm">
-                        <FiMapPin className="w-4 h-4 text-rose-500" />
-                      </div>
-                      <div className="flex flex-col justify-center min-w-0">
-                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Location</p>
-                        <p className="text-sm font-medium text-slate-700 truncate w-full">
-                          {getAddressString(booking.address)}
-                        </p>
-                      </div>
-                    </div>
-  
-                    {/* Footer Section */}
-                    <div className="relative z-10 flex items-center justify-between pt-4 border-t border-slate-200">
-                      <div>
-                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">
-                          {booking.farmerAmount
-                            ? (booking.farmerAmount.paymentMethod === 'cash'
-                              ? (booking.farmerAmount.status === 'paid' ? 'Paid in Cash' : 'Pay in Cash')
-                              : (booking.farmerAmount.status === 'paid' ? 'Paid Online' : 'Total Amount'))
-                            : 'Total Amount'}
-                        </p>
-                        <p className="text-xl font-bold text-slate-900 flex items-baseline gap-0.5">
-                          <span className="text-sm font-semibold text-slate-400">₹</span>
-                          {/* worker bookings: the backend's per-worker amount (pay + platform fee + extensions) */}
-                          {(booking.farmerAmount?.total ?? (booking.finalAmount || booking.totalAmount || 0)).toLocaleString('en-IN')}
-                        </p>
-                      </div>
-  
-                      <button
-                        className="flex items-center gap-1.5 pl-4 pr-3 py-2 rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-600 font-bold text-sm hover:bg-indigo-600 hover:border-indigo-600 hover:text-white transition-all shadow-sm active:scale-95"
-                      >
-                        View Details
-                        <FiChevronRight className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </motion.div>
-                ))}
-              </motion.div>
+                  </section>
+                )}
+
+                {actionRequests.length > 0 && combined.length > 0 && (
+                  <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Your orders</h2>
+                )}
+
+                {/* Main Cards List */}
+                <div className="space-y-2.5">
+                  {combined.map(({ kind, item }) => (
+                    <motion.div
+                      key={kind === 'request' ? `req-${item._id}` : (item._id || item.id)}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.15 }}
+                    >
+                      {kind === 'request' ? renderRequestCard(item) : renderBookingCard(item)}
+                    </motion.div>
+                  ))}
+                </div>
               </>
             );
           })()}
@@ -630,4 +700,3 @@ const MyBookings = () => {
 };
 
 export default MyBookings;
-
