@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiBriefcase, FiCheckCircle, FiClock, FiTrendingUp, FiChevronRight, FiUser, FiBell, FiMapPin, FiArrowRight } from 'react-icons/fi';
+import { FiBriefcase, FiCheckCircle, FiClock, FiTrendingUp, FiChevronRight, FiUser, FiBell, FiMapPin, FiArrowRight, FiStar, FiUsers, FiLayers, FiArrowUpRight } from 'react-icons/fi';
 import { FaWallet } from 'react-icons/fa';
 import { workerTheme as themeColors, vendorTheme } from '../../../../theme';
 import Header from '../../components/layout/Header';
@@ -332,72 +332,99 @@ const Dashboard = () => {
     <div className="min-h-screen pb-20" style={{ background: themeColors.backgroundGradient }}>
       <Header title="Dashboard" showBack={false} notificationCount={stats.pendingJobs} />
 
-      <main className="pt-0">
+      <main className="pt-1">
         {/* Profile Card Section */}
-        <div className="px-4 pt-3 pb-1">
+        <div className="px-4 pt-2.5 pb-1">
           <div
-            className="rounded-2xl p-3.5 cursor-pointer active:scale-98 transition-all duration-200 relative overflow-hidden shadow-sm"
+            className="rounded-2xl p-4 cursor-pointer active:scale-[0.99] transition-all duration-200 relative overflow-hidden shadow-sm border"
             onClick={() => navigate('/worker/profile')}
             style={{
-              background: themeColors.button,
-              border: `1.5px solid rgba(255, 255, 255, 0.25)`,
+              background: 'linear-gradient(135deg, #14532d 0%, #166534 50%, #15803d 100%)',
+              borderColor: 'rgba(255, 255, 255, 0.2)',
             }}
           >
-            {/* Decorative Pattern */}
+            {/* Subtle decorative glow orb */}
             <div
-              className="absolute top-0 right-0 w-24 h-24 rounded-full opacity-10"
+              className="absolute -top-12 -right-12 w-32 h-32 rounded-full opacity-20 pointer-events-none"
               style={{
-                background: `radial-gradient(circle, #FFFFFF 0%, transparent 70%)`,
-                transform: 'translate(20px, -20px)',
+                background: 'radial-gradient(circle, #86efac 0%, transparent 70%)',
               }}
             />
 
-            <div className="relative z-10 flex items-center gap-3">
-              {/* Profile Photo */}
-              <div
-                className="w-11 h-11 rounded-full flex items-center justify-center shrink-0 overflow-hidden shadow-sm"
-                style={{
-                  background: `linear-gradient(135deg, ${themeColors.button} 0%, ${themeColors.button}dd 100%)`,
-                  border: `2px solid #FFFFFF`,
-                }}
-              >
-                {workerProfile.photo ? (
-                  <OptimizedImage
-                    src={workerProfile.photo}
-                    alt={workerProfile.name}
-                    className="w-full h-full object-cover"
-                    width={44}
-                    height={44}
-                  />
-                ) : (
-                  <FiUser className="w-5 h-5 text-white" />
-                )}
+            <div className="relative z-10 flex items-center gap-3.5">
+              {/* Profile Photo with live ring */}
+              <div className="relative shrink-0">
+                <div
+                  className="w-13 h-13 rounded-full flex items-center justify-center overflow-hidden border-2 border-white/90 shadow-sm"
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.15)',
+                  }}
+                >
+                  {workerProfile.photo ? (
+                    <OptimizedImage
+                      src={workerProfile.photo}
+                      alt={workerProfile.name}
+                      className="w-full h-full object-cover"
+                      width={52}
+                      height={52}
+                    />
+                  ) : (
+                    <FiUser className="w-6 h-6 text-white" />
+                  )}
+                </div>
+                {/* Live status dot */}
+                <span
+                  className={`absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-emerald-900 transition-colors ${
+                    workerProfile.status === 'ONLINE' ? 'bg-emerald-400 shadow-[0_0_8px_rgba(74,222,128,0.9)]' : 'bg-zinc-400'
+                  }`}
+                />
               </div>
 
               {/* Profile Info */}
               <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-extrabold uppercase tracking-widest text-white/90 mb-0.5 leading-none">
-                  WELCOME !
-                </p>
-                <h2 className="text-base font-bold text-white truncate leading-tight">{workerProfile.name}</h2>
-                
-                {/* Status Toggle in Dashboard */}
-                <div 
-                  onClick={handleToggleStatus}
-                  className="inline-flex items-center gap-1.5 mt-1 bg-black/20 hover:bg-black/30 transition-all backdrop-blur-md px-2.5 py-0.5 rounded-full cursor-pointer border border-white/20 active:scale-95"
-                >
-                  <div className={`w-1.5 h-1.5 rounded-full ${workerProfile.status === 'ONLINE' ? 'bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.9)]' : 'bg-red-400'}`}></div>
-                  <span className="text-[11px] font-bold text-white tracking-wide">
-                    {isTogglingStatus ? 'UPDATING...' : (workerProfile.status === 'ONLINE' ? 'ONLINE' : 'OFFLINE')}
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-200">
+                    {workerProfile.workerType === 'TEAM_LEADER' ? 'TEAM LEADER' : 'FIELD SPECIALIST'}
+                  </span>
+                  <span className="w-1 h-1 rounded-full bg-emerald-300/80" />
+                  <span className="text-[10px] font-bold text-emerald-100 flex items-center gap-0.5">
+                    ★ {stats.rating > 0 ? stats.rating.toFixed(1) : '5.0'}
                   </span>
                 </div>
+                <h2 className="text-base font-bold text-white truncate leading-tight">
+                  {workerProfile.name}
+                </h2>
+                <p className="text-xs text-emerald-100/90 truncate font-medium mt-0.5">
+                  {workerProfile.skills && workerProfile.skills.length > 0
+                    ? workerProfile.skills.slice(0, 2).join(' • ')
+                    : (workerProfile.categories && workerProfile.categories.length > 0 ? workerProfile.categories.slice(0, 2).join(' • ') : 'AgroYilt Verified Worker')}
+                </p>
               </div>
 
-              {/* Arrow Icon */}
-              <div
-                className="p-2 rounded-xl shrink-0 bg-white/25 backdrop-blur-sm border border-white/30"
-              >
-                <FiChevronRight className="w-4 h-4 text-white" />
+              {/* Online/Offline interactive toggle button & Profile Chevron */}
+              <div className="flex flex-col items-end gap-1.5 shrink-0">
+                <button
+                  onClick={handleToggleStatus}
+                  className={`px-3 py-1 rounded-full text-[11px] font-bold flex items-center gap-1.5 transition-all border shadow-xs active:scale-95 ${
+                    workerProfile.status === 'ONLINE'
+                      ? 'bg-emerald-400/25 text-emerald-100 border-emerald-300/50 hover:bg-emerald-400/35'
+                      : 'bg-black/30 text-zinc-300 border-white/20 hover:bg-black/40'
+                  }`}
+                  title={workerProfile.status === 'ONLINE' ? 'Tap to go offline' : 'Tap to go online'}
+                >
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      workerProfile.status === 'ONLINE'
+                        ? 'bg-emerald-400 animate-pulse shadow-[0_0_6px_rgba(74,222,128,0.9)]'
+                        : 'bg-zinc-400'
+                    }`}
+                  />
+                  <span>{isTogglingStatus ? 'Updating...' : (workerProfile.status === 'ONLINE' ? 'Online' : 'Offline')}</span>
+                </button>
+
+                <div className="w-7 h-7 rounded-xl flex items-center justify-center bg-white/15 backdrop-blur-md border border-white/25">
+                  <FiChevronRight className="w-3.5 h-3.5 text-white" />
+                </div>
               </div>
             </div>
           </div>
@@ -406,367 +433,388 @@ const Dashboard = () => {
         {/* Incomplete Profile Prompt */}
         {((!workerProfile.skills || workerProfile.skills.length === 0) ||
           (!workerProfile.address || Object.keys(workerProfile.address).length === 0)) && (
-            <div className="px-4 pt-1 -mb-1">
+            <div className="px-4 pt-2">
               <div
                 onClick={() => navigate('/worker/profile')}
-                className="bg-orange-50 border-l-4 border-orange-500 p-3 rounded-r-xl shadow-sm cursor-pointer hover:bg-orange-100 transition-colors"
+                className="bg-amber-50/90 border border-amber-200/90 p-3 rounded-xl shadow-xs cursor-pointer hover:bg-amber-100/80 transition-colors flex items-center gap-2.5 active:scale-[0.99]"
               >
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <FiClock className="h-4 w-4 text-orange-500" />
-                  </div>
-                  <div className="ml-2.5">
-                    <p className="text-xs font-bold text-orange-700">Profile Incomplete</p>
-                    <p className="text-[11px] text-orange-600">
-                      Complete your profile (Address, Skills) to receive jobs.
-                    </p>
-                  </div>
-                  <div className="ml-auto">
-                    <FiArrowRight className="h-3.5 w-3.5 text-orange-500" />
-                  </div>
+                <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center shrink-0">
+                  <FiClock className="h-4 w-4 text-amber-600" />
                 </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-amber-900">Complete Your Profile</p>
+                  <p className="text-[11px] text-amber-700 truncate">
+                    Add skills and address to unlock 3x more farmer booking requests.
+                  </p>
+                </div>
+                <FiArrowRight className="h-4 w-4 text-amber-600 shrink-0" />
               </div>
             </div>
           )}
 
-        {/* Stats Cards - Compact & Native Mobile View */}
+        {/* Primary Earnings & Wallet Overview Card */}
         <div className="px-4 pt-2.5">
-          <div className="grid grid-cols-2 gap-2.5 mb-2.5">
-            {/* Card 1: This Month Earnings - Dark Blue Gradient */}
-            <div
-              onClick={() => navigate('/worker/jobs')}
-              className="rounded-xl p-3 relative overflow-hidden cursor-pointer active:scale-95 transition-transform shadow-sm"
-              style={{
-                background: 'linear-gradient(135deg, #001947 0%, #003b77 100%)',
-                border: '1.5px solid rgba(255, 255, 255, 0.15)',
-              }}
-            >
-              <div className="relative z-10">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[10px] text-white/80 font-bold uppercase tracking-wider truncate mb-0.5">This Month</p>
-                    <p className="text-lg font-black text-white leading-tight tracking-tight">
-                      {'\u20B9'}{stats.thisMonthEarnings.toLocaleString()}
-                    </p>
-                  </div>
-                  <div className="p-1.5 rounded-lg bg-white/20 backdrop-blur-sm border border-white/20 shrink-0 ml-1.5">
-                    <FaWallet className="w-4 h-4 text-white" />
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 mt-1.5 text-white/75">
-                  <FiTrendingUp className="w-3 h-3 text-emerald-400" />
-                  <span className="text-[10px] font-medium">Earnings</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Card 2: Pending Jobs - Light Blue Gradient */}
-            <div
-              onClick={() => navigate(pendingRequestsCount > 0 ? '/worker/booking-requests' : '/worker/jobs')}
-              className="rounded-xl p-3 relative overflow-hidden cursor-pointer active:scale-95 transition-transform shadow-sm"
-              style={{
-                background: 'linear-gradient(135deg, #406788 0%, #304a63 100%)',
-                border: '1.5px solid rgba(255, 255, 255, 0.15)',
-              }}
-            >
-              <div className="relative z-10">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[10px] text-white/80 font-bold uppercase tracking-wider truncate mb-0.5">Pending Jobs</p>
-                    <p className="text-lg font-black text-white leading-tight tracking-tight">
-                      {stats.pendingJobs}
-                    </p>
-                  </div>
-                  <div className="p-1.5 rounded-lg bg-white/20 backdrop-blur-sm border border-white/20 shrink-0 ml-1.5">
-                    <FiClock className="w-4 h-4 text-white" />
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 mt-1.5 text-white/75">
-                  <FiClock className="w-3 h-3 text-amber-300" />
-                  <span className="text-[10px] font-medium">Waiting</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Card 3: Accepted Jobs - Light Blue Gradient */}
-            <div
-              onClick={() => navigate('/worker/jobs')}
-              className="rounded-xl p-3 relative overflow-hidden cursor-pointer active:scale-95 transition-transform shadow-sm"
-              style={{
-                background: 'linear-gradient(135deg, #406788 0%, #304a63 100%)',
-                border: '1.5px solid rgba(255, 255, 255, 0.15)',
-              }}
-            >
-              <div className="relative z-10">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[10px] text-white/80 font-bold uppercase tracking-wider truncate mb-0.5">Accepted</p>
-                    <p className="text-lg font-black text-white leading-tight tracking-tight">
-                      {stats.acceptedJobs}
-                    </p>
-                  </div>
-                  <div className="p-1.5 rounded-lg bg-white/20 backdrop-blur-sm border border-white/20 shrink-0 ml-1.5">
-                    <FiCheckCircle className="w-4 h-4 text-white" />
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 mt-1.5 text-white/75">
-                  <FiBriefcase className="w-3 h-3 text-sky-300" />
-                  <span className="text-[10px] font-medium">Active</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Card 4: Completed Jobs - Dark Blue Gradient */}
-            <div
-              onClick={() => navigate('/worker/jobs')}
-              className="rounded-xl p-3 relative overflow-hidden cursor-pointer active:scale-95 transition-transform shadow-sm"
-              style={{
-                background: 'linear-gradient(135deg, #001947 0%, #003b77 100%)',
-                border: '1.5px solid rgba(255, 255, 255, 0.15)',
-              }}
-            >
-              <div className="relative z-10">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[10px] text-white/80 font-bold uppercase tracking-wider truncate mb-0.5">Completed</p>
-                    <p className="text-lg font-black text-white leading-tight tracking-tight">
-                      {stats.completedJobs}
-                    </p>
-                  </div>
-                  <div className="p-1.5 rounded-lg bg-white/20 backdrop-blur-sm border border-white/20 shrink-0 ml-1.5">
-                    <FiBriefcase className="w-4 h-4 text-white" />
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 mt-1.5 text-white/75">
-                  <FiCheckCircle className="w-3 h-3 text-emerald-400" />
-                  <span className="text-[10px] font-medium">Done</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Farmer Work Requests Card (For All Workers) */}
-        <div className="px-4 mt-1.5">
-          <div 
-            onClick={() => navigate('/worker/booking-requests')}
-            className="relative overflow-hidden rounded-xl p-3 cursor-pointer shadow-sm active:scale-[0.98] transition-transform duration-200"
+          <div
+            onClick={() => navigate('/worker/wallet')}
+            className="rounded-2xl p-4 cursor-pointer active:scale-[0.99] transition-all duration-200 relative overflow-hidden text-white shadow-sm border border-emerald-700/40"
             style={{
-              background: 'linear-gradient(135deg, #047857 0%, #065F46 100%)',
-              color: '#fff'
+              background: 'linear-gradient(135deg, #064e3b 0%, #047857 55%, #059669 100%)',
             }}
           >
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center backdrop-blur-sm shrink-0">
-                  <FiBriefcase size={18} color="#fff" />
+            <div
+              className="absolute -right-6 -bottom-6 w-28 h-28 rounded-full opacity-15 pointer-events-none"
+              style={{ background: 'radial-gradient(circle, #34d399 0%, transparent 70%)' }}
+            />
+
+            <div className="relative z-10 flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-200/90">
+                    This Month's Earnings
+                  </span>
+                  <span className="px-1.5 py-0.2 rounded-full bg-emerald-500/30 text-emerald-100 text-[10px] font-bold border border-emerald-400/30 flex items-center gap-1">
+                    <FiTrendingUp className="w-2.5 h-2.5" />
+                    Active
+                  </span>
                 </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold truncate">Farmer Work Requests</h3>
-                    {pendingRequestsCount > 0 && (
-                      <span className="bg-amber-400 text-slate-900 text-[10px] font-black px-1.5 py-0.5 rounded-full animate-pulse">
-                        {pendingRequestsCount} NEW
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-emerald-100 text-[11px] font-medium truncate">
-                    {pendingRequestsCount > 0
-                      ? `${pendingRequestsCount} new job request(s) waiting for your quote`
-                      : 'View and quote on incoming farmer requests'}
-                  </p>
+                <div className="flex items-baseline gap-2.5 mt-1">
+                  <span className="text-2xl font-black tracking-tight text-white">
+                    ₹{stats.thisMonthEarnings.toLocaleString()}
+                  </span>
+                  <span className="text-xs font-medium text-emerald-200/80">
+                    • Total ₹{stats.totalEarnings.toLocaleString()}
+                  </span>
                 </div>
               </div>
-              <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center shrink-0 ml-2">
-                <FiArrowRight size={13} />
+
+              <div className="flex items-center gap-2">
+                <div className="text-right hidden sm:block">
+                  <p className="text-[11px] font-bold text-emerald-100">My Wallet</p>
+                  <p className="text-[10px] text-emerald-200/75">Withdraw</p>
+                </div>
+                <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/25 shadow-inner">
+                  <FaWallet className="w-4 h-4 text-emerald-100" />
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Group Booking Requests Card (For Team Leaders) */}
-        {workerProfile.workerType === 'TEAM_LEADER' && (
-          <div className="px-4 mt-1.5">
-            <div 
-              onClick={() => navigate('/worker/group-requests')}
-              className="relative overflow-hidden rounded-xl p-3 cursor-pointer shadow-sm active:scale-[0.98] transition-transform duration-200"
+        {/* Operations & Job Metrics Grid (2x2 Grid) */}
+        <div className="px-4 pt-2.5">
+          <div className="grid grid-cols-2 gap-2.5">
+            {/* Card 1: Pending Requests */}
+            <div
+              onClick={() => navigate(pendingRequestsCount > 0 ? '/worker/booking-requests' : '/worker/jobs')}
+              className="bg-white rounded-xl p-3 border border-amber-200/80 shadow-xs active:scale-95 transition-all cursor-pointer hover:shadow-sm hover:border-amber-300"
+            >
+              <div className="flex items-start justify-between">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-semibold text-gray-500 truncate">Pending Jobs</p>
+                  <p className="text-xl font-black text-gray-900 leading-tight mt-0.5">
+                    {stats.pendingJobs}
+                  </p>
+                  <div className="flex items-center gap-1 mt-1 text-amber-600">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                    <span className="text-[10px] font-bold truncate">Requires Quote</span>
+                  </div>
+                </div>
+                <div className="w-8 h-8 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center shrink-0 ml-1">
+                  <FiClock className="w-4 h-4 text-amber-600" />
+                </div>
+              </div>
+            </div>
+
+            {/* Card 2: Active / Accepted */}
+            <div
+              onClick={() => navigate('/worker/jobs')}
+              className="bg-white rounded-xl p-3 border border-sky-200/80 shadow-xs active:scale-95 transition-all cursor-pointer hover:shadow-sm hover:border-sky-300"
+            >
+              <div className="flex items-start justify-between">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-semibold text-gray-500 truncate">Accepted</p>
+                  <p className="text-xl font-black text-gray-900 leading-tight mt-0.5">
+                    {stats.acceptedJobs}
+                  </p>
+                  <div className="flex items-center gap-1 mt-1 text-sky-600">
+                    <span className="w-1.5 h-1.5 rounded-full bg-sky-500" />
+                    <span className="text-[10px] font-bold truncate">In Progress</span>
+                  </div>
+                </div>
+                <div className="w-8 h-8 rounded-lg bg-sky-50 border border-sky-100 flex items-center justify-center shrink-0 ml-1">
+                  <FiBriefcase className="w-4 h-4 text-sky-600" />
+                </div>
+              </div>
+            </div>
+
+            {/* Card 3: Completed */}
+            <div
+              onClick={() => navigate('/worker/jobs')}
+              className="bg-white rounded-xl p-3 border border-emerald-200/80 shadow-xs active:scale-95 transition-all cursor-pointer hover:shadow-sm hover:border-emerald-300"
+            >
+              <div className="flex items-start justify-between">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-semibold text-gray-500 truncate">Completed</p>
+                  <p className="text-xl font-black text-gray-900 leading-tight mt-0.5">
+                    {stats.completedJobs}
+                  </p>
+                  <div className="flex items-center gap-1 mt-1 text-emerald-600">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    <span className="text-[10px] font-bold truncate">Fulfilled</span>
+                  </div>
+                </div>
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center shrink-0 ml-1">
+                  <FiCheckCircle className="w-4 h-4 text-emerald-600" />
+                </div>
+              </div>
+            </div>
+
+            {/* Card 4: Worker Rating */}
+            <div
+              onClick={() => navigate('/worker/profile')}
+              className="bg-white rounded-xl p-3 border border-indigo-200/80 shadow-xs active:scale-95 transition-all cursor-pointer hover:shadow-sm hover:border-indigo-300"
+            >
+              <div className="flex items-start justify-between">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-semibold text-gray-500 truncate">Rating</p>
+                  <p className="text-xl font-black text-gray-900 leading-tight mt-0.5">
+                    {stats.rating > 0 ? stats.rating.toFixed(1) : '5.0'}
+                  </p>
+                  <div className="flex items-center gap-1 mt-1 text-indigo-600">
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                    <span className="text-[10px] font-bold truncate">Top Performer</span>
+                  </div>
+                </div>
+                <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center shrink-0 ml-1">
+                  <FiStar className="w-4 h-4 text-indigo-600" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Highlighted Live Opportunities Banner */}
+        {pendingRequestsCount > 0 && (
+          <div className="px-4 pt-2.5">
+            <div
+              onClick={() => navigate('/worker/booking-requests')}
+              className="relative overflow-hidden rounded-xl p-3.5 cursor-pointer shadow-sm active:scale-[0.98] transition-transform duration-200 border border-emerald-600/30 text-white"
               style={{
-                background: 'linear-gradient(135deg, #0D47A1 0%, #1565C0 100%)',
-                color: '#fff'
+                background: 'linear-gradient(135deg, #047857 0%, #065F46 100%)',
               }}
             >
               <div className="flex justify-between items-center">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center backdrop-blur-sm shrink-0">
-                    <FiBriefcase size={18} color="#fff" />
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm shrink-0 border border-white/20">
+                    <FiBriefcase size={20} color="#fff" />
                   </div>
                   <div className="min-w-0">
-                    <h3 className="text-sm font-bold truncate">Group Booking Requests</h3>
-                    <p className="text-white/85 text-[11px] font-medium truncate">
-                      Manage farmer group requests & team dispatch
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <h3 className="text-sm font-bold truncate">Farmer Work Requests</h3>
+                      <span className="bg-amber-400 text-slate-900 text-[10px] font-black px-2 py-0.5 rounded-full animate-pulse shadow-xs">
+                        {pendingRequestsCount} NEW
+                      </span>
+                    </div>
+                    <p className="text-emerald-100 text-[11px] font-medium truncate">
+                      {pendingRequestsCount} new farm job request(s) waiting for your quote
                     </p>
                   </div>
                 </div>
-                <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center shrink-0 ml-2">
-                  <FiArrowRight size={13} />
+                <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center shrink-0 ml-2">
+                  <FiArrowRight size={14} />
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* Team Management Card (For all workers) - Compact Banner */}
-        <div className="px-4 mt-1.5">
-          <div 
-            onClick={() => navigate('/worker/team')}
-            className="relative overflow-hidden rounded-xl p-3 cursor-pointer shadow-sm active:scale-[0.98] transition-transform duration-200"
-            style={{
-              background: workerProfile.workerType === 'TEAM_LEADER' ? 'linear-gradient(135deg, #2E7D32 0%, #388E3C 100%)' : 'linear-gradient(135deg, #F57C00 0%, #FF9800 100%)',
-              color: '#fff'
-            }}
-          >
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center backdrop-blur-sm shrink-0">
-                  {workerProfile.workerType === 'TEAM_LEADER' ? (
-                    <FiUser size={18} color="#fff" />
-                  ) : (
-                    <FiBriefcase size={18} color="#fff" />
-                  )}
+        {/* Quick Actions & Field Operations Grid */}
+        <div className="px-4 pt-3 pb-1">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-[11px] font-extrabold uppercase tracking-wider text-gray-400">
+              Field Operations & Services
+            </h2>
+          </div>
+          <div className="grid grid-cols-2 gap-2.5">
+            {/* Action 1: Farmer Requests */}
+            <div
+              onClick={() => navigate('/worker/booking-requests')}
+              className="bg-white p-3 rounded-xl shadow-xs border border-emerald-100/80 active:scale-[0.98] transition-all cursor-pointer flex items-center gap-2.5 hover:border-emerald-200 hover:shadow-sm"
+            >
+              <div className="w-8.5 h-8.5 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0 text-emerald-700">
+                <FiBriefcase className="w-4 h-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold text-gray-800 leading-tight">Farmer Requests</p>
+                <p className="text-[10px] text-gray-400 font-medium mt-0.5 truncate">
+                  {pendingRequestsCount > 0 ? `${pendingRequestsCount} requests` : 'Quote & bid'}
+                </p>
+              </div>
+            </div>
+
+            {/* Action 2: Team Roster / My Crew */}
+            <div
+              onClick={() => navigate('/worker/team')}
+              className="bg-white p-3 rounded-xl shadow-xs border border-blue-100/80 active:scale-[0.98] transition-all cursor-pointer flex items-center gap-2.5 hover:border-blue-200 hover:shadow-sm"
+            >
+              <div className="w-8.5 h-8.5 rounded-lg bg-blue-50 flex items-center justify-center shrink-0 text-blue-700">
+                <FiUsers className="w-4 h-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold text-gray-800 leading-tight">
+                  {workerProfile.workerType === 'TEAM_LEADER' ? 'Team Roster' : 'My Team'}
+                </p>
+                <p className="text-[10px] text-gray-400 font-medium mt-0.5 truncate">
+                  {workerProfile.workerType === 'TEAM_LEADER' ? 'Dispatch & recruit' : 'Crew members'}
+                </p>
+              </div>
+            </div>
+
+            {/* Action 3: Group Booking Requests (if Team Leader) OR Assigned Jobs Map */}
+            {workerProfile.workerType === 'TEAM_LEADER' ? (
+              <div
+                onClick={() => navigate('/worker/group-requests')}
+                className="bg-white p-3 rounded-xl shadow-xs border border-indigo-100/80 active:scale-[0.98] transition-all cursor-pointer flex items-center gap-2.5 hover:border-indigo-200 hover:shadow-sm"
+              >
+                <div className="w-8.5 h-8.5 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0 text-indigo-700">
+                  <FiLayers className="w-4 h-4" />
                 </div>
-                <div className="min-w-0">
-                  <h3 className="text-sm font-bold truncate">
-                    {workerProfile.workerType === 'TEAM_LEADER' ? 'Manage Your Team Roster' : 'My Team'}
-                  </h3>
-                  <p className="text-white/85 text-[11px] font-medium truncate">
-                    {workerProfile.workerType === 'TEAM_LEADER' 
-                      ? 'View member skills, status & recruit' 
-                      : (workerProfile.teamId ? 'View your team leader' : 'Join or Create a team')}
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-gray-800 leading-tight">Group Bookings</p>
+                  <p className="text-[10px] text-gray-400 font-medium mt-0.5 truncate">
+                    Manage dispatch
                   </p>
                 </div>
               </div>
-              <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center shrink-0 ml-2">
-                <FiArrowRight size={13} />
+            ) : (
+              <div
+                onClick={() => navigate('/worker/jobs')}
+                className="bg-white p-3 rounded-xl shadow-xs border border-teal-100/80 active:scale-[0.98] transition-all cursor-pointer flex items-center gap-2.5 hover:border-teal-200 hover:shadow-sm"
+              >
+                <div className="w-8.5 h-8.5 rounded-lg bg-teal-50 flex items-center justify-center shrink-0 text-teal-700">
+                  <FiMapPin className="w-4 h-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-gray-800 leading-tight">Field Map</p>
+                  <p className="text-[10px] text-gray-400 font-medium mt-0.5 truncate">
+                    {stats.acceptedJobs} active on field
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Action 4: Wallet & Payouts */}
+            <div
+              onClick={() => navigate('/worker/wallet')}
+              className="bg-white p-3 rounded-xl shadow-xs border border-purple-100/80 active:scale-[0.98] transition-all cursor-pointer flex items-center gap-2.5 hover:border-purple-200 hover:shadow-sm"
+            >
+              <div className="w-8.5 h-8.5 rounded-lg bg-purple-50 flex items-center justify-center shrink-0 text-purple-700">
+                <FaWallet className="w-4 h-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold text-gray-800 leading-tight">My Wallet</p>
+                <p className="text-[10px] text-gray-400 font-medium mt-0.5 truncate">
+                  Passbook & payouts
+                </p>
               </div>
             </div>
           </div>
         </div>
 
         {/* Recent Jobs Section */}
-        <div className="px-4 pt-3 pb-6">
+        <div className="px-4 pt-3.5 pb-8">
           <div className="flex items-center justify-between mb-2.5">
-            <h2 className="text-base font-bold text-gray-800">Recent Jobs</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-bold text-gray-800">Recent Jobs</h2>
+              {recentJobs.length > 0 && (
+                <span className="text-[11px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.2 rounded-full">
+                  {recentJobs.length}
+                </span>
+              )}
+            </div>
             {recentJobs.length > 0 && (
               <button
                 onClick={() => navigate('/worker/jobs')}
-                className="px-3 py-1 rounded-lg font-bold text-xs transition-all duration-300 active:scale-95 text-white shadow-sm"
-                style={{
-                  background: `linear-gradient(135deg, ${themeColors.button} 0%, ${themeColors.button}dd 100%)`,
-                }}
+                className="px-3 py-1 rounded-full font-bold text-xs transition-all duration-200 active:scale-95 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 flex items-center gap-1 shadow-2xs"
               >
-                View All
+                <span>View All</span>
+                <FiChevronRight className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
+
           {recentJobs.length > 0 ? (
             <div className="space-y-2.5">
-              {recentJobs.map((job, index) => {
-                // Alternating colors
-                const isDarkBlue = index % 2 === 0;
-                const accentColor = isDarkBlue ? '#001947' : '#406788';
-
+              {recentJobs.map((job) => {
+                const s = String(job.status || '').toUpperCase();
+                const isDone = s === 'COMPLETED' || s === 'WORK_DONE';
+                const isProgress = s === 'IN_PROGRESS' || s === 'VISITED' || s === 'ASSIGNED' || s === 'ACCEPTED';
+                
                 return (
                   <div
                     key={job.id}
                     onClick={() => navigate(`/worker/job/${job.id}`)}
-                    className="bg-white rounded-xl shadow-sm cursor-pointer active:scale-98 transition-all duration-200 relative overflow-hidden border border-gray-100"
+                    className="bg-white rounded-xl shadow-xs hover:shadow-sm cursor-pointer active:scale-[0.99] transition-all duration-200 relative overflow-hidden border border-gray-100 hover:border-emerald-200"
                   >
-                    {/* Left accent border */}
-                    <div
-                      className="absolute left-0 top-0 bottom-0 w-1.5 rounded-l-xl"
-                      style={{
-                        background: `linear-gradient(180deg, ${accentColor} 0%, ${accentColor}dd 100%)`,
-                      }}
-                    />
-
-                    {/* Compact Content */}
-                    <div className="px-3 py-2 pl-3.5">
-                      <div className="flex items-center gap-2.5">
-                        {/* Profile Image Circle */}
-                        <div
-                          className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 overflow-hidden"
-                          style={{
-                            border: `2px solid ${accentColor}30`,
-                            background: `linear-gradient(135deg, ${accentColor}15 0%, ${accentColor}08 100%)`,
-                          }}
-                        >
-                          <FiUser className="w-4 h-4" style={{ color: accentColor }} />
+                    <div className="p-3">
+                      <div className="flex items-center gap-3">
+                        {/* Profile / Service Avatar */}
+                        <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-100/80 flex items-center justify-center shrink-0 text-emerald-700">
+                          <FiBriefcase className="w-5 h-5" />
                         </div>
 
                         {/* Main Content */}
                         <div className="flex-1 min-w-0">
-                          {/* Name and Service in one line */}
-                          <div className="flex items-center gap-2 mb-1">
-                            <p className="text-xs font-bold text-gray-800 truncate">{job.customerName}</p>
-                            <span
-                              className="text-[10px] font-bold px-1.5 py-0.5 rounded-md shrink-0"
-                              style={{
-                                background: `linear-gradient(135deg, ${accentColor} 0%, ${accentColor}dd 100%)`,
-                                color: '#FFFFFF',
-                              }}
-                            >
-                              {job.serviceType || 'Service'}
+                          <div className="flex items-center justify-between gap-1 mb-1">
+                            <p className="text-xs font-bold text-gray-900 truncate">
+                              {job.customerName}
+                            </p>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/60 shrink-0">
+                              {job.serviceType || 'Agri Service'}
                             </span>
                           </div>
 
-                          {/* Address, Time, Status in one line */}
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <div
-                              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px]"
-                              style={{
-                                background: 'rgba(0, 166, 166, 0.08)',
-                                border: '1px solid rgba(0, 166, 166, 0.15)',
-                              }}
-                            >
-                              <FiMapPin className="w-2.5 h-2.5 shrink-0" style={{ color: themeColors.button }} />
-                              <span className="font-medium text-gray-700 truncate max-w-[90px]">{job.location}</span>
+                            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-slate-50 border border-slate-100 text-slate-600">
+                              <FiMapPin className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                              <span className="truncate max-w-[90px]">{job.location}</span>
                             </div>
-                            <div
-                              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px]"
-                              style={{
-                                background: 'rgba(245, 158, 11, 0.08)',
-                                border: '1px solid rgba(245, 158, 11, 0.15)',
-                              }}
-                            >
-                              <FiClock className="w-2.5 h-2.5 shrink-0" style={{ color: '#F59E0B' }} />
-                              <span className="font-medium text-gray-700">{job.time}</span>
+
+                            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-amber-50 border border-amber-100 text-amber-700">
+                              <FiClock className="w-2.5 h-2.5 text-amber-500 shrink-0" />
+                              <span>{job.time}</span>
                             </div>
+
                             <span
-                              className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                              style={{
-                                background: `${accentColor}12`,
-                                color: accentColor,
-                                border: `1px solid ${accentColor}25`,
-                              }}
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                                isDone
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : isProgress
+                                  ? 'bg-sky-50 text-sky-700 border border-sky-200'
+                                  : 'bg-amber-50 text-amber-700 border border-amber-200'
+                              }`}
                             >
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full ${
+                                  isDone ? 'bg-emerald-500' : isProgress ? 'bg-sky-500' : 'bg-amber-500'
+                                }`}
+                              />
                               {getStatusLabel(job.status)}
                             </span>
                           </div>
                         </div>
 
-                        {/* Navigate Button */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            navigate(`/worker/job/${job.id}`);
-                          }}
-                          className="p-1.5 rounded-lg shrink-0 active:scale-95 transition-transform"
-                          style={{
-                            background: `linear-gradient(135deg, ${accentColor} 0%, ${accentColor}dd 100%)`,
-                          }}
-                        >
-                          <FiArrowRight className="w-3.5 h-3.5 text-white" />
-                        </button>
+                        {/* Right Arrow / Price */}
+                        <div className="flex flex-col items-end gap-1 shrink-0 ml-1">
+                          {job.price && (
+                            <span className="text-xs font-black text-gray-900">
+                              ₹{job.price}
+                            </span>
+                          )}
+                          <div className="w-7 h-7 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400 group-hover:text-emerald-700 group-hover:bg-emerald-50 transition-colors">
+                            <FiChevronRight className="w-4 h-4" />
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -774,17 +822,24 @@ const Dashboard = () => {
               })}
             </div>
           ) : (
-            <div
-              className="bg-white rounded-xl p-8 text-center shadow-md"
-              style={{
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-              }}
-            >
-              <FiBriefcase className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-              <p className="text-gray-600 font-semibold mb-2">No jobs assigned yet</p>
-              <p className="text-sm text-gray-500">
-                You'll see assigned jobs here when vendors assign work to you
+            <div className="bg-white rounded-xl p-7 text-center shadow-xs border border-gray-100">
+              <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-3">
+                <FiBriefcase className="w-6 h-6" />
+              </div>
+              <p className="text-gray-800 font-bold text-sm mb-1">No assigned jobs right now</p>
+              <p className="text-xs text-gray-500 max-w-xs mx-auto mb-4">
+                Keep your status online to receive alerts from local farmers looking for workers.
               </p>
+              <button
+                onClick={() => navigate('/worker/booking-requests')}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-white shadow-xs active:scale-95 transition-all inline-flex items-center gap-1.5"
+                style={{
+                  background: 'linear-gradient(135deg, #166534 0%, #15803d 100%)',
+                }}
+              >
+                <FiBriefcase className="w-3.5 h-3.5" />
+                <span>Browse Farmer Requests</span>
+              </button>
             </div>
           )}
         </div>

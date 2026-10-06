@@ -17,8 +17,6 @@ const Header = ({
 }) => {
   const navigate = useNavigate();
   const logoRef = useRef(null);
-  const bellRef = useRef(null);
-  const bellButtonRef = useRef(null);
   const [count, setCount] = useState(notificationCount);
 
   // Sync prop changes
@@ -95,21 +93,20 @@ const Header = ({
 
   return (
     <header
-      className="sticky top-0 z-40 w-full bg-white"
+      className="sticky top-0 z-40 w-full backdrop-blur-xl transition-all"
       style={{
-        borderBottom: '2px solid rgba(156, 163, 175, 0.3)',
-        borderBottomLeftRadius: '20px',
-        borderBottomRightRadius: '20px',
-        boxShadow: '0 8px 24px rgba(0, 0, 0, 0.15), 0 4px 12px rgba(0, 0, 0, 0.1), 0 2px 6px rgba(0, 0, 0, 0.08)',
+        background: 'linear-gradient(180deg, #F1F8E9 0%, rgba(255, 255, 255, 0.96) 100%)',
+        borderBottom: '1px solid rgba(165, 214, 167, 0.45)',
+        boxShadow: '0 2px 14px rgba(46, 125, 50, 0.05)',
       }}
     >
-      <div className="px-4 py-3 flex items-center justify-between">
+      <div className="px-4 py-2.5 flex items-center justify-between max-w-lg mx-auto">
         {/* Left: Back button or Logo */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 shrink-0">
           {showBack ? (
             <button
               onClick={handleBack}
-              className="p-2 rounded-full hover:bg-white/30 transition-colors active:scale-95"
+              className="p-2 -ml-1 rounded-full hover:bg-emerald-50 active:bg-emerald-100 transition-colors"
             >
               <FiArrowLeft className="w-5 h-5" style={{ color: themeColors.button }} />
             </button>
@@ -120,8 +117,8 @@ const Header = ({
               onMouseEnter={() => {
                 if (logoRef.current) {
                   gsap.to(logoRef.current, {
-                    scale: 1.2,
-                    duration: 0.3,
+                    scale: 1.08,
+                    duration: 0.25,
                     ease: 'power2.out',
                   });
                 }
@@ -130,7 +127,7 @@ const Header = ({
                 if (logoRef.current) {
                   gsap.to(logoRef.current, {
                     scale: 1.0,
-                    duration: 0.3,
+                    duration: 0.25,
                     ease: 'power2.out',
                   });
                 }
@@ -138,12 +135,29 @@ const Header = ({
             >
               <Logo
                 ref={logoRef}
-                className="h-14 w-14 sm:h-16 sm:w-16 shadow-md border-2 border-white/80 transition-transform"
+                className="h-10 w-10 sm:h-11 sm:w-11 object-contain transition-transform"
               />
             </div>
           )}
-          {showBack && <h1 className="text-lg font-bold text-gray-800">{title || 'Worker'}</h1>}
+          {showBack && <h1 className="text-base font-bold text-gray-900 truncate max-w-[170px]">{title || 'Worker'}</h1>}
         </div>
+
+        {/* Center: Operating Hub / City Indicator (Dashboard only) */}
+        {!showBack && (
+          <div
+            onClick={() => navigate('/worker/profile')}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50/90 hover:bg-emerald-100/90 border border-emerald-200/70 cursor-pointer active:scale-95 transition-all max-w-[190px] shadow-2xs"
+            title="Worker Operating Area"
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+            <span className="text-xs font-bold text-emerald-900 truncate">
+              Worker Hub
+            </span>
+            <span className="text-[10px] font-extrabold text-emerald-700 uppercase bg-emerald-100/80 px-1.5 py-0.2 rounded-sm shrink-0">
+              Active
+            </span>
+          </div>
+        )}
 
         {/* Right: Search and Notifications */}
         <div className="flex items-center gap-2">
@@ -157,134 +171,20 @@ const Header = ({
           )}
           {showNotifications && (
             <div
-              ref={bellButtonRef}
-              className="relative rounded-full cursor-pointer group active:scale-95 transition-transform duration-300"
-              style={{
-                width: '42px',
-                height: '42px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                margin: '2px' // Spacing for border
-              }}
-              onMouseEnter={() => {
-                if (bellButtonRef.current && bellRef.current) {
-                  const btn = bellButtonRef.current.querySelector('button');
-
-                  // Scale Wrapper
-                  gsap.to(bellButtonRef.current, {
-                    scale: 1.15,
-                    duration: 0.3,
-                    ease: 'power2.out',
-                  });
-
-                  // Shadow on inner button
-                  if (btn) {
-                    gsap.to(btn, {
-                      boxShadow: count > 0
-                        ? '0 6px 20px rgba(239, 68, 68, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.5)'
-                        : `0 4px 12px ${themeColors.brand.teal}40`,
-                      duration: 0.3,
-                      ease: 'power2.out',
-                    });
-                  }
-
-                  // Rotate Bell
-                  gsap.to(bellRef.current, {
-                    rotation: 15,
-                    scale: 1.1,
-                    duration: 0.3,
-                    ease: 'power2.out',
-                  });
-                }
-              }}
-              onMouseLeave={() => {
-                if (bellButtonRef.current && bellRef.current) {
-                  const btn = bellButtonRef.current.querySelector('button');
-
-                  gsap.to(bellButtonRef.current, {
-                    scale: 1.0,
-                    duration: 0.3,
-                    ease: 'power2.out',
-                  });
-
-                  if (btn) {
-                    gsap.to(btn, {
-                      boxShadow: count > 0
-                        ? '0 3px 12px rgba(239, 68, 68, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.4)'
-                        : `0 2px 6px ${themeColors.brand.teal}26`,
-                      duration: 0.3,
-                      ease: 'power2.out',
-                    });
-                  }
-
-                  gsap.to(bellRef.current, {
-                    rotation: 0,
-                    scale: 1.0,
-                    duration: 0.3,
-                    ease: 'power2.out',
-                  });
-                }
-              }}
+              className="relative cursor-pointer group active:scale-95 transition-transform"
+              onClick={handleNotifications}
             >
-              {/* 1. Animated Running Border */}
-              <div
-                className="absolute inset-[-2px] rounded-full z-0"
-                style={{
-                  background: themeColors.brand.conic,
-                  animation: 'spin 2s linear infinite',
-                  boxShadow: `0 0 8px ${themeColors.brand.orange}26`
-                }}
-              />
-
-              {/* 2. White Mask (to hide center of conic gradient) */}
-              <div className="absolute inset-[1px] rounded-full bg-white z-0" />
-
-              {/* 3. Inner Button */}
               <button
-                onClick={handleNotifications}
-                className="relative z-10 w-full h-full rounded-full flex items-center justify-center overflow-hidden"
-                style={{
-                  background: count > 0
-                    ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(220, 38, 38, 0.12) 100%)'
-                    : 'linear-gradient(135deg, rgba(52, 121, 137, 0.1) 0%, rgba(187, 95, 54, 0.1) 100%)',
-                  boxShadow: count > 0
-                    ? '0 3px 12px rgba(239, 68, 68, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.4)'
-                    : '0 2px 6px rgba(52, 121, 137, 0.15)',
-                }}
+                className="w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 border border-emerald-100 bg-white hover:bg-emerald-50/60 shadow-2xs"
+                title="Notifications"
               >
-                {/* Define Gradient for Icon */}
-                <svg width="0" height="0" className="absolute">
-                  <linearGradient id="groo-bell-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor={themeColors.brand.teal} />
-                    <stop offset="50%" stopColor={themeColors.brand.yellow} />
-                    <stop offset="100%" stopColor={themeColors.brand.orange} />
-                  </linearGradient>
-                </svg>
-
-                <FiBell
-                  ref={bellRef}
-                  className="w-5 h-5 transition-all duration-300"
-                  style={{
-                    stroke: count > 0 ? '#EF4444' : 'url(#groo-bell-gradient)',
-                    strokeWidth: '2.5',
-                    color: 'transparent',
-                    filter: count > 0
-                      ? 'drop-shadow(0 2px 6px rgba(239, 68, 68, 0.4))'
-                      : 'drop-shadow(0 1px 3px rgba(52, 121, 137, 0.3))',
-                  }}
-                />
+                <FiBell className="w-5 h-5 text-gray-700 group-hover:text-emerald-700 transition-colors" />
               </button>
-              {/* 4. Active Badge (Moved outside for robustness and to prevent clipping) */}
+
               {count > 0 && (
                 <span
-                  className="absolute -top-1.5 -right-1.5 bg-gradient-to-br from-red-500 to-red-600 text-white text-[10px] font-black rounded-full flex items-center justify-center z-20"
-                  style={{
-                    minWidth: '20px',
-                    height: '20px',
-                    boxShadow: '0 3px 8px rgba(239, 68, 68, 0.5), 0 0 0 2px #fff',
-                    border: '2px solid #fff'
-                  }}
+                  className="absolute -top-1 -right-1 bg-gradient-to-r from-red-500 to-rose-600 text-white text-[10px] font-black rounded-full flex items-center justify-center z-20 px-1.5 py-0.5 shadow-sm border-2 border-white animate-pulse"
+                  style={{ minWidth: '19px', height: '19px' }}
                 >
                   {count > 9 ? '9+' : count}
                 </span>

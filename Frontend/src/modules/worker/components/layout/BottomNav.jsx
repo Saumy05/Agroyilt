@@ -1,4 +1,4 @@
-﻿import React, { useRef, useEffect, useState, memo, useMemo } from 'react';
+import React, { useRef, useEffect, useState, memo, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { FiHome, FiBriefcase, FiUser, FiDollarSign } from 'react-icons/fi';
 import { HiHome, HiBriefcase, HiUser } from 'react-icons/hi';
@@ -76,13 +76,13 @@ const BottomNav = memo(() => {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-2 pb-[env(safe-area-inset-bottom,20px)] pt-2 z-[60] shadow-[0_-4px_20px_rgba(0,0,0,0.05)]"
+      className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-xl border-t border-emerald-100/80 px-2 pb-[env(safe-area-inset-bottom,20px)] pt-1.5 z-[60] shadow-[0_-4px_24px_rgba(46,125,50,0.06)]"
       style={{
         WebkitBackfaceVisibility: 'hidden',
         bottom: isKeyboardOpen ? `-${keyboardHeight}px` : undefined,
       }}
     >
-      <div className="flex items-center justify-around px-2 py-2">
+      <div className="flex items-center justify-around px-2 py-1.5">
         {navItems.map((item) => {
           const isActive = location.pathname === item.path ||
             (item.path === '/worker/dashboard' && location.pathname === '/worker');
@@ -92,7 +92,7 @@ const BottomNav = memo(() => {
             <button
               key={item.path}
               onClick={() => handleNavClick(item.path)}
-              className="flex flex-col items-center justify-center relative w-16 h-14 rounded-xl transition-all duration-300 group"
+              className="flex flex-col items-center justify-center relative w-16 h-13 rounded-xl transition-all duration-300 group"
               style={{
                 // No inline background here
               }}
@@ -107,14 +107,10 @@ const BottomNav = memo(() => {
                 }
               }}
             >
-              {/* Active Indicator Bar - Gradient Accent */}
+              {/* Active Indicator Bar - Sleek Emerald Pill */}
               {isActive && (
                 <div
-                  className="absolute -top-2 w-10 h-1 rounded-b-full"
-                  style={{
-                    background: themeColors.gradient,
-                    boxShadow: `0 2px 8px ${themeColors.brand.teal}4D`,
-                  }}
+                  className="absolute -top-1.5 w-7 h-1 rounded-full bg-emerald-600 shadow-[0_2px_8px_rgba(46,125,50,0.4)]"
                 />
               )}
 
