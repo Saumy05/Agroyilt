@@ -141,7 +141,6 @@ const BookingTrack = () => {
     setRefreshing(false);
     setSelectedWorkerId(null);
     setIsFullScreen(false);
-    setRedirectCountdown(3);
     setSelectedProofModal(null);
 
     // Destroy previous Leaflet map instance fully

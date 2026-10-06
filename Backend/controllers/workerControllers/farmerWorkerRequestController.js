@@ -772,6 +772,11 @@ const validateDailyRequestPayload = (body) => {
   if (!location || (!location.city && !location.addressLine1))
     errors.push('Work location (city or address) is required.');
 
+  // daily reporting time (HH:mm) — optional for older clients, validated when sent
+  if (body.reportingTime !== undefined && body.reportingTime !== null && body.reportingTime !== '' &&
+      !/^([01]\d|2[0-3]):[0-5]\d$/.test(String(body.reportingTime)))
+    errors.push('Reporting time must be in HH:mm format.');
+
   // Rate validation for DAILY
   const minD = Number(minDailyRate);
   const maxD = Number(maxDailyRate);
@@ -958,6 +963,7 @@ exports.createFarmerRequest = async (req, res) => {
         startDate:    sDate,
         endDate:      eDate,
         numberOfDays: numD,
+        reportingTime: req.body.reportingTime ? String(req.body.reportingTime) : null,
         minDailyRate: effMinDailyRate,
         maxDailyRate: effMaxDailyRate,
         minRate:      effMinDailyRate,

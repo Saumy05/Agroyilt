@@ -32,6 +32,8 @@ exports.getWorkerFinancialSettings = async () => {
     workerPenaltyMaxAmount:          settings.workerPenaltyMaxAmount          ?? 500,
     workerPenaltyPercentage:         settings.workerPenaltyPercentage         ?? 5,
     maxWorkerDues:                   settings.maxWorkerDues                   ?? 500,
+    workerJourneyWindowMinutes:      settings.workerJourneyWindowMinutes      ?? 120,
+    workerEarlyStartMinutes:         settings.workerEarlyStartMinutes         ?? 30,
     workerCashPaymentEnabled:        settings.workerCashPaymentEnabled        ?? true
   };
 };

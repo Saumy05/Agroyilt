@@ -68,7 +68,9 @@ const AdminSettings = () => {
     workerPenaltyPercentage: 5,
     extensionExpiryMinutes: 30,
     maxWorkerDues: 500,
-    workerCashPaymentEnabled: true
+    workerCashPaymentEnabled: true,
+    workerJourneyWindowMinutes: 120,
+    workerEarlyStartMinutes: 30
   });
   const [systemLoading, setSystemLoading] = useState(false);
 
@@ -363,7 +365,9 @@ const AdminSettings = () => {
             workerPenaltyPercentage: res.settings.workerPenaltyPercentage ?? 5,
             extensionExpiryMinutes: res.settings.extensionExpiryMinutes ?? 30,
             maxWorkerDues: res.settings.maxWorkerDues ?? 500,
-            workerCashPaymentEnabled: res.settings.workerCashPaymentEnabled ?? true
+            workerCashPaymentEnabled: res.settings.workerCashPaymentEnabled ?? true,
+            workerJourneyWindowMinutes: res.settings.workerJourneyWindowMinutes ?? 120,
+            workerEarlyStartMinutes: res.settings.workerEarlyStartMinutes ?? 30
           });
           // Load support settings
           setSupportSettings({
@@ -583,7 +587,9 @@ const AdminSettings = () => {
         workerPenaltyPercentage: Number(systemSettings.workerPenaltyPercentage) || 0,
         extensionExpiryMinutes: Number(systemSettings.extensionExpiryMinutes) || 30,
         maxWorkerDues: Math.max(0, Number(systemSettings.maxWorkerDues) || 0),
-        workerCashPaymentEnabled: Boolean(systemSettings.workerCashPaymentEnabled)
+        workerCashPaymentEnabled: Boolean(systemSettings.workerCashPaymentEnabled),
+        workerJourneyWindowMinutes: Math.max(0, Number(systemSettings.workerJourneyWindowMinutes) || 0),
+        workerEarlyStartMinutes: Math.max(0, Number(systemSettings.workerEarlyStartMinutes) || 0)
       };
       await updateSettings(payload);
       toastManager.success('System preferences & worker rules updated');
@@ -1551,6 +1557,37 @@ const AdminSettings = () => {
                         )}
                       </div>
                     )}
+                  </div>
+
+                  {/* When workers may start (before the booked time) */}
+                  <div className="border border-gray-200 rounded-xl p-4 space-y-4">
+                    <h3 className="text-sm font-bold text-gray-800">Job Start Timing</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 uppercase mb-1.5">Start Journey opens (minutes before start)</label>
+                        <input
+                          type="number"
+                          name="workerJourneyWindowMinutes"
+                          value={systemSettings.workerJourneyWindowMinutes}
+                          onChange={handleSystemChange}
+                          min="0" max="1440"
+                          className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-gray-500 font-bold text-gray-800 text-sm"
+                        />
+                        <p className="text-[10px] text-gray-500 mt-1">Workers cannot mark themselves “on the way” earlier than this. 120 = 2 hours.</p>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 uppercase mb-1.5">Start OTP opens (minutes before start)</label>
+                        <input
+                          type="number"
+                          name="workerEarlyStartMinutes"
+                          value={systemSettings.workerEarlyStartMinutes}
+                          onChange={handleSystemChange}
+                          min="0" max="1440"
+                          className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-gray-500 font-bold text-gray-800 text-sm"
+                        />
+                        <p className="text-[10px] text-gray-500 mt-1">How early work may start if the farmer agrees. Being late is always allowed (late penalty applies).</p>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Worker dues & cash bookings */}

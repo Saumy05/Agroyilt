@@ -138,21 +138,16 @@ const settlement = require('../../services/workerSettlementService');
 const { issueOtp } = require('../../utils/otpUtil');
 
 const VISIT_OTP_TTL_MS = 6 * 60 * 60 * 1000;
-const TZ_MIN = () => Number(process.env.APP_TZ_OFFSET_MINUTES ?? 330);
-/** Midnight (app time zone) of the calendar day containing `d`. */
-const dayStart = (d) => new Date(Math.floor((new Date(d).getTime() + TZ_MIN() * 60000) / 86400000) * 86400000 - TZ_MIN() * 60000);
 
-/** True once the calendar day this assignment/day is scheduled for has begun. */
-const workDayReached = async (assignment, dayIdx) => {
-  const parent = await WorkerBookingRequest.findById(assignment.parentRequestId).select('scheduledDate startDate bookingType');
-  if (!parent) return false;
-  const base = assignment.bookingType === 'DAILY' ? parent.startDate : parent.scheduledDate;
-  if (!base) return true; // nothing to enforce against
-  const scheduled = assignment.bookingType === 'DAILY'
-    ? new Date(dayStart(base).getTime() + (Math.max(1, dayIdx) - 1) * 86400000)
-    : dayStart(base);
-  return Date.now() >= scheduled.getTime();
+/** Booked start / journey window / Start-OTP window of this assignment (or DAILY day), by server time. */
+const startWindowsFor = async (assignment, dayIdx) => {
+  const { computeStartWindows } = require('../../services/workerScheduleService');
+  const { getWorkerFinancialSettings } = require('../../services/workerFinancialService');
+  const parent = await WorkerBookingRequest.findById(assignment.parentRequestId).select('scheduledDate startDate startTime reportingTime bookingType');
+  if (!parent) return null;
+  return computeStartWindows(parent, assignment, dayIdx, await getWorkerFinancialSettings());
 };
+const { formatAppTime } = require('../../services/workerScheduleService');
 
 const nextDayLog = (dayNumber) => {
   const v = issueOtp(48 * 60 * 60 * 1000);
@@ -282,6 +277,16 @@ exports.startJourney = async (req, res) => {
       return res.json({ success: true, message: 'Journey already started.', data: current });
     }
 
+    // not hours/days ahead: the farmer would see "on the way" and live location far too early
+    const windows = await startWindowsFor(current, current.currentDayIndex || 1);
+    if (windows?.journeyOpensAt && Date.now() < windows.journeyOpensAt.getTime()) {
+      return res.status(409).json({
+        success: false, code: 'TOO_EARLY',
+        message: `You can start your journey from ${formatAppTime(windows.journeyOpensAt)}.`,
+        data: { journeyOpensAt: windows.journeyOpensAt, startAt: windows.startAt }
+      });
+    }
+
     const now = new Date();
     // The visit OTP the farmer will read out is issued NOW (journey start), not at booking time: an OTP minted at
     // confirmation would have expired long before the worker arrives.
@@ -405,33 +410,40 @@ exports.markArrived = async (req, res) => {
   }
 };
 
-/** Late-arrival penalty for HOURLY visits. One mechanism only: the wallet/dues penalty (never also netEarning). */
-const applyLatePenalty = async (assignment) => {
+/**
+ * Late-arrival penalty: HOURLY against the booked start, DAILY per day against the reporting time (bookings without
+ * one are not checked). One mechanism only: the wallet/dues penalty (never also netEarning).
+ */
+const applyLatePenalty = async (assignment, { dayIdx = null, startedAt } = {}) => {
   try {
     const { getWorkerFinancialSettings, applyWorkerPenalty, computeWorkerPenalty } = require('../../services/workerFinancialService');
     const settings = await getWorkerFinancialSettings();
     if (!settings.workerPenaltyEnabled) return;
-    const parent = await WorkerBookingRequest.findById(assignment.parentRequestId).select('scheduledDate startTime');
-    if (!parent || !parent.scheduledDate || !parent.startTime) return;
-    const [sHour, sMin] = parent.startTime.split(':').map(Number);
-    if (isNaN(sHour)) return;
+    const windows = await startWindowsFor(assignment, dayIdx || 1);
+    if (!windows?.startAt) return;
 
-    const scheduled = dayStart(parent.scheduledDate).getTime() + ((sHour * 60) + (sMin || 0)) * 60000;
-    const diffMins = Math.floor((assignment.visitOtpVerifiedAt.getTime() - scheduled) / 60000);
+    const diffMins = Math.floor((new Date(startedAt).getTime() - windows.startAt.getTime()) / 60000);
     const freeMins = Number(settings.workerPenaltyFreeMinutes) || 0;
     if (diffMins <= freeMins) return;
 
-    const amount = computeWorkerPenalty(settings, { grossAmount: assignment.grossAmount, lateMinutes: diffMins - freeMins });
+    const isDaily = dayIdx !== null;
+    // DAILY: a day's pay is the daily rate; HOURLY: the job's pay
+    const pay = isDaily ? Number(assignment.agreedRate) || 0 : Number(assignment.grossAmount) || 0;
+    const amount = computeWorkerPenalty(settings, { grossAmount: pay, lateMinutes: diffMins - freeMins });
     if (!(amount > 0)) return;
 
-    const claimed = await IndWorkerAssignment.findOneAndUpdate(
-      { _id: assignment._id, 'latePenalty.applied': { $ne: true } },
-      { $set: { latePenalty: { applied: true, amount, minutesLate: diffMins, ruleType: settings.workerPenaltyType, appliedAt: new Date() } } },
-      { new: true }
-    );
-    if (!claimed) return; // somebody already applied it
-    await applyWorkerPenalty(assignment.workerId, assignment.legacyBookingId, `late_pen_${assignment._id}`, 'late_arrival',
-      `Late arrival by ${diffMins} minutes (grace: ${freeMins}m)`, { amount });
+    if (!isDaily) {
+      const claimed = await IndWorkerAssignment.findOneAndUpdate(
+        { _id: assignment._id, 'latePenalty.applied': { $ne: true } },
+        { $set: { latePenalty: { applied: true, amount, minutesLate: diffMins, ruleType: settings.workerPenaltyType, appliedAt: new Date() } } },
+        { new: true }
+      );
+      if (!claimed) return; // somebody already applied it
+    }
+    // the event id makes each job (HOURLY) / each day (DAILY) charge at most once
+    await applyWorkerPenalty(assignment.workerId, assignment.legacyBookingId,
+      isDaily ? `late_pen_${assignment._id}_d${dayIdx}` : `late_pen_${assignment._id}`, 'late_arrival',
+      `Late arrival by ${diffMins} minutes (grace: ${freeMins}m)${isDaily ? ` on day ${dayIdx}` : ''}`, { amount });
   } catch (penErr) {
     console.warn('[Late penalty check error - non-fatal]:', penErr.message);
   }
@@ -471,8 +483,13 @@ exports.verifyVisitOtp = async (req, res) => {
     if (!['JOURNEY_STARTED', 'ARRIVED'].includes(assignment.journeyStatus)) {
       return res.status(409).json({ success: false, message: 'Start your journey before verifying the visit OTP.' });
     }
-    if (!(await workDayReached(assignment, isDaily ? dayIdx : 1))) {
-      return res.status(409).json({ success: false, message: 'Work cannot be started before the scheduled day.' });
+    const windows = await startWindowsFor(assignment, isDaily ? dayIdx : 1);
+    if (!windows || (windows.startOtpOpensAt && Date.now() < windows.startOtpOpensAt.getTime())) {
+      return res.status(409).json({
+        success: false, code: 'TOO_EARLY',
+        message: windows?.startOtpOpensAt ? `Work can start from ${formatAppTime(windows.startOtpOpensAt)}.` : 'Work cannot be started yet.',
+        data: windows ? { startOtpOpensAt: windows.startOtpOpensAt, startAt: windows.startAt } : null
+      });
     }
 
     const now = new Date();
@@ -490,7 +507,7 @@ exports.verifyVisitOtp = async (req, res) => {
     if (result.status !== 'verified') return sendOtpFailure(res, result, 'OTP');
 
     const verified = result.assignment;
-    if (!isDaily) await applyLatePenalty(verified);
+    await applyLatePenalty(verified, isDaily ? { dayIdx, startedAt: now } : { startedAt: verified.visitOtpVerifiedAt || now });
     await settlement.syncParentProgress(verified.parentRequestId);
 
     for (const room of [`booking_req:${verified.parentRequestId}`, `booking_req_${verified.parentRequestId}`]) {

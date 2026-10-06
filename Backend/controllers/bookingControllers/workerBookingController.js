@@ -333,6 +333,15 @@ const getJobById = async (req, res) => {
           }
         } catch (e) {}
 
+        // when Start Journey / Start OTP open (server time; serverTime lets the app correct a wrong phone clock)
+        try {
+          const { computeStartWindows } = require('../../services/workerScheduleService');
+          const { getWorkerFinancialSettings } = require('../../services/workerFinancialService');
+          syntheticBooking.startWindows = computeStartWindows(parent, assignDoc, assignDoc.currentDayIndex || 1, await getWorkerFinancialSettings());
+          syntheticBooking.reportingTime = parent?.reportingTime || null;
+          syntheticBooking.serverTime = new Date();
+        } catch (e) { /* windows are informational; the endpoints enforce them */ }
+
         const isCash = Boolean(assignDoc.isCashBooking) || assignDoc.paymentMethod === 'cash' || parent?.paymentMethod === 'cash';
         if (isCash) {
           const { buildWorkerCashCollection } = require('../../services/workerFinancialService');
@@ -428,7 +437,14 @@ const getJobById = async (req, res) => {
 
         try {
           const WorkerBookingRequest = require('../../models/WorkerBookingRequest');
-          const pReq = pReqId ? await WorkerBookingRequest.findById(pReqId).select('financialSnapshot paymentMethod paymentStatus bookingType durationMinutes numberOfDays auditLog') : null;
+          const pReq = pReqId ? await WorkerBookingRequest.findById(pReqId).select('financialSnapshot paymentMethod paymentStatus bookingType durationMinutes numberOfDays auditLog scheduledDate startDate startTime reportingTime') : null;
+          if (assignment && pReq) {
+            const { computeStartWindows } = require('../../services/workerScheduleService');
+            const { getWorkerFinancialSettings } = require('../../services/workerFinancialService');
+            jobData.startWindows = computeStartWindows(pReq, assignment, assignment.currentDayIndex || 1, await getWorkerFinancialSettings());
+            jobData.reportingTime = pReq.reportingTime || null;
+            jobData.serverTime = new Date();
+          }
           const isCash = jobData.paymentMethod === 'cash' || Boolean(assignment?.isCashBooking) || (pReq && pReq.paymentMethod === 'cash');
           if (isCash && assignment) {
             const { buildWorkerCashCollection } = require('../../services/workerFinancialService');

@@ -185,6 +185,9 @@ const JobDetails = () => {
   const socket = useAppNotifications('worker');
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(true);
+  // server time drives when Start Journey / Start OTP open (a phone's clock may be wrong)
+  const [serverOffsetMs, setServerOffsetMs] = useState(0);
+  const [nowTick, setNowTick] = useState(() => Date.now());
   const [actionLoading, setActionLoading] = useState(false);
   const [isCompletionModalOpen, setIsCompletionModalOpen] = useState(false);
   const [isVisitModalOpen, setIsVisitModalOpen] = useState(false);
@@ -260,6 +263,7 @@ const JobDetails = () => {
         data.commissionRate = commRate;
         data.commissionAmount = commAmt;
         data.workerNetEarning = net;
+        setServerOffsetMs(data.serverTime ? new Date(data.serverTime).getTime() - Date.now() : 0);
         setJob({
           ...data,
           items: data.bookedItems || []
@@ -326,6 +330,34 @@ const JobDetails = () => {
   const localWorker = authStorage.getUserData('worker') || {};
   const currentWorkerId = localWorker._id || localWorker.id || (typeof job?.workerId === 'string' ? job.workerId : job?.workerId?._id);
   const isDaily = job?.bookingType === 'DAILY' || job?.rateUnit === 'daily';
+
+  // Start Journey opens N hours before the booked start, Start OTP N minutes before (admin settings, enforced by the server)
+  const journeyOpensAt = job?.startWindows?.journeyOpensAt ? new Date(job.startWindows.journeyOpensAt).getTime() : null;
+  const startOtpOpensAt = job?.startWindows?.startOtpOpensAt ? new Date(job.startWindows.startOtpOpensAt).getTime() : null;
+  const serverNow = nowTick + serverOffsetMs;
+  const journeyLocked = journeyOpensAt !== null && serverNow < journeyOpensAt;
+  const startOtpLocked = startOtpOpensAt !== null && serverNow < startOtpOpensAt;
+  useEffect(() => {
+    if (!journeyLocked && !startOtpLocked) return undefined;
+    const t = setInterval(() => setNowTick(Date.now()), 30000);
+    return () => clearInterval(t);
+  }, [journeyLocked, startOtpLocked]);
+  const fmtOpen = (ms) => new Date(ms - serverOffsetMs).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true });
+  const waitText = (ms) => {
+    const mins = Math.max(1, Math.ceil((ms - serverNow) / 60000));
+    if (mins >= 1440) return `in ${Math.floor(mins / 1440)} day${mins >= 2880 ? 's' : ''}`;
+    if (mins >= 60) return `in ${Math.floor(mins / 60)} hr ${mins % 60} min`;
+    return `in ${mins} min`;
+  };
+  const lockedAction = (title, opensAt, isSticky) => (
+    <div className={`w-full rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 px-4 py-3.5 text-center ${isSticky ? '' : 'mb-4'}`}>
+      <p className="font-black text-gray-700 flex items-center justify-center gap-2"><FiClock className="w-5 h-5" /> {title}</p>
+      <p className="text-xs text-gray-500 mt-1">Opens {fmtOpen(opensAt)} ({waitText(opensAt)})</p>
+      {job?.startWindows?.startAt && (
+        <p className="text-[11px] text-gray-400 mt-0.5">Work booked to start {fmtOpen(new Date(job.startWindows.startAt).getTime())}</p>
+      )}
+    </div>
+  );
   // Farmer-worker bookings are driven by the IndWorkerAssignment lifecycle (Start OTP → Stop → End OTP)
   const isAssignmentJob = Boolean(job?.assignmentId);
 
@@ -612,6 +644,7 @@ const JobDetails = () => {
     }
 
     if (isAccepted && (statusLower === 'confirmed' || statusLower === 'assigned')) {
+      if (journeyLocked) return lockedAction('Start Journey', journeyOpensAt, isSticky);
       return (
         <button
           onClick={() => handleStatusUpdate('start')}
@@ -640,6 +673,7 @@ const JobDetails = () => {
     // FIX 2: Only show arrival OTP if work has NOT yet started.
     // If workStatus is already IN_PROGRESS, skip this block — status will be 'in_progress' not 'visited'.
     if ((statusLower === 'visited' || statusLower === 'arrived') && job?.workStatus !== 'IN_PROGRESS') {
+      if (startOtpLocked) return lockedAction(isDaily ? "Today's Reach OTP" : 'Start OTP', startOtpOpensAt, isSticky);
       return (
         <button
           onClick={() => handleStatusUpdate('visit')}

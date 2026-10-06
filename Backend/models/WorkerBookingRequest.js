@@ -39,6 +39,7 @@ const workerBookingRequestSchema = new mongoose.Schema({
   // HOURLY-only: required for HOURLY bookings, null for DAILY bookings
   scheduledDate:   { type: Date, default: null, index: true },
   startTime:       { type: String, default: null }, // HH:mm — HOURLY only
+  reportingTime:   { type: String, default: null }, // HH:mm — DAILY: when workers must report each day (null on older bookings)
   endTime:         { type: String, default: null }, // HH:mm — HOURLY only
   durationMinutes: { type: Number, default: 60 },
   rateUnit:        { type: String, enum: ['hourly', 'daily'], default: 'daily' },

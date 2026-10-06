@@ -269,6 +269,7 @@ const WorkerRequestForm = () => {
     // DAILY fields
     startDate:       '',
     numberOfDays:    '1',
+    reportingTime:   '09:00',
     // Rates
     minRate:         targetedWorker?.dailyRate || targetedWorker?.hourlyRate || '',
     maxRate:         targetedWorker?.dailyRate || targetedWorker?.hourlyRate || '',
@@ -422,6 +423,8 @@ const WorkerRequestForm = () => {
       const days = parseInt(formData.numberOfDays, 10);
       if (!formData.numberOfDays || isNaN(days) || days < 1)
         e.numberOfDays = 'Number of days must be at least 1.';
+      if (!formData.reportingTime)
+        e.reportingTime = 'Please choose what time workers should arrive each day.';
     } else {
       // HOURLY
       if (!formData.scheduledDate)
@@ -484,6 +487,7 @@ const WorkerRequestForm = () => {
       if (isDaily) {
         payload.startDate    = formData.startDate;
         payload.numberOfDays = parseInt(formData.numberOfDays, 10);
+        payload.reportingTime = formData.reportingTime;
         payload.minDailyRate = minR;
         payload.maxDailyRate = maxR;
       } else {
@@ -840,6 +844,20 @@ const WorkerRequestForm = () => {
                       className={`w-full bg-slate-50/80 border rounded-xl px-3 py-2 text-xs sm:text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white ${errors.numberOfDays ? 'border-red-300' : 'border-slate-200'}`}
                     />
                     <FieldError name="numberOfDays" />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-600 mb-1 block">Reporting Time (each day) *</label>
+                    <input
+                      type="time"
+                      name="reportingTime"
+                      id="daily-reporting-time"
+                      value={formData.reportingTime}
+                      onChange={handleChange}
+                      className={`w-full bg-slate-50/80 border rounded-xl px-3 py-2 text-xs sm:text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white ${errors.reportingTime ? 'border-red-300' : 'border-slate-200'}`}
+                    />
+                    <p className="text-[10px] text-slate-400 mt-0.5">Workers should arrive by this time every day.</p>
+                    <FieldError name="reportingTime" />
                   </div>
                 </div>
               ) : (

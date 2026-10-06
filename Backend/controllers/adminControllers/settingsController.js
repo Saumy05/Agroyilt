@@ -71,6 +71,8 @@ exports.updateSettings = async (req, res, next) => {
       // Worker dues & cash
       maxWorkerDues,
       workerCashPaymentEnabled,
+      workerJourneyWindowMinutes,
+      workerEarlyStartMinutes,
       // Withdrawal settings
       minWithdrawalAmount,
       minWithdrawalAmountPaise
@@ -200,6 +202,9 @@ exports.updateSettings = async (req, res, next) => {
       // Dues above this block a worker from new jobs (see services/workerDuesService.syncDuesRestriction)
       if (maxWorkerDues !== undefined) settings.maxWorkerDues = Math.max(0, Number(maxWorkerDues) || 0);
       if (workerCashPaymentEnabled !== undefined) settings.workerCashPaymentEnabled = Boolean(workerCashPaymentEnabled);
+      // How long before the booked start a worker may Start Journey / enter the Start OTP (services/workerScheduleService)
+      if (workerJourneyWindowMinutes !== undefined) settings.workerJourneyWindowMinutes = Math.min(1440, Math.max(0, Number(workerJourneyWindowMinutes) || 0));
+      if (workerEarlyStartMinutes !== undefined) settings.workerEarlyStartMinutes = Math.min(1440, Math.max(0, Number(workerEarlyStartMinutes) || 0));
 
       // Minimum withdrawal limit configuration
       if (minWithdrawalAmount !== undefined) {

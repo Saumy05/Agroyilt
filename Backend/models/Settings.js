@@ -273,6 +273,9 @@ const settingsSchema = new mongoose.Schema({
   workerPenaltyMaxAmount:   { type: Number, default: 500, min: 0 }, // cap
   workerPenaltyPercentage:  { type: Number, default: 5,   min: 0, max: 100 }, // % of earning
   maxWorkerDues:            { type: Number, default: 500, min: 0 }, // outstanding dues threshold
+  // When a worker may act before the booked start (server time): Start Journey / Start OTP
+  workerJourneyWindowMinutes: { type: Number, default: 120, min: 0 },
+  workerEarlyStartMinutes:    { type: Number, default: 30,  min: 0 },
   workerCashPaymentEnabled: { type: Boolean, default: true }
 }, { timestamps: true });
 
