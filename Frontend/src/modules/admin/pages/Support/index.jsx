@@ -500,9 +500,18 @@ const AdminSupport = () => {
               <div className="p-3.5 bg-gray-50 rounded-2xl border border-gray-100 space-y-1 text-xs">
                 <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 block">User Details</span>
                 <p className="font-black text-gray-900 text-sm">{selectedTicket.name}</p>
-                <div className="flex items-center gap-2 pt-0.5">
+                <div className="flex items-center gap-2 pt-0.5 flex-wrap">
                   {getRoleBadge(selectedTicket.createdByRole)}
-                  {selectedTicket.phone && <span className="text-gray-500 font-mono text-[11px]">{selectedTicket.phone}</span>}
+                  {selectedTicket.phone && (
+                    <a
+                      href={`tel:${selectedTicket.phone.replace(/[^\d+]/g, '')}`}
+                      className="text-primary-700 hover:underline font-mono text-[11px] font-bold flex items-center gap-1"
+                      title="Click to call user"
+                    >
+                      <FiPhone className="w-3 h-3" />
+                      {selectedTicket.phone}
+                    </a>
+                  )}
                 </div>
                 {selectedTicket.email && <p className="text-gray-400 text-[11px] truncate">{selectedTicket.email}</p>}
               </div>
@@ -556,11 +565,44 @@ const AdminSupport = () => {
               </div>
             </div>
 
-            {/* Subject Banner */}
-            <div className="p-4 bg-primary-50/40 rounded-2xl border border-primary-100/60">
-              <span className="text-[10px] font-black uppercase tracking-wider text-primary-700 block mb-0.5">Subject</span>
+            {/* Subject Banner & Problem Description */}
+            <div className="p-4 bg-primary-50/40 rounded-2xl border border-primary-100/60 space-y-1.5">
+              <span className="text-[10px] font-black uppercase tracking-wider text-primary-700 block">Subject</span>
               <h3 className="font-black text-gray-900 text-sm">{selectedTicket.subject}</h3>
+              {selectedTicket.description && (
+                <div className="pt-2 border-t border-primary-100/60">
+                  <span className="text-[10px] font-bold text-gray-400 block mb-0.5">Customer's Initial Description:</span>
+                  <p className="text-xs text-gray-700 whitespace-pre-wrap leading-relaxed">{selectedTicket.description}</p>
+                </div>
+              )}
             </div>
+
+            {/* Attached Photos / Evidence (if any) */}
+            {selectedTicket.attachments && selectedTicket.attachments.length > 0 && (
+              <div className="p-3.5 bg-gray-50 rounded-2xl border border-gray-100">
+                <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 block mb-2">
+                  Customer Attached Evidence ({selectedTicket.attachments.length})
+                </span>
+                <div className="flex gap-2.5 overflow-x-auto pb-1">
+                  {selectedTicket.attachments.map((url, idx) => (
+                    <a
+                      key={idx}
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="shrink-0 group relative"
+                      title="Click to view full photo"
+                    >
+                      <img
+                        src={url}
+                        alt={`Evidence ${idx + 1}`}
+                        className="w-16 h-16 rounded-xl object-cover border border-gray-200 shadow-xs group-hover:opacity-90 transition-opacity"
+                      />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Conversation Thread */}
             <div className="rounded-2xl border border-gray-200 bg-gray-50/50 p-4 max-h-[360px] overflow-y-auto space-y-3">

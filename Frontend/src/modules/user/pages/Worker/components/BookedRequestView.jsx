@@ -408,7 +408,15 @@ const BookedRequestView = ({ request, onRefresh }) => {
               <span className="block text-sm font-bold text-slate-900">Report a problem</span>
               <span className="block text-[11px] text-slate-500">Our team will review it</span>
             </button>
-            <button type="button" onClick={() => navigate('/user/help-support')} className="p-3 rounded-2xl border border-slate-200 text-left">
+            <button
+              type="button"
+              onClick={() => {
+                const bNum = request.bookingNumber || String(request._id || '').substring(0, 8);
+                const title = request.workTitle || 'Worker Hiring';
+                navigate(`/user/help-support?category=WORKER&bookingNumber=${encodeURIComponent(bNum)}&bookingId=${request._id}&subject=${encodeURIComponent(`Help with worker request #${bNum} (${title})`)}&openCreate=true`);
+              }}
+              className="p-3 rounded-2xl border border-slate-200 text-left hover:bg-slate-50 transition-colors"
+            >
               <FiHelpCircle className="text-blue-600 mb-1" />
               <span className="block text-sm font-bold text-slate-900">Help</span>
               <span className="block text-[11px] text-slate-500">Call or chat with support</span>

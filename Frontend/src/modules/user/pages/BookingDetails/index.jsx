@@ -26,6 +26,7 @@ import {
   FiSearch,
   FiHome,
   FiAlertCircle,
+  FiHelpCircle,
   FiCamera,
   FiAlertTriangle,
   FiCheckSquare,
@@ -2408,6 +2409,27 @@ const BookingDetails = () => {
             >
               <FiMail className="w-6 h-6 text-gray-700" />
               <span className="text-sm font-bold text-gray-700">Email Help</span>
+            </button>
+
+            {/* Direct Support Request Link */}
+            <button
+              onClick={() => {
+                const bNum = booking.bookingNumber || (booking._id || id).substring(0, 8);
+                const title = booking.serviceName || 'Equipment Order';
+                navigate(`/user/help-support?category=BOOKING&bookingNumber=${encodeURIComponent(bNum)}&bookingId=${id}&subject=${encodeURIComponent(`Help with booking #${bNum} (${title})`)}&openCreate=true`);
+              }}
+              className="col-span-2 p-3.5 bg-emerald-50 border border-emerald-200/80 rounded-2xl hover:bg-emerald-100/70 transition-all active:scale-98 flex items-center justify-between text-left"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-700 text-white flex items-center justify-center shrink-0">
+                  <FiHelpCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="block text-xs sm:text-sm font-bold text-emerald-950">Need Help with this Order?</span>
+                  <span className="block text-[11px] text-emerald-700 font-medium">Submit quick support request or request callback</span>
+                </div>
+              </div>
+              <FiChevronRight className="w-4 h-4 text-emerald-600 shrink-0" />
             </button>
 
             {/* Raise Dispute Button */}
