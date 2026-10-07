@@ -9,7 +9,8 @@ const axios = require('axios');
 const sendSMS = async (phone, message) => {
   try {
     // Check for Test Mode or Specific Test Number
-    if (process.env.USE_DEFAULT_OTP === 'true' || phone === '6268455485') {
+    const TEST_NUMBERS = ['6268455485', '6260491554', '6260491555'];
+    if (process.env.USE_DEFAULT_OTP === 'true' || TEST_NUMBERS.includes(phone)) {
       console.log(`[SMS MOCK] To: ${phone}, Msg: ${message}`);
       return { success: true, data: 'Mock Success' };
     }
