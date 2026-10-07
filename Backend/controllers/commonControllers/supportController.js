@@ -1,6 +1,9 @@
 const SupportTicket = require('../../models/SupportTicket');
 const SupportMessage = require('../../models/SupportMessage');
 const SupportQuery = require('../../models/SupportQuery');
+const Dispute = require('../../models/Dispute');
+const Booking = require('../../models/Booking');
+const WorkerBookingRequest = require('../../models/WorkerBookingRequest');
 const AdminAuditLog = require('../../models/AdminAuditLog');
 const { createNotification } = require('../notificationControllers/notificationController');
 const claims = require('../../services/supportClaimService');
@@ -584,7 +587,9 @@ const getAdminTicketById = async (req, res) => {
     const query = ticketId.startsWith('AGY-') ? { ticketNumber: ticketId.toUpperCase() } : { _id: ticketId };
     const ticket = await SupportTicket.findOne(query)
       .populate('assignedTo', 'name email phone')
-      .populate('bookingId');
+      .populate('bookingId')
+      .populate('workerRequestId', 'bookingNumber status workTitle requiredWorkers totalAmount')
+      .populate('disputeId', 'reason status priority resolutionType createdAt');
 
     if (!ticket) {
       return res.status(404).json({ success: false, message: 'Ticket not found' });
@@ -1027,6 +1032,324 @@ const adminAssignTicket = async (req, res) => {
 };
 
 // ========================================================
+// LANE BRIDGING: TICKET <-> DISPUTE CONVERSION & LINKING
+// ========================================================
+
+/**
+ * Admin: Convert a Support Ticket to a Dispute (Lane Bridging)
+ * POST /api/admin/support/tickets/:ticketId/convert-to-dispute
+ */
+const convertToDispute = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    const adminUser = req.user;
+    const {
+      bookingDomain = 'VENDOR_BOOKING',
+      bookingId,
+      bookingNumber,
+      workerRequestId,
+      reason,
+      description,
+      priority
+    } = req.body;
+
+    const query = ticketId.startsWith('AGY-') ? { ticketNumber: ticketId.toUpperCase() } : { _id: ticketId };
+    const ticket = await SupportTicket.findOne(query);
+
+    if (!ticket) {
+      return res.status(404).json({ success: false, message: 'Ticket not found' });
+    }
+
+    if (ticket.disputeId) {
+      const existing = await Dispute.findById(ticket.disputeId).lean();
+      if (existing) {
+        return res.status(400).json({
+          success: false,
+          message: `This ticket is already linked to Dispute #${existing._id}`,
+          data: { disputeId: existing._id, dispute: existing }
+        });
+      }
+    }
+
+    // Resolve booking based on domain
+    let vendorBooking = null;
+    let workerReq = null;
+
+    if (bookingDomain === 'VENDOR_BOOKING') {
+      const bId = bookingId || ticket.bookingId;
+      const bNum = (bookingNumber || ticket.bookingNumber || '').trim();
+      if (bId) {
+        vendorBooking = await Booking.findById(bId);
+      } else if (bNum) {
+        vendorBooking = await Booking.findOne({ bookingNumber: bNum });
+      }
+
+      if (!vendorBooking) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please provide a valid Machinery Booking ID or Booking Number'
+        });
+      }
+    } else if (bookingDomain === 'WORKER_BOOKING') {
+      const wId = workerRequestId || ticket.workerRequestId;
+      const wNum = (bookingNumber || ticket.bookingNumber || '').trim();
+      if (wId) {
+        workerReq = await WorkerBookingRequest.findById(wId);
+      } else if (wNum) {
+        workerReq = await WorkerBookingRequest.findOne({ bookingNumber: wNum });
+      }
+
+      if (!workerReq) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please provide a valid Worker Booking Request ID or Booking Number'
+        });
+      }
+    } else {
+      return res.status(400).json({ success: false, message: 'Invalid bookingDomain. Must be VENDOR_BOOKING or WORKER_BOOKING' });
+    }
+
+    // Determine raiser model & role
+    const raiserId = ticket.createdByUserId;
+    const raiserModel = ['User', 'Vendor', 'Worker'].includes(ticket.createdByModel) ? ticket.createdByModel : 'User';
+    const raiserRole = ticket.createdByRole === 'VENDOR' ? 'VENDOR' : (ticket.createdByRole === 'WORKER' ? 'WORKER' : 'FARMER');
+
+    // Check if an open dispute already exists for this booking & user
+    const dupQuery = {
+      raisedBy: raiserId,
+      bookingDomain
+    };
+    if (bookingDomain === 'VENDOR_BOOKING') dupQuery.vendorBookingId = vendorBooking._id;
+    if (bookingDomain === 'WORKER_BOOKING') dupQuery.workerRequestId = workerReq._id;
+
+    let dispute = await Dispute.findOne({
+      ...dupQuery,
+      status: { $nin: ['RESOLVED', 'DISMISSED', 'resolved', 'dismissed'] }
+    });
+
+    const isNew = !dispute;
+
+    const validReasons = [
+      'Quality Issue', 'Delay / Late Arrival', 'Payment Dispute', 'No Show',
+      'Poor Driver Behavior', 'OTP Refusal', 'Work Not Completed', 'Worker Absent',
+      'Underpayment', 'Overbilling', 'Other'
+    ];
+    const validatedReason = validReasons.includes(reason) ? reason : 'Other';
+    const validatedPriority = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'].includes(priority)
+      ? priority
+      : (['LOW', 'MEDIUM', 'HIGH', 'URGENT'].includes(ticket.priority) ? ticket.priority : 'HIGH');
+
+    const descText = (description || ticket.description || '').trim() || `${ticket.subject}: ${ticket.description}`;
+
+    if (dispute) {
+      // Link to existing dispute
+      dispute.sourceTicketId = ticket._id;
+      dispute.sourceTicketNumber = ticket.ticketNumber;
+      dispute.auditLog.push({
+        performedBy: adminUser._id,
+        adminName: adminUser.name || 'Admin',
+        action: 'LINKED_TO_SUPPORT_TICKET',
+        notes: `Lane Bridging: Linked to Support Ticket #${ticket.ticketNumber}`,
+        timestamp: new Date()
+      });
+      await dispute.save();
+    } else {
+      // Transfer attachments as evidence
+      const evidence = (ticket.attachments || []).map((url, idx) => ({
+        uploadedBy: raiserId,
+        uploaderModel: raiserModel,
+        uploaderRole: raiserRole,
+        url,
+        fileType: 'image',
+        caption: `Transferred from Support Ticket #${ticket.ticketNumber} (Attachment ${idx + 1})`,
+        uploadedAt: new Date()
+      }));
+
+      dispute = await Dispute.create({
+        bookingDomain,
+        vendorBookingId: bookingDomain === 'VENDOR_BOOKING' ? vendorBooking._id : null,
+        workerRequestId: bookingDomain === 'WORKER_BOOKING' ? workerReq._id : null,
+        raisedBy: raiserId,
+        raisedByModel: raiserModel,
+        raisedByRole: raiserRole,
+        reason: validatedReason,
+        description: descText,
+        evidence,
+        attachments: ticket.attachments || [],
+        status: 'OPEN',
+        priority: validatedPriority,
+        sourceTicketId: ticket._id,
+        sourceTicketNumber: ticket.ticketNumber,
+        auditLog: [{
+          performedBy: adminUser._id,
+          adminName: adminUser.name || 'Admin',
+          action: 'CONVERTED_FROM_SUPPORT_TICKET',
+          previousStatus: 'TICKET',
+          newStatus: 'OPEN',
+          notes: `Lane Bridging: Converted from Support Ticket #${ticket.ticketNumber} ("${ticket.subject}")`,
+          timestamp: new Date()
+        }]
+      });
+    }
+
+    // Update the support ticket
+    ticket.disputeId = dispute._id;
+    ticket.convertedToDispute = true;
+    ticket.convertedAt = new Date();
+    ticket.convertedBy = adminUser._id;
+    if (bookingDomain === 'VENDOR_BOOKING') {
+      ticket.bookingId = vendorBooking._id;
+      ticket.bookingNumber = vendorBooking.bookingNumber || ticket.bookingNumber;
+    } else {
+      ticket.workerRequestId = workerReq._id;
+      ticket.bookingNumber = workerReq.bookingNumber || ticket.bookingNumber;
+    }
+
+    if (ticket.status === 'OPEN') {
+      ticket.status = 'IN_PROGRESS';
+    }
+    await ticket.save();
+
+    // Create system message in conversation thread
+    await SupportMessage.create({
+      ticketId: ticket._id,
+      senderId: adminUser._id,
+      senderRole: 'ADMIN',
+      senderType: 'ADMIN',
+      senderName: 'System',
+      message: `⚔️ [Lane Bridged] Ticket converted to Dispute #${dispute._id} (${dispute.reason}). Legal & financial investigation is active in Dispute Management.`,
+      isInternalNote: false
+    });
+
+    // Notify customer
+    const recipientKey = ticket.createdByRole === 'VENDOR'
+      ? { vendorId: ticket.createdByUserId }
+      : ticket.createdByRole === 'WORKER'
+        ? { workerId: ticket.createdByUserId }
+        : { userId: ticket.createdByUserId };
+
+    await createNotification({
+      ...recipientKey,
+      type: 'dispute_update',
+      title: 'Dispute Case Opened',
+      message: `Your support request #${ticket.ticketNumber} has been transitioned to an official Dispute case (#${dispute._id}). Our arbitration team will review the booking.`,
+      relatedId: dispute._id,
+      relatedType: 'Dispute',
+      data: { disputeId: dispute._id.toString(), ticketId: ticket._id.toString() }
+    });
+
+    // Notify admin socket room
+    try {
+      const { getIO } = require('../../sockets');
+      const io = getIO();
+      if (io) {
+        io.to('admin_global').emit('new_dispute', {
+          disputeId: dispute._id,
+          bookingDomain: dispute.bookingDomain,
+          reason: dispute.reason,
+          priority: dispute.priority,
+          raisedByRole: dispute.raisedByRole,
+          sourceTicketNumber: ticket.ticketNumber,
+          createdAt: dispute.createdAt
+        });
+      }
+    } catch (_) {}
+
+    // Audit log
+    if (AdminAuditLog && typeof AdminAuditLog.log === 'function') {
+      await AdminAuditLog.log({
+        adminId: adminUser._id,
+        adminName: adminUser.name || 'Admin',
+        adminEmail: adminUser.email || '',
+        adminRole: adminUser.role || 'ADMIN',
+        action: 'SUPPORT_TICKET_CONVERTED_TO_DISPUTE',
+        module: 'SUPPORT',
+        targetId: ticket._id,
+        targetModel: 'SupportTicket',
+        targetName: ticket.ticketNumber,
+        details: { disputeId: dispute._id, bookingDomain, isNew },
+        req
+      }).catch(() => {});
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: isNew ? 'Ticket successfully converted to Dispute' : 'Ticket linked to existing open Dispute',
+      data: {
+        ticket,
+        dispute
+      }
+    });
+
+  } catch (error) {
+    console.error('Convert to dispute error:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to convert ticket to dispute'
+    });
+  }
+};
+
+/**
+ * Admin: Link an existing Dispute to a Support Ticket
+ * POST /api/admin/support/tickets/:ticketId/link-dispute
+ */
+const linkDispute = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    const { disputeId } = req.body;
+    const adminUser = req.user;
+
+    if (!disputeId) {
+      return res.status(400).json({ success: false, message: 'disputeId is required' });
+    }
+
+    const query = ticketId.startsWith('AGY-') ? { ticketNumber: ticketId.toUpperCase() } : { _id: ticketId };
+    const ticket = await SupportTicket.findOne(query);
+    if (!ticket) return res.status(404).json({ success: false, message: 'Ticket not found' });
+
+    const dispute = await Dispute.findById(disputeId);
+    if (!dispute) return res.status(404).json({ success: false, message: 'Dispute not found' });
+
+    ticket.disputeId = dispute._id;
+    ticket.convertedToDispute = true;
+    ticket.convertedAt = ticket.convertedAt || new Date();
+    ticket.convertedBy = ticket.convertedBy || adminUser._id;
+    await ticket.save();
+
+    dispute.sourceTicketId = ticket._id;
+    dispute.sourceTicketNumber = ticket.ticketNumber;
+    dispute.auditLog.push({
+      performedBy: adminUser._id,
+      adminName: adminUser.name || 'Admin',
+      action: 'LINKED_TO_SUPPORT_TICKET',
+      notes: `Lane Bridging: Linked to Support Ticket #${ticket.ticketNumber}`,
+      timestamp: new Date()
+    });
+    await dispute.save();
+
+    await SupportMessage.create({
+      ticketId: ticket._id,
+      senderId: adminUser._id,
+      senderRole: 'ADMIN',
+      senderType: 'ADMIN',
+      senderName: 'System',
+      message: `⚔️ [Lane Bridged] Ticket linked to Dispute #${dispute._id} (${dispute.reason}).`,
+      isInternalNote: false
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Ticket and Dispute successfully linked',
+      data: { ticket, dispute }
+    });
+  } catch (error) {
+    console.error('Link dispute error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to link dispute' });
+  }
+};
+
+// ========================================================
 // LEGACY BACKWARD COMPATIBILITY HANDLERS
 // ========================================================
 
@@ -1065,6 +1388,8 @@ module.exports = {
   adminClaimTicket,
   adminReleaseTicket,
   getSupportTeam,
+  convertToDispute,
+  linkDispute,
 
   // Legacy compatibility exports
   submitQuery,

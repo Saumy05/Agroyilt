@@ -189,7 +189,20 @@ const disputeSchema = new mongoose.Schema({
   escalationNote: { type: String, default: '' },
 
   // ── 10. Internal Admin Tags ───────────────────────────────────────────────
-  internalTags: [{ type: String, trim: true }]
+  internalTags: [{ type: String, trim: true }],
+
+  // ── 11. Lane Bridging: Source Support Ticket ──────────────────────────────
+  sourceTicketId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'SupportTicket',
+    default: null,
+    index: true
+  },
+  sourceTicketNumber: {
+    type: String,
+    trim: true,
+    default: null
+  }
 
 }, {
   timestamps: true

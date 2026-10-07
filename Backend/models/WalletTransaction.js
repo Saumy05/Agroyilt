@@ -18,7 +18,7 @@ const walletTransactionSchema = new mongoose.Schema({
   },
   reason: {
     type: String,
-    enum: ['booking_payment', 'commission_deduction', 'refund', 'payout', 'security_deposit_hold', 'security_deposit_release', 'topup', 'referral_reward', 'referral_reversal', 'earnings_credit', 'penalty', 'dues_recovery'],
+    enum: ['booking_payment', 'commission_deduction', 'refund', 'payout', 'security_deposit_hold', 'security_deposit_release', 'topup', 'referral_reward', 'referral_reversal', 'earnings_credit', 'penalty', 'dues_recovery', 'dispute_refund'],
     required: true
   },
   referenceId: {

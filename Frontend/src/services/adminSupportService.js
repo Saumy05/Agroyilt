@@ -55,6 +55,18 @@ const adminSupportService = {
     return response.data;
   },
 
+  // Lane Bridging: Convert a ticket into a Dispute
+  convertToDispute: async (ticketId, payload) => {
+    const response = await api.post(`/admin/support/tickets/${ticketId}/convert-to-dispute`, payload);
+    return response.data;
+  },
+
+  // Lane Bridging: Link an existing dispute to a ticket
+  linkDispute: async (ticketId, payload) => {
+    const response = await api.post(`/admin/support/tickets/${ticketId}/link-dispute`, payload);
+    return response.data;
+  },
+
   // Legacy fallback: Get all support queries
   getQueries: async (params = {}) => {
     const response = await api.get('/admin/support/all', { params });

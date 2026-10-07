@@ -10,6 +10,8 @@ const {
   adminClaimTicket,
   adminReleaseTicket,
   getSupportTeam,
+  convertToDispute,
+  linkDispute,
   getAdminQueries,
   respondToQuery
 } = require('../../controllers/commonControllers/supportController');
@@ -26,6 +28,10 @@ router.patch('/tickets/:ticketId/priority', authenticate, isAdmin, adminUpdatePr
 router.patch('/tickets/:ticketId/assign', authenticate, isAdmin, adminAssignTicket);
 router.post('/tickets/:ticketId/claim', authenticate, isAdmin, adminClaimTicket);
 router.post('/tickets/:ticketId/release', authenticate, isAdmin, adminReleaseTicket);
+
+// Lane Bridging: Convert or Link Ticket to Dispute
+router.post('/tickets/:ticketId/convert-to-dispute', authenticate, isAdmin, convertToDispute);
+router.post('/tickets/:ticketId/link-dispute', authenticate, isAdmin, linkDispute);
 
 // Legacy backward compatibility endpoints
 router.get('/all', authenticate, isAdmin, getAdminQueries);

@@ -79,6 +79,11 @@ const supportTicketSchema = new mongoose.Schema({
     ref: 'Booking',
     default: null
   },
+  workerRequestId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'WorkerBookingRequest',
+    default: null
+  },
   bookingNumber: {
     type: String,
     trim: true,
@@ -87,6 +92,26 @@ const supportTicketSchema = new mongoose.Schema({
   transactionId: {
     type: String,
     trim: true,
+    default: null
+  },
+  // Lane Bridging: reference to linked on-the-job Dispute
+  disputeId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Dispute',
+    default: null,
+    index: true
+  },
+  convertedToDispute: {
+    type: Boolean,
+    default: false
+  },
+  convertedAt: {
+    type: Date,
+    default: null
+  },
+  convertedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Admin',
     default: null
   },
   attachments: [{

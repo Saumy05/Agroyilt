@@ -15,6 +15,20 @@ const TICKET_CATEGORIES = [
   'TECHNICAL_ISSUE', 'OTHER'
 ];
 
+const DISPUTE_REASONS = [
+  'Quality Issue',
+  'Delay / Late Arrival',
+  'Payment Dispute',
+  'No Show',
+  'Poor Driver Behavior',
+  'OTP Refusal',
+  'Work Not Completed',
+  'Worker Absent',
+  'Underpayment',
+  'Overbilling',
+  'Other'
+];
+
 // "3h", "25m": how long ago, for claim age
 const ago = (d) => {
   if (!d) return '';
@@ -51,6 +65,15 @@ const AdminSupport = () => {
   const [conversation, setConversation] = useState([]);
   const [loadingConversation, setLoadingConversation] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+
+  // Lane Bridging (Convert to Dispute)
+  const [isConvertModalOpen, setIsConvertModalOpen] = useState(false);
+  const [convertDomain, setConvertDomain] = useState('VENDOR_BOOKING');
+  const [convertBookingNumber, setConvertBookingNumber] = useState('');
+  const [convertReason, setConvertReason] = useState('Quality Issue');
+  const [convertPriority, setConvertPriority] = useState('HIGH');
+  const [convertDescription, setConvertDescription] = useState('');
+  const [submittingConvert, setSubmittingConvert] = useState(false);
 
   // Reply state
   const [replyMessage, setReplyMessage] = useState('');
@@ -234,6 +257,61 @@ const AdminSupport = () => {
     } catch (error) {
       console.error('Priority update error:', error);
       toastManager.error('Failed to update priority');
+    }
+  };
+
+  // Open Lane Bridging modal (Convert to Dispute)
+  const handleOpenConvertModal = () => {
+    if (!selectedTicket) return;
+    setConvertDomain(selectedTicket.createdByRole === 'WORKER' ? 'WORKER_BOOKING' : 'VENDOR_BOOKING');
+    setConvertBookingNumber(
+      selectedTicket.bookingNumber ||
+      selectedTicket.bookingId?.bookingNumber ||
+      selectedTicket.workerRequestId?.bookingNumber ||
+      selectedTicket.bookingId?._id ||
+      selectedTicket.workerRequestId?._id ||
+      ''
+    );
+    setConvertReason('Quality Issue');
+    setConvertPriority(selectedTicket.priority || 'HIGH');
+    setConvertDescription(selectedTicket.description || selectedTicket.subject || '');
+    setIsConvertModalOpen(true);
+  };
+
+  const handleConfirmConvert = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!convertBookingNumber.trim()) {
+      return toastManager.error('Please enter the Booking Number or Booking ID');
+    }
+
+    try {
+      setSubmittingConvert(true);
+      const payload = {
+        bookingDomain: convertDomain,
+        bookingNumber: convertBookingNumber.trim(),
+        reason: convertReason,
+        priority: convertPriority,
+        description: convertDescription.trim()
+      };
+
+      const res = await adminSupportService.convertToDispute(selectedTicket._id, payload);
+      if (res && res.success) {
+        toastManager.success(res.message || 'Ticket converted to Dispute');
+        setIsConvertModalOpen(false);
+        if (res.data?.ticket) {
+          setSelectedTicket(res.data.ticket);
+        }
+        // Refresh conversation & ticket details
+        handleOpenTicket(res.data?.ticket || selectedTicket);
+        fetchTickets(page);
+      } else {
+        toastManager.error(res?.message || 'Failed to convert ticket to dispute');
+      }
+    } catch (error) {
+      console.error('Convert to dispute error:', error);
+      toastManager.error(error.response?.data?.message || 'Failed to convert ticket to dispute');
+    } finally {
+      setSubmittingConvert(false);
     }
   };
 
@@ -738,6 +816,64 @@ const AdminSupport = () => {
               </div>
             </div>
 
+            {/* LANE BRIDGING: LINKED DISPUTE BANNER */}
+            {selectedTicket.disputeId ? (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-gradient-to-r from-red-50 to-amber-50 rounded-2xl border border-red-200 shadow-xs">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-red-100 text-red-700 flex items-center justify-center shrink-0 mt-0.5">
+                    <FiAlertTriangle className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-red-700 bg-red-100/90 px-2 py-0.5 rounded-md">
+                        Lane Bridged · Dispute Case
+                      </span>
+                      <span className="text-xs font-mono font-black text-gray-900">
+                        #{selectedTicket.disputeId?._id || selectedTicket.disputeId}
+                      </span>
+                      {selectedTicket.disputeId?.status && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-white text-red-700 border border-red-200">
+                          {selectedTicket.disputeId.status}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-700 mt-1 font-medium">
+                      <strong className="text-gray-900">Reason:</strong> {selectedTicket.disputeId?.reason || 'On-the-job problem'}. Formal evidence and financial arbitration are active in Disputes.
+                    </p>
+                  </div>
+                </div>
+                <a
+                  href="/admin/disputes"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold shrink-0 shadow-md shadow-red-200 transition-all flex items-center justify-center gap-1.5"
+                >
+                  <span>Open Disputes Lane</span>
+                  <FiChevronRight className="w-3.5 h-3.5" />
+                </a>
+              </div>
+            ) : (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-amber-50/70 border border-amber-200/90 rounded-2xl text-xs">
+                <div className="flex items-center gap-2.5 text-amber-900">
+                  <span className="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0 font-black">
+                    <FiAlertTriangle className="w-4 h-4" />
+                  </span>
+                  <div>
+                    <p className="font-bold text-amber-950">On-the-job problem with money or evidence?</p>
+                    <p className="text-[11px] text-amber-800/90">Bridge this conversation into an official, evidence-backed Dispute case.</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleOpenConvertModal}
+                  className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-black text-xs shrink-0 shadow-sm active:scale-95 transition-all flex items-center justify-center gap-1.5"
+                >
+                  <FiAlertTriangle className="w-3.5 h-3.5" />
+                  Convert to Dispute
+                </button>
+              </div>
+            )}
+
             {/* Subject Banner & Problem Description */}
             <div className="p-4 bg-primary-50/40 rounded-2xl border border-primary-100/60 space-y-1.5">
               <span className="text-[10px] font-black uppercase tracking-wider text-primary-700 block">Subject</span>
@@ -937,6 +1073,138 @@ const AdminSupport = () => {
             </form>
           </div>
         )}
+      </Modal>
+
+      {/* CONVERT TICKET TO DISPUTE MODAL (LANE BRIDGING) */}
+      <Modal
+        isOpen={isConvertModalOpen}
+        onClose={() => setIsConvertModalOpen(false)}
+        title="Bridge to Dispute Lane"
+        size="md"
+      >
+        <form onSubmit={handleConfirmConvert} className="space-y-4 text-xs">
+          <div className="p-3.5 bg-amber-50 rounded-2xl border border-amber-200 text-amber-900 leading-relaxed space-y-1">
+            <p className="font-black text-amber-950 flex items-center gap-1.5 text-xs">
+              <FiAlertTriangle className="text-amber-600" />
+              Formal Dispute Escalation
+            </p>
+            <p className="text-[11px] text-amber-800">
+              This moves this issue into the Dispute management workflow. Customer attachments will automatically transfer as formal evidence, and financial arbitration will be unlocked.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 tracking-wider">Booking Domain</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setConvertDomain('VENDOR_BOOKING')}
+                className={`py-2 px-3 rounded-xl border font-bold text-center transition-all ${
+                  convertDomain === 'VENDOR_BOOKING'
+                    ? 'bg-primary-600 text-white border-primary-600 shadow-sm'
+                    : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                }`}
+              >
+                🚜 Vendor / Machinery
+              </button>
+              <button
+                type="button"
+                onClick={() => setConvertDomain('WORKER_BOOKING')}
+                className={`py-2 px-3 rounded-xl border font-bold text-center transition-all ${
+                  convertDomain === 'WORKER_BOOKING'
+                    ? 'bg-primary-600 text-white border-primary-600 shadow-sm'
+                    : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                }`}
+              >
+                👷 Worker / Labour
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 tracking-wider">
+              Booking Number or ID <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              required
+              value={convertBookingNumber}
+              onChange={(e) => setConvertBookingNumber(e.target.value)}
+              placeholder="e.g. AGY-BK-1234 or Mongo ID"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 font-bold text-gray-800 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-primary-500 outline-none"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 tracking-wider">Dispute Reason</label>
+              <select
+                value={convertReason}
+                onChange={(e) => setConvertReason(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-bold text-gray-800 bg-gray-50 focus:bg-white outline-none"
+              >
+                {DISPUTE_REASONS.map(r => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 tracking-wider">Priority</label>
+              <select
+                value={convertPriority}
+                onChange={(e) => setConvertPriority(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-bold text-gray-800 bg-gray-50 focus:bg-white outline-none"
+              >
+                <option value="URGENT">🚨 Urgent</option>
+                <option value="HIGH">High</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="LOW">Low</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 tracking-wider">Complaint Description</label>
+            <textarea
+              rows={3}
+              value={convertDescription}
+              onChange={(e) => setConvertDescription(e.target.value)}
+              placeholder="Detailed summary of the problem..."
+              className="w-full p-3 rounded-xl border border-gray-200 text-xs font-medium text-gray-800 bg-gray-50 focus:bg-white outline-none resize-none"
+            />
+          </div>
+
+          {selectedTicket?.attachments?.length > 0 && (
+            <p className="text-[11px] text-gray-500 font-medium">
+              📎 <strong>{selectedTicket.attachments.length} attachment(s)</strong> will automatically carry over as formal dispute evidence.
+            </p>
+          )}
+
+          <div className="flex gap-2.5 pt-2">
+            <button
+              type="button"
+              onClick={() => setIsConvertModalOpen(false)}
+              className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 font-bold hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submittingConvert || !convertBookingNumber.trim()}
+              className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold shadow-md shadow-red-200 disabled:opacity-50 transition-all flex items-center justify-center gap-1.5"
+            >
+              {submittingConvert ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <>
+                  <FiAlertTriangle className="w-4 h-4" />
+                  Confirm & Bridge
+                </>
+              )}
+            </button>
+          </div>
+        </form>
       </Modal>
     </div>
   );
