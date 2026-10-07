@@ -74,6 +74,13 @@ const adminSchema = new mongoose.Schema({
     default: 'admin'
   },
 
+  // Which saved role (AdminRole) this admin was set up from. Permissions are copied from it; they may differ later.
+  roleId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'AdminRole',
+    default: null
+  },
+
   // ── Geographic Scope ──────────────────────────────────────────────────────
   scopeType: {
     type: String,
@@ -274,6 +281,7 @@ adminSchema.methods.toPublicJSON = function () {
     name: this.name,
     email: this.email,
     role: this.role,
+    roleId: this.roleId,
     scopeType: this.scopeType,
     // New state-based scope
     stateId: this.stateId,

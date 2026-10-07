@@ -238,6 +238,14 @@
     "children": []
   },
   {
+    "title": "Roles",
+    "route": "/admin/roles",
+    "allowedRoles": [
+      "super_admin"
+    ],
+    "children": []
+  },
+  {
     "title": "Geographic Management",
     "route": "/admin/geographic-management",
     "allowedRoles": [

@@ -14,6 +14,7 @@ import {
   getAttributionSummary, exportAttributionData,
   getDistricts, getSubDistricts
 } from '../../services/adminManagementService';
+import { getRoles } from '../../services/adminRoleService';
 import { stateService, districtService, subDistrictService } from '../../services/geoService';
 import {
   PERMISSION_GROUPS,
@@ -84,7 +85,7 @@ const StatCard = ({ icon: Icon, label, value, color }) => (
 
 // ── Permission Editor ──────────────────────────────────────────────────────
 
-const PermissionsEditor = ({ permissions, onChange }) => {
+export const PermissionsEditor = ({ permissions, onChange }) => {
   const [expanded, setExpanded] = useState({});
 
   const toggleGroup = (group) => {
@@ -307,6 +308,7 @@ const AdminFormModal = ({ admin, states, cities, onClose, onSave, defaultTab = '
     districtName: admin?.districtName || '',
     subDistrictId: admin?.subDistrictId?._id || admin?.subDistrictId || '',
     subDistrictName: admin?.subDistrictName || '',
+    roleId: admin?.roleId?._id || admin?.roleId || '',
     permissions: { ...buildDefaultPermissions(), ...(admin?.permissions || {}) },
     salary: {
       baseSalary: admin?.salary?.baseSalary !== undefined && admin?.salary?.baseSalary !== 0 ? admin.salary.baseSalary : '',
@@ -330,6 +332,27 @@ const AdminFormModal = ({ admin, states, cities, onClose, onSave, defaultTab = '
     }
   });
   const [loading, setLoading] = useState(false);
+  const [savedRoles, setSavedRoles] = useState([]);
+  useEffect(() => {
+    getRoles().then((res) => setSavedRoles(res?.data || [])).catch(() => {});
+  }, []);
+
+  // One dropdown: Super Admin, a saved role, or custom. A saved role fills the permission ticks (still editable per person).
+  const handleRoleSelect = (value) => {
+    if (value === 'super_admin') {
+      setForm((p) => ({ ...p, role: 'super_admin', roleId: '', scopeType: 'GLOBAL_INDIA' }));
+      return;
+    }
+    const picked = savedRoles.find((r) => r._id === value);
+    setForm((p) => ({
+      ...p,
+      role: 'admin',
+      roleId: picked ? picked._id : '',
+      permissions: picked
+        ? picked.permissionKeys.reduce((acc, k) => ({ ...acc, [k]: true }), buildDefaultPermissions())
+        : p.permissions
+    }));
+  };
   const [activeTab, setActiveTab] = useState(defaultTab); // 'basic' | 'permissions' | 'compensation'
   const [showPassword, setShowPassword] = useState(false);
   const [overrideBankDetails, setOverrideBankDetails] = useState(false);
@@ -611,17 +634,24 @@ const AdminFormModal = ({ admin, states, cities, onClose, onSave, defaultTab = '
                   </div>
                 </div>
 
-                {/* Role */}
+                {/* Role: one dropdown (Super Admin, a saved role, or custom) */}
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Role *</label>
-                  <select name="role" value={form.role} onChange={handleChange}
+                  <select
+                    value={form.role === 'super_admin' ? 'super_admin' : (savedRoles.some((r) => r._id === form.roleId) ? form.roleId : 'custom')}
+                    onChange={(e) => handleRoleSelect(e.target.value)}
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white">
-                    <option value="admin">Admin</option>
-                    <option value="super_admin">Super Admin</option>
+                    <option value="super_admin">Super Admin (full access to everything)</option>
+                    {savedRoles.map((r) => <option key={r._id} value={r._id}>{r.name}</option>)}
+                    <option value="custom">Custom (choose permissions by hand)</option>
                   </select>
-                  {form.role === 'super_admin' && (
+                  {form.role === 'super_admin' ? (
                     <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
                       <FiAlertCircle className="w-3 h-3" /> Super Admin has unrestricted global access to everything.
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-gray-400 mt-1">
+                      A role ticks its permissions for you, and you can still adjust them in the Permissions tab. Create roles under Roles in the sidebar.
                     </p>
                   )}
                 </div>
@@ -2184,7 +2214,7 @@ const PeopleAttributionView = ({ onViewAdminPeople }) => {
                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                           admin.role === 'super_admin' ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-blue-100 text-blue-800 border-blue-200'
                         }`}>
-                          {admin.role === 'super_admin' ? 'Super Admin' : 'Admin'}
+                          {admin.role === 'super_admin' ? 'Super Admin' : (admin.roleId?.name || 'Admin')}
                         </span>
                       </td>
                       <td className="py-3 px-4">

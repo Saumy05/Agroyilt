@@ -281,6 +281,7 @@ app.use('/api/admin/settlements', require('./routes/admin-routes/settlementManag
 app.use('/api/admin/website', require('./routes/admin-routes/websiteManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/adminPayout.routes'));
 app.use('/api/admin/admins', require('./routes/admin-routes/adminManagement.routes'));
+app.use('/api/admin/roles', require('./routes/admin-routes/adminRole.routes'));
 app.use('/api/admin/payroll', require('./routes/admin-routes/adminPayroll.routes'));
 app.use('/api/image', require('./routes/admin-routes/image.routes'));
 app.use('/api', require('./routes/admin-routes/upload.routes')); // Generic upload access

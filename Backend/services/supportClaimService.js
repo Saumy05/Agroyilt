@@ -176,10 +176,11 @@ const teamOverview = async () => {
     ])
   ]);
   const byId = Object.fromEntries(rows.map((r) => [String(r._id), r]));
-  const agents = await Admin.find({
-    isActive: { $ne: false },
-    $or: [{ 'permissions.support.reply': true }, { _id: { $in: rows.map((r) => r._id) } }]
-  }).select('name role').lean();
+  // Permission keys are stored with literal dots (permissions["support.reply"]), which a Mongo query can't match,
+  // so filter in code; the admin list is small.
+  const holders = new Set(rows.map((r) => String(r._id)));
+  const agents = (await Admin.find({ isActive: { $ne: false } }).select('name role permissions').lean())
+    .filter((a) => a.permissions?.['support.reply'] === true || holders.has(String(a._id)));
 
   return {
     maxOpen,

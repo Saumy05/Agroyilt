@@ -44,6 +44,7 @@ const Referrals = lazy(() => import('../pages/Referrals'));
 
 
 const AdminManagement = lazy(() => import('../pages/AdminManagement'));
+const Roles = lazy(() => import('../pages/Roles'));
 const MySalary = lazy(() => import('../pages/MySalary'));
 const GeographicManagement = lazy(() => import('../pages/Geographic'));
 
@@ -107,6 +108,7 @@ const AdminRoutes = () => {
             <Route path="referrals" element={<Referrals />} />
             <Route path="settings/*" element={<Settings />} />
             <Route path="admin-management" element={<AdminManagement />} />
+            <Route path="roles" element={<Roles />} />
             <Route path="admin-salaries" element={<Navigate to="/admin/admin-management" replace />} />
             <Route path="admin-payroll" element={<Navigate to="/admin/admin-management" replace />} />
             <Route path="my-salary" element={<MySalary />} />

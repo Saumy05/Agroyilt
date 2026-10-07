@@ -10,6 +10,16 @@ const Vendor = require('../../models/Vendor');
 const Worker = require('../../models/Worker');
 const { validationResult } = require('express-validator');
 const { PERMISSION_KEYS } = require('../../models/Admin');
+const AdminRole = require('../../models/AdminRole');
+
+/** Resolve an optional roleId from the request. Returns { role } | { error } ; role is null when none/cleared. */
+const resolveRoleInput = async (roleId) => {
+  if (roleId === undefined) return { skip: true };
+  if (!roleId) return { role: null };
+  if (!mongoose.isValidObjectId(roleId)) return { error: 'Invalid role' };
+  const role = await AdminRole.findById(roleId).lean();
+  return role ? { role } : { error: 'Role not found' };
+};
 const { calculateAdminCombinedIncentives } = require('../../utils/adminIncentiveHelper');
 
 /**
@@ -55,6 +65,7 @@ const getAllAdmins = async (req, res) => {
         .populate('districtId', 'name')
         .populate('subDistrictId', 'name')
         .populate('createdBy', 'name email role')
+        .populate('roleId', 'name')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(parseInt(limit))
@@ -156,12 +167,18 @@ const createAdmin = async (req, res) => {
       });
     }
 
+    const roleInput = await resolveRoleInput(req.body.roleId);
+    if (roleInput.error) return res.status(400).json({ success: false, message: roleInput.error });
+
     // Build permissions object (only relevant for non-super_admin)
     let resolvedPermissions = Admin.defaultPermissions();
     if (role !== 'super_admin' && permissions && typeof permissions === 'object') {
       PERMISSION_KEYS.forEach(key => {
         if (permissions[key] === true) resolvedPermissions[key] = true;
       });
+    } else if (role !== 'super_admin' && roleInput.role) {
+      // A role was picked but no explicit ticks were sent: start from the role
+      roleInput.role.permissionKeys.forEach(key => { resolvedPermissions[key] = true; });
     }
 
     // Validate Minimum Combined Registration Threshold if provided
@@ -195,6 +212,7 @@ const createAdmin = async (req, res) => {
       email,
       password,
       role: role || 'admin',
+      roleId: role === 'super_admin' ? null : (roleInput.role?._id || null),
       scopeType: effectiveScopeType,
       stateId: stateId || null,
       stateName: stateName || '',
@@ -330,6 +348,10 @@ const updateAdmin = async (req, res) => {
     if (districtName !== undefined) admin.districtName = districtName || '';
     if (subDistrictId !== undefined) admin.subDistrictId = subDistrictId || null;
     if (subDistrictName !== undefined) admin.subDistrictName = subDistrictName || '';
+
+    const roleInput = await resolveRoleInput(req.body.roleId);
+    if (roleInput.error) return res.status(400).json({ success: false, message: roleInput.error });
+    if (!roleInput.skip) admin.roleId = admin.role === 'super_admin' ? null : (roleInput.role?._id || null);
 
     // Permissions (only for non-super_admin)
     if (admin.role !== 'super_admin' && permissions && typeof permissions === 'object') {
