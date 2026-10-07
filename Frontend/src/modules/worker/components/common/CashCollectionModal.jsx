@@ -17,9 +17,10 @@ const CashCollectionModal = ({
   booking,
   onConfirm,
   onInitiateOTP,
-  loading
+  loading,
+  defaultMode = 'cash'
 }) => {
-  const [paymentMode, setPaymentMode] = useState('cash'); // 'cash' or 'qr'
+  const [paymentMode, setPaymentMode] = useState(defaultMode || 'cash'); // 'cash' or 'qr'
   const [extraItems, setExtraItems] = useState([]);
   const [step, setStep] = useState('summary'); // 'summary' or 'otp'
   const [otp, setOtp] = useState(['', '', '', '']);
@@ -33,7 +34,7 @@ const CashCollectionModal = ({
   const [qrSuccess, setQrSuccess] = useState(false);
   const pollingTimerRef = useRef(null);
 
-  const bookingId = booking?._id || booking?.id;
+  const bookingId = booking?._id || booking?.id || booking?.assignmentId;
 
   // Fix potential undefined issue
   const safeExtraItems = Array.isArray(extraItems) ? extraItems : [];
@@ -44,7 +45,13 @@ const CashCollectionModal = ({
       return 0;
     }
 
-    const rawFinal = booking?.finalAmount || parseFloat(booking?.price) || 0;
+    const rawFinal = booking?.finalAmount ||
+      parseFloat(booking?.price) ||
+      booking?.cashCollection?.totalToCollect ||
+      booking?.cashToCollect ||
+      booking?.grossAmount ||
+      booking?.workerGrossEarning ||
+      (booking?.agreedRate ? (booking.agreedRate * (booking.workedDays || 1)) : 0);
     const existingExtras = booking?.workDoneDetails?.items || [];
     const existingExtrasTotal = existingExtras.reduce((sum, item) => sum + (parseFloat(item.price || 0) * (item.qty || 1)), 0);
     return (booking?.customerConfirmationOTP || booking?.paymentOtp)
@@ -76,7 +83,7 @@ const CashCollectionModal = ({
         setOtp(['', '', '', '']);
       }
 
-      setPaymentMode('cash');
+      setPaymentMode(defaultMode || 'cash');
       setSubmitting(false);
       setQrData(null);
       setQrError(null);

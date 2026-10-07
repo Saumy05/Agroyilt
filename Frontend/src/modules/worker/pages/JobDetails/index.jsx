@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, lazy, Suspense } from 'react';
 import { useNavigate, useParams, useLocation, useSearchParams } from 'react-router-dom';
-import { FiMapPin, FiPhone, FiClock, FiUser, FiCheck, FiX, FiArrowRight, FiNavigation, FiTool, FiCheckCircle, FiDollarSign, FiCamera, FiPlus, FiTrash, FiXCircle, FiAward, FiFileText, FiAlertTriangle } from 'react-icons/fi';
+import { FiMapPin, FiPhone, FiClock, FiUser, FiCheck, FiX, FiArrowRight, FiNavigation, FiTool, FiCheckCircle, FiDollarSign, FiCamera, FiPlus, FiTrash, FiXCircle, FiAward, FiFileText, FiAlertTriangle, FiCreditCard } from 'react-icons/fi';
 import { workerTheme as themeColors } from '../../../../theme';
 import Header from '../../components/layout/Header';
 import { SkeletonCard } from '../../../../components/common/SkeletonLoaders';
@@ -702,17 +702,30 @@ const JobDetails = () => {
       );
     }
 
-    // work_done = worker pressed Stop → waiting for farmer's End OTP
+    // work_done = worker pressed Stop → waiting for farmer's End OTP (Cash) OR Admin QR (Online)
     if (statusLower === 'work_done' && (isAssignmentJob || job?.workStatus === 'SUBMITTED')) {
       return (
-        <button
-          onClick={() => handleStatusUpdate('complete')}
-          disabled={actionLoading}
-          className={`w-full py-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 shadow-xl active:scale-95 transition-all text-lg ${isSticky ? '' : 'mb-4'}`}
-          style={{ background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)' }}
-        >
-          {actionLoading ? 'Loading...' : <>ENTER END OTP <FiCheckCircle className="w-5 h-5" /></>}
-        </button>
+        <div className={`space-y-2.5 ${isSticky ? '' : 'mb-4'}`}>
+          <button
+            onClick={() => handleStatusUpdate('complete')}
+            disabled={actionLoading}
+            className="w-full py-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 shadow-xl active:scale-95 transition-all text-lg"
+            style={{ background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)' }}
+          >
+            {actionLoading ? 'Loading...' : <>ENTER END OTP (CASH) <FiCheckCircle className="w-5 h-5" /></>}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setCollectionAmount(job.finalAmount || job.grossAmount || job.workerGrossEarning || 0);
+              setIsPaymentModalOpen(true);
+            }}
+            className="w-full py-3.5 rounded-xl font-black text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border-2 border-emerald-400/60 flex items-center justify-center gap-2 active:scale-95 transition-all text-sm shadow-sm"
+          >
+            <FiCreditCard className="w-4 h-4 text-emerald-600" />
+            <span>📲 SHOW ADMIN QR (ONLINE / ZERO DUES)</span>
+          </button>
+        </div>
       );
     }
 
@@ -1522,6 +1535,7 @@ const JobDetails = () => {
           onClose={() => setIsCompletionModalOpen(false)}
           job={job}
           loading={actionLoading}
+          onOpenQrModal={() => setIsPaymentModalOpen(true)}
           onComplete={async (photos, otp) => {
             try {
               setActionLoading(true);
@@ -1558,11 +1572,15 @@ const JobDetails = () => {
         />
       </Suspense>
 
-      {/* Unified Cash Collection Modal - REUSABLE COMPONENT */}
+      {/* Unified Cash & Admin QR Collection Modal - REUSABLE COMPONENT */}
       <Suspense fallback={null}>
         <CashCollectionModal
           isOpen={isPaymentModalOpen}
-          onClose={() => setIsPaymentModalOpen(false)}
+          defaultMode="qr"
+          onClose={() => {
+            setIsPaymentModalOpen(false);
+            fetchJobDetails();
+          }}
           booking={job}
           onInitiateOTP={handleInitiateCashOTP}
           onConfirm={handleConfirmCash}

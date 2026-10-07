@@ -7,7 +7,7 @@ import { toastManager } from '../../../../utils/toastManager';
 import { compressImage, fileToBase64 } from '../../../../utils/imageCompression';
 import { rupees, paymentLineLabel } from '../../../../utils/workerPayment';
 
-const WorkCompletionModal = ({ isOpen, onClose, job, onComplete, loading }) => {
+const WorkCompletionModal = ({ isOpen, onClose, job, onComplete, loading, onOpenQrModal }) => {
   const [workPhotos, setWorkPhotos] = useState([]);
   const [completionOtp, setCompletionOtp] = useState(['', '', '', '']);
   const [isUploading, setIsUploading] = useState(false);
@@ -382,6 +382,20 @@ const WorkCompletionModal = ({ isOpen, onClose, job, onComplete, loading }) => {
                       </span>
                     </div>
                   </label>
+
+                  {/* Switch to Dynamic Admin QR option */}
+                  {onOpenQrModal && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        onOpenQrModal();
+                      }}
+                      className="w-full py-2.5 px-3 bg-white hover:bg-emerald-50 border-2 border-emerald-400 text-emerald-800 font-black text-xs rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 shadow-xs"
+                    >
+                      <span>📲 Farmer prefers UPI? Show Admin QR (Zero Dues)</span>
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 flex items-center justify-between">

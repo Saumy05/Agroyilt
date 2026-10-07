@@ -28,8 +28,9 @@ const qrCallerRelation = (req, { booking, assignment, parentReq }) => {
   if (role === 'USER' && farmerOf(target) === uid) return 'farmer';
   if (role === 'VENDOR' && booking?.vendorId && String(booking.vendorId._id || booking.vendorId) === uid) return 'provider';
   if (role === 'WORKER') {
-    const w = assignment?.workerId || booking?.workerId;
+    const w = assignment?.workerId || booking?.workerId || parentReq?.workerId;
     if (w && String(w._id || w) === uid) return 'provider';
+    if (parentReq?.selectedWorkerIds && parentReq.selectedWorkerIds.some(sw => String(sw._id || sw) === uid)) return 'provider';
   }
   return null;
 };
@@ -95,6 +96,12 @@ exports.generateAdminPaymentQr = async (req, res) => {
     // Determine target entity details
     if (!qrCallerRelation(req, { booking, assignment, parentReq })) {
       return res.status(403).json({ success: false, message: 'Not authorized for this booking.' });
+    }
+    if (assignment && (assignment.assignmentStatus === 'COMPLETED' || assignment.settlementStatus === 'SETTLED')) {
+      return res.status(400).json({ success: false, message: 'This assignment is already settled.' });
+    }
+    if (parentReq && parentReq.paymentStatus === 'success') {
+      return res.status(400).json({ success: false, message: 'This request is already paid.' });
     }
     if (booking && [PAYMENT_STATUS.SUCCESS, PAYMENT_STATUS.COLLECTED_BY_VENDOR, PAYMENT_STATUS.REFUNDED].includes(booking.paymentStatus)) {
       return res.status(400).json({ success: false, message: 'This booking is already paid.' });
@@ -536,28 +543,114 @@ exports.confirmAdminQrPayment = async (req, res) => {
     // FLOW C: PARENT WORKER REQUEST
     // ─────────────────────────────────────────────────────────────────────────
     if (parentReq) {
+      if (parentReq.paymentStatus === 'success' && parentReq.paymentMethod === 'qr_online') {
+        return res.status(200).json({
+          success: true,
+          message: 'Payment already confirmed and settled via Admin QR',
+          data: { requestId: parentReq._id }
+        });
+      }
+
+      const totalPayable = parentReq.financialSnapshot?.totalPayable || 0;
       parentReq.paymentStatus = 'success';
       parentReq.paymentMethod = 'qr_online';
+      parentReq.isCashBooking = false;
       parentReq.status = 'completed';
       parentReq.qrPayment = {
         refId: parentReq.qrPayment?.refId || `qr_${Date.now()}`,
-        amount: parentReq.financialSnapshot?.totalPayable || 0,
+        amount: totalPayable,
         adminUpiId,
         status: 'COMPLETED',
-        utr: utr || null,
+        utr: cleanUtr,
         confirmedAt: new Date()
       };
       await parentReq.save();
 
+      // Settle all active child assignments for this parent request
+      const settlementSvc = require('../../services/workerSettlementService');
+      const assignments = await IndWorkerAssignment.find({
+        parentRequestId: parentReq._id,
+        assignmentStatus: { $ne: 'CANCELLED' }
+      });
+
+      for (const asg of assignments) {
+        if (asg.settlementStatus !== 'SETTLED') {
+          const workedDays = asg.workedDays || 1;
+          const grossAmount = asg.grossAmount || (asg.agreedRate * workedDays) || 0;
+          const commRate = asg.commissionRate ?? settings?.workerCommissionPercentage ?? 10;
+          const commAmount = Math.round((grossAmount * commRate) / 100);
+          const workerNetEarning = grossAmount - commAmount;
+
+          await IndWorkerAssignment.updateOne(
+            { _id: asg._id },
+            {
+              $set: {
+                completionStatus: 'OTP_VERIFIED',
+                workStatus: 'SUBMITTED',
+                paymentMethod: 'qr_online',
+                isCashBooking: false,
+                grossAmount,
+                commissionAmount: commAmount,
+                netEarning: workerNetEarning,
+                workCompletedAt: new Date(),
+                cashPlatformFee: 0,
+                qrPayment: {
+                  refId: `qr_${asg._id}`,
+                  amount: grossAmount,
+                  adminUpiId,
+                  status: 'COMPLETED',
+                  utr: cleanUtr,
+                  confirmedAt: new Date()
+                }
+              }
+            }
+          );
+          await settlementSvc.settleAssignment(asg._id, { useStoredAmounts: true });
+
+          emitSafe(`worker_${asg.workerId}`, 'qr_payment_success', {
+            requestId: parentReq._id,
+            assignmentId: asg._id,
+            workerId: asg.workerId,
+            grossAmount,
+            netEarning: workerNetEarning,
+            paymentMethod: 'qr_online'
+          });
+
+          await createNotification({
+            recipientType: 'worker',
+            recipientId: asg.workerId,
+            type: 'payment_success',
+            title: '💰 Wallet Credited via Admin QR!',
+            message: `₹${workerNetEarning} has been added to your AgroYilt wallet for completing this job. (Farmer paid online).`,
+            relatedId: parentReq._id,
+            relatedType: 'WorkerBookingRequest',
+            priority: 'high'
+          });
+        }
+      }
+
+      await settlementSvc.finishParent(parentReq._id);
+
       emitSafe(`user_${parentReq.farmerId}`, 'qr_payment_success', {
         requestId: parentReq._id,
-        status: 'completed'
+        status: 'completed',
+        amount: totalPayable
+      });
+
+      await createNotification({
+        userId: parentReq.farmerId,
+        type: 'payment_success',
+        title: 'UPI Payment Confirmed!',
+        message: `Your payment of ₹${totalPayable} via Admin QR has been successfully verified. Work completed!`,
+        relatedId: parentReq._id,
+        relatedType: 'WorkerBookingRequest',
+        priority: 'high'
       });
 
       return res.status(200).json({
         success: true,
-        message: 'Parent request QR payment confirmed',
-        data: { requestId: parentReq._id }
+        message: 'Parent request QR payment confirmed & all worker assignments settled',
+        data: { requestId: parentReq._id, amount: totalPayable }
       });
     }
 

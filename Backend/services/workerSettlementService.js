@@ -87,7 +87,8 @@ const settleAssignment = async (assignmentId, { useStoredAmounts = false } = {})
   const key = `settle_assign_${a._id}`;
   try {
     const parent = await WorkerBookingRequest.findById(a.parentRequestId).select('paymentMethod paymentStatus financialSnapshot bookingType durationMinutes numberOfDays auditLog workTitle');
-    const isCash = Boolean(a.isCashBooking) || a.paymentMethod === 'cash' || (parent && parent.paymentMethod === 'cash');
+    const isOnlinePay = a.paymentMethod === 'qr_online' || a.paymentMethod === 'online' || a.isCashBooking === false;
+    const isCash = !isOnlinePay && (Boolean(a.isCashBooking) || a.paymentMethod === 'cash' || (parent && parent.paymentMethod === 'cash'));
 
     let gross = a.grossAmount, commission = a.commissionAmount, net = a.netEarning;
     if (a.bookingType === 'DAILY' && !useStoredAmounts) {

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import {
   FiArrowLeft, FiCalendar, FiMapPin, FiPhone, FiNavigation, FiStar, FiClock, FiKey,
-  FiEye, FiEyeOff, FiPlusCircle, FiUserPlus, FiAlertTriangle, FiHelpCircle, FiXCircle, FiCheck, FiChevronDown, FiChevronUp
+  FiEye, FiEyeOff, FiPlusCircle, FiUserPlus, FiAlertTriangle, FiHelpCircle, FiXCircle, FiCheck, FiChevronDown, FiChevronUp, FiCreditCard
 } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import workerBookingService from '../../../../../services/workerBookingService';
@@ -15,6 +15,7 @@ import DisputeModal from '../../../../../components/common/DisputeModal';
 import ExtensionModal from '../../BookingTrack/components/ExtensionModal';
 import AddWorkersModal from '../../BookingTrack/components/AddWorkersModal';
 import DecreaseWorkerModal from '../../BookingTrack/components/DecreaseWorkerModal';
+import FarmerWorkerQrModal from './FarmerWorkerQrModal';
 import { workLength } from '../../../../../utils/workerPayment';
 
 // One worker's journey through a job (per day for DAILY bookings)
@@ -59,6 +60,7 @@ const BookedRequestView = ({ request, onRefresh }) => {
   const [revealed, setRevealed] = useState({});
   const [showDone, setShowDone] = useState(false);
   const [modal, setModal] = useState(null); // 'extend' | 'add' | 'dispute' | { decrease: worker } | { rate: worker }
+  const [qrModal, setQrModal] = useState(null); // { targetId, title, amount }
   const [rated, setRated] = useState(() => {
     try { return JSON.parse(localStorage.getItem(`rated_workers_${id}`) || '{}'); } catch { return {}; }
   });
@@ -205,9 +207,20 @@ const BookedRequestView = ({ request, onRefresh }) => {
             </button>
           )}
           {cash && (
-            <span className={`px-3 py-2 rounded-xl text-xs font-bold ${cash.status === 'paid' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}>
-              {cash.status === 'paid' ? `Paid ₹${Number(cash.cashToPay).toLocaleString('en-IN')} cash` : `Pay ₹${Number(cash.cashToPay).toLocaleString('en-IN')} cash at the end`}
-            </span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className={`px-3 py-2 rounded-xl text-xs font-bold ${cash.status === 'paid' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}>
+                {cash.status === 'paid' ? `Paid ₹${Number(cash.cashToPay).toLocaleString('en-IN')} cash` : `Pay ₹${Number(cash.cashToPay).toLocaleString('en-IN')} cash at the end`}
+              </span>
+              {cash.status !== 'paid' && ['IN_PROGRESS', 'WORK_SUBMITTED', 'COMPLETED'].includes(w.journeyStatus) && (
+                <button
+                  type="button"
+                  onClick={() => setQrModal({ targetId: w.assignmentId, title: `${w.workerName} · UPI Payment`, amount: cash.cashToPay })}
+                  className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center gap-1.5 active:scale-95 transition-all shadow-xs"
+                >
+                  <FiCreditCard size={13} /> Pay Online (UPI)
+                </button>
+              )}
+            </div>
           )}
           {isDaily && !['COMPLETED'].includes(w.journeyStatus) && !w.isDecreased && (
             <button type="button" onClick={() => setModal({ decrease: w })}
@@ -380,7 +393,23 @@ const BookedRequestView = ({ request, onRefresh }) => {
         {/* Payment */}
         {bill && (
           <div className={card}>
-            <h2 className="font-black text-slate-900 mb-3">Payment</h2>
+            <div className="flex items-center justify-between mb-3 gap-2">
+              <h2 className="font-black text-slate-900">Payment</h2>
+              {request.status !== 'completed' && request.paymentMethod === 'cash' && (
+                <button
+                  type="button"
+                  onClick={() => setQrModal({
+                    targetId: id,
+                    title: `${request.workTitle || 'Worker Request'} · UPI Settlement`,
+                    amount: bill.grandTotal || request.financialSnapshot?.totalPayable || 0
+                  })}
+                  className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 text-xs font-black flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
+                >
+                  <FiCreditCard size={13} className="text-emerald-600" />
+                  <span>Pay All Online (Admin UPI)</span>
+                </button>
+              )}
+            </div>
             <WorkerPaymentBill bill={bill} />
           </div>
         )}
@@ -468,6 +497,14 @@ const BookedRequestView = ({ request, onRefresh }) => {
         onSubmit={(data) => rateWorker(modal.rate, data)}
         bookingName={request.workTitle}
         workerName={modal?.rate?.workerName}
+      />
+      <FarmerWorkerQrModal
+        isOpen={Boolean(qrModal)}
+        onClose={() => setQrModal(null)}
+        targetId={qrModal?.targetId}
+        title={qrModal?.title}
+        amount={qrModal?.amount}
+        onSuccess={refreshAll}
       />
     </div>
   );
