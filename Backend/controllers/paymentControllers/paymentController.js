@@ -7,6 +7,28 @@ const { PAYMENT_STATUS, BOOKING_STATUS } = require('../../utils/constants');
 const { createOrder, verifyPayment, refundPayment } = require('../../services/razorpayService');
 const { createNotification } = require('../notificationControllers/notificationController');
 const { recordBookingEarning } = require('../../services/earningTrackerService');
+const { getPlatformEarning, getVendorEarning } = require('../../utils/vendorPayout');
+const { calculateBookingCommission } = require('../../services/workerFinancialService');
+
+// Daily earnings tracker entry for a completed booking, from its bill (current Vendor Commission if it has none)
+const recordCompletedBookingEarning = async (booking) => {
+  try {
+    const VendorBill = require('../../models/VendorBill');
+    const bill = booking.vendorBillId ? await VendorBill.findById(booking.vendorBillId).lean() : null;
+    const settings = bill ? null : await Settings.findOne({ type: 'global' }).lean();
+    recordBookingEarning({
+      date: new Date(),
+      totalRevenue: bill ? bill.grandTotal : booking.finalAmount,
+      platformCommission: getPlatformEarning(bill, booking, settings),
+      vendorEarnings: getVendorEarning(bill, booking, settings),
+      totalGST: bill ? bill.totalGST : 0,
+      totalTDS: 0
+    });
+  } catch (err) {
+    // Stats only: never fail a payment that has already been applied
+    console.error('[EarningTracker] Failed to record booking earning:', err.message);
+  }
+};
 const {
   applyOnlinePayment,
   getAdvancePaid
@@ -137,7 +159,7 @@ const verifyPaymentWebhook = async (req, res) => {
     // Independent worker bookings are paid out to the worker's wallet on completion
     if (completed && booking.workerId && !booking.vendorId) {
       const Worker = require('../../models/Worker');
-      const workerEarning = Math.round(booking.finalAmount * 0.8 * 100) / 100;
+      const { netAmount: workerEarning } = await calculateBookingCommission(booking.finalAmount);
       await Worker.findByIdAndUpdate(booking.workerId, { $inc: { 'wallet.balance': workerEarning } });
       await Booking.updateOne({ _id: booking._id }, { $set: { workerPaymentStatus: 'PAID', isWorkerPaid: true, workerPaidAt: new Date() } });
       await Transaction.create({
@@ -148,18 +170,7 @@ const verifyPaymentWebhook = async (req, res) => {
       });
     }
 
-    if (completed) {
-      const VendorBill = require('../../models/VendorBill');
-      const bill = booking.vendorBillId ? await VendorBill.findById(booking.vendorBillId) : null;
-      recordBookingEarning({
-        date: new Date(),
-        totalRevenue: bill ? bill.grandTotal : booking.finalAmount,
-        platformCommission: bill ? bill.companyRevenue : (booking.finalAmount * 0.2),
-        vendorEarnings: bill ? bill.vendorTotalEarning : (booking.finalAmount * 0.8),
-        totalGST: bill ? bill.totalGST : 0,
-        totalTDS: 0
-      });
-    }
+    if (completed) await recordCompletedBookingEarning(booking);
 
     await createNotification({
       userId: booking.userId,
@@ -275,12 +286,7 @@ const processWalletPayment = async (req, res) => {
 
     await Booking.updateOne({ _id: pre._id }, { $set: { paymentLockAt: null } });
 
-    if (completed) {
-      recordBookingEarning({
-        date: new Date(), totalRevenue: booking.finalAmount, platformCommission: booking.finalAmount * 0.2,
-        vendorEarnings: booking.finalAmount * 0.8, totalGST: 0, totalTDS: 0
-      });
-    }
+    if (completed) await recordCompletedBookingEarning(booking);
 
     await createNotification({
       userId, type: 'payment_success', title: 'Payment Successful',

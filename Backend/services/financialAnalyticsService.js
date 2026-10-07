@@ -429,7 +429,8 @@ const getFinancialOverview = async ({
     {
       $group: {
         _id: null,
-        companyRevenuePaise: { $sum: { $round: [{ $multiply: ['$companyRevenue', 100] }, 0] } },
+        // Platform's earning excludes the GST it collects for the government
+        companyRevenuePaise: { $sum: { $round: [{ $multiply: [{ $subtract: ['$companyRevenue', { $ifNull: ['$totalGST', 0] }] }, 100] }, 0] } },
         visitingChargesPaise: { $sum: { $round: [{ $multiply: ['$visitingCharges', 100] }, 0] } },
         totalGSTPaise: { $sum: { $round: [{ $multiply: ['$totalGST', 100] }, 0] } }
       }

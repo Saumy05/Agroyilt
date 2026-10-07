@@ -115,7 +115,14 @@ exports.updateSettings = async (req, res, next) => {
       if (platformFeePercentage !== undefined) settings.platformFeePercentage = platformFeePercentage;
       if (vendorCashLimit !== undefined) settings.vendorCashLimit = vendorCashLimit; // Add this
       if (cancellationPenalty !== undefined) settings.cancellationPenalty = cancellationPenalty;
-      if (bookingCommissionPercentage !== undefined) settings.bookingCommissionPercentage = bookingCommissionPercentage;
+      // Vendor Commission drives every vendor payout (utils/vendorPayout)
+      if (bookingCommissionPercentage !== undefined) {
+        const val = Number(bookingCommissionPercentage);
+        if (isNaN(val) || val < 0 || val > 100) {
+          return res.status(400).json({ success: false, message: 'Vendor commission must be between 0 and 100.' });
+        }
+        settings.bookingCommissionPercentage = val;
+      }
       if (razorpayKeyId !== undefined) settings.razorpayKeyId = razorpayKeyId;
       if (razorpayKeySecret !== undefined) settings.razorpayKeySecret = razorpayKeySecret;
       if (razorpayWebhookSecret !== undefined) settings.razorpayWebhookSecret = razorpayWebhookSecret;

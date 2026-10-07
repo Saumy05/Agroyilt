@@ -5,35 +5,50 @@ const PDFDocument = require('pdfkit');
  * @param {Object} bill - VendorBill document
  * @param {Object} booking - Booking document
  * @param {Stream} res - Express response stream
+ * @param {Object} settings - Global Settings (Billing & Company Details from admin settings)
  */
-const generateInvoicePDF = (bill, booking, res) => {
+const generateInvoicePDF = (bill, booking, res, settings = {}) => {
     const doc = new PDFDocument({ margin: 50 });
 
     // Pipe to response
     doc.pipe(res);
 
+    const companyName = settings.companyName || settings.appName || 'AgroYilt';
+    const cityLine = [settings.companyCity, settings.companyState, settings.companyPincode].filter(Boolean).join(', ');
+    const contactLine = [settings.companyPhone, settings.companyEmail].filter(Boolean).join(' | ');
+    const taxLine = [settings.companyGSTIN && `GSTIN: ${settings.companyGSTIN}`, settings.companyPAN && `PAN: ${settings.companyPAN}`].filter(Boolean).join('   ');
+    const invoiceNumber = `${settings.invoicePrefix ? `${settings.invoicePrefix}-` : ''}${booking.bookingNumber}`;
+
     // --- Header ---
     doc.fillColor('#444444')
+        .fontSize(18)
+        .text(companyName, 50, 40, { width: 330 })
+        .fontSize(8);
+    let headerY = 62;
+    [settings.companyAddress, cityLine, contactLine, taxLine].filter(Boolean).forEach(line => {
+        doc.text(line, 50, headerY, { width: 330 });
+        headerY += 11;
+    });
+    doc.fillColor('#000000')
         .fontSize(20)
-        .text('GROO', 50, 45)
-        .fontSize(10)
-        .text('Agri-Services & Equipment Rental', 50, 65)
-        .fillColor('#000000')
-        .fontSize(20)
-        .text('INVOICE', 200, 50, { align: 'right' });
+        .text('INVOICE', 200, 45, { align: 'right' });
 
-    doc.moveDown();
-    doc.strokeColor('#aaaaaa').lineWidth(1).moveTo(50, 90).lineTo(550, 90).stroke();
+    const dividerY = Math.max(90, headerY + 6);
+    doc.strokeColor('#aaaaaa').lineWidth(1).moveTo(50, dividerY).lineTo(550, dividerY).stroke();
 
     // --- Info Section ---
-    const infoTop = 110;
+    const infoTop = dividerY + 20;
     doc.fontSize(10)
         .font('Helvetica-Bold').text('Invoice Number:', 50, infoTop)
-        .font('Helvetica').text(booking.bookingNumber, 150, infoTop)
+        .font('Helvetica').text(invoiceNumber, 150, infoTop)
         .font('Helvetica-Bold').text('Invoice Date:', 50, infoTop + 15)
-        .font('Helvetica').text(new Date(bill.generatedAt).toLocaleDateString(), 150, infoTop + 15)
+        .font('Helvetica').text(new Date(bill.generatedAt).toLocaleDateString('en-IN'), 150, infoTop + 15)
         .font('Helvetica-Bold').text('Booking Status:', 50, infoTop + 30)
         .font('Helvetica').text(booking.status.toUpperCase(), 150, infoTop + 30);
+    if (settings.sacCode) {
+        doc.font('Helvetica-Bold').text('SAC Code:', 50, infoTop + 45)
+            .font('Helvetica').text(settings.sacCode, 150, infoTop + 45);
+    }
 
     doc.font('Helvetica-Bold').text('Bill To:', 350, infoTop)
         .font('Helvetica').text(booking.userId?.name || 'Valued Farmer', 350, infoTop + 15)
@@ -57,7 +72,7 @@ const generateInvoicePDF = (bill, booking, res) => {
     doc.moveDown(4);
 
     // --- Table Header ---
-    const tableTop = 200;
+    const tableTop = infoTop + 95;
     doc.font('Helvetica-Bold')
         .text('Description', 50, tableTop)
         .text('Qty', 280, tableTop)
@@ -169,7 +184,7 @@ const generateInvoicePDF = (bill, booking, res) => {
     doc.fillColor('#888888')
         .fontSize(8)
         .text('This is a computer generated invoice and does not require a physical signature.', 50, 700, { align: 'center', width: 500 })
-        .text('Thank you for choosing GROO for your farming needs!', 50, 715, { align: 'center', width: 500 });
+        .text(`Thank you for choosing ${companyName} for your farming needs!`, 50, 715, { align: 'center', width: 500 });
 
     doc.end();
 };

@@ -10,6 +10,7 @@ const Settings = require('../../models/Settings');
 const Vendor = require('../../models/Vendor');
 const Service = require('../../models/Service'); // Using Service as ref by Booking.js
 const { BILL_STATUS } = require('../../utils/constants');
+const { getVendorPayoutPercentage } = require('../../utils/vendorPayout');
 const {
   generateOtp,
   generateDistinctOtp,
@@ -984,7 +985,7 @@ const completeSelfJob = async (req, res) => {
     const Settings = require('../../models/Settings');
     const settings = await Settings.findOne({ type: 'global' });
 
-    let serviceSplitPct = settings?.servicePayoutPercentage ?? 70;
+    let serviceSplitPct = getVendorPayoutPercentage(settings);
     let partsSplitPct = settings?.partsPayoutPercentage ?? 10;
     let serviceGstPct = settings?.serviceGstPercentage ?? 18;
     let partsGstPct = settings?.partsGstPercentage ?? 18;

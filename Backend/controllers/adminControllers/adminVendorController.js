@@ -412,7 +412,7 @@ const getVendorEarnings = async (req, res) => {
           _id: null,
           totalRevenue: { $sum: '$grandTotal' },
           vendorEarnings: { $sum: '$vendorTotalEarning' },
-          platformCommission: { $sum: '$companyRevenue' },
+          platformCommission: { $sum: { $subtract: ['$companyRevenue', { $ifNull: ['$totalGST', 0] }] } },
           totalBookings: { $sum: 1 }
         }
       }

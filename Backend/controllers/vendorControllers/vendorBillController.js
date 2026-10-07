@@ -4,6 +4,7 @@ const { generateInvoicePDF } = require('../../utils/invoiceGenerator');
 
 const Settings = require('../../models/Settings');
 const { BILL_STATUS } = require('../../utils/constants');
+const { getVendorPayoutPercentage } = require('../../utils/vendorPayout');
 
 /**
  * Create or Update Vendor Bill
@@ -36,9 +37,7 @@ const createOrUpdateBill = async (req, res) => {
     // ── Fetch Settings (frozen snapshot) ──
     const settings = await Settings.findOne({ type: 'global' });
     
-    // Use the new bookingCommissionPercentage (default 10%), or fallback to 100 - servicePayoutPercentage
-    const commissionPct = settings?.bookingCommissionPercentage ?? (100 - (settings?.servicePayoutPercentage ?? 90));
-    const serviceSplitPct = 100 - commissionPct;
+    const serviceSplitPct = getVendorPayoutPercentage(settings);
     const partsSplitPct = settings?.partsPayoutPercentage ?? 10;
     
     // Check if equipment/agri service (5% rental GST standard)
@@ -328,18 +327,28 @@ const getBillByBookingId = async (req, res) => {
 const downloadInvoice = async (req, res) => {
   try {
     const { bookingId } = req.params;
-    const bill = await VendorBill.findOne({ bookingId });
     const booking = await Booking.findById(bookingId).populate('userId');
 
+    if (!booking) {
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+    // Invoices carry the farmer's name, phone and address: only the booking's vendor may download them
+    if (booking.vendorId?.toString() !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'Not authorized for this booking' });
+    }
+
+    const bill = await VendorBill.findOne({ bookingId });
     if (!bill) {
       return res.status(404).json({ success: false, message: 'Invoice not generated yet' });
     }
+
+    const settings = await Settings.findOne({ type: 'global' }).lean();
 
     const fileName = `Invoice_${booking.bookingNumber}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
 
-    generateInvoicePDF(bill, booking, res);
+    generateInvoicePDF(bill, booking, res, settings || {});
   } catch (error) {
     console.error('Download invoice error:', error);
     res.status(500).json({ success: false, message: 'Failed to generate PDF' });

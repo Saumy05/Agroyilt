@@ -18,6 +18,7 @@ const User = require('../models/User');
 const Transaction = require('../models/Transaction');
 const Settings = require('../models/Settings');
 const { BOOKING_STATUS, PAYMENT_STATUS, BILL_STATUS } = require('../utils/constants');
+const { getVendorPayoutPercentage } = require('../utils/vendorPayout');
 
 const OTP_MAX_ATTEMPTS = 5;
 const OTP_LOCK_MINUTES = 15;
@@ -306,7 +307,7 @@ const getRentalSettings = async () => {
   const s = await Settings.findOne({ type: 'global' }).lean();
   return {
     gstPct: s?.rentalGstPercentage ?? 5,
-    payoutPct: s?.rentalPayoutPercentage ?? 90,
+    payoutPct: getVendorPayoutPercentage(s),
     settings: s
   };
 };
@@ -510,7 +511,7 @@ const settleVendorCash = async (bookingId, { collectorRole, collectorId }) => {
       await recordBookingEarning({
         date: new Date(),
         totalRevenue: grandTotal,
-        platformCommission: bill.companyRevenue,
+        platformCommission: round2((bill.companyRevenue || 0) - (bill.totalGST || 0)),
         vendorEarnings: bill.vendorTotalEarning,
         totalGST: bill.totalGST,
         totalTDS: 0

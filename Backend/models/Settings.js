@@ -140,7 +140,7 @@ const settingsSchema = new mongoose.Schema({
   // Billing & Invoice Configuration
   companyName: {
     type: String,
-    default: 'TodayMyDream'
+    default: 'AgroYilt'
   },
   companyGSTIN: {
     type: String,

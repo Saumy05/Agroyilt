@@ -6,6 +6,7 @@ const User = require('../../models/User');
 const Settings = require('../../models/Settings');
 const PlatformEarning = require('../../models/PlatformEarning');
 const { BOOKING_STATUS, PAYMENT_STATUS } = require('../../utils/constants');
+const { getPlatformEarning, getVendorEarning } = require('../../utils/vendorPayout');
 
 /**
  * Get Financial Dashboard Overview
@@ -158,6 +159,7 @@ const getPaymentTransactions = async (req, res) => {
       .lean();
 
     const total = await Booking.countDocuments(query);
+    const settings = await Settings.findOne({ type: 'global' }).lean();
 
     // Fetch VendorBills for these bookings
     const bookingIds = bookings.map(b => b._id);
@@ -174,8 +176,8 @@ const getPaymentTransactions = async (req, res) => {
         customer: b.userId?.name || 'Guest',
         vendor: b.vendorId?.businessName || 'Unassigned',
         amount: bill?.grandTotal || b.finalAmount || 0,
-        platformFee: bill?.companyRevenue || (b.finalAmount ? b.finalAmount * 0.2 : 0),
-        vendorEarnings: bill?.vendorTotalEarning || (b.finalAmount ? b.finalAmount * 0.8 : 0),
+        platformFee: getPlatformEarning(bill, b, settings),
+        vendorEarnings: getVendorEarning(bill, b, settings),
         tax: bill?.totalGST || 0,
         paymentMethod: b.paymentMethod || 'N/A',
         paymentStatus: b.paymentStatus || 'N/A',
@@ -450,7 +452,7 @@ const getCODReport = async (req, res) => {
         {
           $group: {
             _id: null,
-            platformCommission: { $sum: '$companyRevenue' }
+            platformCommission: { $sum: { $subtract: ['$companyRevenue', { $ifNull: ['$totalGST', 0] }] } }
           }
         }
       ]);
@@ -557,7 +559,7 @@ const getRevenueBreakdown = async (req, res) => {
         $group: {
           _id: '$service.title',
           revenue: { $sum: '$grandTotal' },
-          commission: { $sum: '$companyRevenue' },
+          commission: { $sum: { $subtract: ['$companyRevenue', { $ifNull: ['$totalGST', 0] }] } },
           count: { $sum: 1 }
         }
       },
@@ -585,7 +587,7 @@ const getRevenueBreakdown = async (req, res) => {
         $group: {
           _id: '$booking.paymentMethod',
           revenue: { $sum: '$grandTotal' },
-          commission: { $sum: '$companyRevenue' },
+          commission: { $sum: { $subtract: ['$companyRevenue', { $ifNull: ['$totalGST', 0] }] } },
           count: { $sum: 1 }
         }
       }
@@ -612,7 +614,7 @@ const getRevenueBreakdown = async (req, res) => {
         $group: {
           _id: '$booking.address.city',
           revenue: { $sum: '$grandTotal' },
-          commission: { $sum: '$companyRevenue' },
+          commission: { $sum: { $subtract: ['$companyRevenue', { $ifNull: ['$totalGST', 0] }] } },
           count: { $sum: 1 }
         }
       },

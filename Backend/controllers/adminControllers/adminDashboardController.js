@@ -8,10 +8,42 @@ const SoilTestRequest = require('../../models/SoilTestRequest');
 const EcommerceOrder = require('../../models/EcommerceOrder');
 const Admin = require('../../models/Admin');
 const AdminPayroll = require('../../models/AdminPayroll');
+const VendorBill = require('../../models/VendorBill');
+const Settings = require('../../models/Settings');
 
 const { BOOKING_STATUS, PAYMENT_STATUS, VENDOR_STATUS } = require('../../utils/constants');
 const { buildAdminScopeFilter } = require('../../utils/adminScopeHelper');
 const { calculateAdminCombinedIncentives } = require('../../utils/adminIncentiveHelper');
+const { getVendorPayoutPercentage } = require('../../utils/vendorPayout');
+
+/**
+ * Pipeline stages that attach each booking's bill and compute `platformEarning`:
+ * bill.companyRevenue − bill.totalGST (GST is collected for the government, not earned).
+ * Legacy bookings without a bill fall back to the current Vendor Commission on finalAmount.
+ * Mirrors utils/vendorPayout.getPlatformEarning.
+ */
+const platformEarningStages = (settings) => {
+  const fallbackRate = (100 - getVendorPayoutPercentage(settings)) / 100;
+  return [
+    { $lookup: { from: VendorBill.collection.name, localField: '_id', foreignField: 'bookingId', as: 'bill' } },
+    {
+      $addFields: {
+        platformEarning: {
+          $cond: [
+            { $gt: [{ $size: '$bill' }, 0] },
+            {
+              $subtract: [
+                { $ifNull: [{ $arrayElemAt: ['$bill.companyRevenue', 0] }, 0] },
+                { $ifNull: [{ $arrayElemAt: ['$bill.totalGST', 0] }, 0] }
+              ]
+            },
+            { $multiply: [{ $ifNull: ['$finalAmount', 0] }, fallbackRate] }
+          ]
+        }
+      }
+    }
+  ];
+};
 
 /**
  * Get overall dashboard stats
@@ -55,6 +87,7 @@ const getDashboardStats = async (req, res) => {
     // Run all dashboard metric queries in parallel for high performance
     const adminId = req.user?._id;
     const workerTypeScope = Object.keys(workerScope).length > 0 ? { $and: [dateFilter, workerScope] } : dateFilter;
+    const globalSettings = await Settings.findOne({ type: 'global' }).lean();
 
     const [
       totalUsers,
@@ -90,13 +123,15 @@ const getDashboardStats = async (req, res) => {
         { $group: { _id: '$status', count: { $sum: 1 } } }
       ]),
 
-      // 5. Booking revenue
+      // 5. Booking revenue (platform's real earning from each bill)
       Booking.aggregate([
         { $match: bookingMatch },
+        ...platformEarningStages(globalSettings),
         {
           $group: {
             _id: null,
             totalRevenue: { $sum: '$finalAmount' },
+            platformEarning: { $sum: '$platformEarning' },
             totalBookings: { $sum: 1 }
           }
         }
@@ -316,9 +351,8 @@ const getDashboardStats = async (req, res) => {
     });
 
     // Revenue calculations
-    const bookingRevData = revenueResult[0] || { totalRevenue: 0, totalBookings: 0 };
-    const bookingRevenue = bookingRevData.totalRevenue;
-    const bookingCommission = bookingRevenue * 0.2; // 20% commission
+    const bookingRevData = revenueResult[0] || { totalRevenue: 0, platformEarning: 0, totalBookings: 0 };
+    const bookingCommission = Math.round(bookingRevData.platformEarning * 100) / 100;
 
     const soilTestRevData = soilTestRevenueResult[0] || { totalAmount: 0, totalCommission: 0, count: 0 };
     const soilTestCommission = soilTestRevData.totalCommission;
@@ -432,6 +466,8 @@ const getRevenueAnalytics = async (req, res) => {
     // Apply Admin Geographic Scope to booking metrics
     const bookingScope = buildAdminScopeFilter(req.user, 'booking');
 
+    const globalSettings = await Settings.findOne({ type: 'global' }).lean();
+
     // Revenue analytics
     // Booking Revenue Analytics
     const revenueData = await Booking.aggregate([
@@ -443,6 +479,7 @@ const getRevenueAnalytics = async (req, res) => {
           ...bookingScope
         }
       },
+      ...platformEarningStages(globalSettings),
       {
         $group: {
           _id: {
@@ -454,7 +491,7 @@ const getRevenueAnalytics = async (req, res) => {
           },
           revenue: { $sum: '$finalAmount' },
           bookings: { $sum: 1 },
-          platformCommission: { $sum: { $multiply: ['$finalAmount', 0.2] } }
+          platformCommission: { $sum: '$platformEarning' }
         }
       },
       { $sort: { _id: 1 } }

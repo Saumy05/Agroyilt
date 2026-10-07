@@ -5,6 +5,7 @@ const { validationResult } = require('express-validator');
  * Get vendor settings
  */
 const Settings = require('../../models/Settings');
+const { getVendorPayoutPercentage } = require('../../utils/vendorPayout');
 
 /**
  * Get vendor settings
@@ -31,9 +32,9 @@ const getSettings = async (req, res) => {
           serviceGstPercentage: globalSettings?.serviceGstPercentage ?? 18,
           rentalGstPercentage: globalSettings?.rentalGstPercentage ?? 5,
           partsGstPercentage: globalSettings?.partsGstPercentage ?? 18,
-          servicePayoutPercentage: globalSettings?.servicePayoutPercentage ?? 70,
+          servicePayoutPercentage: getVendorPayoutPercentage(globalSettings),
           partsPayoutPercentage: globalSettings?.partsPayoutPercentage ?? 10,
-          bookingCommissionPercentage: globalSettings?.bookingCommissionPercentage ?? 10
+          bookingCommissionPercentage: 100 - getVendorPayoutPercentage(globalSettings)
         }
       }
     });
