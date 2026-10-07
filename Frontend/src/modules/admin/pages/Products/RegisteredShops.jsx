@@ -61,7 +61,7 @@ const RegisteredShops = () => {
                         <thead>
                             <tr className="bg-gray-50/50 border-b border-gray-50">
                                 <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-[2px]">Shop & Status</th>
-                                <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-[2px]">Owner Details</th>
+                                <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-[2px]">Vendor Details</th>
                                 <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-[2px]">Location</th>
                                 <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-[2px]">Products & Stock</th>
                                 <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-[2px]">License</th>

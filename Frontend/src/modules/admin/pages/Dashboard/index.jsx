@@ -244,7 +244,7 @@ const AdminDashboard = () => {
       link: '/admin/users/analytics'
     },
     {
-      title: 'Equipment Owners',
+      title: 'Vendors',
       value: (stats.totalVendors || 0).toLocaleString(),
       change: 0,
       icon: FiBriefcase,
@@ -429,7 +429,7 @@ const AdminDashboard = () => {
                     <span className="font-bold text-white">₹{(stats.adminCompensation?.farmerIncentives || 0).toLocaleString()}</span>
                   </div>
                   <div>
-                    <span className="text-gray-400 block">🚜 Eq. Owners</span>
+                    <span className="text-gray-400 block">🚜 Vendors</span>
                     <span className="font-bold text-white">₹{(stats.adminCompensation?.vendorIncentives || 0).toLocaleString()}</span>
                   </div>
                   <div>
@@ -523,7 +523,7 @@ const AdminDashboard = () => {
                   className="bg-white/10 hover:bg-white/20 p-2.5 rounded-xl transition cursor-pointer"
                 >
                   <p className="text-base font-bold text-amber-300">{myRegistrations.vendors}</p>
-                  <p className="text-[10px] text-blue-100 mt-0.5">🚜 Owners</p>
+                  <p className="text-[10px] text-blue-100 mt-0.5">🚜 Vendors</p>
                 </button>
                 <button
                   onClick={() => navigate('/admin/workers/all?createdByMe=true')}
@@ -560,7 +560,7 @@ const AdminDashboard = () => {
               </div>
               <div onClick={() => navigate('/admin/vendors/all')} className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs hover:shadow-md transition cursor-pointer">
                 <span className="text-2xl">🚜</span>
-                <p className="text-xs font-medium text-gray-500 mt-2">Equipment Owners</p>
+                <p className="text-xs font-medium text-gray-500 mt-2">Vendors</p>
                 <p className="text-xl font-bold text-gray-900 mt-0.5">{stats.totalVendors}</p>
               </div>
               <div onClick={() => navigate('/admin/workers/all')} className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs hover:shadow-md transition cursor-pointer">
@@ -621,7 +621,7 @@ const AdminDashboard = () => {
                 <span className="text-emerald-400 font-black">{myRegistrations.total}</span>
               </h2>
               <p className="text-xs text-blue-200 mt-0.5">
-                Farmers, equipment owners &amp; workers onboarded directly under your Super Admin credentials
+                Farmers, vendors &amp; workers onboarded directly under your Super Admin credentials
               </p>
             </div>
 
@@ -638,7 +638,7 @@ const AdminDashboard = () => {
                 className="flex items-center gap-2 px-3.5 py-2 bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl text-xs font-bold transition cursor-pointer"
               >
                 <span className="text-amber-400 font-extrabold">{myRegistrations.vendors}</span>
-                <span>Equipment Owners</span>
+                <span>Vendors</span>
               </button>
               <button
                 onClick={() => navigate('/admin/workers/all?createdByMe=true')}

@@ -83,9 +83,9 @@ const RegistrationFeesList = ({ role = 'USER' }) => {
       color: 'emerald'
     },
     VENDOR: {
-      title: 'Equipment Owner Registration Fees',
-      subtitle: 'Monitor and track all registration fee transactions collected from machinery & equipment owners.',
-      tag: 'Owner',
+      title: 'Vendor Registration Fees',
+      subtitle: 'Monitor and track all registration fee transactions collected from machinery & vendors.',
+      tag: 'Vendor',
       icon: FiBriefcase,
       color: 'purple'
     }

@@ -24,16 +24,16 @@ export const PERMISSION_GROUPS = [
     ]
   },
   {
-    group: 'Vendor Management (Owners)',
+    group: 'Vendor Management',
     icon: '🏪',
     color: 'orange',
     keys: [
-      { key: 'vendors.view', label: 'View Equipment Owners' },
-      { key: 'vendors.create', label: 'Create Owners' },
-      { key: 'vendors.edit', label: 'Edit Owners' },
-      { key: 'vendors.approve', label: 'Approve/Reject Owners' },
-      { key: 'vendors.block', label: 'Block/Unblock Owners' },
-      { key: 'vendors.delete', label: 'Delete Owners' }
+      { key: 'vendors.view', label: 'View Vendors' },
+      { key: 'vendors.create', label: 'Create Vendors' },
+      { key: 'vendors.edit', label: 'Edit Vendors' },
+      { key: 'vendors.approve', label: 'Approve/Reject Vendors' },
+      { key: 'vendors.block', label: 'Block/Unblock Vendors' },
+      { key: 'vendors.delete', label: 'Delete Vendors' }
     ]
   },
   {

@@ -110,7 +110,7 @@ export default function MySalaryHistoryModal({ isOpen, onClose }) {
               <td style="text-align: right;">+₹${(payroll.farmerIncentives || 0).toLocaleString()}</td>
             </tr>
             <tr>
-              <td>Equipment Owner Incentives</td>
+              <td>Vendor Incentives</td>
               <td>${payroll.vendorCount || 0} onboarded</td>
               <td style="text-align: right;">+₹${(payroll.vendorIncentives || 0).toLocaleString()}</td>
             </tr>
@@ -293,7 +293,7 @@ export default function MySalaryHistoryModal({ isOpen, onClose }) {
                             <span className="text-gray-500">Breakdown:</span>
                             <div className="flex flex-wrap gap-2 text-gray-700 font-medium">
                               <span>👨‍🌾 Farmers: {item.farmerCount || 0} (₹{item.farmerIncentives || 0})</span>
-                              <span>🚜 Owners: {item.vendorCount || 0} (₹{item.vendorIncentives || 0})</span>
+                              <span>🚜 Vendors: {item.vendorCount || 0} (₹{item.vendorIncentives || 0})</span>
                               <span>👷 Workers: {item.workerCount || 0} (₹{item.workerIncentives || 0})</span>
                               {item.minRegistrationsThreshold > 0 && (
                                 <span className="text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 text-[10px]">

@@ -237,7 +237,7 @@ const WithdrawalsPage = () => {
       <div>
         <h1 className="text-2xl font-black text-gray-900 tracking-tight">Withdrawal Requests</h1>
         <p className="text-sm text-gray-500 mt-0.5">
-          Review, approve, and finalize bank payouts for Farmers, Equipment Owners, and Workers
+          Review, approve, and finalize bank payouts for Farmers, Vendors, and Workers
         </p>
       </div>
 
@@ -332,7 +332,7 @@ const WithdrawalsPage = () => {
               >
                 <option value="ALL">All Roles</option>
                 <option value="farmer">Farmer / User</option>
-                <option value="vendor">Equipment Owner</option>
+                <option value="vendor">Vendor</option>
                 <option value="worker">Worker</option>
               </select>
             </div>
@@ -421,7 +421,7 @@ const WithdrawalsPage = () => {
                               ? 'bg-purple-100 text-purple-800'
                               : 'bg-emerald-100 text-emerald-800'
                           }`}>
-                            {role === 'farmer' || role === 'user' ? 'Farmer' : role === 'vendor' ? 'Owner' : 'Worker'}
+                            {role === 'farmer' || role === 'user' ? 'Farmer' : role === 'vendor' ? 'Vendor' : 'Worker'}
                           </span>
                           {/* Worker Type Badge */}
                           {role === 'worker' && workerType && (

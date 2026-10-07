@@ -95,7 +95,7 @@ const KycVerification = () => {
 
     return (
         <div className="space-y-4">
-            <CardShell icon={FiFileText} title="KYC Verification" subtitle="Review and verify equipment owner documents">
+            <CardShell icon={FiFileText} title="KYC Verification" subtitle="Review and verify vendor documents">
 
                 {/* Stats */}
                 <div className="grid grid-cols-3 gap-3">

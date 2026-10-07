@@ -34,7 +34,7 @@ const iconMap = {
   Dashboard: FiHome,
   Farmers: FiUsers,
   Workers: FiUser,
-  "Equipment Owners": FiBriefcase,
+  "Vendors": FiBriefcase,
   Bookings: FiShoppingBag,
   "User Catalog": FiGrid,
   Payments: FiDollarSign,
@@ -73,9 +73,9 @@ const getChildRoute = (parentRoute, childName) => {
       "Registration Fees": "/admin/workers/registration-fees",
     },
     "/admin/vendors": {
-      "All Owners": "/admin/vendors/all",
-      "Owner Bookings": "/admin/vendors/bookings",
-      "Owner Analytics": "/admin/vendors/analytics",
+      "All Vendors": "/admin/vendors/all",
+      "Vendor Bookings": "/admin/vendors/bookings",
+      "Vendor Analytics": "/admin/vendors/analytics",
       "Registration Fees": "/admin/vendors/registration-fees",
     },
     "/admin/bookings": {
@@ -93,7 +93,7 @@ const getChildRoute = (parentRoute, childName) => {
       "Payment Overview": "/admin/payments/overview",
       "Farmer Payments": "/admin/payments/users",
       "Worker Payments": "/admin/payments/workers",
-      "Owner Payments": "/admin/payments/vendors",
+      "Vendor Payments": "/admin/payments/vendors",
       "Admin Revenue": "/admin/payments/revenue",
       "Payment Reports": "/admin/payments/reports",
     },
@@ -115,7 +115,7 @@ const getChildRoute = (parentRoute, childName) => {
     },
     "/admin/settlements": {
       "Pending": "/admin/settlements/pending",
-      "Owners with Due": "/admin/settlements/vendors",
+      "Vendors with Due": "/admin/settlements/vendors",
       "History": "/admin/settlements/history",
       "Worker Dues": "/admin/settlements/worker-dues",
     },
@@ -186,7 +186,7 @@ const AdminSidebar = ({ isOpen, onClose }) => {
     'Dashboard': 'dashboard.view',
     'Farmers': 'users.view',
     'Workers': 'workers.view',
-    'Equipment Owners': 'vendors.view',
+    'Vendors': 'vendors.view',
     'Bookings': 'bookings.view',
     'Payments': 'payments.view',
     'Withdrawals': 'settlements.view',
@@ -407,7 +407,7 @@ const AdminSidebar = ({ isOpen, onClose }) => {
               {counts.bookings > 99 ? '99+' : counts.bookings}
             </span>
           )}
-          {item.title === "Equipment Owners" && counts.owners > 0 && (
+          {item.title === "Vendors" && counts.owners > 0 && (
             <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse mr-2">
               {counts.owners > 99 ? '99+' : counts.owners}
             </span>

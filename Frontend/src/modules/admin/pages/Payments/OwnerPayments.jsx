@@ -155,7 +155,7 @@ const OwnerPayments = () => {
     exportToCSV(transactions, 'owner_transactions', [
       { key: '_id', label: 'Transaction ID' },
       { key: 'vendorId.businessName', label: 'Business Name' },
-      { key: 'vendorId.name', label: 'Owner Name' },
+      { key: 'vendorId.name', label: 'Vendor Name' },
       { key: 'vendorId.phone', label: 'Phone' },
       { key: 'type', label: 'Type' },
       { key: 'amount', label: 'Amount', type: 'currency' },
@@ -291,7 +291,7 @@ const OwnerPayments = () => {
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
                 <th className="py-3 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Transaction ID</th>
-                <th className="py-3 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Owner</th>
+                <th className="py-3 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Vendor</th>
                 <th className="py-3 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Type</th>
                 <th className="py-3 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Amount</th>
                 <th className="py-3 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>

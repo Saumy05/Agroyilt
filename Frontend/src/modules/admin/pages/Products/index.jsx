@@ -236,7 +236,7 @@ const ManageProducts = () => {
                 res = await adminProductService.rejectProduct(rejectTarget._id, rejectReason);
             }
             if (res.success) {
-                toastManager.success('Equipment rejected. Owner will be notified.');
+                toastManager.success('Equipment rejected. Vendor will be notified.');
                 setShowRejectModal(false);
                 fetchData();
             }
@@ -494,7 +494,7 @@ const ManageProducts = () => {
                         <tr className="bg-slate-50/50 border-b border-slate-100">
                             <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Machine</th>
                             <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Category</th>
-                            <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Owner / Shop</th>
+                            <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Vendor / Shop</th>
                             {activeTab === 'pending' && <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Rental Type</th>}
                             <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Price</th>
                             <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Actions</th>

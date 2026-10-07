@@ -1570,7 +1570,7 @@ const AdminPeopleDetailModal = ({ admin, onClose }) => {
       case 'vendor':
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-            🚜 Eq. Owner / Vendor
+            🚜 Vendor
           </span>
         );
       case 'worker':
@@ -1658,7 +1658,7 @@ const AdminPeopleDetailModal = ({ admin, onClose }) => {
             <p className="text-xl font-black text-green-700 mt-0.5">{summary.totalFarmers}</p>
           </div>
           <div className="bg-white p-3 rounded-xl border border-amber-200 shadow-xs">
-            <p className="text-[10px] uppercase font-bold text-amber-600">Vendors / Owners</p>
+            <p className="text-[10px] uppercase font-bold text-amber-600">Vendors</p>
             <p className="text-xl font-black text-amber-700 mt-0.5">{summary.totalVendors}</p>
           </div>
           <div className="bg-white p-3 rounded-xl border border-purple-200 shadow-xs">
@@ -2153,7 +2153,7 @@ const PeopleAttributionView = ({ onViewAdminPeople }) => {
                   <th className="py-3 px-4 font-bold">Geographic Scope</th>
                   <th className="py-3 px-4 font-bold text-center">Total Added</th>
                   <th className="py-3 px-4 font-bold text-center">👨‍🌾 Farmers</th>
-                  <th className="py-3 px-4 font-bold text-center">🚜 Eq. Owners</th>
+                  <th className="py-3 px-4 font-bold text-center">🚜 Vendors</th>
                   <th className="py-3 px-4 font-bold text-center">👷 Workers</th>
                   <th className="py-3 px-4 font-bold">Status</th>
                   <th className="py-3 px-4 font-bold text-right">Actions</th>
@@ -2571,7 +2571,7 @@ const AdminManagement = ({ defaultTab }) => {
                           <div className="flex items-center gap-1 text-[10px] text-gray-500 font-medium">
                             <span title="Farmers">👨‍🌾 {admin.onboardedStats?.farmers || 0}</span>
                             <span>·</span>
-                            <span title="Equipment Owners">🚜 {admin.onboardedStats?.vendors || 0}</span>
+                            <span title="Vendors">🚜 {admin.onboardedStats?.vendors || 0}</span>
                             <span>·</span>
                             <span title="Workers">👷 {admin.onboardedStats?.workers || 0}</span>
                           </div>

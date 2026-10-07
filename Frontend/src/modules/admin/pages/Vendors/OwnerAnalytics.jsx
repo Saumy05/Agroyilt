@@ -73,7 +73,7 @@ const OwnerAnalytics = () => {
               <FiUsers className="w-4 h-4" />
             </div>
             <div>
-              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Total Equipment Owners</p>
+              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Total Vendors</p>
               <h3 className="text-lg font-bold text-gray-900">{data.totalVendors}</h3>
             </div>
           </div>

@@ -49,7 +49,7 @@ const OwnerReport = () => {
         <CardShell className="bg-white p-4">
           <h3 className="text-base font-bold mb-4 flex items-center gap-2">
             <FiTrendingUp className="text-primary-600" />
-            Top 10 Owners by Revenue
+            Top 10 Vendors by Revenue
           </h3>
           <div className="h-[350px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -69,7 +69,7 @@ const OwnerReport = () => {
           <CardShell className="bg-white p-4">
             <h3 className="text-base font-bold mb-4 flex items-center gap-2">
               <FiBriefcase className="text-amber-600" />
-              Owner Approval Status
+              Vendor Approval Status
             </h3>
             <div className="h-[200px]">
               <ResponsiveContainer width="100%" height="100%">
@@ -99,7 +99,7 @@ const OwnerReport = () => {
           <CardShell className="bg-white p-4">
             <h3 className="text-base font-bold mb-4 flex items-center gap-2">
               <FiBriefcase className="text-indigo-600" />
-              Owners by Category
+              Vendors by Category
             </h3>
             <div className="h-[200px]">
               <ResponsiveContainer width="100%" height="100%">

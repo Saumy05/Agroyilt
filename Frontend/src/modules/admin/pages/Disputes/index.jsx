@@ -100,7 +100,7 @@ const AdminDisputes = () => {
                         <FiAlertTriangle className="text-primary-600" />
                         Dispute Management
                     </h1>
-                    <p className="text-gray-500 text-sm mt-1">Review and resolve complaints from Farmers and Owners.</p>
+                    <p className="text-gray-500 text-sm mt-1">Review and resolve complaints from Farmers and Vendors.</p>
                 </div>
 
                 <div className="flex flex-col sm:flex-row items-center gap-3">

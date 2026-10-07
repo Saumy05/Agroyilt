@@ -178,7 +178,7 @@ const AllOwners = () => {
         setOwners(prev => prev.map(o =>
           o.id === ownerId ? { ...o, approvalStatus: 'approved' } : o
         ));
-        toastManager.success('Owner approved successfully!');
+        toastManager.success('Vendor approved successfully!');
       } else {
         toastManager.error(response.message || 'Failed to approve owner');
       }
@@ -195,7 +195,7 @@ const AllOwners = () => {
         setOwners(prev => prev.map(o =>
           o.id === ownerId ? { ...o, approvalStatus: 'rejected' } : o
         ));
-        toastManager.success('Owner rejected successfully.');
+        toastManager.success('Vendor rejected successfully.');
       } else {
         toastManager.error(response.message || 'Failed to reject owner');
       }
@@ -213,7 +213,7 @@ const AllOwners = () => {
         setOwners(prev => prev.map(o =>
           o.id === ownerId ? { ...o, isActive: newStatus } : o
         ));
-        toastManager.success(`Owner ${newStatus ? 'activated' : 'deactivated'} successfully`);
+        toastManager.success(`Vendor ${newStatus ? 'activated' : 'deactivated'} successfully`);
       } else {
         toastManager.error(response.message || 'Failed to update owner status');
       }
@@ -242,7 +242,7 @@ const AllOwners = () => {
         if (selectedOwner && selectedOwner.id === ownerId) {
           setSelectedOwner({ ...selectedOwner, service: newServices });
         }
-        toastManager.success(`Owner marked as ${!isCurrentlyLab ? 'Soil Lab' : 'Standard Vendor'}`);
+        toastManager.success(`Vendor marked as ${!isCurrentlyLab ? 'Soil Lab' : 'Standard Vendor'}`);
       } else {
         toastManager.error(response.message || 'Failed to update services');
       }
@@ -261,7 +261,7 @@ const AllOwners = () => {
       const response = await adminVendorService.deleteVendor(ownerId);
       if (response.success) {
         setOwners(prev => prev.filter(o => o.id !== ownerId));
-        toastManager.success('Owner deleted successfully');
+        toastManager.success('Vendor deleted successfully');
       } else {
         toastManager.error(response.message || 'Failed to delete owner');
       }
@@ -517,13 +517,13 @@ const AllOwners = () => {
     <div className="space-y-4">
       <CardShell
         icon={FiFilter}
-        title="Equipment Owner Management"
-        subtitle="Manage and verify platform equipment owners"
+        title="Vendor Management"
+        subtitle="Manage and verify platform vendors"
       >
         {/* Stats Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
-            <div className="text-[10px] font-bold text-blue-700 uppercase tracking-wider mb-1">Total Owners</div>
+            <div className="text-[10px] font-bold text-blue-700 uppercase tracking-wider mb-1">Total Vendors</div>
             <div className="text-xl font-bold text-blue-900">{analytics.totalVendors || owners.length}</div>
           </div>
           <div className="bg-purple-50 border border-purple-200 rounded-xl p-3">
@@ -553,7 +553,7 @@ const AllOwners = () => {
               className="px-4 py-2 bg-[#347989] hover:bg-[#2c6573] text-white rounded-lg text-sm font-bold transition-all flex items-center gap-2 shadow-sm shrink-0"
             >
               <FiPlus className="w-4 h-4" />
-              Add Owner
+              Add Vendor
             </button>
           </div>
 
@@ -562,7 +562,7 @@ const AllOwners = () => {
               <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
               <input
                 type="text"
-                placeholder="Search equipment owners..."
+                placeholder="Search vendors..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all text-sm"
@@ -605,7 +605,7 @@ const AllOwners = () => {
             <table className="w-full text-left border-collapse min-w-[800px]">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/50">
-                  <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Owner Details</th>
+                  <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Vendor Details</th>
                   <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Business Info</th>
                   <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Location</th>
                   <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Status</th>
@@ -615,11 +615,11 @@ const AllOwners = () => {
               <tbody className="divide-y divide-gray-50">
                 {loading ? (
                   <tr>
-                    <td colSpan="5" className="px-4 py-8 text-center text-xs text-gray-500">Loading equipment owners...</td>
+                    <td colSpan="5" className="px-4 py-8 text-center text-xs text-gray-500">Loading vendors...</td>
                   </tr>
                 ) : filteredOwners.length === 0 ? (
                   <tr>
-                    <td colSpan="5" className="px-4 py-8 text-center text-xs text-gray-500">No equipment owners found</td>
+                    <td colSpan="5" className="px-4 py-8 text-center text-xs text-gray-500">No vendors found</td>
                   </tr>
                 ) : (
                   filteredOwners.map((owner) => (
@@ -720,7 +720,7 @@ const AllOwners = () => {
                           <button
                             onClick={() => handleDelete(owner.id)}
                             className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Delete Owner"
+                            title="Delete Vendor"
                           >
                             <FiTrash2 className="w-3.5 h-3.5" />
                           </button>
@@ -742,7 +742,7 @@ const AllOwners = () => {
           setIsViewModalOpen(false);
           setSelectedOwner(null);
         }}
-        title="Owner Details"
+        title="Vendor Details"
         size="lg"
       >
         {selectedOwner && (
@@ -753,7 +753,7 @@ const AllOwners = () => {
                 <div className="text-gray-900">{selectedOwner.businessName || 'N/A'}</div>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Owner Name</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Vendor Name</label>
                 <div className="text-gray-900">{selectedOwner.name}</div>
               </div>
               <div>
@@ -968,7 +968,7 @@ const AllOwners = () => {
                   className="flex-1 px-4 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
                 >
                   <FiCheck className="w-5 h-5" />
-                  Approve Owner
+                  Approve Vendor
                 </button>
                 <button
                   onClick={async () => {
@@ -979,7 +979,7 @@ const AllOwners = () => {
                   className="flex-1 px-4 py-3 bg-red-600 text-white rounded-xl font-semibold hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
                 >
                   <FiX className="w-5 h-5" />
-                  Reject Owner
+                  Reject Vendor
                 </button>
               </div>
             )}
@@ -1019,7 +1019,7 @@ const AllOwners = () => {
             shopLicense: ''
           });
         }}
-        title="Add Equipment Owner"
+        title="Add Vendor"
         size="lg"
       >
         <form onSubmit={handleAddOwnerSubmit} className="space-y-6">
@@ -1033,7 +1033,7 @@ const AllOwners = () => {
               </h3>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Owner Name</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Vendor Name</label>
                 <input
                   type="text"
                   required
@@ -1405,7 +1405,7 @@ const AllOwners = () => {
 
               <div className="p-3 bg-teal-50 border border-teal-100 rounded-xl mt-4">
                 <p className="text-[10px] text-teal-700 leading-relaxed italic">
-                  Note: Equipment Owners registered directly by the admin are automatically verified and marked active, allowing immediate catalog listing and login.
+                  Note: Vendors registered directly by the admin are automatically verified and marked active, allowing immediate catalog listing and login.
                 </p>
               </div>
 

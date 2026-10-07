@@ -18,9 +18,9 @@ const Vendors = () => {
   const location = useLocation();
 
   const navTabs = [
-    { name: 'All Owners', path: '/admin/vendors/all', icon: FiUsers },
-    { name: 'Owner Bookings', path: '/admin/vendors/bookings', icon: FiBriefcase },
-    { name: 'Owner Analytics', path: '/admin/vendors/analytics', icon: FiActivity },
+    { name: 'All Vendors', path: '/admin/vendors/all', icon: FiUsers },
+    { name: 'Vendor Bookings', path: '/admin/vendors/bookings', icon: FiBriefcase },
+    { name: 'Vendor Analytics', path: '/admin/vendors/analytics', icon: FiActivity },
     { name: 'Registration Fees', path: '/admin/vendors/registration-fees', icon: FiDollarSign },
   ];
 

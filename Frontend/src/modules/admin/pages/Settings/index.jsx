@@ -969,7 +969,7 @@ const AdminSettings = () => {
                           <p className="text-[10px] text-gray-400">per registration</p>
                         </div>
                         <div className="bg-white p-2.5 rounded-lg border border-indigo-50 shadow-xs">
-                          <p className="text-[10px] text-gray-500">Per Owner</p>
+                          <p className="text-[10px] text-gray-500">Per Vendor</p>
                           <p className="text-sm font-bold text-blue-600">+₹{profile.salaryInfo.vendorIncentive || 0}</p>
                           <p className="text-[10px] text-gray-400">per registration</p>
                         </div>
@@ -1104,7 +1104,7 @@ const AdminSettings = () => {
                         className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all" />
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Owner Cash Limit (₹)</label>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Vendor Cash Limit (₹)</label>
                       <input type="number" name="vendorCashLimit" value={financialSettings.vendorCashLimit} onChange={handleFinancialChange}
                         className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all" />
                     </div>
@@ -1361,7 +1361,7 @@ const AdminSettings = () => {
                           className="w-full px-4 py-2.5 bg-white border border-blue-200 rounded-lg outline-none focus:border-blue-500 text-lg font-bold text-gray-800"
                           placeholder="0"
                         />
-                        <p className="text-[11px] text-gray-500 mt-2">Equipment & Agri Store Owners</p>
+                        <p className="text-[11px] text-gray-500 mt-2">Equipment & Agri Store Vendors</p>
                       </div>
 
                       <div className="bg-purple-50/50 p-4 rounded-xl border border-purple-100">

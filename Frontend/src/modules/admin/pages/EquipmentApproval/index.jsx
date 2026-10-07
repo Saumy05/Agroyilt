@@ -110,7 +110,7 @@ const EquipmentApproval = () => {
               <tr className="bg-slate-50/50">
                 <th className="px-8 py-5 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Asset Details</th>
                 <th className="px-6 py-5 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Category</th>
-                <th className="px-6 py-5 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Vendor (Owner)</th>
+                <th className="px-6 py-5 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Vendor</th>
                 <th className="px-6 py-5 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Rates</th>
                 <th className="px-6 py-5 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
                 <th className="px-6 py-5 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">Actions</th>
@@ -287,7 +287,7 @@ const EquipmentApproval = () => {
                    <div className="flex items-center gap-4 border-b border-slate-50 pb-6">
                       <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center"><FiUser className="text-blue-600" /></div>
                       <div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Listing Owner</p>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Listing Vendor</p>
                         <p className="text-lg font-black text-slate-800">{selectedItem.vendorId?.name || 'Official Vendor'}</p>
                       </div>
                    </div>

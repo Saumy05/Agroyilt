@@ -37,16 +37,16 @@
     ]
   },
   {
-    "title": "Equipment Owners",
+    "title": "Vendors",
     "route": "/admin/vendors",
     "allowedRoles": [
       "super_admin",
       "admin"
     ],
     "children": [
-      "All Owners",
-      "Owner Bookings",
-      "Owner Analytics",
+      "All Vendors",
+      "Vendor Bookings",
+      "Vendor Analytics",
       "Registration Fees"
     ]
   },
@@ -73,7 +73,7 @@
       "Payment Overview",
       "Farmer Payments",
       "Worker Payments",
-      "Owner Payments",
+      "Vendor Payments",
       "Admin Revenue",
       "Payment Reports"
     ]
@@ -96,7 +96,7 @@
     ],
     "children": [
       "Pending",
-      "Owners with Due",
+      "Vendors with Due",
       "History"
     ]
   },

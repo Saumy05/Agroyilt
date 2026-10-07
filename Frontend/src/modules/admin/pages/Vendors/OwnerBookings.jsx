@@ -118,7 +118,7 @@ const OwnerBookings = () => {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-sm text-gray-600">
                           <div className="flex items-center gap-2">
                             <FiBriefcase className="w-4 h-4" />
-                            <span>Owner: <span className="font-medium text-gray-800">{booking.vendorId?.businessName || booking.vendorId?.name || 'Unassigned'}</span></span>
+                            <span>Vendor: <span className="font-medium text-gray-800">{booking.vendorId?.businessName || booking.vendorId?.name || 'Unassigned'}</span></span>
                           </div>
                           <div className="flex items-center gap-2">
                             <FiUser className="w-4 h-4 text-blue-500" />

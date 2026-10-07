@@ -331,7 +331,7 @@ const PaymentReports = () => {
     },
     {
       id: 'cod',
-      title: 'Cash Collected by Owner',
+      title: 'Cash Collected by Vendor',
       description: 'Track cash collected by owners vs commission owed. Identify high-risk owners.',
       icon: FiAlertTriangle,
       color: 'orange',
@@ -348,7 +348,7 @@ const PaymentReports = () => {
           { key: 'bookingNumber', header: 'Booking ID' },
           { key: 'service', header: 'Equipment' },
           { key: 'customer', header: 'Farmer' },
-          { key: 'vendor', header: 'Owner' },
+          { key: 'vendor', header: 'Vendor' },
           { key: 'amount', header: 'Amount', render: (val) => `₹${(val || 0).toLocaleString('en-IN')}` },
           { key: 'platformFee', header: 'Platform Fee', render: (val) => `₹${(val || 0).toLocaleString('en-IN')}` },
           { key: 'paymentMethod', header: 'Method' },
@@ -375,7 +375,7 @@ const PaymentReports = () => {
         ];
       case 'tds':
         return [
-          { key: 'vendorName', header: 'Owner Name' },
+          { key: 'vendorName', header: 'Vendor Name' },
           { key: 'panNumber', header: 'PAN Number' },
           { key: 'grossSales', header: 'Gross Sales', render: (val) => `₹${(val || 0).toLocaleString('en-IN')}` },
           { key: 'tdsRate', header: 'Rate (%)', render: (val) => `${val}%` },
@@ -384,7 +384,7 @@ const PaymentReports = () => {
         ];
       case 'cod':
         return [
-          { key: 'vendorName', header: 'Owner Name' },
+          { key: 'vendorName', header: 'Vendor Name' },
           { key: 'phone', header: 'Phone' },
           { key: 'totalCashCollected', header: 'Cash Collected', render: (val) => `₹${(val || 0).toLocaleString('en-IN')}` },
           {
@@ -446,9 +446,9 @@ const PaymentReports = () => {
           color="indigo"
         />
         <StatsCard
-          title="Owner Earnings"
+          title="Vendor Earnings"
           value={`₹${(overview?.revenue?.totalVendorEarnings || 0).toLocaleString('en-IN')}`}
-          subtitle="Total Owners Gross"
+          subtitle="Total Vendors Gross"
           icon={FiDollarSign}
           color="teal"
         />
@@ -457,28 +457,28 @@ const PaymentReports = () => {
         <StatsCard
           title="Settlements Received"
           value={`₹${(overview?.revenue?.totalSettlementReceived || 0).toLocaleString('en-IN')}`}
-          subtitle="Owners paid Platform"
+          subtitle="Vendors paid Platform"
           icon={FiTrendingUp}
           color="emerald"
         />
         <StatsCard
           title="Pending Settlements (Owed)"
           value={`₹${(overview?.revenue?.totalPendingSettlement || 0).toLocaleString('en-IN')}`}
-          subtitle="Owners negative balance"
+          subtitle="Vendors negative balance"
           icon={FiAlertTriangle}
           color="orange"
         />
         <StatsCard
           title="Payouts Completed"
           value={`₹${(overview?.revenue?.totalAmountPaidToVendors || 0).toLocaleString('en-IN')}`}
-          subtitle="Platform paid Owners"
+          subtitle="Platform paid Vendors"
           icon={FiCheck}
           color="blue"
         />
         <StatsCard
           title="Pending Payouts"
           value={`₹${(overview?.revenue?.totalPendingPayout || 0).toLocaleString('en-IN')}`}
-          subtitle="Owners awaiting withdrawal"
+          subtitle="Vendors awaiting withdrawal"
           icon={FiAlertTriangle}
           color="red"
         />
@@ -564,7 +564,7 @@ const PaymentReports = () => {
                 <>
                   <div><span className="text-gray-500">Total Gross Sales:</span> <span className="font-semibold">₹{(reportSummary.totalGrossSales || 0).toLocaleString('en-IN')}</span></div>
                   <div><span className="text-gray-500">Total TDS Liability:</span> <span className="font-semibold text-purple-600">₹{(reportSummary.totalTDS || 0).toFixed(2)}</span></div>
-                  <div><span className="text-gray-500">Owners:</span> <span className="font-semibold">{reportSummary.vendorCount || 0}</span></div>
+                  <div><span className="text-gray-500">Vendors:</span> <span className="font-semibold">{reportSummary.vendorCount || 0}</span></div>
                 </>
               )}
               {activeReport === 'cod' && (
@@ -578,7 +578,7 @@ const PaymentReports = () => {
                     <span className="font-semibold text-red-600 text-lg">₹{(reportSummary.totalOutstandingDues || 0).toLocaleString('en-IN')}</span>
                   </div>
                   <div>
-                    <span className="text-gray-500 block text-xs">High Risk Owners</span>
+                    <span className="text-gray-500 block text-xs">High Risk Vendors</span>
                     <span className="font-semibold text-red-600 text-lg">{reportSummary.highRiskCount || 0}</span>
                   </div>
                 </div>
@@ -587,7 +587,7 @@ const PaymentReports = () => {
                 <>
                   <div><span className="text-gray-500">Total Amount:</span> <span className="font-semibold">₹{(reportSummary.totalAmount || 0).toLocaleString('en-IN')}</span></div>
                   <div><span className="text-gray-500">Platform Commission:</span> <span className="font-semibold text-green-600">₹{(reportSummary.totalCommission || 0).toLocaleString('en-IN')}</span></div>
-                  <div><span className="text-gray-500">Owner Earnings:</span> <span className="font-semibold">₹{(reportSummary.totalVendorEarnings || 0).toLocaleString('en-IN')}</span></div>
+                  <div><span className="text-gray-500">Vendor Earnings:</span> <span className="font-semibold">₹{(reportSummary.totalVendorEarnings || 0).toLocaleString('en-IN')}</span></div>
                 </>
               )}
             </div>

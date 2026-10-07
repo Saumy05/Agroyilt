@@ -109,7 +109,7 @@ export default function MySalaryPage() {
               <td style="text-align: right;">+₹${(payroll.farmerIncentives || 0).toLocaleString()}</td>
             </tr>
             <tr>
-              <td>Equipment Owner Incentives</td>
+              <td>Vendor Incentives</td>
               <td>${payroll.vendorCount || 0} registered</td>
               <td style="text-align: right;">+₹${(payroll.vendorIncentives || 0).toLocaleString()}</td>
             </tr>

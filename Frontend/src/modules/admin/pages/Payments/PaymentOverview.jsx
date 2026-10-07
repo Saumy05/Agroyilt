@@ -282,7 +282,7 @@ const PaymentOverview = () => {
   const getRoleBadge = (role) => {
     switch (role) {
       case 'vendor':
-        return <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-amber-100 text-amber-800">Owner</span>;
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-amber-100 text-amber-800">Vendor</span>;
       case 'worker':
         return <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-teal-100 text-teal-800">Worker</span>;
       case 'user':
@@ -407,9 +407,9 @@ const PaymentOverview = () => {
               }}
               className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-700 focus:outline-none focus:border-emerald-500"
             >
-              <option value="all">All Roles (Farmer, Owner, Worker)</option>
+              <option value="all">All Roles (Farmer, Vendor, Worker)</option>
               <option value="user">Farmer / User</option>
-              <option value="vendor">Equipment Owner / Vendor</option>
+              <option value="vendor">Vendor</option>
               <option value="worker">Farm Worker</option>
             </select>
           </div>
