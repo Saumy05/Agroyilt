@@ -15,6 +15,16 @@ const TICKET_CATEGORIES = [
   'TECHNICAL_ISSUE', 'OTHER'
 ];
 
+// "3h", "25m": how long ago, for claim age
+const ago = (d) => {
+  if (!d) return '';
+  const m = Math.max(0, Math.floor((Date.now() - new Date(d).getTime()) / 60000));
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  return h < 24 ? `${h}h` : `${Math.floor(h / 24)}d`;
+};
+
 const AdminSupport = () => {
   const [tickets, setTickets] = useState([]);
   const [stats, setStats] = useState({
@@ -50,9 +60,26 @@ const AdminSupport = () => {
 
   const messagesEndRef = useRef(null);
 
+  // Claim queue: which tab, counts, and what the current admin may do on the open ticket
+  const [view, setView] = useState('unassigned');
+  const [queue, setQueue] = useState({ unassigned: 0, mine: 0, waiting: 0, maxOpen: 5, unlimited: false });
+  const [viewer, setViewer] = useState({ isOwner: false, canAct: false });
+  const [claiming, setClaiming] = useState(false);
+
+  // Supervisor strip (super admin only): what each agent is holding, click to filter the list
+  const [team, setTeam] = useState({ agents: [], maxOpen: 5 });
+  const [agentFilter, setAgentFilter] = useState(null); // { id, name }
+
   useEffect(() => {
     fetchTickets(1);
-  }, [statusFilter, roleFilter, categoryFilter, priorityFilter]);
+  }, [view, agentFilter, statusFilter, roleFilter, categoryFilter, priorityFilter]);
+
+  useEffect(() => {
+    if (!queue.unlimited) return;
+    adminSupportService.getTeam()
+      .then(res => { if (res?.success && res.data) setTeam(res.data); })
+      .catch(() => {});
+  }, [queue.unlimited, tickets]);
 
   const fetchTickets = async (targetPage = 1) => {
     try {
@@ -60,6 +87,8 @@ const AdminSupport = () => {
       const params = {
         page: targetPage,
         limit: 20,
+        view: agentFilter || view === 'all' ? undefined : view,
+        agent: agentFilter?.id || undefined,
         status: statusFilter || undefined,
         role: roleFilter || undefined,
         category: categoryFilter || undefined,
@@ -72,6 +101,9 @@ const AdminSupport = () => {
         setTickets(response.data.tickets || []);
         if (response.data.stats) {
           setStats(response.data.stats);
+        }
+        if (response.data.queue) {
+          setQueue(response.data.queue);
         }
         if (response.data.pagination) {
           setPagination(response.data.pagination);
@@ -97,6 +129,7 @@ const AdminSupport = () => {
   const handleOpenTicket = async (ticket) => {
     try {
       setSelectedTicket(ticket);
+      setViewer(ticket.viewer || { isOwner: false, canAct: false });
       setIsDetailModalOpen(true);
       setLoadingConversation(true);
       setReplyMessage('');
@@ -106,6 +139,8 @@ const AdminSupport = () => {
       if (res && res.success && res.data) {
         setSelectedTicket(res.data.ticket);
         setConversation(res.data.messages || []);
+        if (res.data.viewer) setViewer(res.data.viewer);
+        if (res.data.queue) setQueue(res.data.queue);
       }
     } catch (error) {
       console.error('Load conversation error:', error);
@@ -114,6 +149,11 @@ const AdminSupport = () => {
       setLoadingConversation(false);
     }
   };
+
+  // Not the owner: replies become internal notes (the toggle follows ownership)
+  useEffect(() => {
+    if (!viewer.canAct) setIsInternalNote(true);
+  }, [viewer.canAct, selectedTicket?._id]);
 
   useEffect(() => {
     if (isDetailModalOpen) {
@@ -132,7 +172,7 @@ const AdminSupport = () => {
       setSubmittingReply(true);
       const payload = {
         message: replyMessage.trim(),
-        isInternalNote
+        isInternalNote: isInternalNote || !viewer.canAct
       };
 
       const res = await adminSupportService.replyTicket(selectedTicket._id, payload);
@@ -194,6 +234,47 @@ const AdminSupport = () => {
     } catch (error) {
       console.error('Priority update error:', error);
       toastManager.error('Failed to update priority');
+    }
+  };
+
+  // Claim a ticket from the queue row or from inside the ticket; the server decides who wins a race
+  const handleClaim = async (ticket, e) => {
+    e?.stopPropagation?.();
+    try {
+      setClaiming(true);
+      const res = await adminSupportService.claimTicket(ticket._id);
+      if (res?.success) {
+        toastManager.success('Ticket claimed. It is yours now.');
+        if (selectedTicket?._id === ticket._id) {
+          setSelectedTicket(prev => ({ ...prev, assignedAdminName: res.data?.assignedAdminName }));
+          setViewer({ isOwner: true, canAct: true });
+        } else if (e) {
+          handleOpenTicket({ ...ticket, viewer: { isOwner: true, canAct: true } });
+        }
+      }
+    } catch (error) {
+      toastManager.error(error.response?.data?.message || 'Could not claim this ticket');
+    } finally {
+      setClaiming(false);
+      fetchTickets(page);
+    }
+  };
+
+  const handleRelease = async () => {
+    if (!selectedTicket) return;
+    try {
+      setClaiming(true);
+      const res = await adminSupportService.releaseTicket(selectedTicket._id);
+      if (res?.success) {
+        toastManager.success('Ticket returned to the queue');
+        setSelectedTicket(prev => ({ ...prev, assignedAdminName: null, assignedTo: null }));
+        setViewer({ isOwner: false, canAct: false });
+      }
+    } catch (error) {
+      toastManager.error(error.response?.data?.message || 'Could not release this ticket');
+    } finally {
+      setClaiming(false);
+      fetchTickets(page);
     }
   };
 
@@ -281,6 +362,80 @@ const AdminSupport = () => {
             <span className={`text-2xl font-black tracking-tight mt-1 block ${item.color}`}>{item.count || 0}</span>
           </div>
         ))}
+      </div>
+
+      {/* Supervisor strip: who holds what */}
+      {queue.unlimited && team.agents.length > 0 && (
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[10px] font-black uppercase tracking-wider text-gray-400">Support team · open tickets (limit {team.maxOpen})</span>
+            {agentFilter && (
+              <button onClick={() => setAgentFilter(null)} className="text-[11px] font-black text-primary-700 hover:underline">Clear filter ✕</button>
+            )}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+            {team.agents.map(a => {
+              const stale = a.oldestUnrepliedAt && (Date.now() - new Date(a.oldestUnrepliedAt).getTime()) > 30 * 60000;
+              const pct = a.unlimited ? 0 : Math.min(100, Math.round((a.open / Math.max(1, team.maxOpen)) * 100));
+              const active = agentFilter?.id === a.adminId;
+              return (
+                <button
+                  key={a.adminId}
+                  onClick={() => setAgentFilter(active ? null : { id: a.adminId, name: a.name })}
+                  className={`text-left p-3 rounded-xl border transition-all ${active ? 'border-primary-500 bg-primary-50 ring-2 ring-primary-100' : 'border-gray-200 bg-white hover:bg-gray-50'}`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-black text-xs text-gray-900 truncate">{a.name}</span>
+                    <span className={`text-[11px] font-black ${a.atLimit ? 'text-red-600' : 'text-gray-600'}`}>
+                      {a.unlimited ? a.open : `${a.open} / ${team.maxOpen}`}
+                    </span>
+                  </div>
+                  {!a.unlimited && (
+                    <div className="h-1.5 bg-gray-100 rounded-full mt-2 overflow-hidden">
+                      <div className={`h-full rounded-full ${a.atLimit ? 'bg-red-500' : pct >= 60 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${pct}%` }} />
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 mt-2 text-[10px] font-bold text-gray-500 flex-wrap">
+                    {a.urgent > 0 && <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700">{a.urgent} urgent</span>}
+                    {a.waiting > 0 && <span>{a.waiting} waiting on user</span>}
+                    {a.oldestUnrepliedAt && (
+                      <span className={stale ? 'text-red-600' : 'text-amber-600'}>no reply for {ago(a.oldestUnrepliedAt)}</span>
+                    )}
+                    {a.open === 0 && a.waiting === 0 && <span className="text-emerald-600">free</span>}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Queue tabs */}
+      <div className="flex flex-wrap items-center gap-2">
+        {[
+          { id: 'unassigned', label: 'Unassigned', count: queue.unassigned },
+          { id: 'mine', label: 'Assigned to me', count: queue.mine },
+          { id: 'waiting', label: 'Waiting on user', count: queue.waiting },
+          { id: 'all', label: 'All tickets' }
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => { setAgentFilter(null); setView(tab.id); }}
+            className={`px-3.5 py-2 rounded-xl text-xs font-black border transition-all ${
+              view === tab.id && !agentFilter
+                ? 'bg-primary-600 text-white border-primary-600 shadow-md shadow-primary-200'
+                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+            }`}
+          >
+            {tab.label}
+            {tab.count !== undefined && (
+              <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] ${view === tab.id && !agentFilter ? 'bg-white/25' : 'bg-gray-100 text-gray-600'}`}>{tab.count}</span>
+            )}
+          </button>
+        ))}
+        <span className="ml-auto text-[11px] font-bold text-gray-500">
+          {queue.unlimited ? 'Supervisor: no claim limit' : `Your open tickets: ${queue.mine} / ${queue.maxOpen}`}
+        </span>
       </div>
 
       {/* Filter and Search Bar */}
@@ -434,6 +589,12 @@ const AdminSupport = () => {
                     {/* Status */}
                     <td className="px-5 py-4">
                       {getStatusBadge(t.status)}
+                      <p className={`text-[10px] font-bold mt-1 ${t.assignedTo ? 'text-gray-500' : 'text-red-500'}`}>
+                        {t.viewer?.isOwner ? 'You' : (t.assignedAdminName || t.assignedTo?.name || 'Unclaimed')}
+                      </p>
+                      {t.assignedTo && t.claimedAt && t.status === 'OPEN' && (
+                        <p className="text-[10px] font-bold text-amber-600">claimed {ago(t.claimedAt)} ago, no reply</p>
+                      )}
                     </td>
 
                     {/* Last Activity */}
@@ -444,13 +605,24 @@ const AdminSupport = () => {
 
                     {/* Actions */}
                     <td className="px-5 py-4 text-right">
-                      <button
-                        onClick={() => handleOpenTicket(t)}
-                        className="px-3.5 py-1.5 bg-gray-100 hover:bg-primary-600 hover:text-white text-gray-700 rounded-xl font-bold text-xs transition-all active:scale-95 shadow-sm flex items-center gap-1.5 ml-auto"
-                      >
-                        <FiEye className="w-3.5 h-3.5" />
-                        <span>Manage</span>
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                        {!t.assignedTo && !['RESOLVED', 'CLOSED'].includes(t.status) && (
+                          <button
+                            onClick={(e) => handleClaim(t, e)}
+                            disabled={claiming}
+                            className="px-3.5 py-1.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-bold text-xs transition-all active:scale-95 shadow-sm disabled:opacity-50"
+                          >
+                            Claim
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleOpenTicket(t)}
+                          className="px-3.5 py-1.5 bg-gray-100 hover:bg-primary-600 hover:text-white text-gray-700 rounded-xl font-bold text-xs transition-all active:scale-95 shadow-sm flex items-center gap-1.5"
+                        >
+                          <FiEye className="w-3.5 h-3.5" />
+                          <span>{t.viewer?.canAct ? 'Manage' : 'View'}</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -537,8 +709,8 @@ const AdminSupport = () => {
                   <select
                     value={selectedTicket.status}
                     onChange={(e) => handleStatusChange(e.target.value)}
-                    disabled={updatingStatus}
-                    className="flex-1 px-2.5 py-1 rounded-lg bg-white border border-gray-200 font-bold text-xs outline-none"
+                    disabled={updatingStatus || !viewer.canAct}
+                    className="flex-1 px-2.5 py-1 rounded-lg bg-white border border-gray-200 font-bold text-xs outline-none disabled:opacity-60"
                   >
                     <option value="OPEN">Open</option>
                     <option value="IN_PROGRESS">In Progress</option>
@@ -554,7 +726,8 @@ const AdminSupport = () => {
                   <select
                     value={selectedTicket.priority}
                     onChange={(e) => handlePriorityChange(e.target.value)}
-                    className="flex-1 px-2.5 py-1 rounded-lg bg-white border border-gray-200 font-bold text-xs outline-none"
+                    disabled={!viewer.canAct}
+                    className="flex-1 px-2.5 py-1 rounded-lg bg-white border border-gray-200 font-bold text-xs outline-none disabled:opacity-60"
                   >
                     <option value="LOW">Low</option>
                     <option value="MEDIUM">Medium</option>
@@ -674,6 +847,31 @@ const AdminSupport = () => {
               <div ref={messagesEndRef} />
             </div>
 
+            {/* Ownership: reply needs the claim; everyone else can read and leave internal notes */}
+            <div className={`flex items-center justify-between gap-3 p-3 rounded-xl border text-xs ${
+              viewer.canAct ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-800'
+            }`}>
+              <span className="font-bold">
+                {viewer.canAct
+                  ? (selectedTicket.assignedTo || selectedTicket.assignedAdminName ? 'You own this ticket.' : 'Supervisor access.')
+                  : (selectedTicket.assignedTo || selectedTicket.assignedAdminName
+                    ? `Claimed by ${selectedTicket.assignedAdminName || selectedTicket.assignedTo?.name}. Read-only; you can leave internal notes.`
+                    : 'Unclaimed. Claim it to reply to the customer.')}
+              </span>
+              {!selectedTicket.assignedTo && !selectedTicket.assignedAdminName && !['RESOLVED', 'CLOSED'].includes(selectedTicket.status) && (
+                <button type="button" onClick={() => handleClaim(selectedTicket)} disabled={claiming}
+                  className="px-3.5 py-1.5 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-black shrink-0 disabled:opacity-50">
+                  Claim
+                </button>
+              )}
+              {viewer.canAct && (selectedTicket.assignedTo || selectedTicket.assignedAdminName) && (
+                <button type="button" onClick={handleRelease} disabled={claiming}
+                  className="px-3.5 py-1.5 bg-white border border-emerald-300 text-emerald-800 rounded-lg font-black shrink-0 disabled:opacity-50">
+                  Release to queue
+                </button>
+              )}
+            </div>
+
             {/* Admin Reply Form - Clean, Simple & Fast */}
             <form onSubmit={handleSendAdminReply} className="pt-1">
               <div className={`rounded-2xl border transition-all overflow-hidden ${
@@ -694,7 +892,7 @@ const AdminSupport = () => {
                   }}
                   rows={2}
                   placeholder={
-                    isInternalNote
+                    isInternalNote || !viewer.canAct
                       ? "Write an internal note (only visible to admins)... [Press Enter to send]"
                       : "Type your reply... [Press Enter to send]"
                   }
@@ -705,7 +903,8 @@ const AdminSupport = () => {
                   <label className="flex items-center gap-1.5 cursor-pointer text-gray-500 hover:text-gray-700 select-none">
                     <input
                       type="checkbox"
-                      checked={isInternalNote}
+                      checked={isInternalNote || !viewer.canAct}
+                      disabled={!viewer.canAct}
                       onChange={(e) => setIsInternalNote(e.target.checked)}
                       className="w-3.5 h-3.5 rounded text-amber-600 focus:ring-amber-500 border-gray-300 cursor-pointer"
                     />

@@ -276,7 +276,9 @@ const settingsSchema = new mongoose.Schema({
   // When a worker may act before the booked start (server time): Start Journey / Start OTP
   workerJourneyWindowMinutes: { type: Number, default: 120, min: 0 },
   workerEarlyStartMinutes:    { type: Number, default: 30,  min: 0 },
-  workerCashPaymentEnabled: { type: Boolean, default: true }
+  workerCashPaymentEnabled: { type: Boolean, default: true },
+  // Support: how many open tickets one agent may hold at a time (super admin is exempt)
+  supportMaxOpenClaims:     { type: Number, default: 5, min: 1, max: 50 }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Settings', settingsSchema);

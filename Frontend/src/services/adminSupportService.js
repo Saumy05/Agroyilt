@@ -37,6 +37,24 @@ const adminSupportService = {
     return response.data;
   },
 
+  // Claim an unclaimed ticket (first agent wins)
+  claimTicket: async (ticketId) => {
+    const response = await api.post(`/admin/support/tickets/${ticketId}/claim`);
+    return response.data;
+  },
+
+  // Put a claimed ticket back in the shared queue
+  releaseTicket: async (ticketId) => {
+    const response = await api.post(`/admin/support/tickets/${ticketId}/release`);
+    return response.data;
+  },
+
+  // Super admin: what each support agent is holding
+  getTeam: async () => {
+    const response = await api.get('/admin/support/team');
+    return response.data;
+  },
+
   // Legacy fallback: Get all support queries
   getQueries: async (params = {}) => {
     const response = await api.get('/admin/support/all', { params });

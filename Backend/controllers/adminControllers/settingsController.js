@@ -73,6 +73,8 @@ exports.updateSettings = async (req, res, next) => {
       workerCashPaymentEnabled,
       workerJourneyWindowMinutes,
       workerEarlyStartMinutes,
+      // Support desk
+      supportMaxOpenClaims,
       // Withdrawal settings
       minWithdrawalAmount,
       minWithdrawalAmountPaise
@@ -212,6 +214,8 @@ exports.updateSettings = async (req, res, next) => {
       // How long before the booked start a worker may Start Journey / enter the Start OTP (services/workerScheduleService)
       if (workerJourneyWindowMinutes !== undefined) settings.workerJourneyWindowMinutes = Math.min(1440, Math.max(0, Number(workerJourneyWindowMinutes) || 0));
       if (workerEarlyStartMinutes !== undefined) settings.workerEarlyStartMinutes = Math.min(1440, Math.max(0, Number(workerEarlyStartMinutes) || 0));
+      // Open tickets one support agent may hold (services/supportClaimService)
+      if (supportMaxOpenClaims !== undefined) settings.supportMaxOpenClaims = Math.min(50, Math.max(1, Math.floor(Number(supportMaxOpenClaims)) || 5));
 
       // Minimum withdrawal limit configuration
       if (minWithdrawalAmount !== undefined) {

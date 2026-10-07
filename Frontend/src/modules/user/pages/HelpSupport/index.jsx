@@ -1043,6 +1043,11 @@ const HelpSupport = () => {
                   {getStatusBadge(activeTicket.status)}
                 </div>
                 <h3 className="font-bold text-gray-900 text-xs sm:text-sm truncate">{activeTicket.subject}</h3>
+                <p className="text-[10px] font-semibold text-emerald-700 mt-0.5">
+                  {activeTicket.assignedAdminName
+                    ? `${activeTicket.assignedAdminName} from Agroyilt Support is handling this`
+                    : 'We\'ve received your ticket'}
+                </p>
                 <div className="flex items-center gap-1.5 text-[10px] text-gray-400 font-medium mt-0.5">
                   <span>{activeTicket.category}</span>
                   <span>•</span>
@@ -1117,7 +1122,9 @@ const HelpSupport = () => {
                     >
                       <div className="flex items-center gap-1 mb-1 px-1">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                          {isUser ? 'You' : 'Agroyilt Support'}
+                          {isUser
+                            ? 'You'
+                            : (msg.senderName && msg.senderName !== 'AgroYilt Support' ? `${msg.senderName} · Agroyilt Support` : 'Agroyilt Support')}
                         </span>
                         <span className="text-[9px] text-gray-400">
                           {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

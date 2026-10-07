@@ -3,6 +3,28 @@ const SupportMessage = require('../../models/SupportMessage');
 const SupportQuery = require('../../models/SupportQuery');
 const AdminAuditLog = require('../../models/AdminAuditLog');
 const { createNotification } = require('../notificationControllers/notificationController');
+const claims = require('../../services/supportClaimService');
+
+/**
+ * Customers (farmers / vendors / workers) see support agents by FIRST NAME only.
+ * Never expose an agent's full name or admin id; applied when reading, so older tickets are covered too.
+ */
+const supportFirstName = (name) => String(name || '').trim().split(/\s+/)[0] || null;
+
+const toCustomerTicket = (ticket) => {
+  const plain = typeof ticket.toObject === 'function' ? ticket.toObject() : { ...ticket };
+  delete plain.assignedTo;
+  plain.assignedAdminName = supportFirstName(plain.assignedAdminName);
+  return plain;
+};
+
+const toCustomerMessage = (msg) => {
+  const plain = typeof msg.toObject === 'function' ? msg.toObject() : { ...msg };
+  if (plain.senderType !== 'ADMIN') return plain;
+  delete plain.senderId;
+  plain.senderName = supportFirstName(plain.senderName) || 'AgroYilt Support';
+  return plain;
+};
 
 /**
  * Helper to determine user role and model
@@ -176,7 +198,7 @@ const getMyTickets = async (req, res) => {
     return res.status(200).json({
       success: true,
       data: {
-        tickets,
+        tickets: tickets.map(toCustomerTicket),
         unreadCount: unreadCount[0]?.totalUnread || 0,
         pagination: {
           page: pageNum,
@@ -242,10 +264,9 @@ const getTicketById = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      data: {
-        ticket,
-        messages
-      }
+      data: isAdministrative
+        ? { ticket, messages }
+        : { ticket: toCustomerTicket(ticket), messages: messages.map(toCustomerMessage) }
     });
   } catch (error) {
     console.error('Get ticket detail error:', error);
@@ -397,7 +418,7 @@ const reopenTicket = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: 'Ticket reopened successfully',
-      data: { ticket, message: reopenMsg }
+      data: { ticket: toCustomerTicket(ticket), message: reopenMsg }
     });
   } catch (error) {
     console.error('Reopen ticket error:', error);
@@ -445,16 +466,26 @@ const getUnreadSupportCount = async (req, res) => {
 const getAdminTickets = async (req, res) => {
   try {
     const {
-      status, role, category, priority, search,
+      status, role, category, priority, search, view, agent,
       page = 1, limit = 20
     } = req.query;
+
+    // Untouched URGENT claims go back to the queue (lazy: runs whenever the queue is opened)
+    await claims.releaseStaleUrgent().catch(() => {});
 
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(50, Math.max(1, parseInt(limit)));
     const skip = (pageNum - 1) * limitNum;
 
     const filter = {};
-    if (status && status !== 'ALL') {
+    // Queue tabs: unassigned | mine | waiting. No view = everything (read-only overview).
+    Object.assign(filter, claims.viewFilter(view, req.user) || {});
+    // Supervisor filter: one agent's open and waiting tickets
+    if (agent && claims.isSuperAdmin(req.user) && /^[0-9a-fA-F]{24}$/.test(String(agent))) {
+      filter.assignedTo = agent;
+      if (!status || status === 'ALL') filter.status = { $in: [...claims.ACTIVE_STATUSES, 'WAITING_FOR_USER'] };
+    }
+    if (status && status !== 'ALL' && !filter.status) {
       filter.status = status.toUpperCase();
     }
     if (role && role !== 'ALL') {
@@ -481,7 +512,7 @@ const getAdminTickets = async (req, res) => {
     const [tickets, total, statusStats] = await Promise.all([
       SupportTicket.find(filter)
         .populate('assignedTo', 'name email')
-        .sort({ lastMessageAt: -1, createdAt: -1 })
+        .sort(view === 'unassigned' ? { createdAt: 1 } : { lastMessageAt: -1, createdAt: -1 })
         .skip(skip)
         .limit(limitNum)
         .lean(),
@@ -513,11 +544,18 @@ const getAdminTickets = async (req, res) => {
       stats.total += item.count;
     });
 
+    // Unclaimed queue: oldest first, URGENT/HIGH on top
+    if (view === 'unassigned') {
+      tickets.sort((a, b) => (claims.PRIORITY_RANK[a.priority] ?? 2) - (claims.PRIORITY_RANK[b.priority] ?? 2));
+    }
+    const queue = await claims.queueCounts(req.user);
+
     return res.status(200).json({
       success: true,
       data: {
-        tickets,
+        tickets: tickets.map((t) => ({ ...t, viewer: claims.viewerFlags(t, req.user) })),
         stats,
+        queue,
         pagination: {
           page: pageNum,
           limit: limitNum,
@@ -567,7 +605,9 @@ const getAdminTicketById = async (req, res) => {
       success: true,
       data: {
         ticket,
-        messages
+        messages,
+        viewer: claims.viewerFlags(ticket, req.user),
+        queue: await claims.queueCounts(req.user)
       }
     });
   } catch (error) {
@@ -602,6 +642,15 @@ const adminReplyTicket = async (req, res) => {
 
     const senderName = adminUser.name || 'AgroYilt Support';
     const isInternal = Boolean(isInternalNote);
+
+    // Replying to the customer needs ownership; internal notes stay open to the whole team
+    if (!isInternal) {
+      const guard = claims.actionGuard(ticket, adminUser);
+      if (guard) return res.status(guard.status).json({ success: false, message: guard.message });
+    } else if (ticket.assignedTo && String(ticket.assignedTo) === String(adminUser._id)) {
+      ticket.claimedAt = new Date(); // owner activity keeps an URGENT claim from going stale
+      await ticket.save();
+    }
 
     const supportMsg = await SupportMessage.create({
       ticketId: ticket._id,
@@ -669,7 +718,7 @@ const adminReplyTicket = async (req, res) => {
       ...recipientKey,
       type: 'support_ticket_reply',
       title: 'Support replied to your request',
-      message: `AgroYilt Support replied to ticket #${ticket.ticketNumber}`,
+      message: `${supportFirstName(adminUser.name) ? `${supportFirstName(adminUser.name)} from AgroYilt Support` : 'AgroYilt Support'} replied to ticket #${ticket.ticketNumber}`,
       relatedId: ticket._id,
       relatedType: 'support_ticket',
       data: {
@@ -688,7 +737,7 @@ const adminReplyTicket = async (req, res) => {
         io.to(room).emit('ticket_reply', {
           ticketId: ticket._id,
           ticketNumber: ticket.ticketNumber,
-          message: supportMsg,
+          message: toCustomerMessage(supportMsg),
           status: ticket.status
         });
       }
@@ -752,6 +801,9 @@ const adminUpdateStatus = async (req, res) => {
     if (!ticket) {
       return res.status(404).json({ success: false, message: 'Ticket not found' });
     }
+
+    const guard = claims.actionGuard(ticket, adminUser);
+    if (guard) return res.status(guard.status).json({ success: false, message: guard.message });
 
     const oldStatus = ticket.status;
     const newStatus = status.toUpperCase();
@@ -850,6 +902,9 @@ const adminUpdatePriority = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Ticket not found' });
     }
 
+    const guard = claims.actionGuard(ticket, adminUser);
+    if (guard) return res.status(guard.status).json({ success: false, message: guard.message });
+
     ticket.priority = priority.toUpperCase();
     await ticket.save();
 
@@ -884,47 +939,90 @@ const adminUpdatePriority = async (req, res) => {
  * Admin: Assign ticket to an admin
  * PATCH /api/admin/support/tickets/:ticketId/assign
  */
+/**
+ * Super admin: what each support agent is holding
+ * GET /api/admin/support/team
+ */
+const getSupportTeam = async (req, res) => {
+  try {
+    if (!claims.isSuperAdmin(req.user)) {
+      return res.status(403).json({ success: false, message: 'Only a super admin can see the team overview.' });
+    }
+    return res.status(200).json({ success: true, data: await claims.teamOverview() });
+  } catch (error) {
+    console.error('Support team overview error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to load the team overview' });
+  }
+};
+
+/** Resolve :ticketId (mongo id or AGY- number) to the ticket's _id */
+const resolveTicketId = async (ticketId) => {
+  const query = ticketId.startsWith('AGY-') ? { ticketNumber: ticketId.toUpperCase() } : { _id: ticketId };
+  const t = await SupportTicket.findOne(query).select('_id').lean();
+  return t?._id || null;
+};
+
+const auditClaim = (req, action, ticket, details = {}) => {
+  if (!AdminAuditLog || typeof AdminAuditLog.log !== 'function') return Promise.resolve();
+  const a = req.user;
+  return AdminAuditLog.log({
+    adminId: a._id, adminName: a.name || 'Admin', adminEmail: a.email || '', adminRole: a.role || 'ADMIN',
+    action, module: 'SUPPORT', targetId: ticket._id, targetModel: 'SupportTicket', targetName: ticket.ticketNumber,
+    details, req
+  }).catch(err => console.warn('[AuditLog] Error:', err.message));
+};
+
+const claimResponse = (res, ticket, message) => res.status(200).json({ success: true, message, data: ticket });
+const claimError = (res, error, fallback) => {
+  if (!error.status) console.error(fallback, error);
+  return res.status(error.status || 500).json({ success: false, message: error.status ? error.message : fallback });
+};
+
+/**
+ * Admin: claim an unclaimed ticket (first agent wins)
+ * POST /api/admin/support/tickets/:ticketId/claim
+ */
+const adminClaimTicket = async (req, res) => {
+  try {
+    const id = await resolveTicketId(req.params.ticketId);
+    if (!id) return res.status(404).json({ success: false, message: 'Ticket not found' });
+    const ticket = await claims.claimTicket(id, req.user);
+    await auditClaim(req, 'SUPPORT_TICKET_CLAIMED', ticket);
+    return claimResponse(res, ticket, 'Ticket claimed');
+  } catch (error) {
+    return claimError(res, error, 'Failed to claim ticket');
+  }
+};
+
+/**
+ * Admin: put a claimed ticket back in the shared queue (owner or super admin)
+ * POST /api/admin/support/tickets/:ticketId/release
+ */
+const adminReleaseTicket = async (req, res) => {
+  try {
+    const id = await resolveTicketId(req.params.ticketId);
+    if (!id) return res.status(404).json({ success: false, message: 'Ticket not found' });
+    const ticket = await claims.releaseTicket(id, req.user);
+    await auditClaim(req, 'SUPPORT_TICKET_RELEASED', ticket);
+    return claimResponse(res, ticket, 'Ticket returned to the queue');
+  } catch (error) {
+    return claimError(res, error, 'Failed to release ticket');
+  }
+};
+
+/**
+ * Admin: reassign a ticket to another agent (owner or super admin)
+ * PATCH /api/admin/support/tickets/:ticketId/assign   body: { adminId }
+ */
 const adminAssignTicket = async (req, res) => {
   try {
-    const { ticketId } = req.params;
-    const { adminId, adminName } = req.body;
-    const currentAdmin = req.user;
-
-    const query = ticketId.startsWith('AGY-') ? { ticketNumber: ticketId.toUpperCase() } : { _id: ticketId };
-    const ticket = await SupportTicket.findOne(query);
-
-    if (!ticket) {
-      return res.status(404).json({ success: false, message: 'Ticket not found' });
-    }
-
-    ticket.assignedTo = adminId || currentAdmin._id;
-    ticket.assignedAdminName = adminName || currentAdmin.name || 'Admin';
-    await ticket.save();
-
-    if (AdminAuditLog && typeof AdminAuditLog.log === 'function') {
-      await AdminAuditLog.log({
-        adminId: currentAdmin._id,
-        adminName: currentAdmin.name || 'Admin',
-        adminEmail: currentAdmin.email || '',
-        adminRole: currentAdmin.role || 'ADMIN',
-        action: 'SUPPORT_TICKET_ASSIGNED',
-        module: 'SUPPORT',
-        targetId: ticket._id,
-        targetModel: 'SupportTicket',
-        targetName: ticket.ticketNumber,
-        details: { assignedTo: ticket.assignedTo, assignedAdminName: ticket.assignedAdminName },
-        req
-      }).catch(err => console.warn('[AuditLog] Error:', err.message));
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: `Ticket assigned to ${ticket.assignedAdminName}`,
-      data: ticket
-    });
+    const id = await resolveTicketId(req.params.ticketId);
+    if (!id) return res.status(404).json({ success: false, message: 'Ticket not found' });
+    const ticket = await claims.reassignTicket(id, req.user, req.body?.adminId);
+    await auditClaim(req, 'SUPPORT_TICKET_ASSIGNED', ticket, { assignedTo: ticket.assignedTo, assignedAdminName: ticket.assignedAdminName });
+    return claimResponse(res, ticket, `Ticket assigned to ${ticket.assignedAdminName}`);
   } catch (error) {
-    console.error('Assign ticket error:', error);
-    return res.status(500).json({ success: false, message: 'Failed to assign ticket' });
+    return claimError(res, error, 'Failed to assign ticket');
   }
 };
 
@@ -964,6 +1062,9 @@ module.exports = {
   adminUpdateStatus,
   adminUpdatePriority,
   adminAssignTicket,
+  adminClaimTicket,
+  adminReleaseTicket,
+  getSupportTeam,
 
   // Legacy compatibility exports
   submitQuery,

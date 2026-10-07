@@ -118,6 +118,11 @@ const supportTicketSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  // When the current owner claimed it (or last touched it); drives the stale-claim release for URGENT tickets
+  claimedAt: {
+    type: Date,
+    default: null
+  },
 
   // Conversation tracking
   lastMessage: {
