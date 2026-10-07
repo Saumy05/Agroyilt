@@ -344,9 +344,6 @@ app.use('/api/v1/translate', require('./routes/common-routes/translation.routes'
 // SEO Dynamic Sitemap
 app.use('/', require('./routes/common-routes/sitemap.routes'));
 
-// Chatbot routes
-app.use('/api/chat', require('./routes/common-routes/chat.routes'));
-
 // Farmer routes (User Panel - Agriculture module)
 app.use('/api/farmer', require('./routes/farmer-routes/index'));
 

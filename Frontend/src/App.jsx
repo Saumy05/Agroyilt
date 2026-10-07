@@ -9,7 +9,6 @@ import { EcommerceCartProvider } from './context/EcommerceCartContext';
 import { BrandProvider } from './context/BrandContext';
 import { initializePushNotifications, setupForegroundNotificationHandler } from './services/pushNotificationService';
 // Global common imports removed here as they are now handled in AppRoutes.jsx for conditional rendering
-// import { LocationPermissionChecker, Chatbot } from './components/common';
 
 /**
  * Global Toast Limiter:
