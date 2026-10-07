@@ -21,6 +21,7 @@ import { FaRupeeSign } from 'react-icons/fa';
 import { toastManager } from '../../utils/toastManager';
 import { useSocket } from '../../context/SocketContext';
 import { serviceTimerService } from '../../services/serviceTimerService';
+import EndOtpUnavailableModal from './EndOtpUnavailableModal';
 
 // Pause reason presets with agriculture domain terms
 const PAUSE_REASONS = [
@@ -120,6 +121,7 @@ export const LiveServiceTimer = ({
   const [loadingAction, setLoadingAction] = useState(false);
   const [showPauseModal, setShowPauseModal] = useState(false);
   const [showEndModal, setShowEndModal] = useState(false);
+  const [showOtpUnavailable, setShowOtpUnavailable] = useState(false);
   const [showResumeModal, setShowResumeModal] = useState(false);
   const [resumeOtpInput, setResumeOtpInput] = useState('');
   const [selectedReason, setSelectedReason] = useState('machine_issue');
@@ -205,7 +207,8 @@ export const LiveServiceTimer = ({
           resumeOtp: payload.status === 'RUNNING' ? null : (payload.resumeOtp !== undefined ? payload.resumeOtp : prev.resumeOtp),
           ratePerMinute: payload.ratePerMinute || prev.ratePerMinute,
           adminBaseCharge: payload.adminBaseCharge ?? prev.adminBaseCharge,
-          billingSummary: payload.billingSummary || prev.billingSummary
+          billingSummary: payload.billingSummary || prev.billingSummary,
+          endOtpDispute: payload.action === 'OTP_UNAVAILABLE' ? payload.endOtpDispute : (payload.action === 'END' || payload.action === 'PARTIAL_END' ? null : prev.endOtpDispute)
         }));
 
         if (payload.action === 'PAUSE') {
@@ -220,6 +223,10 @@ export const LiveServiceTimer = ({
               ? 'You resumed the service.'
               : `Service was RESUMED by ${payload.performedBy === 'vendor' ? `${serviceLabel} Operator` : 'Farmer'}`
           );
+        } else if (payload.action === 'OTP_UNAVAILABLE') {
+          toastManager.info(payload.performedBy === role
+            ? 'Reported to support. Billing is paused.'
+            : 'Billing is paused. Our support team will contact you shortly.');
         } else if (payload.action === 'END' || payload.action === 'PARTIAL_END') {
           toastManager.success('Service work ended. Final bill generated.');
           onStatusChange();
@@ -428,6 +435,9 @@ export const LiveServiceTimer = ({
     return PAUSE_REASONS.find(r => r.id === timerData.lastPauseReason) || PAUSE_REASONS[0];
   }, [timerData.lastPauseReason]);
 
+  // Vendor reported "End OTP unavailable": time is frozen (STOPPED) until support completes the booking
+  const isFrozen = timerData.status === 'STOPPED' && !!(timerData.endOtpDispute?.isActive || booking?.endOtpDispute?.isActive);
+
   // If cancelled or rejected, return clean cancelled card
   if (['cancelled', 'rejected'].includes(booking?.status?.toLowerCase()) || timerData.status === 'CANCELLED') {
     return (
@@ -539,7 +549,9 @@ export const LiveServiceTimer = ({
           ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white'
           : timerData.status === 'PAUSED'
             ? 'bg-gradient-to-r from-amber-500 to-orange-600 text-white animate-pulse'
-            : 'bg-slate-100 text-slate-700'
+            : isFrozen
+              ? 'bg-gradient-to-r from-red-500 to-rose-600 text-white'
+              : 'bg-slate-100 text-slate-700'
       }`}>
         <div className="flex items-center gap-1.5">
           {timerData.status === 'RUNNING' && (
@@ -555,6 +567,7 @@ export const LiveServiceTimer = ({
             {timerData.status === 'RUNNING' && '🟢 Service Active'}
             {timerData.status === 'PAUSED' && `⏸️ Paused by ${timerData.lastPausedBy === 'vendor' ? `${serviceLabel} Operator` : 'Farmer'}`}
             {timerData.status === 'NOT_STARTED' && `${serviceEmoji} ${serviceLabel} Ready`}
+            {isFrozen && '🛑 Billing paused — support reviewing'}
           </span>
         </div>
 
@@ -683,7 +696,7 @@ export const LiveServiceTimer = ({
         </div>
 
         {/* Farmer Completion OTP Card - anti-fraud guarantee */}
-        {role === 'farmer' && ['RUNNING', 'PAUSED'].includes(timerData.status) && (timerData.driver_end_otp || booking?.driver_end_otp) && (
+        {role === 'farmer' && (['RUNNING', 'PAUSED'].includes(timerData.status) || isFrozen) && (timerData.driver_end_otp || booking?.driver_end_otp) && (
           <div className="bg-gradient-to-r from-teal-700 via-emerald-700 to-green-700 rounded-2xl p-3.5 text-white shadow-md flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center shrink-0">
@@ -711,6 +724,26 @@ export const LiveServiceTimer = ({
               <FiPlay className="w-4 h-4 fill-current" />
               <span>{booking?.status?.toLowerCase() !== 'in_progress' ? 'Start Service (Verify OTP)' : 'Start Work Timer'}</span>
             </button>
+          )}
+
+          {isFrozen && (
+            <div className="space-y-2">
+              <div className="rounded-xl bg-red-50 border border-red-200 p-3 text-[11px] text-red-800 leading-relaxed">
+                {role === 'vendor'
+                  ? 'You reported that the End OTP is unavailable. Billing is frozen and support is contacting the farmer. If the farmer returns, you can still finish with their OTP.'
+                  : 'The operator could not complete the End OTP, so billing is paused. Our support team will contact you shortly. You can still share your completion OTP with the operator if you are on the field.'}
+              </div>
+              {role === 'vendor' && (
+                <button
+                  onClick={() => { setIsPartialEnd(false); setShowEndModal(true); }}
+                  disabled={loadingAction}
+                  className="w-full py-2.5 rounded-xl font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-700 shadow-sm active:scale-95 transition-all flex items-center justify-center gap-1.5 text-xs"
+                >
+                  <FiKey className="w-3.5 h-3.5 shrink-0" />
+                  Farmer is back — Enter End OTP
+                </button>
+              )}
+            </div>
           )}
 
           {timerData.status === 'RUNNING' && (
@@ -862,6 +895,17 @@ export const LiveServiceTimer = ({
         )}
       </AnimatePresence>
 
+      <EndOtpUnavailableModal
+        isOpen={showOtpUnavailable}
+        bookingId={bookingId}
+        onClose={() => setShowOtpUnavailable(false)}
+        onSubmitted={() => {
+          // Don't depend on the socket reaching a farmer-side network: freeze the card locally right away
+          setTimerData(prev => ({ ...prev, status: 'STOPPED', currentSessionStartedAt: null, endOtpDispute: { isActive: true } }));
+          if (onStatusChange) onStatusChange();
+        }}
+      />
+
       {/* ═══════ END / PARTIAL BILL MODAL ═══════ */}
       <AnimatePresence>
         {showEndModal && (
@@ -962,6 +1006,13 @@ export const LiveServiceTimer = ({
                   <p className="text-[10px] text-gray-500 mt-1 text-center font-medium">
                     Farmer must provide the 4-digit code shown on their booking screen to approve bill and completion.
                   </p>
+                  <button
+                    type="button"
+                    onClick={() => { setShowEndModal(false); setShowOtpUnavailable(true); }}
+                    className="mt-2 w-full text-center text-[11px] font-black text-red-600 underline underline-offset-2"
+                  >
+                    Farmer not giving OTP? / OTP unavailable (ओटीपी उपलब्ध नहीं)
+                  </button>
                 </div>
               )}
 

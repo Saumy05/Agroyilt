@@ -7,6 +7,17 @@ import { toastManager } from '../../../../utils/toastManager';
 import adminDisputeService from '../../../../services/adminDisputeService';
 import Modal from '../../components/Modal';
 
+const TERMINAL = ['RESOLVED', 'DISMISSED', 'PARTIAL_SETTLEMENT', 'resolved', 'dismissed'];
+const RESOLUTIONS = [
+    { id: 'ADMIN_COMPLETION_OVERRIDE', label: 'Complete booking without End OTP (bill from recorded work)' },
+    { id: 'FULL_REFUND_TO_FARMER', label: 'Full refund to farmer', amount: 'refundAmount' },
+    { id: 'PARTIAL_SETTLEMENT', label: 'Partial settlement (refund part to farmer)', amount: 'refundAmount' },
+    { id: 'VENDOR_PENALTY', label: 'Penalise vendor', amount: 'vendorPenaltyAmount' },
+    { id: 'BOOKING_CANCELLED_BY_ADMIN', label: 'Cancel booking' },
+    { id: 'CUSTOM_RESOLUTION', label: 'Other / custom resolution' }
+];
+const bookingOf = (d) => d?.vendorBookingId || d?.workerRequestId || null;
+
 const AdminDisputes = () => {
     const [disputes, setDisputes] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -15,6 +26,8 @@ const AdminDisputes = () => {
     const [selectedDispute, setSelectedDispute] = useState(null);
     const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
     const [resolutionNotes, setResolutionNotes] = useState('');
+    const [resolutionType, setResolutionType] = useState('');
+    const [amount, setAmount] = useState('');
     const [submitting, setSubmitting] = useState(false);
 
     useEffect(() => {
@@ -35,11 +48,11 @@ const AdminDisputes = () => {
         }
     };
 
-    const filteredDisputes = disputes.filter(d => 
-        (d.bookingId?.bookingNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (d.raisedBy?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const filteredDisputes = disputes.filter(d =>
+        (bookingOf(d)?.bookingNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (d.raiser?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (d.reason || '').toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    ).sort((a, b) => (b.priority === 'URGENT') - (a.priority === 'URGENT'));
 
     const handleViewDetails = async (id) => {
         try {
@@ -47,6 +60,8 @@ const AdminDisputes = () => {
             if (response.success) {
                 setSelectedDispute(response.data);
                 setResolutionNotes(response.data.resolutionNotes || '');
+                setResolutionType('');
+                setAmount('');
                 setIsDetailsModalOpen(true);
             }
         } catch (error) {
@@ -54,24 +69,28 @@ const AdminDisputes = () => {
         }
     };
 
-    const handleResolve = async (status) => {
+    const handleResolve = async (dismiss = false) => {
         if (!resolutionNotes.trim()) {
             return toastManager.error('Please enter resolution notes');
         }
+        const chosen = RESOLUTIONS.find(r => r.id === resolutionType);
+        if (!dismiss && !chosen) return toastManager.error('Select a resolution');
+        if (!dismiss && chosen.amount && !(Number(amount) > 0)) return toastManager.error('Enter the amount');
 
         try {
             setSubmitting(true);
             const response = await adminDisputeService.resolveDispute(selectedDispute._id, {
-                status,
-                resolutionNotes
+                resolutionType: dismiss ? 'DISMISSED_NO_ACTION' : chosen.id,
+                resolutionNotes,
+                ...(!dismiss && chosen.amount ? { [chosen.amount]: Number(amount) } : {})
             });
             if (response.success) {
-                toastManager.success(`Dispute ${status} successfully`);
+                toastManager.success(dismiss ? 'Dispute dismissed' : 'Dispute resolved');
                 setIsDetailsModalOpen(false);
                 fetchDisputes();
             }
         } catch (error) {
-            toastManager.error('Failed to update dispute');
+            toastManager.error(error?.response?.data?.message || 'Failed to update dispute');
         } finally {
             setSubmitting(false);
         }
@@ -79,14 +98,19 @@ const AdminDisputes = () => {
 
     const getStatusBadge = (status) => {
         const styles = {
+            OPEN: 'bg-amber-100 text-amber-700 border-amber-200',
+            UNDER_REVIEW: 'bg-blue-100 text-blue-700 border-blue-200',
+            RESOLVED: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+            PARTIAL_SETTLEMENT: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+            DISMISSED: 'bg-gray-100 text-gray-700 border-gray-200',
             pending: 'bg-amber-100 text-amber-700 border-amber-200',
             investigating: 'bg-blue-100 text-blue-700 border-blue-200',
             resolved: 'bg-emerald-100 text-emerald-700 border-emerald-200',
             dismissed: 'bg-gray-100 text-gray-700 border-gray-200'
         };
         return (
-            <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${styles[status]}`}>
-                {status.toUpperCase()}
+            <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${styles[status] || styles.OPEN}`}>
+                {String(status).replace('_', ' ').toUpperCase()}
             </span>
         );
     };
@@ -122,10 +146,11 @@ const AdminDisputes = () => {
                             className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-primary-500 outline-none appearance-none cursor-pointer"
                         >
                             <option value="">All Statuses</option>
-                            <option value="pending">Pending</option>
-                            <option value="investigating">Investigating</option>
-                            <option value="resolved">Resolved</option>
-                            <option value="dismissed">Dismissed</option>
+                            <option value="OPEN">Open</option>
+                            <option value="UNDER_REVIEW">Under review</option>
+                            <option value="RESOLVED">Resolved</option>
+                            <option value="PARTIAL_SETTLEMENT">Partial settlement</option>
+                            <option value="DISMISSED">Dismissed</option>
                         </select>
                     </div>
                 </div>
@@ -161,12 +186,15 @@ const AdminDisputes = () => {
                         ) : (
                             filteredDisputes.map((d) => (
                                 <tr key={d._id} className="hover:bg-gray-50/50 transition-colors">
-                                    <td className="px-6 py-4 font-bold text-gray-900">{d.bookingId?.bookingNumber || 'N/A'}</td>
+                                    <td className="px-6 py-4 font-bold text-gray-900">{bookingOf(d)?.bookingNumber || 'N/A'}</td>
                                     <td className="px-6 py-4 text-sm">
-                                        <p className="font-bold text-gray-800">{d.raisedBy?.name}</p>
+                                        <p className="font-bold text-gray-800">{d.raiser?.name}</p>
                                         <p className="text-xs text-gray-500">{d.raisedByRole}</p>
                                     </td>
-                                    <td className="px-6 py-4 text-sm font-medium">{d.reason}</td>
+                                    <td className="px-6 py-4 text-sm font-medium">
+                                        {d.priority === 'URGENT' && <span className="mr-2 px-2 py-0.5 rounded-full text-[10px] font-black bg-red-100 text-red-700 border border-red-200">URGENT</span>}
+                                        {d.reason}
+                                    </td>
                                     <td className="px-6 py-4">{getStatusBadge(d.status)}</td>
                                     <td className="px-6 py-4 text-[10px] text-gray-500 font-mono">
                                         {new Date(d.createdAt).toLocaleString()}
@@ -198,16 +226,19 @@ const AdminDisputes = () => {
                         <div className="grid grid-cols-2 gap-4">
                             <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
                                 <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Raised By</p>
-                                <p className="font-bold text-gray-800 text-sm">{selectedDispute.raisedBy?.name}</p>
+                                <p className="font-bold text-gray-800 text-sm">{selectedDispute.raiser?.name}</p>
                                 <p className="text-xs text-gray-500">{selectedDispute.raisedByRole}</p>
-                                <p className="text-xs text-gray-500 mt-1">📞 {selectedDispute.raisedBy?.phone}</p>
+                                <p className="text-xs text-gray-500 mt-1">📞 {selectedDispute.raiser?.phone}</p>
                             </div>
                             <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
                                 <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Booking Info</p>
-                                <p className="font-bold text-gray-800 text-sm">#{selectedDispute.bookingId?.bookingNumber}</p>
-                                <p className="text-xs text-gray-500">Status: {selectedDispute.bookingId?.status}</p>
+                                <p className="font-bold text-gray-800 text-sm">#{bookingOf(selectedDispute)?.bookingNumber}</p>
+                                <p className="text-xs text-gray-500">Status: {bookingOf(selectedDispute)?.status}</p>
+                                {selectedDispute.vendorBookingId?.userId?.name && (
+                                    <p className="text-xs text-gray-500 mt-1">Farmer: {selectedDispute.vendorBookingId.userId.name} · 📞 {selectedDispute.vendorBookingId.userId.phone}</p>
+                                )}
                                 <button
-                                    onClick={() => window.open(`/admin/bookings/${selectedDispute.bookingId?._id}`, '_blank')}
+                                    onClick={() => window.open(`/admin/bookings/${bookingOf(selectedDispute)?._id}`, '_blank')}
                                     className="text-[10px] text-primary-600 font-bold mt-1 hover:underline"
                                 >
                                     View Full Booking →
@@ -226,15 +257,23 @@ const AdminDisputes = () => {
                         </div>
 
                         {/* Attachments */}
-                        {selectedDispute.attachments?.length > 0 && (
+                        {(selectedDispute.evidence?.length > 0 || selectedDispute.attachments?.length > 0) && (
                             <div>
                                 <p className="text-xs font-bold text-gray-400 uppercase mb-3 flex items-center gap-2">
                                     <FiImage /> Attachments / Evidence
                                 </p>
                                 <div className="grid grid-cols-2 gap-2">
-                                    {selectedDispute.attachments.map((img, i) => (
+                                    {(selectedDispute.evidence?.length > 0
+                                        ? selectedDispute.evidence.map(e => ({ url: e.url, caption: e.caption, by: e.uploaderRole }))
+                                        : selectedDispute.attachments.map(url => ({ url }))
+                                    ).map(({ url: img, caption, by }, i) => (
                                         <div key={i} className="aspect-square rounded-xl overflow-hidden border border-gray-200 group relative">
-                                            <img src={img} alt="evidence" className="w-full h-full object-cover" />
+                                            <img src={img} alt={caption || 'evidence'} className="w-full h-full object-cover" />
+                                            {caption && (
+                                                <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[10px] font-bold px-2 py-1">
+                                                    {caption}{by ? ` · ${by}` : ''}
+                                                </span>
+                                            )}
                                             <button
                                                 onClick={() => window.open(img, '_blank')}
                                                 className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold"
@@ -258,14 +297,30 @@ const AdminDisputes = () => {
                                 onChange={(e) => setResolutionNotes(e.target.value)}
                                 placeholder="Details of your investigation or decision..."
                                 className="w-full h-24 p-4 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
-                                disabled={selectedDispute.status === 'resolved' || selectedDispute.status === 'dismissed'}
+                                disabled={TERMINAL.includes(selectedDispute.status)}
                             />
 
                             {/* Buttons */}
-                            {selectedDispute.status !== 'resolved' && selectedDispute.status !== 'dismissed' ? (
+                            {!TERMINAL.includes(selectedDispute.status) ? (
+                                <>
+                                <select
+                                    value={resolutionType}
+                                    onChange={(e) => setResolutionType(e.target.value)}
+                                    className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
+                                >
+                                    <option value="">Select resolution…</option>
+                                    {RESOLUTIONS.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
+                                </select>
+                                {RESOLUTIONS.find(r => r.id === resolutionType)?.amount && (
+                                    <input
+                                        type="number" min="1" value={amount} onChange={(e) => setAmount(e.target.value)}
+                                        placeholder="Amount (₹)"
+                                        className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                                    />
+                                )}
                                 <div className="flex gap-3 pt-2">
                                     <button
-                                        onClick={() => handleResolve('dismissed')}
+                                        onClick={() => handleResolve(true)}
                                         disabled={submitting}
                                         className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl text-sm font-bold hover:bg-gray-200 transition-colors"
                                     >
@@ -273,14 +328,15 @@ const AdminDisputes = () => {
                                         Dismiss
                                     </button>
                                     <button
-                                        onClick={() => handleResolve('resolved')}
+                                        onClick={() => handleResolve(false)}
                                         disabled={submitting}
                                         className="flex-1 py-3 bg-emerald-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-emerald-200 active:scale-95 transition-transform"
                                     >
                                         <FiCheckCircle className="inline mr-2" />
-                                        Mark Resolved
+                                        Resolve
                                     </button>
                                 </div>
+                                </>
                             ) : (
                                 <div className="p-3 bg-emerald-50 text-emerald-800 rounded-xl flex items-center gap-3">
                                     <FiCheckCircle size={20} />

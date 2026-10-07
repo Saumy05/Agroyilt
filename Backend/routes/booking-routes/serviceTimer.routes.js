@@ -6,7 +6,8 @@ const {
   startServiceTimer,
   pauseServiceTimer,
   resumeServiceTimer,
-  endServiceTimer
+  endServiceTimer,
+  reportEndOtpUnavailable
 } = require('../../controllers/bookingControllers/serviceTimerController');
 
 // All endpoints require authentication (User or Vendor)
@@ -18,5 +19,6 @@ router.post('/:id/start', startServiceTimer);
 router.post('/:id/pause', pauseServiceTimer);
 router.post('/:id/resume', resumeServiceTimer);
 router.post('/:id/end', endServiceTimer);
+router.post('/:id/report-otp-unavailable', reportEndOtpUnavailable);
 
 module.exports = router;

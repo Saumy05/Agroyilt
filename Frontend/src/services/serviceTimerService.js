@@ -24,6 +24,12 @@ export const serviceTimerService = {
   end: async (bookingId, { isPartial = false, reason = '', end_otp = null } = {}) => {
     const res = await api.post(`/bookings/service-timer/${bookingId}/end`, { isPartial, reason, end_otp });
     return res.data;
+  },
+
+  // Vendor cannot get the farmer's End OTP: freezes billing and opens an urgent support dispute with photo evidence
+  reportOtpUnavailable: async (bookingId, { reason, notes = '', odometerPhoto, photos = [] }) => {
+    const res = await api.post(`/bookings/service-timer/${bookingId}/report-otp-unavailable`, { reason, notes, odometerPhoto, photos });
+    return res.data;
   }
 };
 

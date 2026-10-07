@@ -576,7 +576,7 @@ const bookingSchema = new mongoose.Schema({
     logs: [{
       action: {
         type: String,
-        enum: ['START', 'PAUSE', 'RESUME', 'END', 'PARTIAL_END'],
+        enum: ['START', 'PAUSE', 'RESUME', 'END', 'PARTIAL_END', 'OTP_UNAVAILABLE'],
         required: true
       },
       performedBy: {
@@ -613,6 +613,19 @@ const bookingSchema = new mongoose.Schema({
       partialEndReason: { type: String, default: null },
       calculatedAt: { type: Date, default: null }
     }
+  },
+
+  // Vendor could not get the farmer's End OTP (farmer unreachable / refusing / left the field).
+  // Billable time is frozen at reportedAt and a Dispute carries the evidence; the OTP path still works if the farmer returns.
+  adminOverride: { type: Boolean, default: false },
+  adminOverrideNote: { type: String, default: null },
+
+  endOtpDispute: {
+    isActive: { type: Boolean, default: false },
+    reason: { type: String, enum: ['FARMER_NOT_ANSWERING', 'FARMER_DISPUTING_WORK', 'FARMER_LEFT_FIELD', null], default: null },
+    notes: { type: String, default: null },
+    reportedAt: { type: Date, default: null },
+    disputeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Dispute', default: null }
   }
 
 }, {

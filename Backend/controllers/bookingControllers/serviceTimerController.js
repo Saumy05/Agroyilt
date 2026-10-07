@@ -3,6 +3,7 @@ const Category = require('../../models/Category');
 const VendorEquipment = require('../../models/VendorEquipment');
 const { BOOKING_STATUS, USER_ROLES } = require('../../utils/constants');
 const { getIO } = require('../../sockets');
+const endOtpDispute = require('../../services/endOtpDisputeService');
 const {
   generateDistinctOtp,
   verifyBookingOtp,
@@ -233,6 +234,9 @@ const getServiceTimerStatus = async (req, res) => {
           : null,
         requiresResumeOtp: Boolean(status === 'PAUSED'),
         billingSummary: booking.serviceTimer?.billingSummary || null,
+        endOtpDispute: booking.endOtpDispute?.isActive
+          ? { isActive: true, reason: booking.endOtpDispute.reason, reportedAt: booking.endOtpDispute.reportedAt }
+          : null,
         logs: booking.serviceTimer?.logs || [],
         serverTime: now
       }
@@ -465,8 +469,9 @@ const endServiceTimer = async (req, res) => {
     const role = getCallerRole(req, booking);
     if (!role) return res.status(403).json({ success: false, message: 'Not authorized' });
 
+    const frozenForDispute = booking.serviceTimer?.status === 'STOPPED' && booking.endOtpDispute?.isActive;
     if (booking.status !== BOOKING_STATUS.IN_PROGRESS || !booking.serviceTimer ||
-        !['RUNNING', 'PAUSED'].includes(booking.serviceTimer.status)) {
+        !(['RUNNING', 'PAUSED'].includes(booking.serviceTimer.status) || frozenForDispute)) {
       return res.status(400).json({ success: false, message: 'There is no running service to end.' });
     }
 
@@ -563,12 +568,68 @@ const endServiceTimer = async (req, res) => {
   }
 };
 
+/**
+ * POST /api/bookings/service-timer/:id/report-otp-unavailable
+ * Vendor cannot get the farmer's End OTP: freeze billable time, open an URGENT dispute with photo evidence.
+ */
+const reportEndOtpUnavailable = async (req, res) => {
+  try {
+    const booking = await Booking.findById(req.params.id).select('userId vendorId bookingNumber');
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+    if (getCallerRole(req, booking) !== 'vendor') {
+      return res.status(403).json({ success: false, message: 'Only the assigned vendor can report this.' });
+    }
+
+    const { reason, notes, photos, odometerPhoto } = req.body || {};
+    const { booking: frozen, dispute } = await endOtpDispute.reportEndOtpUnavailable({
+      bookingId: booking._id, vendorId: booking.vendorId, reason, notes, photos, odometerPhoto
+    });
+
+    broadcastTimerUpdate(frozen, 'OTP_UNAVAILABLE', { performedBy: 'vendor', endOtpDispute: frozen.endOtpDispute });
+
+    try {
+      const io = getIO();
+      if (io) {
+        io.to('admin_global').emit('new_dispute', {
+          disputeId: dispute._id, bookingDomain: dispute.bookingDomain, reason: dispute.reason,
+          priority: dispute.priority, raisedByRole: dispute.raisedByRole,
+          bookingRef: booking.bookingNumber || booking._id.toString(), createdAt: dispute.createdAt
+        });
+      }
+    } catch (e) { /* non-fatal */ }
+
+    try {
+      const { createNotification } = require('../notificationControllers/notificationController');
+      await createNotification({
+        userId: booking.userId,
+        type: 'support_update',
+        title: 'Support will contact you',
+        message: 'Your operator could not complete the End OTP. Billing has been paused and our support team will contact you shortly.',
+        relatedId: booking._id,
+        relatedType: 'booking',
+        priority: 'high',
+        pushData: { type: 'support_update', bookingId: booking._id.toString(), link: `/user/booking/${booking._id}` }
+      });
+    } catch (e) { console.warn('[reportEndOtpUnavailable] notify failed', e.message); }
+
+    res.status(200).json({
+      success: true,
+      message: 'Dispute submitted with your photo evidence. You may safely leave the field; support is contacting the farmer.',
+      data: { disputeId: dispute._id, reportedAt: frozen.endOtpDispute.reportedAt }
+    });
+  } catch (error) {
+    console.error('reportEndOtpUnavailable error:', error);
+    res.status(error.status || 500).json({ success: false, message: error.status ? error.message : 'Failed to submit the report' });
+  }
+};
+
 module.exports = {
   getServiceTimerStatus,
   startServiceTimer,
   pauseServiceTimer,
   resumeServiceTimer,
   endServiceTimer,
+  reportEndOtpUnavailable,
   resolveRates,
   broadcastTimerUpdate
 };

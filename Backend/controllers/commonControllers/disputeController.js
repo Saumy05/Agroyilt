@@ -111,6 +111,27 @@ async function resolveDisputeContext(callerId, callerRole, body) {
   throw new Error('Either bookingId (vendor booking) or workerRequestId (worker booking) is required');
 }
 
+// ─── Raiser lookup ────────────────────────────────────────────────────────────
+
+/** Dispute.raisedBy has no ref (it spans User/Vendor/Worker), so attach { name, phone } for admin screens. */
+async function attachRaisers(disputes) {
+  const models = { User, Vendor, Worker };
+  const list = Array.isArray(disputes) ? disputes : [disputes];
+  const byModel = {};
+  for (const d of list) {
+    if (d && models[d.raisedByModel]) (byModel[d.raisedByModel] ||= new Set()).add(String(d.raisedBy));
+  }
+  const found = {};
+  await Promise.all(Object.entries(byModel).map(async ([m, ids]) => {
+    const rows = await models[m].find({ _id: { $in: [...ids] } }).select('name phone businessName').lean();
+    for (const r of rows) found[`${m}:${r._id}`] = { name: r.businessName || r.name || '', phone: r.phone || '' };
+  }));
+  return list.map((d) => {
+    const plain = typeof d.toObject === 'function' ? d.toObject() : d;
+    return { ...plain, raiser: found[`${plain.raisedByModel}:${plain.raisedBy}`] || null };
+  });
+}
+
 // ─── Raise Dispute ────────────────────────────────────────────────────────────
 
 /**
@@ -314,7 +335,7 @@ const getAdminDisputes = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      data: disputes,
+      data: await attachRaisers(disputes),
       pagination: {
         total,
         page: parseInt(page),
@@ -356,7 +377,8 @@ const getAdminDisputeById = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Dispute not found' });
     }
 
-    return res.status(200).json({ success: true, data: dispute });
+    const [withRaiser] = await attachRaisers(dispute);
+    return res.status(200).json({ success: true, data: withRaiser });
   } catch (error) {
     console.error('[getAdminDisputeById]', error);
     return res.status(500).json({ success: false, message: 'Failed to fetch dispute details' });
@@ -863,6 +885,15 @@ async function _handleCompletionOverride(dispute, adminId, adminName) {
     const nonCompletableStatuses = ['completed', 'cancelled', 'rejected'];
     if (nonCompletableStatuses.includes(booking.status)) {
       throw new Error(`Booking is already in ${booking.status} state; cannot override`);
+    }
+
+    // Service still open on the field (vendor reported "End OTP unavailable"): end it through the normal billing path
+    // so the bill, GST and vendor payout are generated; payment collection then continues as usual.
+    if (booking.status === 'in_progress' && ['RUNNING', 'PAUSED', 'STOPPED'].includes(booking.serviceTimer?.status)) {
+      const forced = await require('../../services/endOtpDisputeService')
+        .adminForceEndAndBill(booking._id, { adminId, adminName, disputeId: dispute._id });
+      if (!forced) throw new Error('Booking changed state, please refresh and retry');
+      return;
     }
 
     booking.status       = 'completed';
