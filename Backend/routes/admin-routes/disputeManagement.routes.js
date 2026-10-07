@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../../middleware/authMiddleware');
-const { isAdmin } = require('../../middleware/roleMiddleware');
+const { isAdmin, requirePermission } = require('../../middleware/roleMiddleware');
 const {
   getAdminDisputes,
   getAdminDisputeById,
@@ -17,18 +17,18 @@ const {
  * Base: /api/admin/disputes
  */
 
-// Stats (must come before /:id to avoid route shadowing)
-router.get('/stats',         authenticate, isAdmin, getDisputeStats);
+// Stats & Read operations: accessible by Support Agents & Supervisors (disputes.view)
+router.get('/stats',         authenticate, isAdmin, requirePermission('disputes.view'), getDisputeStats);
+router.get('/',              authenticate, isAdmin, requirePermission('disputes.view'), getAdminDisputes);
+router.get('/:id',           authenticate, isAdmin, requirePermission('disputes.view'), getAdminDisputeById);
 
-// List & detail
-router.get('/',              authenticate, isAdmin, getAdminDisputes);
-router.get('/:id',           authenticate, isAdmin, getAdminDisputeById);
+// Investigation workflow transitions (review & escalate)
+router.patch('/:id/review',   authenticate, isAdmin, requirePermission('disputes.view'), startReview);
+router.patch('/:id/escalate', authenticate, isAdmin, requirePermission('disputes.view'), escalateDispute);
 
-// Workflow transitions
-router.patch('/:id/review',   authenticate, isAdmin, startReview);
-router.patch('/:id/resolve',  authenticate, isAdmin, resolveDispute);
-router.patch('/:id/dismiss',  authenticate, isAdmin, dismissDispute);
-router.patch('/:id/escalate', authenticate, isAdmin, escalateDispute);
+// Financial resolutions & dismissal: RESTRICTED to Support Supervisors (disputes.manage)
+router.patch('/:id/resolve',  authenticate, isAdmin, requirePermission('disputes.manage'), resolveDispute);
+router.patch('/:id/dismiss',  authenticate, isAdmin, requirePermission('disputes.manage'), dismissDispute);
 
 module.exports = router;
 

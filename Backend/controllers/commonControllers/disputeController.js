@@ -30,6 +30,7 @@ const Vendor               = require('../../models/Vendor');
 const Worker               = require('../../models/Worker');
 const { createNotification } = require('../notificationControllers/notificationController');
 const { buildAdminScopeFilter, verifyResourceScope } = require('../../utils/adminScopeHelper');
+const ledger = require('../../services/ledgerService');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -371,7 +372,8 @@ const getAdminDisputeById = async (req, res) => {
         populate: { path: 'farmerId', select: 'name phone email' }
       })
       .populate('assignmentId', 'assignmentStatus workerId farmerId agreedRate netEarning settlementStatus')
-      .populate('resolvedBy', 'name email role');
+      .populate('resolvedBy', 'name email role')
+      .populate('sourceTicketId', 'ticketNumber subject status priority createdAt');
 
     if (!dispute) {
       return res.status(404).json({ success: false, message: 'Dispute not found' });
@@ -480,6 +482,16 @@ const resolveDispute = async (req, res) => {
     const dispute = await Dispute.findById(id);
     if (!dispute) return res.status(404).json({ success: false, message: 'Dispute not found' });
 
+    // Authorization check: Only Super Admin or admins with 'disputes.manage' can resolve or financially alter disputes
+    const isSuper = String(admin.role || '').toLowerCase() === 'super_admin';
+    const canManage = isSuper || admin.permissions?.['disputes.manage'] === true;
+    if (!canManage) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied: Only Support Supervisors with "disputes.manage" permission can execute dispute resolutions or financial actions.'
+      });
+    }
+
     const terminalStatuses = ['RESOLVED', 'DISMISSED', 'PARTIAL_SETTLEMENT', 'resolved', 'dismissed'];
     if (terminalStatuses.includes(dispute.status)) {
       return res.status(400).json({ success: false, message: `Dispute already resolved with status: ${dispute.status}` });
@@ -488,6 +500,27 @@ const resolveDispute = async (req, res) => {
     const prevStatus  = dispute.status;
     const adminId     = admin.id || admin._id;
     const adminName   = admin.name || admin.email || 'Admin';
+
+    // ── Refund guard: never more than the farmer was charged, minus what is already refunded ─────────
+    const wantsRefund = ['FULL_REFUND_TO_FARMER', 'PARTIAL_SETTLEMENT'].includes(resolutionType) ||
+      (['BOOKING_CANCELLED_BY_ADMIN', 'CUSTOM_RESOLUTION'].includes(resolutionType) && Number(refundAmount) > 0);
+    if (wantsRefund) {
+      const requested = Number(refundAmount);
+      if (!(requested > 0)) {
+        return res.status(400).json({ success: false, message: 'refundAmount must be greater than 0' });
+      }
+      // A retry of a refund that was already paid cannot pay again, so it is not checked against what is left
+      const alreadyPaid = await WalletTransaction.exists({ idempotencyKey: `dispute_refund_${dispute._id.toString()}` });
+      if (!alreadyPaid) {
+        const cap = await _refundCap(dispute);
+        if (cap === null) {
+          return res.status(400).json({ success: false, message: 'This booking has no recorded payment amount, so a refund cannot be verified.' });
+        }
+        if (requested > cap) {
+          return res.status(400).json({ success: false, message: `Refund of ₹${requested} is more than the ₹${cap} that can still be refunded for this booking.` });
+        }
+      }
+    }
 
     // ── Financial Actions ───────────────────────────────────────────────────
     const financials = {
@@ -513,8 +546,8 @@ const resolveDispute = async (req, res) => {
         case 'FULL_REFUND_TO_FARMER': {
           const amount = Number(refundAmount);
           if (!amount || amount <= 0) throw new Error('refundAmount must be > 0 for FULL_REFUND_TO_FARMER');
-          await _creditFarmerWallet(dispute, amount, 'Admin Full Refund — Dispute Resolution');
-          financials.refundedToFarmer = amount;
+          const paid = await _creditFarmerWallet(dispute, amount, 'Admin Full Refund — Dispute Resolution');
+          financials.refundedToFarmer = paid.refundAmount;
           break;
         }
 
@@ -522,8 +555,8 @@ const resolveDispute = async (req, res) => {
         case 'PARTIAL_SETTLEMENT': {
           const amount = Number(refundAmount);
           if (!amount || amount <= 0) throw new Error('refundAmount must be > 0 for PARTIAL_SETTLEMENT');
-          await _creditFarmerWallet(dispute, amount, 'Admin Partial Settlement — Dispute Resolution');
-          financials.refundedToFarmer = amount;
+          const paid = await _creditFarmerWallet(dispute, amount, 'Admin Partial Settlement — Dispute Resolution');
+          financials.refundedToFarmer = paid.refundAmount;
           break;
         }
 
@@ -556,8 +589,8 @@ const resolveDispute = async (req, res) => {
         case 'BOOKING_CANCELLED_BY_ADMIN':
           await _cancelBookingForDispute(dispute, adminId, adminName, resolutionNotes);
           if (refundAmount && Number(refundAmount) > 0) {
-            await _creditFarmerWallet(dispute, Number(refundAmount), 'Admin Cancellation Refund — Dispute Resolution');
-            financials.refundedToFarmer = Number(refundAmount);
+            const paid = await _creditFarmerWallet(dispute, Number(refundAmount), 'Admin Cancellation Refund — Dispute Resolution');
+            financials.refundedToFarmer = paid.refundAmount;
           }
           break;
 
@@ -570,8 +603,8 @@ const resolveDispute = async (req, res) => {
         case 'CUSTOM_RESOLUTION':
           // Admin-described free-form resolution; optionally include refund
           if (refundAmount && Number(refundAmount) > 0) {
-            await _creditFarmerWallet(dispute, Number(refundAmount), 'Admin Custom Resolution Refund');
-            financials.refundedToFarmer = Number(refundAmount);
+            const paid = await _creditFarmerWallet(dispute, Number(refundAmount), 'Admin Custom Resolution Refund');
+            financials.refundedToFarmer = paid.refundAmount;
           }
           break;
 
@@ -751,6 +784,36 @@ async function _notifyDisputer(dispute, { title, message }) {
   } catch (e) { /* non-fatal */ }
 }
 
+/**
+ * The most a dispute may still refund to the farmer: what they were charged/paid minus what was already refunded.
+ * Returns null when the booking records no amount to check against (the refund cannot be verified).
+ */
+async function _refundCap(dispute) {
+  if (dispute.bookingDomain === 'VENDOR_BOOKING' && dispute.vendorBookingId) {
+    const b = await Booking.findById(dispute.vendorBookingId).select('finalAmount advancePaidAmount paymentStatus paymentMethod refundedAmount').lean();
+    if (!b) return null;
+    const charged = Math.max(Number(b.finalAmount) || 0, require('../../services/bookingSettlementService').getAdvancePaid(b) || 0);
+    return charged > 0 ? Math.max(0, Math.round((charged - (Number(b.refundedAmount) || 0)) * 100) / 100) : null;
+  }
+  if (dispute.bookingDomain === 'WORKER_BOOKING' && dispute.workerRequestId) {
+    const r = await WorkerBookingRequest.findById(dispute.workerRequestId).select('financialSnapshot refundAmount').lean();
+    const charged = Number(r?.financialSnapshot?.totalPayable) || 0;
+    return charged > 0 ? Math.max(0, Math.round((charged - (Number(r.refundAmount) || 0)) * 100) / 100) : null;
+  }
+  return null;
+}
+
+/** Tell the booking how much was refunded, so the automatic refund paths never refund the same money again. */
+async function _recordRefundOnBooking(dispute, amount) {
+  if (dispute.bookingDomain === 'VENDOR_BOOKING' && dispute.vendorBookingId) {
+    await Booking.updateOne({ _id: dispute.vendorBookingId }, { $inc: { refundedAmount: amount } });
+  } else if (dispute.bookingDomain === 'WORKER_BOOKING' && dispute.workerRequestId) {
+    await WorkerBookingRequest.updateOne({ _id: dispute.workerRequestId }, [
+      { $set: { refundAmount: { $round: [{ $add: [{ $ifNull: ['$refundAmount', 0] }, amount] }, 2] } } }
+    ]);
+  }
+}
+
 async function _creditFarmerWallet(dispute, amount, description) {
   // Determine farmerId from the booking domain
   let farmerId = null;
@@ -767,38 +830,30 @@ async function _creditFarmerWallet(dispute, amount, description) {
 
   if (!farmerId) throw new Error('Cannot determine farmer for refund');
 
+  // One refund per dispute, through the shared idempotent ledger: the balance moves at most once per key, so a retry
+  // after a later failure can never pay twice, and concurrent updates are applied atomically ($inc), never overwritten.
   const refundKey = `dispute_refund_${dispute._id.toString()}`;
-  const existing  = await WalletTransaction.findOne({ idempotencyKey: refundKey });
-  if (existing) return { alreadyProcessed: true };
-
-  let wallet = await Wallet.findOne({ userId: farmerId, userModel: 'User' });
-  if (!wallet) wallet = await Wallet.create({ userId: farmerId, userModel: 'User', balance: 0 });
-
-  const prevBalance   = wallet.balance || 0;
-  wallet.balance      = prevBalance + amount;
-  await wallet.save();
-
-  await User.findByIdAndUpdate(farmerId, { 'wallet.balance': wallet.balance });
-
-  await WalletTransaction.create({
-    walletId:       wallet._id,
-    type:           'credit',
-    amount,
-    reason:         'dispute_refund',
-    referenceId:    dispute._id.toString(),
-    idempotencyKey: refundKey,
-    status:         'completed'
+  const res = await ledger.applyOnce({
+    ownerId: farmerId, ownerModel: 'User', amount, key: refundKey, reason: 'dispute_refund', referenceId: dispute._id
   });
 
-  await Transaction.create({
+  if (res.duplicate) {
+    // Already paid on an earlier attempt: report what was actually paid, do not pay or notify again
+    const paid = await WalletTransaction.findOne({ idempotencyKey: refundKey }).select('amount').lean();
+    return { success: true, alreadyProcessed: true, refundAmount: paid?.amount ?? amount };
+  }
+
+  await _recordRefundOnBooking(dispute, amount);
+
+  await ledger.recordPassbookOnce(refundKey, {
     userId:        farmerId,
     type:          'refund',
     amount,
     status:        'completed',
     paymentMethod: 'wallet',
     description,
-    balanceBefore: prevBalance,
-    balanceAfter:  wallet.balance,
+    balanceBefore: res.balance - amount,
+    balanceAfter:  res.balance,
     referenceId:   dispute._id.toString(),
     metadata:      { disputeId: dispute._id, bookingDomain: dispute.bookingDomain }
   });
@@ -820,13 +875,13 @@ async function _creditFarmerWallet(dispute, amount, description) {
     const { getIO } = require('../../sockets');
     const io = getIO();
     if (io) {
-      const payload = { balance: wallet.balance, refundAmount: amount, type: 'credit', message: description };
+      const payload = { balance: res.balance, refundAmount: amount, type: 'credit', message: description };
       io.to(`user_${farmerId}`).emit('wallet_balance_updated', payload);
       io.to(`user:${farmerId}`).emit('wallet_balance_updated', payload);
     }
   } catch (e) { /* non-fatal */ }
 
-  return { success: true, refundAmount: amount, newBalance: wallet.balance };
+  return { success: true, refundAmount: amount, newBalance: res.balance };
 }
 
 async function _applyWorkerPenaltyForDispute(dispute, amount, adminId, adminName) {

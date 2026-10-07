@@ -1,10 +1,11 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
     FiAlertTriangle, FiSearch, FiFilter, FiCheckCircle,
-    FiXCircle, FiClock, FiEye, FiMessageSquare, FiImage
+    FiXCircle, FiClock, FiEye, FiMessageSquare, FiImage, FiLock
 } from 'react-icons/fi';
 import { toastManager } from '../../../../utils/toastManager';
 import adminDisputeService from '../../../../services/adminDisputeService';
+import authStorage from '../../../../utils/authStorage';
 import Modal from '../../components/Modal';
 
 const TERMINAL = ['RESOLVED', 'DISMISSED', 'PARTIAL_SETTLEMENT', 'resolved', 'dismissed'];
@@ -29,6 +30,14 @@ const AdminDisputes = () => {
     const [resolutionType, setResolutionType] = useState('');
     const [amount, setAmount] = useState('');
     const [submitting, setSubmitting] = useState(false);
+
+    // Role Separation: Support Agent (investigate/view) vs Support Supervisor (financial resolve)
+    const currentUser = authStorage.getUser();
+    const canManage = useMemo(() => {
+        if (!currentUser) return false;
+        if (currentUser.role === 'super_admin' || currentUser.role === 'SUPER_ADMIN') return true;
+        return currentUser.permissions?.['disputes.manage'] === true;
+    }, [currentUser]);
 
     useEffect(() => {
         fetchDisputes();
@@ -194,6 +203,11 @@ const AdminDisputes = () => {
                                     <td className="px-6 py-4 text-sm font-medium">
                                         {d.priority === 'URGENT' && <span className="mr-2 px-2 py-0.5 rounded-full text-[10px] font-black bg-red-100 text-red-700 border border-red-200">URGENT</span>}
                                         {d.reason}
+                                        {(d.sourceTicketNumber || d.sourceTicketId) && (
+                                            <span className="ml-2 px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-200" title="Originated from Support Ticket">
+                                                From Ticket #{d.sourceTicketNumber || d.sourceTicketId?.ticketNumber || ''}
+                                            </span>
+                                        )}
                                     </td>
                                     <td className="px-6 py-4">{getStatusBadge(d.status)}</td>
                                     <td className="px-6 py-4 text-[10px] text-gray-500 font-mono">
@@ -222,6 +236,30 @@ const AdminDisputes = () => {
             >
                 {selectedDispute && (
                     <div className="space-y-6">
+                        {/* Lane Bridging: Source Support Ticket Banner */}
+                        {(selectedDispute.sourceTicketId || selectedDispute.sourceTicketNumber) && (
+                            <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                                <div className="flex items-center gap-2.5">
+                                    <span className="p-2 bg-blue-100 text-blue-700 rounded-xl shrink-0">
+                                        <FiMessageSquare className="w-4 h-4" />
+                                    </span>
+                                    <div>
+                                        <p className="text-[10px] font-bold uppercase tracking-wider text-blue-600">Originated from Support Ticket</p>
+                                        <p className="text-xs font-black text-blue-950">
+                                            #{selectedDispute.sourceTicketNumber || selectedDispute.sourceTicketId?.ticketNumber || 'Ticket'}
+                                            {selectedDispute.sourceTicketId?.subject && ` — "${selectedDispute.sourceTicketId.subject}"`}
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => window.open(`/admin/support`, '_blank')}
+                                    className="px-3 py-1.5 bg-white border border-blue-200 text-blue-700 hover:bg-blue-100/50 rounded-xl text-xs font-bold transition-colors shrink-0"
+                                >
+                                    Open Support Lane →
+                                </button>
+                            </div>
+                        )}
+
                         {/* Users Info */}
                         <div className="grid grid-cols-2 gap-4">
                             <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
@@ -300,43 +338,55 @@ const AdminDisputes = () => {
                                 disabled={TERMINAL.includes(selectedDispute.status)}
                             />
 
-                            {/* Buttons */}
+                            {/* Buttons & Supervisor Authorization Check */}
                             {!TERMINAL.includes(selectedDispute.status) ? (
-                                <>
-                                <select
-                                    value={resolutionType}
-                                    onChange={(e) => setResolutionType(e.target.value)}
-                                    className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
-                                >
-                                    <option value="">Select resolution…</option>
-                                    {RESOLUTIONS.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
-                                </select>
-                                {RESOLUTIONS.find(r => r.id === resolutionType)?.amount && (
-                                    <input
-                                        type="number" min="1" value={amount} onChange={(e) => setAmount(e.target.value)}
-                                        placeholder="Amount (₹)"
-                                        className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
-                                    />
-                                )}
-                                <div className="flex gap-3 pt-2">
-                                    <button
-                                        onClick={() => handleResolve(true)}
-                                        disabled={submitting}
-                                        className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl text-sm font-bold hover:bg-gray-200 transition-colors"
+                                !canManage ? (
+                                    <div className="p-3.5 bg-amber-50/80 border border-amber-200 rounded-xl text-xs space-y-1">
+                                        <p className="font-bold flex items-center gap-1.5 text-amber-900">
+                                            <FiLock className="text-amber-700" />
+                                            Supervisor Authorization Required
+                                        </p>
+                                        <p className="text-[11px] text-amber-800 leading-relaxed">
+                                            Support Agents can inspect evidence, review bookings, and add notes. Finalizing financial actions (refunds, penalties, billing override) requires <strong>Support Supervisor</strong> authorization (<code>disputes.manage</code>).
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <>
+                                    <select
+                                        value={resolutionType}
+                                        onChange={(e) => setResolutionType(e.target.value)}
+                                        className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
                                     >
-                                        <FiXCircle className="inline mr-2" />
-                                        Dismiss
-                                    </button>
-                                    <button
-                                        onClick={() => handleResolve(false)}
-                                        disabled={submitting}
-                                        className="flex-1 py-3 bg-emerald-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-emerald-200 active:scale-95 transition-transform"
-                                    >
-                                        <FiCheckCircle className="inline mr-2" />
-                                        Resolve
-                                    </button>
-                                </div>
-                                </>
+                                        <option value="">Select resolution…</option>
+                                        {RESOLUTIONS.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
+                                    </select>
+                                    {RESOLUTIONS.find(r => r.id === resolutionType)?.amount && (
+                                        <input
+                                            type="number" min="1" value={amount} onChange={(e) => setAmount(e.target.value)}
+                                            placeholder="Amount (₹)"
+                                            className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                                        />
+                                    )}
+                                    <div className="flex gap-3 pt-2">
+                                        <button
+                                            onClick={() => handleResolve(true)}
+                                            disabled={submitting}
+                                            className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl text-sm font-bold hover:bg-gray-200 transition-colors"
+                                        >
+                                            <FiXCircle className="inline mr-2" />
+                                            Dismiss
+                                        </button>
+                                        <button
+                                            onClick={() => handleResolve(false)}
+                                            disabled={submitting}
+                                            className="flex-1 py-3 bg-emerald-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-emerald-200 active:scale-95 transition-transform"
+                                        >
+                                            <FiCheckCircle className="inline mr-2" />
+                                            Resolve
+                                        </button>
+                                    </div>
+                                    </>
+                                )
                             ) : (
                                 <div className="p-3 bg-emerald-50 text-emerald-800 rounded-xl flex items-center gap-3">
                                     <FiCheckCircle size={20} />
