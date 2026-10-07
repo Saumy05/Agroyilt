@@ -9,16 +9,36 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { filterByDateRange, getDateRange, formatDate } from '../../utils/adminHelpers';
+import { getDateRange } from '../../utils/adminHelpers';
+
+const pad = (n) => String(n).padStart(2, '0');
+
+// Keys match the backend's local-timezone buckets: YYYY-MM-DD (daily) or YYYY-MM (monthly for 'year')
+const buildBuckets = (period) => {
+  const { start, end } = getDateRange(period);
+  const monthly = period === 'year';
+  const cursor = new Date(start.getFullYear(), start.getMonth(), monthly ? 1 : start.getDate());
+  const buckets = [];
+  while (cursor <= end) {
+    const key = `${cursor.getFullYear()}-${pad(cursor.getMonth() + 1)}${monthly ? '' : `-${pad(cursor.getDate())}`}`;
+    buckets.push({
+      key,
+      dateLabel: cursor.toLocaleDateString('en-IN', monthly ? { month: 'short', year: 'numeric' } : { month: 'short', day: 'numeric' }),
+    });
+    if (monthly) cursor.setMonth(cursor.getMonth() + 1);
+    else cursor.setDate(cursor.getDate() + 1);
+  }
+  return buckets;
+};
 
 const BookingsBarChart = ({ data, period = 'month' }) => {
   const filteredData = useMemo(() => {
-    const range = getDateRange(period);
-    const filtered = filterByDateRange(data, range.start, range.end);
-    const daysToShow = period === 'week' ? 7 : 7;
-    return filtered.slice(-daysToShow).map((item) => ({
-      ...item,
-      dateLabel: formatDate(item.date, { month: 'short', day: 'numeric' }),
+    const countsByDate = new Map((data || []).map((item) => [item.date, item.orders || 0]));
+    // Fill every bucket in the period so days with no bookings show as zero instead of disappearing
+    return buildBuckets(period).map(({ key, dateLabel }) => ({
+      date: key,
+      dateLabel,
+      orders: countsByDate.get(key) || 0,
     }));
   }, [data, period]);
 
@@ -48,7 +68,7 @@ const BookingsBarChart = ({ data, period = 'month' }) => {
       <div className="flex items-start justify-between mb-4">
         <div>
           <h3 className="text-base sm:text-lg font-extrabold text-gray-800">Booking Volume</h3>
-          <p className="text-xs sm:text-sm text-gray-500 mt-1">Daily bookings</p>
+          <p className="text-xs sm:text-sm text-gray-500 mt-1">{period === 'year' ? 'Monthly' : 'Daily'} bookings placed</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500" />
@@ -81,6 +101,7 @@ const BookingsBarChart = ({ data, period = 'month' }) => {
               fontSize={10}
               tickLine={false}
               axisLine={false}
+              allowDecimals={false}
               width={50}
             />
             <Tooltip content={<CustomTooltip />} />

@@ -402,13 +402,35 @@ const getRevenueAnalytics = async (req, res) => {
       groupFormat = '%Y-%W';
     }
 
+    // Bucket dates in the caller's timezone so bookings land on the day the admin sees them
+    let timezone = 'UTC';
+    if (req.query.timezone) {
+      try {
+        new Intl.DateTimeFormat('en-US', { timeZone: req.query.timezone });
+        timezone = req.query.timezone;
+      } catch {
+        // Invalid timezone, fall back to UTC
+      }
+    }
+
     // Build date filter
     const dateFilter = {};
+    const createdFilter = {};
     if (startDate || endDate) {
       dateFilter.completedAt = {};
-      if (startDate) dateFilter.completedAt.$gte = new Date(startDate);
-      if (endDate) dateFilter.completedAt.$lte = new Date(endDate);
+      createdFilter.createdAt = {};
+      if (startDate) {
+        dateFilter.completedAt.$gte = new Date(startDate);
+        createdFilter.createdAt.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        dateFilter.completedAt.$lte = new Date(endDate);
+        createdFilter.createdAt.$lte = new Date(endDate);
+      }
     }
+
+    // Apply Admin Geographic Scope to booking metrics
+    const bookingScope = buildAdminScopeFilter(req.user, 'booking');
 
     // Revenue analytics
     // Booking Revenue Analytics
@@ -417,7 +439,8 @@ const getRevenueAnalytics = async (req, res) => {
         $match: {
           status: BOOKING_STATUS.COMPLETED,
           paymentStatus: { $in: [PAYMENT_STATUS.SUCCESS, PAYMENT_STATUS.COLLECTED_BY_VENDOR, 'success', 'collected_by_vendor', 'collected_by_worker', 'paid'] },
-          ...dateFilter
+          ...dateFilter,
+          ...bookingScope
         }
       },
       {
@@ -425,7 +448,8 @@ const getRevenueAnalytics = async (req, res) => {
           _id: {
             $dateToString: {
               format: groupFormat,
-              date: '$completedAt'
+              date: '$completedAt',
+              timezone
             }
           },
           revenue: { $sum: '$finalAmount' },
@@ -436,20 +460,60 @@ const getRevenueAnalytics = async (req, res) => {
       { $sort: { _id: 1 } }
     ]);
 
+    // Booking Volume Analytics (all bookings placed, by creation date)
+    const bookingVolumeData = await Booking.aggregate([
+      {
+        $match: {
+          ...createdFilter,
+          ...bookingScope
+        }
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: {
+              format: groupFormat,
+              date: '$createdAt',
+              timezone
+            }
+          },
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
     // Combined revenue analytics
     const mergedData = {};
+    const getEntry = (date) => {
+      if (!mergedData[date]) {
+        mergedData[date] = {
+          date,
+          bookings: 0,
+          completedBookings: 0,
+          bookingRevenue: 0,
+          bookingCommission: 0,
+          soilTestRevenue: 0,
+          soilTestCommission: 0,
+          ecommerceRevenue: 0,
+          totalRevenue: 0,
+          totalCommission: 0
+        };
+      }
+      return mergedData[date];
+    };
 
     revenueData.forEach(item => {
       const commission = item.platformCommission || 0;
-      mergedData[item._id] = {
-        date: item._id,
-        bookingRevenue: commission,
-        bookingCommission: commission,
-        soilTestRevenue: 0,
-        soilTestCommission: 0,
-        totalRevenue: commission,
-        totalCommission: commission
-      };
+      const entry = getEntry(item._id);
+      entry.completedBookings = item.bookings || 0;
+      entry.bookingRevenue = commission;
+      entry.bookingCommission = commission;
+      entry.totalRevenue += commission;
+      entry.totalCommission += commission;
+    });
+
+    bookingVolumeData.forEach(item => {
+      getEntry(item._id).bookings = item.count || 0;
     });
 
     // Soil Test Analytics
@@ -472,7 +536,8 @@ const getRevenueAnalytics = async (req, res) => {
           _id: {
             $dateToString: {
               format: groupFormat,
-              date: '$updatedAt'
+              date: '$updatedAt',
+              timezone
             }
           },
           revenue: { $sum: '$totalAmount' },
@@ -483,23 +548,11 @@ const getRevenueAnalytics = async (req, res) => {
 
     soilTestData.forEach(item => {
       const commission = item.commission || 0;
-      if (!mergedData[item._id]) {
-        mergedData[item._id] = {
-          date: item._id,
-          bookingRevenue: 0,
-          bookingCommission: 0,
-          soilTestRevenue: commission,
-          soilTestCommission: commission,
-          ecommerceRevenue: 0,
-          totalRevenue: commission,
-          totalCommission: commission
-        };
-      } else {
-        mergedData[item._id].soilTestRevenue = commission;
-        mergedData[item._id].soilTestCommission = commission;
-        mergedData[item._id].totalRevenue += commission;
-        mergedData[item._id].totalCommission += commission;
-      }
+      const entry = getEntry(item._id);
+      entry.soilTestRevenue = commission;
+      entry.soilTestCommission = commission;
+      entry.totalRevenue += commission;
+      entry.totalCommission += commission;
     });
 
     // 4. Ecommerce Order Revenue Analytics
@@ -523,7 +576,8 @@ const getRevenueAnalytics = async (req, res) => {
           _id: {
             $dateToString: {
               format: groupFormat,
-              date: '$createdAt'
+              date: '$createdAt',
+              timezone
             }
           },
           revenue: { $sum: '$pricing.platformFee' }
@@ -533,22 +587,10 @@ const getRevenueAnalytics = async (req, res) => {
 
     ecommerceData.forEach(item => {
       const revenue = item.revenue || 0;
-      if (!mergedData[item._id]) {
-        mergedData[item._id] = {
-          date: item._id,
-          bookingRevenue: 0,
-          bookingCommission: 0,
-          soilTestRevenue: 0,
-          soilTestCommission: 0,
-          ecommerceRevenue: revenue,
-          totalRevenue: revenue,
-          totalCommission: revenue
-        };
-      } else {
-        mergedData[item._id].ecommerceRevenue = revenue;
-        mergedData[item._id].totalRevenue += revenue;
-        mergedData[item._id].totalCommission += revenue;
-      }
+      const entry = getEntry(item._id);
+      entry.ecommerceRevenue = revenue;
+      entry.totalRevenue += revenue;
+      entry.totalCommission += revenue;
     });
 
     const finalRevenueData = Object.values(mergedData).sort((a, b) => a.date.localeCompare(b.date));

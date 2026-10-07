@@ -108,7 +108,8 @@ const AdminDashboard = () => {
         const revRes = await getRevenueAnalytics({
           period: apiPeriod,
           startDate: startISO,
-          endDate
+          endDate,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
         });
 
         if (revRes.success) {
