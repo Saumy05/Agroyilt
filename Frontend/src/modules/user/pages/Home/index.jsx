@@ -480,7 +480,7 @@ const Home = () => {
         <motion.div
           variants={itemVariants}
           className="backdrop-blur-xl sticky top-0 z-50 border-b border-black/[0.03] rounded-b-[24px] shadow-[0_4px_30px_rgba(0,0,0,0.03)] transition-all duration-300"
-          style={{ backgroundColor: 'rgba(255, 255, 255, 0.4)' }}
+          style={{ backgroundColor: 'rgba(255, 255, 255, 0.8)' }}
         >
           <Header
             location={address}
