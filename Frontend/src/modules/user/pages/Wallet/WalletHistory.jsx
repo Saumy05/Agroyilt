@@ -26,8 +26,8 @@ import { walletService } from '../../../../services/walletService';
 import withdrawalService from '../../../../services/withdrawalService';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import NotificationBell from '../../components/common/NotificationBell';
-import { themeColors } from '../../../../theme';
 import WithdrawalModal from '../../../../components/common/WithdrawalModal';
+import useBodyScrollLock from '../../../../hooks/useBodyScrollLock';
 
 const TYPE_CONFIG = {
   credit: { label: 'Credit', kind: 'credit' },
@@ -91,6 +91,9 @@ const WalletHistory = () => {
   const [wFilter, setWFilter] = useState('all'); // 'all' | 'completed' | 'pending' | 'rejected'
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [viewProofItem, setViewProofItem] = useState(null);
+
+  // Lock background scrolling when any modal is open in WalletHistory
+  useBodyScrollLock(Boolean(selectedTx || showWithdrawModal || viewProofItem));
 
   // Sync tab with URL
   const handleTabChange = (tab) => {

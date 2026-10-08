@@ -1,8 +1,11 @@
 import React from "react";
 import { FiX } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
+import useBodyScrollLock from "../../../hooks/useBodyScrollLock";
 
 const Modal = ({ isOpen, onClose, title, children, size = "md", className = "" }) => {
+  useBodyScrollLock(isOpen);
+
   const sizeClasses = {
     sm: "max-w-md",
     md: "max-w-xl",

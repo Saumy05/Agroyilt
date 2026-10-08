@@ -3,6 +3,7 @@ import { FiDollarSign, FiAlertCircle, FiCheck, FiX, FiCreditCard, FiClock, FiLoc
 import withdrawalService from '../../services/withdrawalService';
 import BankDetailsSection from './BankDetailsSection';
 import { toastManager } from '../../utils/toastManager';
+import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 
 /**
  * Universal Withdrawal Request Modal
@@ -15,6 +16,8 @@ export const WithdrawalModal = ({
   role = 'user',
   workerType = null
 }) => {
+  useBodyScrollLock(isOpen);
+
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [balanceData, setBalanceData] = useState(null);
