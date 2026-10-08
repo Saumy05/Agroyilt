@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiArrowUp, FiArrowDown, FiClock, FiBell, FiX, FiImage, FiFileText, FiCreditCard, FiCalendar, FiInfo, FiCheckCircle, FiShield } from 'react-icons/fi';
+import { FiArrowUp, FiArrowDown, FiClock, FiBell, FiX, FiImage, FiFileText, FiCreditCard, FiCalendar, FiInfo, FiCheckCircle, FiShield, FiAlertCircle, FiArrowRight } from 'react-icons/fi';
 import { IoWallet, IoWalletOutline } from 'react-icons/io5';
 import { FaWallet } from 'react-icons/fa';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -239,71 +239,148 @@ const Wallet = () => {
     <div className="min-h-screen pb-24" style={{ background: themeColors.backgroundGradient }}>
       <Header title="My Wallet" onBack={() => navigate('/worker/dashboard', { replace: true })} />
 
-      <main className="px-4 py-4 sm:py-5">
-        {/* Balance Card - Compact Mobile View */}
-        <div className="rounded-2xl p-4 sm:p-5 shadow-lg relative overflow-hidden mb-4 bg-gradient-to-br from-emerald-700 via-emerald-800 to-green-900 border border-emerald-600/30">
-          {/* Subtle ambient decorative accents */}
-          <div className="absolute -top-10 -right-10 w-36 h-36 bg-white/10 rounded-full blur-xl pointer-events-none" />
-          <div className="absolute -bottom-8 -left-8 w-28 h-28 bg-emerald-500/20 rounded-full blur-lg pointer-events-none" />
+      <main className="px-3.5 py-3">
+        {/* Unified Dual-Pane Balance & Dues Card */}
+        <div className="rounded-2xl p-3.5 shadow-lg relative overflow-hidden mb-2.5 bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 border border-emerald-500/30 text-white">
+          {/* Ambient background decorative glow */}
+          <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+          <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-emerald-400/15 rounded-full blur-xl pointer-events-none" />
 
-          <div className="relative z-10 text-white">
-            <div className="flex justify-between items-center mb-3">
-              <div>
-                <p className="text-emerald-100/80 text-[11px] font-bold uppercase tracking-wider mb-0.5">Available Balance</p>
-                <p className="text-2xl sm:text-3xl font-black tracking-tight">
-                  ₹{Number(wallet?.balance ?? wallet?.wallet?.balance ?? 0).toLocaleString('en-IN')}
-                </p>
-                {Number(wallet?.reservedWithdrawal || wallet?.wallet?.reservedWithdrawal || 0) > 0 && (
-                  <p className="text-[10px] text-emerald-200/90 font-medium mt-0.5">
-                    ₹{Number(wallet?.reservedWithdrawal || wallet?.wallet?.reservedWithdrawal || 0).toLocaleString('en-IN')} pending withdrawal
-                  </p>
-                )}
+          <div className="relative z-10">
+            {/* Header row */}
+            <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-white/15">
+              <div className="flex items-center gap-1.5">
+                <span className="w-6 h-6 rounded-lg bg-white/15 border border-white/20 flex items-center justify-center text-white">
+                  <IoWallet className="w-3.5 h-3.5" />
+                </span>
+                <span className="text-[11px] font-black uppercase tracking-wider text-emerald-100">Worker Earnings & Ledger</span>
               </div>
-              <div className="w-10 h-10 rounded-xl bg-white/15 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-inner">
-                <IoWallet className="w-5 h-5 text-emerald-100" />
+              <div className="flex items-center gap-1 text-[10px] font-semibold text-emerald-100 bg-white/15 px-2 py-0.5 rounded-full border border-white/20">
+                <FiShield className="w-3 h-3 text-emerald-200 shrink-0" />
+                <span>{(wallet?.vendorId || wallet?.wallet?.vendorId) ? 'Vendor Payouts' : 'Direct Payouts'}</span>
               </div>
             </div>
 
-            {Number(wallet?.outstandingDues || 0) > 0 && (
-              <div className="mb-3 bg-rose-500/30 border border-rose-200/40 rounded-xl p-2.5 backdrop-blur-sm">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-black text-white">You owe ₹{Number(wallet.outstandingDues).toLocaleString('en-IN')} dues</p>
+            {/* Dual Pane Grid: Available Earnings (Left) | Outstanding Dues (Right) */}
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              {/* Left Pane: Available Earnings */}
+              <div className="bg-white/15 backdrop-blur-md rounded-xl p-2.5 border border-white/20 flex flex-col justify-between shadow-xs">
+                <div>
+                  <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-emerald-100 mb-0.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-300" />
+                    <span className="truncate">Available</span>
+                  </div>
+                  <p className="text-lg sm:text-xl font-black tracking-tight text-white mb-0.5">
+                    ₹{Number(wallet?.balance ?? wallet?.wallet?.balance ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+                  {Number(wallet?.reservedWithdrawal || wallet?.wallet?.reservedWithdrawal || 0) > 0 ? (
+                    <p className="text-[9.5px] text-emerald-200/90 font-medium mb-1.5 truncate">
+                      ₹{Number(wallet?.reservedWithdrawal || wallet?.wallet?.reservedWithdrawal || 0).toLocaleString('en-IN')} pending
+                    </p>
+                  ) : (
+                    <div className="h-1 mb-1" />
+                  )}
+                </div>
+                <button
+                  onClick={() => setShowWithdrawModal(true)}
+                  className="w-full bg-white hover:bg-emerald-50 text-emerald-900 font-black py-1.5 px-2 rounded-lg text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1 mt-auto"
+                >
+                  <FiArrowUp className="w-3 h-3 stroke-[2.5]" />
+                  <span>Withdraw</span>
+                </button>
+              </div>
+
+              {/* Right Pane: Outstanding Dues to Admin / Vendor */}
+              <div className={`backdrop-blur-md rounded-xl p-2.5 border flex flex-col justify-between transition-all shadow-xs ${
+                Number(wallet?.outstandingDues || 0) > 0 
+                  ? 'bg-rose-500/20 border-rose-300/30 text-rose-50' 
+                  : 'bg-white/15 border-white/20 text-white'
+              }`}>
+                <div>
+                  <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider mb-0.5 text-slate-100">
+                    <span className={`w-1.5 h-1.5 rounded-full ${Number(wallet?.outstandingDues || 0) > 0 ? 'bg-rose-300 animate-pulse' : 'bg-emerald-300'}`} />
+                    <span className="truncate">Outstanding Dues</span>
+                    {Number(wallet?.outstandingDues || 0) > 0 && <FiAlertCircle className="w-2.5 h-2.5 text-rose-200 shrink-0" />}
+                  </div>
+                  <p className="text-lg sm:text-xl font-black tracking-tight text-white mb-0.5">
+                    ₹{Number(wallet?.outstandingDues || 0).toLocaleString('en-IN')}
+                  </p>
+                  <div className="h-1 mb-1" />
+                </div>
+                {Number(wallet?.outstandingDues || 0) > 0 ? (
                   <button
                     onClick={() => setShowPayDues(true)}
-                    className="bg-white text-rose-700 hover:bg-rose-50 font-black px-2.5 py-1 rounded-lg text-[11px] active:scale-[0.98] transition-all shadow-xs shrink-0"
+                    className="w-full bg-rose-500 hover:bg-rose-600 text-white font-bold py-1.5 px-2 rounded-lg text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1 mt-auto"
                   >
-                    Pay Now
+                    <span>Pay Now</span>
                   </button>
-                </div>
-                {wallet?.isRestricted && (
-                  <p className="text-[10px] font-bold text-white mt-1">Account restricted: {wallet.restrictionReason || 'dues limit crossed'}</p>
+                ) : (
+                  <div className="w-full bg-white/15 text-emerald-100 font-bold py-1.5 rounded-lg text-xs text-center border border-white/20 mt-auto flex items-center justify-center gap-1">
+                    <FiCheckCircle className="w-3 h-3 text-emerald-200" />
+                    <span>All Clear</span>
+                  </div>
                 )}
               </div>
-            )}
+            </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowWithdrawModal(true)}
-                className="flex-1 bg-white hover:bg-emerald-50 text-emerald-950 font-black py-2.5 px-3.5 rounded-xl shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-1.5 text-xs"
-              >
-                <FiArrowUp className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5]" />
-                <span>Request Withdrawal</span>
-              </button>
-              <div className="bg-black/20 text-emerald-100/90 py-2 px-2.5 rounded-xl font-semibold text-[10px] text-center border border-white/10 flex items-center justify-center gap-1 shrink-0 backdrop-blur-xs">
-                <FiShield className="w-3 h-3 text-emerald-300 shrink-0" />
-                <span>{(wallet?.vendorId || wallet?.wallet?.vendorId) ? 'Vendor Payouts' : 'Direct Payouts'}</span>
+            {/* Integrated Cash / Dues Limit Buffer Gauge */}
+            <div className="bg-black/15 rounded-xl p-2 border border-white/15 backdrop-blur-xs">
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="text-[10px] font-semibold text-emerald-100/90 flex items-center gap-1">
+                  <span>Dues Limit Buffer</span>
+                  {(Number(wallet?.outstandingDues || 0) / (wallet?.maxDuesAllowed || 1000)) > 0.8 && (
+                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-rose-500 text-white">Action Needed</span>
+                  )}
+                </span>
+                <span className="text-[11px] font-black text-white">
+                  ₹{Number(wallet?.outstandingDues || 0).toLocaleString()} <span className="text-emerald-100/70 font-normal">/ ₹{(wallet?.maxDuesAllowed || 1000).toLocaleString()}</span>
+                </span>
               </div>
+              <div className="w-full h-1.5 bg-black/20 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ${
+                    (Number(wallet?.outstandingDues || 0) / (wallet?.maxDuesAllowed || 1000)) > 0.8 ? 'bg-rose-400' : 'bg-emerald-300'
+                  }`}
+                  style={{ width: `${Math.min(100, Math.max(2, ((Number(wallet?.outstandingDues || 0)) / (wallet?.maxDuesAllowed || 1000)) * 100))}%` }}
+                />
+              </div>
+              <p className="text-[9.5px] text-emerald-100/80 mt-1">
+                {(Number(wallet?.outstandingDues || 0) / (wallet?.maxDuesAllowed || 1000)) > 0.8
+                  ? `⚠️ Near limit: auto-restriction triggers at ₹${(wallet?.maxDuesAllowed || 1000).toLocaleString()}. Pay dues to keep taking cash jobs.`
+                  : `✓ Safe buffer: auto-restriction at ₹${(wallet?.maxDuesAllowed || 1000).toLocaleString()}.`}
+              </p>
             </div>
           </div>
         </div>
 
+        {/* Account Restricted Notice (If restricted) */}
+        {wallet?.isRestricted && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-2.5 animate-shake">
+            <div className="flex items-start gap-2.5">
+              <FiX className="w-4 h-4 text-red-600 mt-0.5 shrink-0" />
+              <div>
+                <p className="font-bold text-red-800 text-xs">Account Restricted</p>
+                <p className="text-[11px] text-red-600 mb-1.5 leading-relaxed">
+                  {wallet.restrictionReason || 'Your account is restricted due to unpaid dues exceeding the limit.'}
+                </p>
+                <button
+                  onClick={() => setShowPayDues(true)}
+                  className="text-xs font-bold uppercase tracking-wider text-white bg-red-600 hover:bg-red-700 px-2.5 py-1 rounded-lg shadow-xs active:scale-95 transition-all"
+                >
+                  Pay Dues to Unlock
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Dues payments waiting for / refused by the admin */}
         {duesPayments.filter(p => p.status === 'PENDING_REVIEW' || p.status === 'REJECTED').slice(0, 3).map(p => (
-          <div key={p._id} className={`mb-3 rounded-xl px-4 py-3 border text-sm ${p.status === 'REJECTED' ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}>
+          <div key={p._id} className={`mb-2.5 rounded-xl px-3 py-2.5 border text-xs ${p.status === 'REJECTED' ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}>
             <p className={`font-bold ${p.status === 'REJECTED' ? 'text-red-800' : 'text-amber-900'}`}>
               {p.status === 'REJECTED' ? 'Dues payment not accepted' : 'Waiting for admin to confirm'} · ₹{Number(p.amount).toLocaleString('en-IN')} ({p.offlineMode === 'upi' ? 'UPI' : 'cash'})
             </p>
-            <p className="text-xs text-gray-600">
+            <p className="text-[11px] text-gray-600 mt-0.5">
               {p.status === 'REJECTED' ? `Reason: ${p.adminNote || 'not given'}` : `Sent on ${formatDate(p.createdAt)}. Your dues update once the admin confirms.`}
             </p>
           </div>
@@ -311,14 +388,14 @@ const Wallet = () => {
 
         {/* Pending Payouts List */}
         {wallet.pendingBookings?.length > 0 && (
-          <div className="mb-8">
-            <h3 className="font-bold text-gray-800 mb-4 px-1">Pending Payments</h3>
-            <div className="space-y-3">
+          <div className="mb-3">
+            <h3 className="font-bold text-xs uppercase tracking-wider text-slate-500 mb-2 px-0.5">Pending Payments</h3>
+            <div className="space-y-2">
               {wallet.pendingBookings.map(booking => (
-                <div key={booking._id} className="bg-white rounded-2xl p-4 shadow-sm border border-orange-100 flex justify-between items-center">
+                <div key={booking._id} className="bg-white rounded-xl p-3 shadow-xs border border-orange-100 flex justify-between items-center">
                   <div className="min-w-0">
-                    <p className="font-bold text-gray-900 text-sm mb-0.5">{booking.serviceName}</p>
-                    <p className="text-xs text-gray-500 font-medium mb-1">Booking #{booking.bookingNumber}</p>
+                    <p className="font-bold text-gray-900 text-xs mb-0.5">{booking.serviceName}</p>
+                    <p className="text-[11px] text-gray-500 font-medium mb-0.5">Booking #{booking.bookingNumber}</p>
                     <p className="text-[10px] text-gray-400">
                       Completed: {new Date(booking.completedAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}
                     </p>
@@ -327,19 +404,19 @@ const Wallet = () => {
                     <button
                       onClick={() => handleRequestPayout(booking._id)}
                       disabled={payoutLoading === booking._id}
-                      className="flex-shrink-0 px-3 py-2 bg-orange-50 text-orange-600 border border-orange-200 text-xs font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1.5 hover:bg-orange-100"
+                      className="flex-shrink-0 px-2.5 py-1.5 bg-orange-50 text-orange-600 border border-orange-200 text-xs font-bold rounded-lg active:scale-95 transition-all flex items-center gap-1 hover:bg-orange-100"
                     >
                       {payoutLoading === booking._id ? (
                         <span className="w-3 h-3 border-2 border-orange-300 border-t-orange-600 rounded-full animate-spin"></span>
                       ) : (
                         <>
-                          <FiBell className="w-3.5 h-3.5" />
+                          <FiBell className="w-3 h-3" />
                           Ask Vendor
                         </>
                       )}
                     </button>
                   ) : (
-                    <span className="px-3 py-1.5 bg-orange-50 text-orange-600 border border-orange-200 text-xs font-bold rounded-xl">
+                    <span className="px-2.5 py-1 bg-orange-50 text-orange-600 border border-orange-200 text-[11px] font-bold rounded-lg">
                       Pending Settlement
                     </span>
                   )}
@@ -350,7 +427,7 @@ const Wallet = () => {
         )}
 
         {/* Filter Buttons */}
-        <div className="flex gap-2 mb-4 overflow-x-auto pb-2 scrollbar-hide">
+        <div className="flex gap-1.5 mb-2.5 overflow-x-auto pb-1 scrollbar-hide">
           {[
             { id: 'all', label: 'All' },
             { id: 'earnings', label: 'Earnings' },
@@ -359,9 +436,9 @@ const Wallet = () => {
             <button
               key={filterOption.id}
               onClick={() => setFilter(filterOption.id)}
-              className={`px-4.5 py-2 rounded-full font-bold text-xs whitespace-nowrap transition-all ${
+              className={`px-3 py-1.5 rounded-full font-bold text-xs whitespace-nowrap transition-all ${
                 filter === filterOption.id
-                  ? 'bg-emerald-700 text-white shadow-md shadow-emerald-700/25'
+                  ? 'bg-emerald-700 text-white shadow-xs'
                   : 'bg-white text-slate-700 border border-slate-200/80 hover:bg-slate-50'
               }`}
             >
@@ -372,7 +449,7 @@ const Wallet = () => {
 
         {/* Transactions/Ledger */}
         <div>
-          <div className="flex items-center justify-between mb-3 px-0.5">
+          <div className="flex items-center justify-between mb-2 px-0.5">
             <h3 className="font-bold text-xs uppercase tracking-wider text-slate-500">Transaction History</h3>
             <span className="text-[11px] text-slate-400 font-medium">{historyItems.length} record{historyItems.length === 1 ? '' : 's'}</span>
           </div>
@@ -482,10 +559,19 @@ const Wallet = () => {
               })}
             </div>
           )}
+
+          {/* View Complete History Link */}
+          <button
+            onClick={() => navigate('/worker/wallet/history')}
+            className="w-full mt-3 py-2.5 rounded-xl font-semibold text-xs sm:text-sm text-gray-700 bg-white border border-gray-200 flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-xs"
+          >
+            View Complete History
+            <FiArrowRight className="w-3.5 h-3.5" />
+          </button>
         </div>
 
         {/* Withdrawal History Section */}
-        <div className="mt-8">
+        <div className="mt-4">
           <WithdrawalHistoryList role="worker" refreshTrigger={historyRefreshKey} />
         </div>
       </main>

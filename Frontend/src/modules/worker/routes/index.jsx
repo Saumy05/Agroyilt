@@ -53,6 +53,7 @@ const Notifications = lazyLoad(() => import('../pages/Notifications'));
 const JobMap = lazyLoad(() => import('../pages/JobMap'));
 const JobTimeline = lazyLoad(() => import('../pages/JobTimeline'));
 const Wallet = lazyLoad(() => import('../pages/Wallet'));
+const WalletHistory = lazyLoad(() => import('../pages/Wallet/WalletHistory'));
 const Team = lazyLoad(() => import('../pages/Team'));
 const WorkerBookingRequests = lazyLoad(() => import('../pages/AssignedJobs/WorkerBookingRequests'));
 const WorkerGroupRequests = lazyLoad(() => import('../pages/AssignedJobs/WorkerGroupRequests'));
@@ -302,6 +303,7 @@ const WorkerRoutes = () => {
               <Route path="/settings/mpin-setup" element={<ProtectedRoute userType="worker"><MpinSetup /></ProtectedRoute>} />
               <Route path="/notifications" element={<ProtectedRoute userType="worker"><Notifications /></ProtectedRoute>} />
               <Route path="/wallet" element={<ProtectedRoute userType="worker"><Wallet /></ProtectedRoute>} />
+              <Route path="/wallet/history" element={<ProtectedRoute userType="worker"><WalletHistory /></ProtectedRoute>} />
               <Route path="/team" element={<ProtectedRoute userType="worker"><Team /></ProtectedRoute>} />
               <Route path="/referrals" element={<ProtectedRoute userType="worker"><WorkerReferrals /></ProtectedRoute>} />
               <Route path="/booking-requests" element={<ProtectedRoute userType="worker"><WorkerBookingRequests /></ProtectedRoute>} />
