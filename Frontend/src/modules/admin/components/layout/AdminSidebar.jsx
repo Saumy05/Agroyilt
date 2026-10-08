@@ -388,14 +388,14 @@ const AdminSidebar = ({ isOpen, onClose }) => {
     const active = isActive(item);
 
     return (
-      <div key={item.route} className="mb-1">
+      <div key={item.route} className="mb-0.5">
         {/* Main Menu Item */}
         <div
           className={`
-            flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-200 cursor-pointer
+            flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all duration-200 cursor-pointer group
             ${active
-              ? "bg-primary-600 text-white shadow-sm"
-              : "text-gray-300 hover:bg-slate-700"
+              ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-600/25 font-bold"
+              : "text-slate-300 hover:bg-slate-700/60 hover:text-white"
             }
           `}
           onClick={() => {
@@ -406,10 +406,10 @@ const AdminSidebar = ({ isOpen, onClose }) => {
             }
           }}>
           <Icon
-            className={`text-xl flex-shrink-0 ${active ? "text-white" : "text-gray-400"
+            className={`text-lg flex-shrink-0 transition-transform group-hover:scale-110 ${active ? "text-white" : "text-slate-400 group-hover:text-white"
               }`}
           />
-          <span className="font-semibold flex-1 text-base">{item.title}</span>
+          <span className="font-bold flex-1 text-sm tracking-tight">{item.title}</span>
 
           {/* Badge Display */}
           {item.title === "Bookings" && counts.bookings > 0 && (
@@ -433,12 +433,11 @@ const AdminSidebar = ({ isOpen, onClose }) => {
             </span>
           )}
 
-
           {hasChildren && (
             <motion.div
               animate={{ rotate: isExpanded ? 180 : 0 }}
               transition={{ duration: 0.2 }}>
-              <FiChevronDown className="text-gray-400 text-sm" />
+              <FiChevronDown className="text-slate-400 text-xs" />
             </motion.div>
           )}
         </div>
@@ -452,7 +451,7 @@ const AdminSidebar = ({ isOpen, onClose }) => {
               exit={{ height: 0, opacity: 0 }}
               transition={{ duration: 0.2 }}
               className="overflow-hidden">
-              <div className="ml-4 mt-1 pl-4 border-l-2 border-slate-600 space-y-1">
+              <div className="ml-4 mt-1 pl-3.5 border-l-2 border-slate-700 space-y-0.5">
                 {item.children.map((child, index) => {
                   const childRoute = getChildRoute(item.route, child);
                   const isChildActive =
@@ -467,15 +466,15 @@ const AdminSidebar = ({ isOpen, onClose }) => {
                         handleMenuItemClick(childRoute, item.title)
                       }
                       className={`
-                        px-3 py-2 text-sm rounded-lg transition-colors cursor-pointer flex justify-between items-center
+                        px-3 py-1.5 text-xs rounded-lg transition-colors cursor-pointer flex justify-between items-center font-medium
                         ${isChildActive
-                          ? "bg-primary-50 text-white font-medium"
-                          : "text-gray-400 hover:bg-slate-700"
+                          ? "bg-blue-600/30 text-white font-bold border border-blue-500/40"
+                          : "text-slate-400 hover:text-white hover:bg-slate-700/50"
                         }
                       `}>
                       <span>{child}</span>
                       {item.title === "Settlements" && child === "Pending" && counts.pendingSettlements > 0 && (
-                        <span className="bg-red-500 text-white text-[10px] h-5 min-w-[20px] px-1.5 flex items-center justify-center rounded-full">
+                        <span className="bg-red-500 text-white text-[10px] h-4 min-w-[18px] px-1.5 flex items-center justify-center rounded-full font-black">
                           {counts.pendingSettlements}
                         </span>
                       )}
@@ -494,11 +493,11 @@ const AdminSidebar = ({ isOpen, onClose }) => {
   const sidebarContent = (
     <div className="h-full w-full flex flex-col bg-slate-800">
       {/* Header Section */}
-      <div className="px-4 py-6 border-b border-slate-700 bg-slate-900">
+      <div className="px-4 py-5 border-b border-slate-700/80 bg-slate-900">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <div
-              className="w-12 h-12 rounded-xl flex items-center justify-center shadow-md flex-shrink-0"
+              className="w-11 h-11 rounded-xl flex items-center justify-center shadow-md flex-shrink-0"
               style={{
                 background: 'linear-gradient(135deg, #2874F0 0%, #4787F7 100%)',
               }}
@@ -506,17 +505,17 @@ const AdminSidebar = ({ isOpen, onClose }) => {
               <FiUser className="text-white text-xl" />
             </div>
             <div className="flex-1 min-w-0">
-              <h2 className="font-semibold text-white text-base truncate">
+              <h2 className="font-bold text-white text-sm truncate">
                 {adminUser.name}
               </h2>
               <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded ${
                   adminUser.role === 'super_admin' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
                 }`}>
                   {adminUser.role === 'super_admin' ? '⭐ Super Admin' : 'Admin'}
                 </span>
                 {adminUser.role !== 'super_admin' && (
-                  <span className="text-[10px] text-gray-300 truncate max-w-[130px]" title={adminUser.cityName ? `${adminUser.cityName}${adminUser.districtName ? ` • ${adminUser.districtName}` : ''}` : 'Scoped Admin'}>
+                  <span className="text-[10px] text-slate-300 truncate max-w-[130px]" title={adminUser.cityName ? `${adminUser.cityName}${adminUser.districtName ? ` • ${adminUser.districtName}` : ''}` : 'Scoped Admin'}>
                     📍 {adminUser.cityName || 'Scoped'}
                   </span>
                 )}
@@ -529,13 +528,13 @@ const AdminSidebar = ({ isOpen, onClose }) => {
             onClick={onClose}
             className="p-2 hover:bg-white/10 rounded-lg transition-colors flex-shrink-0 lg:hidden"
             aria-label="Close sidebar">
-            <FiX className="text-xl text-gray-300" />
+            <FiX className="text-xl text-slate-300" />
           </button>
         </div>
       </div>
 
       {/* Navigation Menu */}
-      <nav className="flex-1 overflow-y-auto p-3 scrollbar-admin lg:pb-3 space-y-1">
+      <nav className="flex-1 overflow-y-auto px-3 py-2 scrollbar-admin lg:pb-3 space-y-0.5">
         {filteredMenu.map((item, index) => {
           const showCategoryHeader =
             item.category &&
@@ -544,8 +543,8 @@ const AdminSidebar = ({ isOpen, onClose }) => {
           return (
             <div key={item.route || index}>
               {showCategoryHeader && (
-                <div className="px-4 pt-3 pb-1 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                  {item.category}
+                <div className="px-3.5 pt-4 pb-1.5 text-[10px] font-black text-slate-400/90 uppercase tracking-widest flex items-center gap-2">
+                  <span>{item.category}</span>
                 </div>
               )}
               {renderMenuItem(item)}
