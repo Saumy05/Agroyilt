@@ -1,7 +1,8 @@
 import React, { useRef, useEffect, useState, memo, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { FiHome, FiBriefcase, FiUser, FiDollarSign } from 'react-icons/fi';
+import { FiHome, FiBriefcase, FiUser } from 'react-icons/fi';
 import { HiHome, HiBriefcase, HiUser } from 'react-icons/hi';
+import { IoWalletOutline, IoWallet } from 'react-icons/io5';
 import { FiBell } from 'react-icons/fi';
 import { gsap } from 'gsap';
 import { useKeyboardVisibility } from '../../../../hooks/useKeyboardVisibility';
@@ -62,7 +63,7 @@ const BottomNav = memo(() => {
     return [
       { path: '/worker/dashboard', icon: FiHome, activeIcon: HiHome, label: 'Home' },
       { path: '/worker/jobs', icon: FiBriefcase, activeIcon: HiBriefcase, label: 'Jobs', badge: pendingJobsCount },
-      { path: '/worker/wallet', icon: FiDollarSign, activeIcon: FiDollarSign, label: 'Wallet' },
+      { path: '/worker/wallet', icon: IoWalletOutline, activeIcon: IoWallet, label: 'Wallet' },
       { path: '/worker/notifications', icon: FiBell, activeIcon: FiBell, label: 'Alerts', badge: unreadNotificationsCount },
       { path: '/worker/profile', icon: FiUser, activeIcon: HiUser, label: 'Profile' },
     ];

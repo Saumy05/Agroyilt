@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiDollarSign, FiArrowUp, FiArrowDown, FiClock, FiBell, FiX, FiImage, FiFileText, FiCreditCard, FiCalendar, FiInfo } from 'react-icons/fi';
+import { FiArrowUp, FiArrowDown, FiClock, FiBell, FiX, FiImage, FiFileText, FiCreditCard, FiCalendar, FiInfo, FiCheckCircle, FiShield } from 'react-icons/fi';
+import { IoWallet, IoWalletOutline } from 'react-icons/io5';
+import { FaWallet } from 'react-icons/fa';
 import { AnimatePresence, motion } from 'framer-motion';
 import { workerTheme as themeColors } from '../../../../theme';
 import Header from '../../components/layout/Header';
@@ -167,15 +169,16 @@ const Wallet = () => {
   };
   const amountColor = (txn) => {
     const effect = effectOf(txn.type);
-    if (effect === 'cash') return 'text-gray-800';
-    return effect === 'debit' ? 'text-red-600' : 'text-green-600';
+    if (effect === 'cash') return 'text-slate-800';
+    return effect === 'debit' ? 'text-rose-600' : 'text-emerald-600';
   };
 
   const getTransactionIcon = (type) => {
+    if (type === 'payment') return <FiCheckCircle className="w-5 h-5 text-emerald-600" />;
+    if (type === 'cash_collected') return <FaWallet className="w-5 h-5 text-amber-600" />;
     const effect = effectOf(type);
-    if (effect === 'debit') return <FiArrowUp className="w-5 h-5 text-red-500" />;
-    if (effect === 'cash') return <FiDollarSign className="w-5 h-5 text-gray-600" />;
-    return <FiArrowDown className="w-5 h-5 text-green-500" />;
+    if (effect === 'debit') return <FiArrowUp className="w-5 h-5 text-rose-500" />;
+    return <FiArrowDown className="w-5 h-5 text-emerald-600" />;
   };
 
   const getTransactionLabel = (type, txn) => {
@@ -238,18 +241,22 @@ const Wallet = () => {
 
       <main className="px-4 py-6">
         {/* Balance Card */}
-        <div className="rounded-2xl p-6 shadow-xl relative overflow-hidden mb-6 bg-gradient-to-br from-teal-600 to-teal-800">
+        <div className="rounded-3xl p-6 shadow-xl relative overflow-hidden mb-6 bg-gradient-to-br from-emerald-700 via-emerald-800 to-green-900 border border-emerald-600/30">
+          {/* Subtle ambient decorative accents */}
+          <div className="absolute -top-12 -right-12 w-44 h-44 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+          <div className="absolute -bottom-10 -left-10 w-36 h-36 bg-emerald-500/20 rounded-full blur-xl pointer-events-none" />
+
           <div className="relative z-10 text-white">
             <div className="flex justify-between items-start">
               <div>
-                <p className="text-white/80 text-sm font-medium mb-1">Available Balance</p>
-                <p className="text-3xl font-bold mb-1">
+                <p className="text-emerald-100/80 text-xs font-semibold uppercase tracking-wider mb-1">Available Balance</p>
+                <p className="text-3xl sm:text-4xl font-black mb-1 tracking-tight">
                   ₹{Number(wallet?.balance ?? wallet?.wallet?.balance ?? 0).toLocaleString('en-IN')}
                 </p>
                 {Number(wallet?.outstandingDues || 0) > 0 && (
-                  <div className="mt-2 mb-1 bg-red-500/25 border border-red-200/40 rounded-xl px-3 py-2">
-                    <p className="text-sm font-bold text-white">You owe the app ₹{Number(wallet.outstandingDues).toLocaleString('en-IN')}</p>
-                    <p className="text-[11px] text-red-50">
+                  <div className="mt-3 mb-1 bg-rose-500/30 border border-rose-200/40 rounded-2xl px-3.5 py-2.5 backdrop-blur-sm">
+                    <p className="text-sm font-black text-white">You owe the app ₹{Number(wallet.outstandingDues).toLocaleString('en-IN')}</p>
+                    <p className="text-[11px] text-rose-100 mt-0.5 leading-relaxed">
                       Platform fees, commission or penalties your balance could not cover.
                       {wallet?.maxDuesAllowed ? ` Above ₹${Number(wallet.maxDuesAllowed).toLocaleString('en-IN')} you cannot take new jobs.` : ''}
                     </p>
@@ -258,35 +265,36 @@ const Wallet = () => {
                     )}
                     <button
                       onClick={() => setShowPayDues(true)}
-                      className="mt-2 w-full bg-white text-red-700 font-black py-2 rounded-lg text-sm active:scale-[0.98] transition-all"
+                      className="mt-2 w-full bg-white text-rose-700 hover:bg-rose-50 font-black py-2 rounded-xl text-xs active:scale-[0.98] transition-all shadow-sm"
                     >
                       Pay ₹{Number(wallet.outstandingDues).toLocaleString('en-IN')} Dues
                     </button>
                   </div>
                 )}
                 {Number(wallet?.reservedWithdrawal || wallet?.wallet?.reservedWithdrawal || 0) > 0 && (
-                  <p className="text-xs text-teal-200 mb-2">
+                  <p className="text-xs text-emerald-200/90 mb-2 font-medium">
                     ₹{Number(wallet?.reservedWithdrawal || wallet?.wallet?.reservedWithdrawal || 0).toLocaleString('en-IN')} reserved in pending withdrawal
                   </p>
                 )}
               </div>
-              <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm">
-                <FiDollarSign className="w-6 h-6 text-white" />
+              <div className="w-12 h-12 rounded-2xl bg-white/15 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-inner">
+                <IoWallet className="w-6 h-6 text-emerald-100" />
               </div>
             </div>
 
-            <div className="mt-4 flex flex-col sm:flex-row gap-2">
+            <div className="mt-5 flex flex-col sm:flex-row gap-2.5">
               <button
                 onClick={() => setShowWithdrawModal(true)}
-                className="w-full bg-white hover:bg-teal-50 text-teal-900 font-bold py-2.5 px-4 rounded-xl shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-sm"
+                className="w-full bg-white hover:bg-emerald-50 text-emerald-950 font-black py-3 px-4 rounded-2xl shadow-lg shadow-emerald-950/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-sm"
               >
-                <FiArrowUp className="w-4 h-4 text-teal-700" />
+                <FiArrowUp className="w-4 h-4 text-emerald-700 stroke-[2.5]" />
                 Request Withdrawal
               </button>
             </div>
 
-            <div className="mt-3 w-full bg-white/10 text-white py-1.5 rounded-xl font-medium text-[11px] text-center border border-white/20">
-              {(wallet?.vendorId || wallet?.wallet?.vendorId) ? 'Payments are managed by your Vendor' : 'Direct Platform Payouts Active'}
+            <div className="mt-3.5 w-full bg-black/15 text-emerald-100/90 py-1.5 px-3 rounded-xl font-semibold text-[11px] text-center border border-white/10 flex items-center justify-center gap-1.5 backdrop-blur-xs">
+              <FiShield className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
+              <span>{(wallet?.vendorId || wallet?.wallet?.vendorId) ? 'Payments are managed by your Vendor' : 'Direct Platform Payouts Active'}</span>
             </div>
           </div>
         </div>
@@ -353,20 +361,11 @@ const Wallet = () => {
             <button
               key={filterOption.id}
               onClick={() => setFilter(filterOption.id)}
-              className={`px-4 py-2 rounded-full font-semibold text-sm whitespace-nowrap transition-all ${filter === filterOption.id
-                ? 'text-white'
-                : 'bg-white text-gray-700'
-                }`}
-              style={
+              className={`px-4.5 py-2 rounded-full font-bold text-xs whitespace-nowrap transition-all ${
                 filter === filterOption.id
-                  ? {
-                    background: themeColors.button,
-                    boxShadow: `0 2px 8px ${themeColors.button}40`,
-                  }
-                  : {
-                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-                  }
-              }
+                  ? 'bg-emerald-700 text-white shadow-md shadow-emerald-700/25'
+                  : 'bg-white text-slate-700 border border-slate-200/80 hover:bg-slate-50'
+              }`}
             >
               {filterOption.label}
             </button>
@@ -377,10 +376,12 @@ const Wallet = () => {
         <div>
           <h3 className="font-bold text-gray-800 mb-4">Transaction History</h3>
           {historyItems.length === 0 ? (
-            <div className="bg-white rounded-xl p-8 text-center shadow-md">
-              <FiDollarSign className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-              <p className="text-gray-600 font-semibold mb-2">No transactions yet</p>
-              <p className="text-sm text-gray-500">Your payments will appear here</p>
+            <div className="bg-white rounded-3xl p-8 text-center shadow-sm border border-slate-100">
+              <div className="w-16 h-16 rounded-3xl bg-emerald-50 flex items-center justify-center mx-auto mb-4 text-emerald-600">
+                <IoWalletOutline className="w-8 h-8" />
+              </div>
+              <p className="text-slate-800 font-bold mb-1">No transactions yet</p>
+              <p className="text-xs text-slate-500">Your payments will appear here</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -391,26 +392,35 @@ const Wallet = () => {
                   const deducted = entries.filter(e => effectOf(e.type) === 'debit').reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
                   const credited = entries.filter(e => effectOf(e.type) === 'credit').reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
                   return (
-                    <div key={item.id} className="bg-white rounded-xl p-4 shadow-md border-l-4 border-l-teal-500">
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="font-bold text-gray-900 text-sm truncate">{item.title}</p>
-                        <span className="text-xs text-gray-400 shrink-0 ml-2">{formatDate(item.date)}</span>
-                      </div>
-                      <div className="space-y-1.5 text-sm">
-                        {entries.map(e => (
-                          <div key={e._id} className="flex justify-between gap-3">
-                            <span className="text-gray-600">
-                              {getTransactionLabel(e.type, e)}
-                              {e.type === 'cash_collected' && <span className="text-[11px] text-gray-400"> (in hand)</span>}
+                    <div key={item.id} className="bg-white rounded-2xl p-4.5 shadow-sm border border-slate-100 border-l-4 border-l-emerald-600 hover:shadow-md transition-all">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2 truncate">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                          <p className="font-black text-slate-900 text-sm truncate">{item.title}</p>
+                          {cash && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200/60 shrink-0">
+                              Cash Job
                             </span>
-                            <span className={`font-bold ${amountColor(e)}`}>{amountText(e)}</span>
+                          )}
+                        </div>
+                        <span className="text-xs text-slate-400 shrink-0 ml-2 font-medium">{formatDate(item.date)}</span>
+                      </div>
+                      <div className="space-y-2 text-sm bg-slate-50/70 p-3 rounded-xl border border-slate-100 mb-3">
+                        {entries.map(e => (
+                          <div key={e._id} className="flex justify-between items-center gap-3">
+                            <span className="text-slate-600 text-xs font-semibold flex items-center gap-1.5">
+                              {e.type === 'cash_collected' ? <FaWallet className="text-amber-600 w-3 h-3" /> : null}
+                              {getTransactionLabel(e.type, e)}
+                              {e.type === 'cash_collected' && <span className="text-[10px] text-slate-400 font-normal">(in hand)</span>}
+                            </span>
+                            <span className={`font-black text-xs ${amountColor(e)}`}>{amountText(e)}</span>
                           </div>
                         ))}
                       </div>
                       {filter === 'all' && (cash || credited > 0) && (
-                        <div className="flex justify-between pt-2 mt-2 border-t border-dashed border-gray-200 text-sm">
-                          <span className="font-bold text-gray-800">{cash ? 'You kept' : 'Added to wallet'}</span>
-                          <span className="font-black text-teal-700">
+                        <div className="flex justify-between items-center pt-2 border-t border-dashed border-slate-200 text-sm">
+                          <span className="font-bold text-slate-700 text-xs uppercase tracking-wide">{cash ? 'You kept' : 'Added to wallet'}</span>
+                          <span className="font-black text-emerald-700 text-base">
                             ₹{((cash ? Number(cash.amount) || 0 : credited) - (cash ? deducted : 0)).toLocaleString('en-IN')}
                           </span>
                         </div>
@@ -420,38 +430,48 @@ const Wallet = () => {
                 }
                 const txn = item.txn;
                 const effect = effectOf(txn.type);
+                const isPayment = txn.type === 'payment';
                 return (
                   <div
                     key={txn._id}
                     onClick={() => handleTransactionClick(txn)}
-                    className={`bg-white rounded-xl p-4 shadow-md border-l-4 ${txn.type === 'worker_payment' ? 'cursor-pointer hover:shadow-lg active:scale-[0.98] transition-all' : ''}`}
-                    style={{ borderLeftColor: effect === 'debit' ? '#DC2626' : effect === 'cash' ? '#6B7280' : '#10B981' }}
+                    className={`bg-white rounded-2xl p-4 shadow-sm border border-slate-100 border-l-4 ${
+                      isPayment ? 'border-l-emerald-500' : effect === 'debit' ? 'border-l-rose-500' : effect === 'cash' ? 'border-l-amber-500' : 'border-l-emerald-500'
+                    } ${txn.type === 'worker_payment' ? 'cursor-pointer hover:shadow-md active:scale-[0.98] transition-all' : ''}`}
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3.5">
                       <div
-                        className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
-                        style={{ background: effect === 'debit' ? '#FEE2E2' : effect === 'cash' ? '#F3F4F6' : '#D1FAE5' }}
+                        className={`w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 ${
+                          isPayment ? 'bg-emerald-50 text-emerald-600' : effect === 'debit' ? 'bg-rose-50 text-rose-600' : effect === 'cash' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-600'
+                        }`}
                       >
                         {getTransactionIcon(txn.type)}
                       </div>
 
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between mb-1">
-                          <p className="font-bold text-gray-900 text-sm">{getTransactionLabel(txn.type, txn)}</p>
-                          <p className={`text-lg font-bold ${amountColor(txn)}`}>{amountText(txn)}</p>
+                        <div className="flex items-center justify-between mb-0.5">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <p className="font-bold text-slate-900 text-sm truncate">{getTransactionLabel(txn.type, txn)}</p>
+                            {isPayment && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
+                                Online
+                              </span>
+                            )}
+                          </div>
+                          <p className={`text-base font-black ${isPayment ? 'text-slate-900' : amountColor(txn)}`}>{amountText(txn)}</p>
                         </div>
 
-                        <p className="text-xs text-gray-600 line-clamp-2 mb-1">{txn.description}</p>
+                        <p className="text-xs text-slate-500 line-clamp-1 mb-1">{txn.description}</p>
 
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-400">{formatDate(txn.createdAt)}</span>
+                          <span className="text-[11px] text-slate-400 font-medium">{formatDate(txn.createdAt)}</span>
                           {txn.status !== 'completed' && (
-                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${txn.status === 'pending' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${txn.status === 'pending' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'}`}>
                               {txn.status}
                             </span>
                           )}
                           {txn.type === 'worker_payment' && (
-                            <span className="text-xs text-teal-600 font-medium">Tap for details →</span>
+                            <span className="text-[11px] text-emerald-700 font-bold ml-auto">Tap for details →</span>
                           )}
                         </div>
                       </div>
@@ -487,14 +507,14 @@ const Wallet = () => {
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
-              <div className="sticky top-0 bg-gradient-to-br from-teal-600 to-teal-700 text-white px-6 py-5 rounded-t-3xl flex items-center justify-between">
+              <div className="sticky top-0 bg-gradient-to-br from-emerald-700 to-green-900 text-white px-6 py-5 rounded-t-3xl flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                    <FiDollarSign className="w-6 h-6" />
+                  <div className="w-12 h-12 rounded-2xl bg-white/15 backdrop-blur-sm flex items-center justify-center">
+                    <IoWallet className="w-6 h-6 text-emerald-100" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-lg">Payment Details</h3>
-                    <p className="text-xs text-white/80">Transaction Information</p>
+                    <h3 className="font-black text-lg">Payment Details</h3>
+                    <p className="text-xs text-emerald-100/80">Transaction Information</p>
                   </div>
                 </div>
                 <button
@@ -508,20 +528,20 @@ const Wallet = () => {
               <div className="p-6 space-y-6">
                 {/* Amount Section */}
                 <div className="text-center pb-6 border-b border-gray-100">
-                  <p className="text-sm text-gray-500 mb-2">Amount Received</p>
-                  <p className="text-4xl font-black text-green-600">₹{selectedTransaction.amount?.toLocaleString()}</p>
-                  <p className="text-xs text-gray-400 mt-2">{formatDateTime(selectedTransaction.createdAt)}</p>
+                  <p className="text-xs uppercase tracking-wider font-bold text-slate-400 mb-1">Amount Received</p>
+                  <p className="text-4xl font-black text-emerald-600">₹{selectedTransaction.amount?.toLocaleString()}</p>
+                  <p className="text-xs text-slate-400 mt-2">{formatDateTime(selectedTransaction.createdAt)}</p>
                 </div>
 
                 {/* Screenshot */}
                 {selectedTransaction.metadata?.screenshot && (
                   <div>
                     <div className="flex items-center gap-2 mb-3">
-                      <FiImage className="w-5 h-5 text-teal-600" />
+                      <FiImage className="w-5 h-5 text-emerald-600" />
                       <h4 className="font-bold text-gray-900">Payment Proof</h4>
                     </div>
                     <div
-                      className="relative rounded-2xl overflow-hidden border-2 border-gray-100 cursor-pointer hover:border-teal-500 transition-colors group"
+                      className="relative rounded-2xl overflow-hidden border-2 border-gray-100 cursor-pointer hover:border-emerald-500 transition-colors group"
                       onClick={() => viewScreenshot(selectedTransaction.metadata.screenshot)}
                     >
                       <img
