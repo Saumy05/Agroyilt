@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiBell, FiRefreshCw, FiCheck, FiCheckCircle, FiTrash2, FiFilter, FiUser, FiDollarSign, FiUserCheck } from 'react-icons/fi';
 import { toastManager } from '../../../../utils/toastManager';
@@ -72,16 +72,65 @@ const Notifications = () => {
     }
   };
 
+  const cleanTitle = (title) => {
+    if (!title) return '';
+    return title.replace(/^[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2300}-\u{23FF}\u{2B50}\u{203C}\u{2049}\u{25AA}\u{25AB}\u{25B6}\u{25C0}\u{25FB}-\u{25FE}]+\s*/gu, '').trim();
+  };
+
+  const formatNotificationTime = (dateStr) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return dateStr;
+
+    const now = new Date();
+    const diffMs = now - date;
+    const diffSecs = Math.floor(diffMs / 1000);
+    const diffMins = Math.floor(diffSecs / 60);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffSecs < 60) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays === 1) {
+      const timeStr = date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+      return `Yesterday, ${timeStr}`;
+    }
+    if (diffDays < 7) return `${diffDays}d ago`;
+
+    return date.toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+  };
+
   const getIcon = (type) => {
     switch (type) {
       case 'vendor_withdrawal_request':
-        return <FiDollarSign className="text-green-500" />;
+        return <FiDollarSign className="text-white w-4 h-4" />;
       case 'vendor_approval_request':
-        return <FiUserCheck className="text-blue-500" />;
+        return <FiUserCheck className="text-white w-4 h-4" />;
       case 'vendor_cash_limit_exceeded':
-        return <FiDollarSign className="text-red-500" />;
+        return <FiDollarSign className="text-white w-4 h-4" />;
       default:
-        return <FiBell className="text-gray-500" />;
+        return <FiBell className="text-white w-4 h-4" />;
+    }
+  };
+
+  const getGradient = (type) => {
+    switch (type) {
+      case 'vendor_withdrawal_request':
+        return 'bg-gradient-to-br from-emerald-500 to-green-600 shadow-emerald-500/20';
+      case 'vendor_approval_request':
+        return 'bg-gradient-to-br from-blue-500 to-indigo-600 shadow-blue-500/20';
+      case 'vendor_cash_limit_exceeded':
+        return 'bg-gradient-to-br from-red-500 to-rose-600 shadow-red-500/20';
+      default:
+        return 'bg-gradient-to-br from-emerald-600 to-teal-700 shadow-emerald-600/20';
     }
   };
 
@@ -97,19 +146,19 @@ const Notifications = () => {
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="space-y-4"
+      className="space-y-4 max-w-4xl mx-auto"
     >
       {/* Header */}
-      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+      <div className="bg-white rounded-xl p-4 shadow-2xs border border-gray-100">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
-              <FiBell className="text-blue-600 text-lg" />
+            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-600/20">
+              <FiBell className="text-lg" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-gray-900">Notifications</h1>
+              <h1 className="text-lg font-black text-gray-900 tracking-tight">System Notifications</h1>
               <p className="text-xs text-gray-500">
-                {unreadCount > 0 ? `${unreadCount} unread` : 'All caught up!'}
+                {unreadCount > 0 ? `${unreadCount} unread requests requiring attention` : 'All caught up!'}
               </p>
             </div>
           </div>
@@ -117,17 +166,18 @@ const Notifications = () => {
           <div className="flex items-center gap-2">
             <button
               onClick={handleRefresh}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200 shadow-2xs"
               disabled={refreshing}
+              title="Refresh"
             >
-              <FiRefreshCw className={`text-gray-500 ${refreshing ? 'animate-spin' : ''}`} />
+              <FiRefreshCw className={`text-gray-600 ${refreshing ? 'animate-spin' : ''}`} />
             </button>
             {unreadCount > 0 && (
               <button
                 onClick={markAllAsRead}
-                className="px-3 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-1"
+                className="px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-50 border border-emerald-200/80 rounded-lg transition-colors flex items-center gap-1 shadow-2xs"
               >
-                <FiCheckCircle className="text-sm" />
+                <FiCheckCircle className="text-sm text-emerald-600" />
                 Mark All Read
               </button>
             )}
@@ -145,7 +195,7 @@ const Notifications = () => {
                     }
                   }
                 }}
-                className="px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-1"
+                className="px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 border border-red-200/80 rounded-lg transition-colors flex items-center gap-1 shadow-2xs"
               >
                 <FiTrash2 className="text-sm" />
                 Clear All
@@ -155,36 +205,37 @@ const Notifications = () => {
         </div>
 
         {/* Filter Tabs */}
-        <div className="flex gap-2 mt-4 pt-4 border-t border-gray-100">
+        <div className="flex gap-2 mt-4 pt-3 border-t border-gray-100">
           {['all', 'unread', 'read'].map(f => (
             <button
               key={f}
               onClick={() => setFilter(f)}
-              className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${filter === f
-                ? 'bg-blue-600 text-white'
-                : 'text-gray-500 hover:bg-gray-100'
-                }`}
+              className={`px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
+                filter === f
+                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+                  : 'text-gray-600 hover:bg-gray-100 border border-gray-200/80'
+              }`}
             >
-              {f}
+              {f} {f === 'all' ? `(${notifications.length})` : f === 'unread' ? `(${unreadCount})` : ''}
             </button>
           ))}
         </div>
       </div>
 
       {/* Notifications List */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-xl shadow-2xs border border-gray-100 overflow-hidden">
         {loading ? (
           <div className="p-8 text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="text-xs text-gray-500 mt-2">Loading notifications...</p>
+            <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-emerald-600 mx-auto"></div>
+            <p className="text-xs text-gray-500 mt-2 font-medium">Loading notifications...</p>
           </div>
         ) : filteredNotifications.length === 0 ? (
-          <div className="p-8 text-center">
-            <FiBell className="text-4xl text-gray-300 mx-auto mb-2" />
-            <p className="text-sm text-gray-500">No notifications found</p>
+          <div className="p-8 text-center space-y-2">
+            <FiBell className="text-3xl text-gray-300 mx-auto" />
+            <p className="text-sm font-bold text-gray-800">No notifications found</p>
           </div>
         ) : (
-          <div className="divide-y divide-gray-50">
+          <div className="divide-y divide-gray-100">
             <AnimatePresence>
               {filteredNotifications.map(notification => (
                 <motion.div
@@ -192,55 +243,53 @@ const Notifications = () => {
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: 20 }}
-                  className={`p-4 hover:bg-gray-50 transition-colors flex items-start gap-3 ${!notification.isRead ? 'bg-blue-50/30' : ''
-                    }`}
+                  className={`p-3 transition-all flex items-start gap-3 relative group ${
+                    !notification.isRead ? 'bg-gradient-to-r from-emerald-50/40 via-white to-white' : 'hover:bg-gray-50/60'
+                  }`}
                 >
                   {/* Icon */}
-                  <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-2xs ${getGradient(notification.type)}`}>
                     {getIcon(notification.type)}
                   </div>
 
                   {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className={`text-sm ${!notification.isRead ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
-                          {notification.title}
-                        </p>
-                        <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">
-                          {notification.message}
-                        </p>
-                      </div>
-                      <span className="text-[10px] text-gray-400 whitespace-nowrap flex-shrink-0">
-                        {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
-                      </span>
+                  <div className="flex-1 min-w-0 pr-12">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      {!notification.isRead && (
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 shadow-2xs" title="Unread" />
+                      )}
+                      <p className={`text-xs sm:text-sm tracking-tight ${!notification.isRead ? 'font-black text-gray-950' : 'font-bold text-gray-800'}`}>
+                        {cleanTitle(notification.title)}
+                      </p>
                     </div>
+                    <p className="text-[11px] sm:text-xs text-gray-600 leading-snug line-clamp-2">
+                      {notification.message}
+                    </p>
 
-                    {/* Actions */}
-                    <div className="flex items-center gap-2 mt-2">
+                    <div className="mt-1.5 flex items-center justify-between text-[10px] text-gray-400 font-medium">
+                      <span>{formatNotificationTime(notification.createdAt)}</span>
                       {!notification.isRead && (
                         <button
                           onClick={() => markAsRead(notification._id)}
-                          className="text-[10px] font-semibold text-blue-600 hover:underline flex items-center gap-1"
+                          className="text-emerald-700 font-bold hover:underline flex items-center gap-1"
                         >
-                          <FiCheck className="text-xs" />
-                          Mark as read
+                          <FiCheck className="w-3 h-3" /> Mark read
                         </button>
                       )}
-                      <button
-                        onClick={() => deleteNotification(notification._id)}
-                        className="text-[10px] font-semibold text-red-500 hover:underline flex items-center gap-1"
-                      >
-                        <FiTrash2 className="text-xs" />
-                        Delete
-                      </button>
                     </div>
                   </div>
 
-                  {/* Unread indicator */}
-                  {!notification.isRead && (
-                    <div className="w-2 h-2 rounded-full bg-blue-600 flex-shrink-0 mt-2"></div>
-                  )}
+                  {/* Actions */}
+                  <div className="absolute top-2.5 right-2.5 flex items-center gap-1">
+                    <button
+                      onClick={() => deleteNotification(notification._id)}
+                      className="p-1 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors shadow-2xs"
+                      title="Delete"
+                    >
+                      <FiCheckCircle className="w-3.5 h-3.5 hidden" />
+                      <FiTrash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </motion.div>
               ))}
             </AnimatePresence>
