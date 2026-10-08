@@ -74,6 +74,7 @@ const notificationSchema = new mongoose.Schema({
       'worker_rejected',
       'worker_approval_request',
       'wallet_topup',
+      'wallet_credited',
       'payout_requested',
       'payout_processed',
       'scrap_listed',
