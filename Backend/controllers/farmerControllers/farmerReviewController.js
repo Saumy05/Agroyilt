@@ -42,17 +42,45 @@ const farmerReviewController = {
       booking.reviewedAt = new Date();
       await booking.save();
 
-      // If this was a worker booking, also update Worker rating and totalReviews
+      // Update cumulative ratings across Vendor, Worker, and VendorEquipment
+      const updateCumulativeRating = async (Model, docId, newRating) => {
+        try {
+          await Model.updateOne({ _id: docId }, [
+            {
+              $set: {
+                rating: {
+                  $round: [
+                    {
+                      $divide: [
+                        { $add: [{ $multiply: [{ $ifNull: ['$rating', 0] }, { $ifNull: ['$totalReviews', 0] }] }, newRating] },
+                        { $add: [{ $ifNull: ['$totalReviews', 0] }, 1] }
+                      ]
+                    },
+                    2
+                  ]
+                },
+                totalReviews: { $add: [{ $ifNull: ['$totalReviews', 0] }, 1] }
+              }
+            }
+          ]);
+        } catch (err) {
+          console.error(`Error updating rating for ${Model.modelName}:`, err);
+        }
+      };
+
+      if (booking.vendorId) {
+        const Vendor = require('../../models/Vendor');
+        await updateCumulativeRating(Vendor, booking.vendorId, rating);
+      }
+
       if (booking.workerId) {
         const Worker = require('../../models/Worker');
-        const workerReviews = await Review.find({ workerId: booking.workerId, status: { $ne: 'deleted' } });
-        if (workerReviews.length > 0) {
-          const avgRating = workerReviews.reduce((sum, r) => sum + r.rating, 0) / workerReviews.length;
-          await Worker.findByIdAndUpdate(booking.workerId, {
-            rating: Number(avgRating.toFixed(2)),
-            totalReviews: workerReviews.length
-          });
-        }
+        await updateCumulativeRating(Worker, booking.workerId, rating);
+      }
+
+      if (booking.equipmentId) {
+        const VendorEquipment = require('../../models/VendorEquipment');
+        await updateCumulativeRating(VendorEquipment, booking.equipmentId, rating);
       }
 
       res.status(201).json({ success: true, message: 'Review submitted successfully', data: review });

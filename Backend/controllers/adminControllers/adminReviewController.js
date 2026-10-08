@@ -111,6 +111,34 @@ exports.updateReviewStatus = async (req, res) => {
       });
     }
 
+    // Helper to recalculate entity rating from active reviews
+    const recalculateEntityRating = async (Model, queryField, entityId) => {
+      if (!entityId) return;
+      const activeReviews = await Review.find({ [queryField]: entityId, status: 'active' });
+      const totalReviews = activeReviews.length;
+      const avgRating = totalReviews > 0
+        ? parseFloat((activeReviews.reduce((sum, r) => sum + r.rating, 0) / totalReviews).toFixed(2))
+        : 0;
+
+      await Model.findByIdAndUpdate(entityId, {
+        rating: avgRating,
+        totalReviews: totalReviews
+      });
+    };
+
+    if (review.vendorId) {
+      const Vendor = require('../../models/Vendor');
+      await recalculateEntityRating(Vendor, 'vendorId', review.vendorId);
+    }
+    if (review.workerId) {
+      const Worker = require('../../models/Worker');
+      await recalculateEntityRating(Worker, 'workerId', review.workerId);
+    }
+    if (review.serviceId) {
+      const VendorEquipment = require('../../models/VendorEquipment');
+      await recalculateEntityRating(VendorEquipment, 'equipmentId', review.equipmentId);
+    }
+
     res.status(200).json({
       success: true,
       message: `Review status updated to ${status}`,
