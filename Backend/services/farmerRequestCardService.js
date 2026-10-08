@@ -74,6 +74,18 @@ const buildCard = (r, assignments, extensions) => {
     if (rate > 0) amount = { label: 'Budget up to', value: Math.round(rate * required * units) };
   } else if (Number(r.refundAmount) > 0) {
     amount = { label: 'Refunded', value: Number(r.refundAmount) };
+  } else if (['expired', 'cancelled', 'rejected'].includes(r.status) || card.group === 'cancelled') {
+    const estVal = Number(snap.totalPayable || snap.totalAmount || r.totalAmount || r.estimatedCost || 0);
+    if (estVal > 0) {
+      amount = { label: r.status === 'expired' ? 'Expired' : 'Cancelled', value: estVal };
+    } else {
+      const isDaily = r.bookingType === 'DAILY';
+      const rate = Number(isDaily ? (r.maxDailyRate || r.maxRate) : r.maxRate) || 0;
+      const units = isDaily ? (Number(r.numberOfDays) || 1) : (Number(r.durationMinutes) || 60) / 60;
+      if (rate > 0) {
+        amount = { label: r.status === 'expired' ? 'Expired' : 'Cancelled', value: Math.round(rate * required * units) };
+      }
+    }
   }
 
   return { ...card, needsAction: Boolean(card.needsAction), amount };

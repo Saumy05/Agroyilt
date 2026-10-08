@@ -903,75 +903,149 @@ const FarmerRequestDetail = () => {
               })()}
 
               {/* Settlement & Refund Section */}
-              {!bill && (
-              <div className="pt-2 space-y-2">
-                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3 space-y-2">
-                  <div className="flex justify-between items-center text-slate-600">
-                    <div>
-                      <span className="font-bold text-sm text-slate-900 block">Actual Worker Settlement</span>
+              {!bill && (() => {
+                const isExpired = (request.status || '').toLowerCase() === 'expired';
+                const isCancelled = ['cancelled', 'rejected'].includes((request.status || '').toLowerCase());
+                const isTerminal = isExpired || isCancelled;
+                const wasPaid = ['paid', 'success', 'PAID', 'SUCCESS'].includes(
+                  request.paymentStatus || request.paymentSummary?.paymentStatus || ''
+                );
+
+                if (isTerminal && !wasPaid) {
+                  return (
+                    <div className="pt-2 space-y-2">
+                      <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2.5">
+                        <div className="flex justify-between items-center">
+                          <span className="font-bold text-xs text-slate-700 uppercase tracking-wide">
+                            {isExpired ? 'Request Expired' : 'Booking Cancelled'}
+                          </span>
+                          <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-slate-200 text-slate-700 border border-slate-300">
+                            {isExpired ? 'Expired' : 'Cancelled'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs text-slate-600 pt-1.5 border-t border-slate-200/60">
+                          <span>Actual Worker Settlement:</span>
+                          <span className="font-bold text-slate-800">₹0 (No work performed)</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs text-slate-600">
+                          <span>Payment Charged:</span>
+                          <span className="font-bold text-slate-800">₹0 (Unpaid)</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 leading-relaxed pt-1.5 border-t border-slate-200/60">
+                          {isExpired
+                            ? 'This booking request expired before any workers were confirmed. No payment was deducted from your account or wallet.'
+                            : 'This booking was cancelled. No payment was deducted from your account or wallet.'}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (isTerminal && wasPaid) {
+                  const refundVal = Number(request.paymentSummary?.refundAmount ?? (request.paymentSummary?.totalPaidAmount || request.totalAmount || 0));
+                  return (
+                    <div className="pt-2 space-y-2">
+                      <div className="bg-emerald-50/80 border border-emerald-200 rounded-2xl p-4 space-y-2.5">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-bold text-emerald-800 uppercase tracking-wide">Refund Status</span>
+                          <span className={`text-xs font-black px-2.5 py-0.5 rounded-full border ${
+                            request.paymentSummary?.refundStatus === 'REFUNDED' || request.refundCredited
+                              ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                              : 'bg-amber-100 text-amber-800 border-amber-300'
+                          }`}>
+                            {request.paymentSummary?.refundStatus === 'REFUNDED' || request.refundCredited ? 'REFUNDED' : 'REFUND INITIATED'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs text-slate-600 pt-1.5 border-t border-emerald-200/60">
+                          <span>Actual Worker Settlement:</span>
+                          <span className="font-bold text-slate-800">₹0 (No work performed)</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs text-slate-600">
+                          <span>Refund Amount:</span>
+                          <span className="font-black text-emerald-700 text-sm">
+                            ₹{refundVal.toLocaleString('en-IN')} (Full Refund)
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-emerald-700 leading-relaxed pt-1.5 border-t border-emerald-200/60">
+                          {request.paymentSummary?.refundStatus === 'REFUNDED' || request.refundCredited
+                            ? 'The full payment has been refunded to your AgroYilt wallet.'
+                            : 'The full payment is being refunded to your AgroYilt wallet.'}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="pt-2 space-y-2">
+                    <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3 space-y-2">
+                      <div className="flex justify-between items-center text-slate-600">
+                        <div>
+                          <span className="font-bold text-sm text-slate-900 block">Actual Worker Settlement</span>
+                          {request.paymentSummary?.extensionsSummary?.hasExtension && (
+                            <span className="text-[11px] text-slate-500">
+                              Base (₹{Number(request.paymentSummary.extensionsSummary.baseActualWorkerAmount).toLocaleString('en-IN')}) + Extension (₹{Number(request.paymentSummary.extensionsSummary.extensionWorkerAmount).toLocaleString('en-IN')})
+                            </span>
+                          )}
+                        </div>
+                        <span className="font-black text-slate-900 text-base">
+                          {request.paymentSummary?.actualWorkerAmount !== null && request.paymentSummary?.actualWorkerAmount !== undefined ? (
+                            `₹${Number(request.paymentSummary.actualWorkerAmount).toLocaleString('en-IN')}`
+                          ) : (
+                            <span className="text-xs font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                              Pending / In Progress
+                            </span>
+                          )}
+                        </span>
+                      </div>
+
                       {request.paymentSummary?.extensionsSummary?.hasExtension && (
-                        <span className="text-[11px] text-slate-500">
-                          Base (₹{Number(request.paymentSummary.extensionsSummary.baseActualWorkerAmount).toLocaleString('en-IN')}) + Extension (₹{Number(request.paymentSummary.extensionsSummary.extensionWorkerAmount).toLocaleString('en-IN')})
+                        <div className="text-[11px] text-slate-500 pt-1 border-t border-slate-200/60 flex justify-between">
+                          <span>Base Shift Actual Pay:</span>
+                          <span className="font-semibold text-slate-700">₹{Number(request.paymentSummary.extensionsSummary.baseActualWorkerAmount).toLocaleString('en-IN')}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="bg-emerald-50/70 border border-emerald-200 rounded-2xl p-3.5 space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-bold text-emerald-800 uppercase tracking-wide">Refund Status</span>
+                        <span className={`text-xs font-black px-2.5 py-0.5 rounded-full border ${
+                          request.paymentSummary?.refundStatus === 'REFUNDED'
+                            ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                            : request.paymentSummary?.refundStatus === 'PENDING'
+                            ? 'bg-amber-100 text-amber-800 border-amber-300'
+                            : 'bg-gray-100 text-gray-600 border-gray-200'
+                        }`}>
+                          {request.paymentSummary?.refundStatus || (request.refundCredited ? 'REFUNDED' : 'PENDING')}
                         </span>
-                      )}
-                    </div>
-                    <span className="font-black text-slate-900 text-base">
-                      {request.paymentSummary?.actualWorkerAmount !== null && request.paymentSummary?.actualWorkerAmount !== undefined ? (
-                        `₹${Number(request.paymentSummary.actualWorkerAmount).toLocaleString('en-IN')}`
-                      ) : (
-                        <span className="text-xs font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-                          Pending / In Progress
+                      </div>
+
+                      <div className="flex justify-between items-center pt-1 border-t border-emerald-100">
+                        <div>
+                          <span className="text-sm font-bold text-emerald-900 block">Refund Amount</span>
+                          <span className="text-[10px] text-emerald-700">
+                            Unused portion of initial worker reserve
+                          </span>
+                        </div>
+                        <span className="text-base font-black text-emerald-700">
+                          {request.paymentSummary?.refundAmount !== null && request.paymentSummary?.refundAmount !== undefined ? (
+                            `₹${Number(request.paymentSummary.refundAmount).toLocaleString('en-IN')}`
+                          ) : (
+                            <span className="text-xs font-medium text-emerald-600 italic">Pending Settlement</span>
+                          )}
                         </span>
-                      )}
-                    </span>
-                  </div>
+                      </div>
 
-                  {request.paymentSummary?.extensionsSummary?.hasExtension && (
-                    <div className="text-[11px] text-slate-500 pt-1 border-t border-slate-200/60 flex justify-between">
-                      <span>Base Shift Actual Pay:</span>
-                      <span className="font-semibold text-slate-700">₹{Number(request.paymentSummary.extensionsSummary.baseActualWorkerAmount).toLocaleString('en-IN')}</span>
+                      <p className="text-[10px] text-emerald-600 leading-tight">
+                        {request.paymentSummary?.refundStatus === 'REFUNDED'
+                          ? 'Unused reserve has been credited to your AgroYilt wallet.'
+                          : 'Unused worker reserve will be automatically credited to your wallet once work is completed.'}
+                      </p>
                     </div>
-                  )}
-                </div>
-
-                <div className="bg-emerald-50/70 border border-emerald-200 rounded-2xl p-3.5 space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs font-bold text-emerald-800 uppercase tracking-wide">Refund Status</span>
-                    <span className={`text-xs font-black px-2.5 py-0.5 rounded-full border ${
-                      request.paymentSummary?.refundStatus === 'REFUNDED'
-                        ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                        : request.paymentSummary?.refundStatus === 'PENDING'
-                        ? 'bg-amber-100 text-amber-800 border-amber-300'
-                        : 'bg-gray-100 text-gray-600 border-gray-200'
-                    }`}>
-                      {request.paymentSummary?.refundStatus || (request.refundCredited ? 'REFUNDED' : 'PENDING')}
-                    </span>
                   </div>
-
-                  <div className="flex justify-between items-center pt-1 border-t border-emerald-100">
-                    <div>
-                      <span className="text-sm font-bold text-emerald-900 block">Refund Amount</span>
-                      <span className="text-[10px] text-emerald-700">
-                        Unused portion of initial worker reserve
-                      </span>
-                    </div>
-                    <span className="text-base font-black text-emerald-700">
-                      {request.paymentSummary?.refundAmount !== null && request.paymentSummary?.refundAmount !== undefined ? (
-                        `₹${Number(request.paymentSummary.refundAmount).toLocaleString('en-IN')}`
-                      ) : (
-                        <span className="text-xs font-medium text-emerald-600 italic">Pending Settlement</span>
-                      )}
-                    </span>
-                  </div>
-
-                  <p className="text-[10px] text-emerald-600 leading-tight">
-                    {request.paymentSummary?.refundStatus === 'REFUNDED'
-                      ? 'Unused reserve has been credited to your AgroYilt wallet.'
-                      : 'Unused worker reserve will be automatically credited to your wallet once work is completed.'}
-                  </p>
-                </div>
-              </div>
-              )}
+                );
+              })()}
 
               {/* Payment Reference ID(s) */}
               <div className="space-y-1 pt-1 text-xs text-slate-400">

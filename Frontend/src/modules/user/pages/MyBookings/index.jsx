@@ -259,9 +259,13 @@ const MyBookings = () => {
       statusConfig.label = r.card.label;
     }
 
-    const isCancelled = ['cancelled', 'rejected'].includes((r.card?.group || r.status || '').toLowerCase());
-    const amountVal = r.card?.amount?.value || 0;
-    const amountLabel = r.card?.amount?.label || 'Pay in Cash';
+    const isExpired = (r.status || '').toLowerCase() === 'expired';
+    const isCancelled = ['cancelled', 'rejected', 'expired'].includes((r.card?.group || r.status || '').toLowerCase());
+    const amountVal = Number(
+      r.card?.amount?.value ?? 
+      (r.paymentSummary?.totalPayable || r.financialSnapshot?.totalPayable || r.totalAmount || r.estimatedCost || 0)
+    );
+    const amountLabel = isExpired ? 'Expired' : (isCancelled ? 'Cancelled' : (r.card?.amount?.label || 'Pay in Cash'));
 
     const durationLabel = r.bookingType === 'DAILY'
       ? `${Number(r.numberOfDays) || 1} Day${(Number(r.numberOfDays) || 1) > 1 ? 's' : ''}`
@@ -304,11 +308,17 @@ const MyBookings = () => {
           {/* Price / Estimated Cost */}
           <div className="flex items-center gap-1 flex-shrink-0 text-right">
             <div>
-              <div className={`text-sm font-black leading-none ${isCancelled ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
-                ₹{Number(amountVal).toLocaleString('en-IN')}
-              </div>
+              {amountVal > 0 ? (
+                <div className={`text-sm font-black leading-none ${isCancelled ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
+                  ₹{Number(amountVal).toLocaleString('en-IN')}
+                </div>
+              ) : (
+                <div className="text-sm font-bold text-slate-400 leading-none">
+                  ₹0
+                </div>
+              )}
               <div className={`text-[10px] mt-1 font-medium ${isCancelled ? 'text-rose-500 font-semibold' : 'text-slate-400'}`}>
-                {isCancelled ? 'Cancelled' : amountLabel}
+                {amountVal > 0 ? (isExpired ? 'Expired' : (isCancelled ? 'Cancelled' : amountLabel)) : 'No Charge'}
               </div>
             </div>
             <FiChevronRight className="w-4 h-4 text-slate-300 ml-0.5" />
@@ -441,11 +451,17 @@ const MyBookings = () => {
           {/* Price / Total Amount */}
           <div className="flex items-center gap-1 flex-shrink-0 text-right">
             <div>
-              <div className={`text-sm font-black leading-none ${isCancelled ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
-                ₹{Number(amountVal).toLocaleString('en-IN')}
-              </div>
+              {amountVal > 0 ? (
+                <div className={`text-sm font-black leading-none ${isCancelled ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
+                  ₹{Number(amountVal).toLocaleString('en-IN')}
+                </div>
+              ) : (
+                <div className="text-sm font-bold text-slate-400 leading-none">
+                  ₹0
+                </div>
+              )}
               <div className={`text-[10px] mt-1 font-medium ${isCancelled ? 'text-rose-500 font-semibold' : 'text-slate-400'}`}>
-                {paymentSubtitle}
+                {amountVal > 0 ? paymentSubtitle : 'No Charge'}
               </div>
             </div>
             <FiChevronRight className="w-4 h-4 text-slate-300 ml-0.5" />
