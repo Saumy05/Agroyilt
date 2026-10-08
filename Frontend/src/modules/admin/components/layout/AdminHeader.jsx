@@ -200,19 +200,19 @@ const AdminHeader = ({ onMenuClick }) => {
         <div className="flex items-center gap-3 md:gap-4">
           {/* Notifications */}
           <div className="relative">
-            <Button
+            <button
               data-notification-button
               onClick={() => navigate('/admin/notifications')}
-              variant="icon"
-              className="text-gray-700 hover:bg-gray-50"
-              title="Notifications"
-              icon={FiBell}
-            />
-            {unreadCount > 0 && (
-              <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 rounded-full text-[10px] text-white flex items-center justify-center font-bold border-2 border-white pointer-events-none">
-                {unreadCount > 99 ? '99+' : unreadCount}
-              </span>
-            )}
+              aria-label="Notifications"
+              className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gray-50 hover:bg-gray-100 border border-gray-200/80 flex items-center justify-center text-gray-700 transition-all shadow-2xs group relative"
+            >
+              <FiBell className="text-lg text-gray-700 group-hover:scale-110 transition-transform" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-red-500 rounded-full text-[10px] text-white flex items-center justify-center font-black border-2 border-white pointer-events-none px-1 shadow-2xs animate-pulse">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
+            </button>
           </div>
 
           {/* Admin Profile Section */}
