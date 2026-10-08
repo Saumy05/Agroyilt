@@ -186,39 +186,29 @@ const Account = () => {
     }
   };
 
-  const MenuItem = ({ icon: Icon, label, onClick, color = "text-gray-900", badge }) => (
-    <motion.button
-      whileTap={{ scale: 0.98 }}
+  const MenuItem = ({ icon: Icon, label, onClick, color = 'text-slate-800', iconBg = 'bg-slate-100 text-slate-600', badge, subtitle }) => (
+    <button
       onClick={onClick}
-      className="w-full flex items-center justify-between p-4 bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all group mb-3"
-      style={{ '--hover-border': `${themeColors.brand.teal}30` }}
+      className="w-full flex items-center justify-between p-3.5 sm:p-4 hover:bg-slate-50/80 transition-colors text-left group"
     >
-      <div className="flex items-center gap-4">
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors`}
-          style={{
-            backgroundColor: color === 'text-red-500' ? '#FEF2F2' : '#F8FAFC',
-            color: color === 'text-red-500' ? '#EF4444' : 'inherit'
-          }}
-          onMouseEnter={(e) => {
-            if (color !== 'text-red-500') e.currentTarget.style.backgroundColor = `${themeColors.brand.teal}15`;
-          }}
-          onMouseLeave={(e) => {
-            if (color !== 'text-red-500') e.currentTarget.style.backgroundColor = '#F8FAFC';
-          }}
-        >
-          <Icon className={`w-5 h-5 ${color}`} />
+      <div className="flex items-center gap-3.5">
+        <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 ${iconBg}`}>
+          <Icon className="w-4.5 h-4.5" />
         </div>
-        <span className={`font-semibold ${color}`}>{label}</span>
+        <div>
+          <span className={`font-bold text-xs sm:text-sm block ${color}`}>{label}</span>
+          {subtitle && <span className="text-[11px] text-slate-400 font-medium">{subtitle}</span>}
+        </div>
       </div>
       <div className="flex items-center gap-2">
         {badge && (
-          <span className="px-2 py-0.5 bg-red-100 text-red-600 text-[10px] font-bold rounded-full">
+          <span className="px-2 py-0.5 bg-rose-50 text-rose-600 text-[10px] font-bold rounded-full border border-rose-200/60">
             {badge}
           </span>
         )}
-        <FiChevronRight className="w-5 h-5 text-gray-300 group-hover:text-teal-500 transition-colors" />
+        <FiChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all" />
       </div>
-    </motion.button>
+    </button>
   );
 
   const containerVariants = {
@@ -287,186 +277,217 @@ const Account = () => {
           variants={containerVariants}
           initial="hidden"
           animate="visible"
-          className="px-4 pt-6 max-w-lg mx-auto"
+          className="px-4 pt-4 max-w-lg mx-auto"
         >
-          {/* Elevated Profile Card */}
+          {/* Profile Hero Card */}
           <motion.div
             variants={itemVariants}
-            className="bg-white rounded-[28px] p-5 shadow-[0_32px_64px_-16px_rgba(52₹21₹37,0.15)] mb-8 relative overflow-hidden border border-white"
+            className="bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 rounded-2xl p-4 sm:p-5 text-white shadow-lg relative overflow-hidden border border-emerald-500/25 mb-4"
           >
-            {/* Vivid Brand Accents */}
-            <div className="absolute top-0 right-0 w-48 h-48 rounded-full -mr-20 -mt-20 blur-3xl opacity-[0.2]"
-              style={{ backgroundColor: themeColors.brand.yellow }}
-            ></div>
-            <div className="absolute bottom-0 left-0 w-48 h-48 rounded-full -ml-24 -mb-24 blur-3xl opacity-[0.2]"
-              style={{ backgroundColor: themeColors.brand.teal }}
-            ></div>
+            {/* Ambient decorative glow */}
+            <div className="absolute -top-12 -right-12 w-44 h-44 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+            <div className="absolute -bottom-10 -left-10 w-36 h-36 bg-emerald-400/15 rounded-full blur-xl pointer-events-none" />
 
-            <div className="flex items-center gap-4 relative z-10">
-              <div className="relative">
-                <div className="w-20 h-20 rounded-2xl p-1 bg-white shadow-xl rotate-2">
+            <div className="flex items-center gap-3.5 relative z-10">
+              <div className="relative shrink-0">
+                <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-2xl bg-white/20 border-2 border-white/60 p-0.5 flex items-center justify-center shadow-md backdrop-blur-md overflow-hidden">
                   {userProfile.profilePhoto ? (
                     <img
                       src={userProfile.profilePhoto}
                       alt={userProfile.name}
-                      className="w-full h-full rounded-[14px] object-cover"
+                      className="w-full h-full rounded-xl object-cover"
                     />
                   ) : (
-                    <div className="w-full h-full rounded-[14px] flex items-center justify-center text-white font-black text-2xl"
-                      style={{ background: themeColors.gradient }}>
+                    <div className="w-full h-full rounded-xl flex items-center justify-center text-white font-black text-xl bg-white/15">
                       {getInitials()}
                     </div>
                   )}
                 </div>
                 <button
                   onClick={() => navigate('/user/update-profile')}
-                  className="absolute -bottom-1 -right-1 p-1.5 bg-gray-900 text-white rounded-[8px] border-2 border-white shadow-lg active:scale-95 transition-transform"
+                  className="absolute -bottom-1 -right-1 p-1 bg-white text-emerald-800 rounded-lg shadow-sm border border-emerald-100 hover:scale-105 active:scale-95 transition-transform"
+                  title="Update Photo"
                 >
-                  <FiEdit3 className="w-3.5 h-3.5" />
+                  <FiEdit3 className="w-3 h-3" />
                 </button>
               </div>
 
               <div className="flex-1 min-w-0">
-                <h2 className="text-xl font-black text-gray-900 truncate mb-1">
-                  {userProfile.name}
-                </h2>
-                <div className="flex items-center gap-2 mb-3">
-                  <p className="text-sm text-gray-500 font-bold uppercase tracking-widest">
-                    {userProfile.phone ? formatPhoneNumber(userProfile.phone) : 'No phone linked'}
-                  </p>
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-lg sm:text-xl font-black text-white capitalize truncate leading-tight">
+                    {userProfile.name}
+                  </h2>
+                  <button
+                    onClick={() => navigate('/user/update-profile')}
+                    className="px-2.5 py-1 rounded-xl bg-white/15 hover:bg-white/25 border border-white/20 text-white text-xs font-bold transition-all active:scale-95 flex items-center gap-1 shadow-xs backdrop-blur-md shrink-0"
+                  >
+                    <span>Edit</span>
+                    <FiChevronRight className="w-3.5 h-3.5" />
+                  </button>
                 </div>
-                <button
-                  onClick={() => navigate('/user/update-profile')}
-                  className="px-4 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-[10px] font-black uppercase tracking-wider rounded-xl transition-colors"
-                >
-                  Edit Profile
-                </button>
+
+                <p className="text-emerald-100/90 text-xs font-medium mt-0.5">
+                  {userProfile.phone ? formatPhoneNumber(userProfile.phone) : 'No phone linked'}
+                </p>
+
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-100 bg-white/15 px-2 py-0.5 rounded-full border border-white/20">
+                    <FiShield className="w-3 h-3 text-emerald-200" />
+                    <span>Verified AgroYilt Member</span>
+                  </span>
+                </div>
               </div>
             </div>
           </motion.div>
 
-          {/* Quick Actions Grid */}
-          <motion.div variants={itemVariants} className="grid grid-cols-2 gap-3 mb-6">
+          {/* Quick Actions Grid (Harmonious Dual Cards) */}
+          <motion.div variants={itemVariants} className="grid grid-cols-2 gap-3 mb-4">
+            {/* Wallet Balance Card */}
             <button
               onClick={() => navigate('/user/wallet')}
-              className="bg-white p-4 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all text-left group"
+              className="bg-white p-3.5 rounded-2xl border border-slate-100 shadow-xs hover:border-slate-200 hover:shadow-sm transition-all text-left group"
             >
-              <div className="w-10 h-10 rounded-2xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform"
-                style={{ backgroundColor: `${themeColors.brand.teal}15`, color: themeColors.brand.teal }}
-              >
-                <MdAccountBalanceWallet className="w-5 h-5" />
+              <div className="flex items-center justify-between mb-2">
+                <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                  <MdAccountBalanceWallet className="w-4.5 h-4.5" />
+                </div>
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded">
+                  Wallet
+                </span>
               </div>
-              <span className="text-xs text-gray-500 font-bold uppercase tracking-wider">Balance</span>
-              <p className={`text-lg font-black mt-0.5 ${userProfile.walletBalance < 0 ? 'text-red-500' : 'text-gray-900'}`}>
-                ₹{Math.abs(userProfile.walletBalance || 0).toLocaleString('en-IN')}
-                {userProfile.walletBalance < 0 && <span className="text-xs font-normal ml-1">(Penalty)</span>}
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Available</span>
+              <p className={`text-base sm:text-lg font-black mt-0.5 tracking-tight ${
+                userProfile.walletBalance < 0 ? 'text-rose-600' : 'text-slate-900'
+              }`}>
+                ₹{Math.abs(userProfile.walletBalance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
+              <span className="text-[11px] font-bold text-emerald-700 group-hover:text-emerald-800 flex items-center gap-0.5 mt-1">
+                <span>Passbook & Top-up</span>
+                <FiChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+              </span>
             </button>
+
+            {/* Refer & Earn Card */}
             <button
               onClick={() => navigate('/user/rewards')}
-              className="bg-gray-900 p-4 rounded-3xl shadow-lg shadow-gray-200 hover:shadow-xl transition-all text-left relative overflow-hidden group"
+              className="bg-gradient-to-br from-amber-50 to-orange-50/60 p-3.5 rounded-2xl border border-amber-200/60 shadow-xs hover:border-amber-300 hover:shadow-sm transition-all text-left group"
             >
-              <div className="absolute inset-0 bg-gradient-to-br from-gray-800 to-black opacity-50"></div>
-              <div className="relative z-10 h-full flex flex-col justify-between">
-                <div className="w-10 h-10 bg-white/10 text-yellow-400 rounded-2xl flex items-center justify-center mb-3 backdrop-blur-sm group-hover:scale-110 transition-transform">
-                  <FiGift className="w-5 h-5" />
+              <div className="flex items-center justify-between mb-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
+                  <FiGift className="w-4.5 h-4.5" />
                 </div>
-                <div>
-                  <span className="text-xs text-white/60 font-bold uppercase tracking-wider">Rewards</span>
-                  <p className="text-lg font-black text-white mt-0.5">Refer & Earn</p>
-                </div>
+                <span className="text-[10px] font-bold text-amber-700 bg-amber-100/80 px-1.5 py-0.2 rounded">
+                  Earn ₹50
+                </span>
               </div>
+              <span className="text-[10px] text-amber-700/80 font-bold uppercase tracking-wider block">Rewards</span>
+              <p className="text-base sm:text-lg font-black text-slate-900 mt-0.5 tracking-tight">
+                Refer & Earn
+              </p>
+              <span className="text-[11px] font-bold text-amber-700 group-hover:text-amber-800 flex items-center gap-0.5 mt-1">
+                <span>Invite Friends</span>
+                <FiChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+              </span>
             </button>
           </motion.div>
 
-          {/* Activity */}
-          <motion.div variants={itemVariants} className="mb-6">
-            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 pl-2">Activity</h3>
-            <MenuItem
-              icon={FiClipboard}
-              label="My Bookings"
-              onClick={() => navigate('/user/my-bookings')}
-            />
-            <MenuItem
-              icon={FiStar}
-              label="My Ratings"
-              onClick={() => navigate('/user/my-rating')}
-            />
+          {/* Group 1: Bookings & Activity */}
+          <motion.div variants={itemVariants} className="mb-4">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 pl-1">Activity</h3>
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-xs divide-y divide-slate-100 overflow-hidden">
+              <MenuItem
+                icon={FiShoppingBag}
+                iconBg="bg-emerald-50 text-emerald-700"
+                label="My Bookings"
+                subtitle="Track current & past machine bookings"
+                onClick={() => navigate('/user/my-bookings')}
+              />
+              <MenuItem
+                icon={FiStar}
+                iconBg="bg-amber-50 text-amber-600"
+                label="My Ratings"
+                subtitle="Reviews given to operators & equipment"
+                onClick={() => navigate('/user/my-rating')}
+              />
+            </div>
           </motion.div>
 
-          {/* Finance & Payouts */}
-          <motion.div variants={itemVariants} className="mb-6">
-            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 pl-2">Finance & Payouts</h3>
-            <MenuItem
-              icon={FiCreditCard}
-              label="Bank Account & Payout Details"
-              onClick={() => setShowBankModal(true)}
-            />
-            <MenuItem
-              icon={MdAccountBalanceWallet}
-              label="Wallet & History"
-              onClick={() => navigate('/user/wallet')}
-            />
+          {/* Group 2: Finance & Passbook */}
+          <motion.div variants={itemVariants} className="mb-4">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 pl-1">Finance & Passbook</h3>
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-xs divide-y divide-slate-100 overflow-hidden">
+              <MenuItem
+                icon={MdAccountBalanceWallet}
+                iconBg="bg-teal-50 text-teal-700"
+                label="Wallet Passbook & History"
+                subtitle="View statements, refunds & top-ups"
+                onClick={() => navigate('/user/wallet/history')}
+              />
+              <MenuItem
+                icon={FiCreditCard}
+                iconBg="bg-blue-50 text-blue-700"
+                label="Bank Account & Payout Details"
+                subtitle="Linked accounts for refund withdrawals"
+                onClick={() => setShowBankModal(true)}
+              />
+            </div>
           </motion.div>
 
-          {/* Preferences */}
-          <motion.div variants={itemVariants} className="mb-6">
-            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 pl-2">Preferences</h3>
-            <MenuItem
-              icon={FiMapPin}
-              label="Manage Addresses"
-              onClick={() => navigate('/user/manage-addresses')}
-            />
-
-            <MenuItem
-              icon={FiSettings}
-              label="Settings"
-              onClick={() => navigate('/user/settings')}
-            />
+          {/* Group 3: Preferences */}
+          <motion.div variants={itemVariants} className="mb-4">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 pl-1">Preferences</h3>
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-xs divide-y divide-slate-100 overflow-hidden">
+              <MenuItem
+                icon={FiMapPin}
+                iconBg="bg-purple-50 text-purple-700"
+                label="Manage Addresses"
+                subtitle="Delivery and farm location points"
+                onClick={() => navigate('/user/manage-addresses')}
+              />
+              <MenuItem
+                icon={FiSettings}
+                iconBg="bg-slate-100 text-slate-700"
+                label="Settings"
+                subtitle="Security, notifications & preferences"
+                onClick={() => navigate('/user/settings')}
+              />
+            </div>
           </motion.div>
 
-          {/* Support & Legal */}
-          <motion.div variants={itemVariants} className="mb-8">
-            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 pl-2">Support & More</h3>
-            <MenuItem
-              icon={FiHeadphones}
-              label="Help & Support"
-              badge={supportUnreadCount > 0 ? `${supportUnreadCount} New` : null}
-              onClick={() => navigate('/user/help-support')}
-            />
-            <motion.button
-              whileTap={{ scale: 0.98 }}
-              onClick={() => navigate('/user/about-groo')}
-              className="w-full flex items-center justify-between p-4 bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all group mb-3"
-            >
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-gray-50 transition-colors group-hover:bg-opacity-80"
-                  style={{ color: themeColors.brand.teal }}>
-                  <span className="font-bold">G</span>
-                </div>
-                <span className="font-semibold text-gray-900">About Agroyilt</span>
-              </div>
-              <FiChevronRight className="w-5 h-5 text-gray-300 group-hover:text-teal-500 transition-colors" />
-            </motion.button>
-            <div className="h-4"></div>
-            <motion.button
-              whileTap={{ scale: 0.98 }}
-              onClick={() => setShowLogoutModal(true)}
-              className="w-full flex items-center justify-center gap-2 p-4 bg-red-500 hover:bg-red-600 active:bg-red-700 text-white font-black uppercase tracking-wider rounded-2xl shadow-lg shadow-red-200 transition-all mb-3"
-            >
-              <FiLogOut className="w-5 h-5" />
-              <span>Log out</span>
-            </motion.button>
+          {/* Group 4: Support & Account */}
+          <motion.div variants={itemVariants} className="mb-6">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 pl-1">Support & Account</h3>
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-xs divide-y divide-slate-100 overflow-hidden">
+              <MenuItem
+                icon={FiHeadphones}
+                iconBg="bg-cyan-50 text-cyan-700"
+                label="Help & Support"
+                subtitle="Chat with support team"
+                badge={supportUnreadCount > 0 ? `${supportUnreadCount} New` : null}
+                onClick={() => navigate('/user/help-support')}
+              />
+              <MenuItem
+                icon={FiShield}
+                iconBg="bg-emerald-50 text-emerald-700"
+                label="About AgroYilt"
+                subtitle="App info, policies & terms"
+                onClick={() => navigate('/user/about-groo')}
+              />
+              <MenuItem
+                icon={FiLogOut}
+                iconBg="bg-rose-50 text-rose-600"
+                label="Log Out"
+                color="text-rose-600"
+                onClick={() => setShowLogoutModal(true)}
+              />
+            </div>
 
-            {/* Delete Account Button */}
-            <motion.button
-              whileTap={{ scale: 0.98 }}
+            <button
               onClick={() => setShowDeleteConfirm(true)}
-              className="w-full flex items-center justify-center gap-2 p-4 bg-white border-2 border-red-300 text-red-500 font-black uppercase tracking-wider rounded-2xl transition-all hover:bg-red-50"
+              className="w-full mt-3 py-2 text-center text-xs font-bold text-rose-400 hover:text-rose-600 transition-colors"
             >
-              <FiTrash2 className="w-5 h-5" />
-              <span>Delete Account</span>
-            </motion.button>
+              Delete Account Permanently
+            </button>
           </motion.div>
 
           <motion.div variants={itemVariants} className="text-center pb-8">

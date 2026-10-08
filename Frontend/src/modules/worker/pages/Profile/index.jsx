@@ -261,286 +261,310 @@ const Profile = () => {
   }
 
   return (
-    <div className="min-h-screen pb-20" style={{ background: themeColors.backgroundGradient }}>
+    <div className="min-h-screen pb-24" style={{ background: themeColors.backgroundGradient }}>
       <Header title="Profile" />
 
-      <main className="px-4 pt-4 pb-6">
-        {/* Profile Header Card */}
-        <div
-          className="rounded-2xl p-5 mb-4 shadow-xl relative overflow-hidden"
-          style={{
-            background: vendorTheme.button,
-            border: `2px solid ${vendorTheme.button}`,
-          }}
-        >
-          {/* Decorative Pattern */}
-          <div
-            className="absolute top-0 right-0 w-32 h-32 rounded-full opacity-10"
-            style={{
-              background: `radial-gradient(circle, ${vendorTheme.button} 0%, transparent 70%)`,
-              transform: 'translate(30px, -30px)',
-            }}
-          />
+      <main className="max-w-xl mx-auto px-4 pt-3 pb-6">
+        {/* Profile Hero Card */}
+        <div className="bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 rounded-2xl p-4 sm:p-5 mb-3 text-white shadow-lg relative overflow-hidden border border-emerald-500/25">
+          {/* Ambient decorative glow */}
+          <div className="absolute -top-12 -right-12 w-44 h-44 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+          <div className="absolute -bottom-10 -left-10 w-36 h-36 bg-emerald-400/15 rounded-full blur-xl pointer-events-none" />
 
           <div className="relative z-10">
-            <div className="flex items-start gap-4">
-              <div
-                className="w-20 h-20 rounded-full flex items-center justify-center flex-shrink-0"
-                style={{
-                  background: 'rgba(255, 255, 255, 0.3)',
-                  border: '3px solid white',
-                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-                }}
-              >
-                {profile.photo ? (
-                  <img
-                    src={profile.photo}
-                    alt={profile.name}
-                    className="w-full h-full rounded-full object-cover"
-                  />
-                ) : (
-                  <FiUser className="w-10 h-10 text-white" />
-                )}
+            {/* Top row: Avatar + Identity + Edit */}
+            <div className="flex items-center gap-3.5">
+              {/* Avatar with status indicator */}
+              <div className="relative shrink-0">
+                <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-2xl bg-white/20 border-2 border-white/60 p-0.5 flex items-center justify-center shadow-md backdrop-blur-md overflow-hidden">
+                  {profile.photo ? (
+                    <img
+                      src={profile.photo}
+                      alt={profile.name}
+                      className="w-full h-full rounded-xl object-cover"
+                    />
+                  ) : (
+                    <FiUser className="w-8 h-8 text-white" />
+                  )}
+                </div>
+                <span
+                  className={`w-3.5 h-3.5 rounded-full border-2 border-emerald-800 absolute -bottom-0.5 -right-0.5 shadow-xs ${
+                    profile.status === 'ONLINE' ? 'bg-emerald-400' : 'bg-rose-400'
+                  }`}
+                  title={profile.status === 'ONLINE' ? 'Online' : 'Offline'}
+                />
               </div>
-              <div className="flex-1 pr-12">
-                <h2 className="text-xl font-bold text-white mb-0.5">{profile.name}</h2>
-                {profile.serviceCategories && profile.serviceCategories.length > 0 ? (
-                  <div className="flex flex-wrap gap-1 mb-2">
-                    {profile.serviceCategories.map((cat, idx) => (
-                      <span key={idx} className="text-xs text-white bg-white/20 px-2 py-0.5 rounded font-medium backdrop-blur-sm">
-                        {cat}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="mb-2"></div>
-                )}
 
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-1 bg-white/20 px-2 py-0.5 rounded-lg backdrop-blur-sm">
-                    <FiStar className="w-3.5 h-3.5 text-yellow-300 fill-yellow-300" />
-                    <span className="text-white text-sm font-bold">{profile.rating}</span>
-                  </div>
-                  <span className="text-white/60 text-xs">•</span>
-                  <p className="text-sm text-white opacity-90 font-medium">{profile.completedJobs} Completed</p>
-                  <span className="text-white/60 text-xs">•</span>
-                  <p className="text-sm text-white opacity-90 font-medium">{profile.totalJobs} Total</p>
+              {/* Name & Availability */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-lg sm:text-xl font-black text-white capitalize truncate leading-tight">
+                    {profile.name}
+                  </h2>
+                  <button
+                    onClick={() => navigate('/worker/profile/edit')}
+                    className="p-1.5 sm:px-2.5 sm:py-1 rounded-xl bg-white/15 hover:bg-white/25 border border-white/20 text-white text-xs font-bold transition-all active:scale-95 flex items-center gap-1 shadow-xs backdrop-blur-md shrink-0"
+                    title="Edit Profile"
+                  >
+                    <FiEdit2 className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Edit</span>
+                  </button>
                 </div>
 
-                {/* Availability Toggle in Profile Header */}
-                <div 
-                  onClick={handleToggleStatus}
-                  className="inline-flex items-center gap-1.5 mt-2 bg-white/20 hover:bg-white/30 transition-all backdrop-blur-md px-3 py-1 rounded-full cursor-pointer border border-white/30 active:scale-95"
-                >
-                  <div className={`w-2 h-2 rounded-full ${profile.status === 'ONLINE' ? 'bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.8)]' : 'bg-red-400'}`}></div>
-                  <span className="text-xs font-bold text-white tracking-wide">
-                    {isTogglingStatus ? 'UPDATING...' : (profile.status === 'ONLINE' ? 'ONLINE' : 'OFFLINE')}
+                {profile.serviceCategories && profile.serviceCategories.length > 0 && (
+                  <p className="text-emerald-100 text-xs font-medium truncate mt-0.5">
+                    {profile.serviceCategories.join(' • ')}
+                  </p>
+                )}
+
+                {/* Status Toggle Pill */}
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    onClick={handleToggleStatus}
+                    disabled={isTogglingStatus}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/15 hover:bg-white/25 border border-white/20 active:scale-95 transition-all backdrop-blur-md cursor-pointer"
+                  >
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        profile.status === 'ONLINE'
+                          ? 'bg-emerald-300 shadow-[0_0_8px_rgba(110,231,183,0.9)] animate-pulse'
+                          : 'bg-rose-300'
+                      }`}
+                    />
+                    <span className="text-[10.5px] font-bold text-white tracking-wide uppercase">
+                      {isTogglingStatus ? 'Updating...' : (profile.status === 'ONLINE' ? 'Online (Accepting Jobs)' : 'Offline')}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Guaranteed Non-Wrapping Stats Strip */}
+            <div className="grid grid-cols-3 gap-2 pt-3 mt-3 border-t border-white/15 text-center">
+              <div className="bg-white/10 rounded-xl py-2 px-1 backdrop-blur-xs">
+                <div className="flex items-center justify-center gap-1 text-amber-300">
+                  <FiStar className="w-3.5 h-3.5 fill-amber-300" />
+                  <span className="text-white text-xs sm:text-sm font-black">
+                    {profile.rating ? Number(profile.rating).toFixed(1) : '5.0'}
                   </span>
                 </div>
+                <p className="text-[10px] text-emerald-100/80 font-medium mt-0.5 uppercase tracking-wider">Rating</p>
+              </div>
+
+              <div className="bg-white/10 rounded-xl py-2 px-1 backdrop-blur-xs">
+                <p className="text-white text-xs sm:text-sm font-black">{profile.completedJobs || 0}</p>
+                <p className="text-[10px] text-emerald-100/80 font-medium mt-0.5 uppercase tracking-wider">Completed</p>
+              </div>
+
+              <div className="bg-white/10 rounded-xl py-2 px-1 backdrop-blur-xs">
+                <p className="text-white text-xs sm:text-sm font-black">{profile.totalJobs || 0}</p>
+                <p className="text-[10px] text-emerald-100/80 font-medium mt-0.5 uppercase tracking-wider">Total Jobs</p>
               </div>
             </div>
+          </div>
+        </div>
 
-            {/* Edit Profile Button - Absolute Positioned */}
+        {/* Quick Hub Shortcuts */}
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          <button
+            onClick={() => navigate('/worker/jobs')}
+            className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white border border-slate-100 shadow-xs hover:border-slate-200 active:scale-95 transition-all group"
+          >
+            <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center mb-1 group-hover:scale-105 transition-transform">
+              <FiBriefcase className="w-4 h-4" />
+            </div>
+            <span className="text-[11px] font-bold text-slate-800">My Jobs</span>
+          </button>
+
+          <button
+            onClick={() => navigate('/worker/wallet')}
+            className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white border border-slate-100 shadow-xs hover:border-slate-200 active:scale-95 transition-all group"
+          >
+            <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center mb-1 group-hover:scale-105 transition-transform">
+              <FiCreditCard className="w-4 h-4" />
+            </div>
+            <span className="text-[11px] font-bold text-slate-800">Wallet</span>
+          </button>
+
+          <button
+            onClick={() => navigate('/worker/wallet/history')}
+            className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white border border-slate-100 shadow-xs hover:border-slate-200 active:scale-95 transition-all group"
+          >
+            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center mb-1 group-hover:scale-105 transition-transform">
+              <FiTag className="w-4 h-4" />
+            </div>
+            <span className="text-[11px] font-bold text-slate-800">Passbook</span>
+          </button>
+        </div>
+
+        {/* Personal Information */}
+        <div className="bg-white rounded-2xl p-4 mb-3 border border-slate-100 shadow-xs">
+          <div className="flex items-center justify-between pb-2 mb-3 border-b border-slate-100">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Personal Information</h3>
             <button
               onClick={() => navigate('/worker/profile/edit')}
-              className="absolute top-0 right-0 p-2.5 rounded-lg transition-all active:scale-95"
-              style={{
-                background: 'rgba(255, 255, 255, 0.25)',
-                backdropFilter: 'blur(10px)',
-                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
-                border: '1.5px solid rgba(255, 255, 255, 0.3)',
-              }}
+              className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-0.5"
             >
-              <FiEdit2 className="w-5 h-5 text-white" />
+              <span>Edit</span>
+              <FiChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
-        </div>
 
-        {/* Profile Details */}
-        <div
-          className="bg-white rounded-xl p-4 mb-4 shadow-md"
-          style={{
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-          }}
-        >
-          <h3 className="font-bold text-gray-800 mb-4">Personal Information</h3>
           <div className="space-y-3">
             <div className="flex items-center gap-3">
-              <FiPhone className="w-5 h-5" style={{ color: themeColors.icon }} />
-              <div>
-                <p className="text-sm text-gray-600">Phone</p>
-                <p className="text-sm font-semibold text-gray-800">{profile.phone}</p>
+              <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                <FiPhone className="w-4 h-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10.5px] font-medium text-slate-400">Phone</p>
+                <p className="text-xs sm:text-sm font-bold text-slate-800">{profile.phone || 'Not set'}</p>
               </div>
             </div>
+
             <div className="flex items-center gap-3">
-              <FiMail className="w-5 h-5" style={{ color: themeColors.icon }} />
-              <div>
-                <p className="text-sm text-gray-600">Email</p>
-                <p className="text-sm font-semibold text-gray-800">{profile.email}</p>
+              <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                <FiMail className="w-4 h-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10.5px] font-medium text-slate-400">Email</p>
+                <p className="text-xs sm:text-sm font-bold text-slate-800 truncate">{profile.email || 'Not set'}</p>
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              <FiMapPin className="w-5 h-5" style={{ color: themeColors.icon }} />
-              <div>
-                <p className="text-sm text-gray-600">Address</p>
-                <p className="text-sm font-semibold text-gray-800">{profile.address}</p>
-              </div>
-            </div>
-          </div>
-        </div>
 
-        {/* Service Category & Skills */}
-        <div
-          className="bg-white rounded-xl p-4 mb-4 shadow-md"
-          style={{
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-          }}
-        >
-          <h3 className="font-bold text-gray-800 mb-4">Service Information</h3>
-          <div className="space-y-3">
-
-
-            {/* Skills */}
             <div className="flex items-start gap-3">
-              <div className="p-2 rounded-lg mt-0.5" style={{ background: `${themeColors.button}15` }}>
-                <FiTag className="w-5 h-5" style={{ color: themeColors.button }} />
+              <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 mt-0.5">
+                <FiMapPin className="w-4 h-4" />
               </div>
-              <div className="flex-1">
-                <p className="text-xs text-gray-500 font-medium uppercase tracking-wide mb-2">Skills</p>
-                {profile.skills && profile.skills.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    {profile.skills.map((skill, index) => (
-                      <span
-                        key={index}
-                        className="px-3 py-1.5 rounded-lg text-sm font-semibold transition-all"
-                        style={{
-                          background: `linear-gradient(135deg, ${themeColors.button} 0%, ${themeColors.button}dd 100%)`,
-                          color: '#FFFFFF',
-                          boxShadow: `0 2px 6px ${themeColors.button}40`,
-                        }}
-                      >
-                        {skill}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-gray-400 text-sm font-medium">Not set</p>
-                )}
+              <div className="min-w-0 flex-1">
+                <p className="text-[10.5px] font-medium text-slate-400">Address</p>
+                <p className="text-xs sm:text-sm font-medium text-slate-800 leading-relaxed">{profile.address || 'Not set'}</p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Stats */}
-        <div
-          className="bg-white rounded-xl p-4 mb-4 shadow-md"
-          style={{
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-          }}
-        >
-          <h3 className="font-bold text-gray-800 mb-3">Statistics</h3>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-sm text-gray-600">Total Jobs</p>
-              <p className="text-2xl font-bold text-gray-800">{profile.totalJobs}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600">Completed</p>
-              <p className="text-2xl font-bold text-gray-800">{profile.completedJobs}</p>
-            </div>
+        {/* Service Information & Skills */}
+        <div className="bg-white rounded-2xl p-4 mb-3 border border-slate-100 shadow-xs">
+          <div className="flex items-center justify-between pb-2 mb-3 border-b border-slate-100">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Service & Skills</h3>
+            <button
+              onClick={() => navigate('/worker/profile/edit')}
+              className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-0.5"
+            >
+              <span>Manage</span>
+              <FiChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div>
+            <p className="text-[11px] text-slate-400 font-medium mb-2 uppercase tracking-wide">Registered Skills</p>
+            {profile.skills && profile.skills.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {profile.skills.map((skill, index) => (
+                  <span
+                    key={index}
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200/60 flex items-center gap-1.5"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    <span>{skill}</span>
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-slate-400 text-xs font-medium">No skills set</p>
+            )}
           </div>
         </div>
 
-        {/* Refer & Earn Button */}
-        <button
-          onClick={() => navigate('/worker/referrals')}
-          className="w-full bg-white rounded-xl p-4 flex items-center justify-between shadow-md transition-all active:scale-95 mb-4 border border-orange-100 hover:border-orange-300"
-          style={{
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
-          }}
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center">
-              <FiGift className="w-5 h-5 text-orange-600" />
+        {/* Account Menu & Settings Group */}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-xs divide-y divide-slate-100 overflow-hidden mb-3">
+          {/* Bank & Payout Details */}
+          <button
+            onClick={() => setShowBankModal(true)}
+            className="w-full p-3.5 flex items-center justify-between hover:bg-slate-50 transition-colors text-left"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
+                <FiCreditCard className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="font-bold text-slate-800 block text-xs sm:text-sm">Bank Account & Payout Details</span>
+                <span className="text-[11px] text-slate-400">View or update account for wage payouts</span>
+              </div>
             </div>
-            <div className="text-left">
-              <span className="font-bold text-gray-900 block text-sm">Refer & Earn</span>
-              <span className="text-xs text-gray-500">Invite workers & earn cash rewards</span>
+            <FiChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+          </button>
+
+          {/* Refer & Earn */}
+          <button
+            onClick={() => navigate('/worker/referrals')}
+            className="w-full p-3.5 flex items-center justify-between hover:bg-slate-50 transition-colors text-left"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                <FiGift className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-slate-800 block text-xs sm:text-sm">Refer & Earn</span>
+                  <span className="text-[9px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200/60 uppercase">
+                    Reward
+                  </span>
+                </div>
+                <span className="text-[11px] text-slate-400">Invite workers & earn cash rewards</span>
+              </div>
             </div>
-          </div>
-          <FiChevronRight className="w-5 h-5 text-gray-400" />
-        </button>
+            <FiChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+          </button>
 
-        {/* Bank & Payout Details Button */}
-        <button
-          onClick={() => setShowBankModal(true)}
-          className="w-full bg-white rounded-xl p-4 flex items-center justify-between shadow-md transition-all active:scale-95 mb-4 border border-teal-100 hover:border-teal-300"
-          style={{
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
-          }}
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center">
-              <FiCreditCard className="w-5 h-5 text-teal-600" />
+          {/* Settings */}
+          <button
+            onClick={() => navigate('/worker/settings')}
+            className="w-full p-3.5 flex items-center justify-between hover:bg-slate-50 transition-colors text-left"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
+                <FiEdit2 className="w-4 h-4" />
+              </div>
+              <span className="font-bold text-slate-800 text-xs sm:text-sm">Account Settings</span>
             </div>
-            <div className="text-left">
-              <span className="font-bold text-gray-900 block text-sm">Bank Account & Payout Details</span>
-              <span className="text-xs text-gray-500">View or update bank account for wage payouts</span>
+            <FiChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+          </button>
+
+          {/* Help & Support */}
+          <button
+            onClick={() => navigate('/worker/help-support')}
+            className="w-full p-3.5 flex items-center justify-between hover:bg-slate-50 transition-colors text-left"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                <FiHelpCircle className="w-4 h-4" />
+              </div>
+              <span className="font-bold text-slate-800 text-xs sm:text-sm">Help & Support</span>
             </div>
-          </div>
-          <FiChevronRight className="w-5 h-5 text-gray-400" />
-        </button>
+            <FiChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+          </button>
 
-        {/* Settings Button */}
-        <button
-          onClick={() => navigate('/worker/settings')}
-          className="w-full bg-white rounded-xl p-4 flex items-center justify-between shadow-md transition-all active:scale-95 mb-4"
-          style={{
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-          }}
-        >
-          <div className="flex items-center gap-3">
-            <FiEdit2 className="w-5 h-5" style={{ color: themeColors.button }} />
-            <span className="font-semibold text-gray-800">Settings</span>
-          </div>
-          <FiChevronRight className="w-5 h-5 text-gray-400" />
-        </button>
-
-        {/* Help & Support Button */}
-        <button
-          onClick={() => navigate('/worker/help-support')}
-          className="w-full bg-white rounded-xl p-4 flex items-center justify-between shadow-md transition-all active:scale-95 mb-4"
-          style={{
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-          }}
-        >
-          <div className="flex items-center gap-3">
-            <FiHelpCircle className="w-5 h-5" style={{ color: themeColors.button }} />
-            <span className="font-semibold text-gray-800">Help & Support</span>
-          </div>
-          <FiChevronRight className="w-5 h-5 text-gray-400" />
-        </button>
-
-        {/* Logout Button */}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setShowLogoutModal(true);
-          }}
-          className="w-full bg-white rounded-xl p-4 flex items-center justify-between shadow-md transition-all active:scale-95 cursor-pointer"
-          style={{
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-            cursor: 'pointer'
-          }}
-        >
-          <div className="flex items-center gap-3">
-            <FiLogOut className="w-5 h-5 text-red-500" />
-            <span className="font-semibold text-red-500">Logout</span>
-          </div>
-          <FiChevronRight className="w-5 h-5 text-gray-400" />
-        </button>
+          {/* Logout */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setShowLogoutModal(true);
+            }}
+            className="w-full p-3.5 flex items-center justify-between hover:bg-rose-50/50 transition-colors text-left group"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <FiLogOut className="w-4 h-4" />
+              </div>
+              <span className="font-bold text-rose-600 text-xs sm:text-sm">Logout</span>
+            </div>
+            <FiChevronRight className="w-4 h-4 text-rose-400 shrink-0" />
+          </button>
+        </div>
       </main>
 
       <BottomNav />
