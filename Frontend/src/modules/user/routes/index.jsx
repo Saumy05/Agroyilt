@@ -47,6 +47,7 @@ const Settings = lazyLoad(() => import('../pages/Settings'));
 const ManagePaymentMethods = lazyLoad(() => import('../pages/ManagePaymentMethods'));
 const ManageAddresses = lazyLoad(() => import('../pages/ManageAddresses'));
 const Wallet = lazyLoad(() => import('../pages/Wallet'));
+const WalletHistory = lazyLoad(() => import('../pages/Wallet/WalletHistory'));
 const MyPlan = lazyLoad(() => import('../pages/MyPlan'));
 const PlanDetails = lazyLoad(() => import('../pages/MyPlan/PlanDetails'));
 const MyRating = lazyLoad(() => import('../pages/MyRating'));
@@ -147,6 +148,7 @@ const UserRoutes = () => {
               <Route path="/manage-payment-methods" element={<ProtectedRoute userType="user"><ManagePaymentMethods /></ProtectedRoute>} />
               <Route path="/manage-addresses" element={<ProtectedRoute userType="user"><ManageAddresses /></ProtectedRoute>} />
               <Route path="/wallet" element={<ProtectedRoute userType="user"><Wallet /></ProtectedRoute>} />
+              <Route path="/wallet/history" element={<ProtectedRoute userType="user"><WalletHistory /></ProtectedRoute>} />
               <Route path="/my-plan" element={<Navigate to="/user/account" replace />} />
               <Route path="/my-plan/:id" element={<Navigate to="/user/account" replace />} />
               <Route path="/my-rating" element={<ProtectedRoute userType="user"><MyRating /></ProtectedRoute>} />

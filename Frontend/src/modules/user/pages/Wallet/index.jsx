@@ -1,6 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiArrowLeft, FiChevronLeft, FiChevronRight, FiLoader } from 'react-icons/fi';
+import { 
+  FiArrowLeft, 
+  FiChevronLeft, 
+  FiChevronRight, 
+  FiLoader,
+  FiArrowUp,
+  FiArrowDown,
+  FiAlertCircle,
+  FiShield,
+  FiPlus,
+  FiGift
+} from 'react-icons/fi';
+import { IoWallet, IoWalletOutline, IoReceiptOutline } from 'react-icons/io5';
 import { MdAccountBalanceWallet } from 'react-icons/md';
 import { toastManager } from '../../../../utils/toastManager';
 import { walletService } from '../../../../services/walletService';
@@ -211,179 +223,223 @@ const Wallet = () => {
           <NotificationBell />
         </header>
 
-        <main className="px-4 py-6">
+        <main className="px-3.5 py-3">
           {/* Referral Banner */}
-          <div className="bg-gray-100 rounded-xl p-4 mb-4 relative overflow-hidden">
-            <div className="relative z-10">
-              <h2 className="text-lg font-bold text-black">Refer your friends and earn</h2>
-            </div>
-            {/* Gift Box Illustration */}
-            <div className="absolute right-4 top-2 z-0">
-              <div className="relative">
-                <div className="w-20 h-20 bg-purple-400 rounded-lg flex items-center justify-center transform rotate-12 shadow-md">
-                  <div className="w-16 h-16 bg-pink-300 rounded-lg flex items-center justify-center">
-                    <span className="text-3xl">🎁</span>
-                  </div>
-                </div>
-                {/* Sparkles */}
-                <div className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-300 rounded-full"></div>
-                <div className="absolute -bottom-1 -left-1 w-2 h-2 bg-yellow-200 rounded-full"></div>
-                <div className="absolute top-4 -left-2 w-2 h-2 bg-white rounded-full opacity-80"></div>
-                <div className="absolute bottom-4 -right-2 w-2 h-2 bg-white rounded-full opacity-80"></div>
+          <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-green-50 border border-emerald-200/60 rounded-2xl p-3 mb-2.5 flex items-center justify-between shadow-xs">
+            <div>
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded bg-emerald-600 text-white">
+                  Refer & Earn
+                </span>
+                <span className="text-[10px] font-bold text-emerald-800">Earn ₹50 per friend</span>
               </div>
+              <p className="text-xs font-bold text-slate-800">Invite friends & get instant wallet credits</p>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-white/80 border border-emerald-200/50 flex items-center justify-center text-xl shrink-0 shadow-xs">
+              🎁
             </div>
           </div>
 
           {/* Main Balance Card */}
-          <div className="bg-gradient-to-r from-gray-900 to-gray-800 rounded-2xl p-6 mb-6 text-white shadow-lg relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-5 rounded-full -mr-16 -mt-16"></div>
-            <div className="absolute bottom-0 left-0 w-24 h-24 bg-white opacity-5 rounded-full -ml-12 -mb-12"></div>
+          <div className="bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 rounded-2xl p-3.5 sm:p-4 mb-2.5 text-white shadow-lg relative overflow-hidden border border-emerald-500/30">
+            {/* Ambient background decorative glow */}
+            <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+            <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-emerald-400/15 rounded-full blur-xl pointer-events-none" />
 
-            <div className="relative z-10 flex justify-between items-end">
-              <div>
-                <p className="text-gray-400 text-sm font-medium mb-1">Current Balance</p>
-                <h2 className="text-4xl font-bold text-white">
-                  ₹{walletBalance.toLocaleString('en-IN')}
+            <div className="relative z-10">
+              {/* Header row */}
+              <div className="flex items-center justify-between pb-2 mb-2 border-b border-white/15">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-6 h-6 rounded-lg bg-white/15 border border-white/20 flex items-center justify-center text-white">
+                    <IoWallet className="w-3.5 h-3.5" />
+                  </span>
+                  <span className="text-[11px] font-black uppercase tracking-wider text-emerald-100">AgroYilt User Wallet</span>
+                </div>
+                <div className="flex items-center gap-1 text-[10px] font-semibold text-emerald-100 bg-white/15 px-2 py-0.5 rounded-full border border-white/20">
+                  <FiShield className="w-3 h-3 text-emerald-200 shrink-0" />
+                  <span>Escrow Protected</span>
+                </div>
+              </div>
+
+              {/* Balance row */}
+              <div className="mb-3">
+                <p className="text-emerald-100/90 text-[10px] font-bold uppercase tracking-wider mb-0.5">Available Balance</p>
+                <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                  ₹{Number(walletBalance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </h2>
               </div>
+
+              {/* Action buttons */}
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setShowWithdrawModal(true)}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-md active:scale-95 flex items-center gap-1.5"
+                  onClick={() => setShowAddMoney(true)}
+                  className="flex-1 bg-white hover:bg-emerald-50 text-emerald-950 font-black py-2 px-3 rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all"
                 >
-                  <MdAccountBalanceWallet className="w-4 h-4" /> Withdraw
+                  <FiPlus className="w-3.5 h-3.5 stroke-[3] text-emerald-700" />
+                  <span>Add Money</span>
                 </button>
                 <button
-                  onClick={() => setShowAddMoney(true)}
-                  className="bg-white/20 hover:bg-white/30 backdrop-blur-md text-white px-4 py-2 rounded-xl text-sm font-bold transition-colors shadow-sm flex items-center gap-1"
+                  onClick={() => setShowWithdrawModal(true)}
+                  className="flex-1 bg-white/15 hover:bg-white/25 border border-white/20 text-white font-bold py-2 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-xs active:scale-95 transition-all backdrop-blur-xs"
                 >
-                  <span className="text-lg leading-none">+</span> Add Money
+                  <MdAccountBalanceWallet className="w-3.5 h-3.5 text-emerald-200" />
+                  <span>Withdraw</span>
                 </button>
               </div>
             </div>
           </div>
 
           {/* Analytics Cards */}
-          <div className="grid grid-cols-2 gap-4 mb-6">
-            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-              <div className="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center mb-3">
-                <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
+          <div className="grid grid-cols-2 gap-2 mb-2.5">
+            <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-xs">
+              <div className="flex items-center gap-1.5 mb-1">
+                <div className="p-1 rounded-md bg-emerald-50 text-emerald-600">
+                  <FiArrowDown className="w-3 h-3" />
+                </div>
+                <p className="text-[11px] text-slate-500 font-bold truncate">Total Spent</p>
               </div>
-              <p className="text-gray-500 text-xs font-medium">Total Spent</p>
-              <p className="text-lg font-bold text-gray-900">
+              <p className="text-sm sm:text-base font-black text-slate-900">
                 ₹{(
                   txSummary.totalSpent !== undefined
                     ? txSummary.totalSpent
                     : (
                       transactions
                         .filter(t => ['payment', 'withdrawal', 'platform_fee', 'convenience_fee', 'gst', 'worker_payment', 'cash_collected'].includes(t.type))
-                        .reduce((sum, t) => sum + t.amount, 0) -
+                        .reduce((sum, t) => sum + (Number(t.amount) || 0), 0) -
                       transactions
                         .filter(t => ['refund', 'cashback'].includes(t.type))
-                        .reduce((sum, t) => sum + t.amount, 0)
+                        .reduce((sum, t) => sum + (Number(t.amount) || 0), 0)
                     )
                 ).toLocaleString('en-IN')}
               </p>
             </div>
 
-            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-              <div className="w-10 h-10 rounded-full bg-orange-50 flex items-center justify-center mb-3">
-                <svg className="w-5 h-5 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
+            <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-xs">
+              <div className="flex items-center gap-1.5 mb-1">
+                <div className="p-1 rounded-md bg-amber-50 text-amber-600">
+                  <FiAlertCircle className="w-3 h-3" />
+                </div>
+                <p className="text-[11px] text-slate-500 font-bold truncate">Total Penalty</p>
               </div>
-              <p className="text-gray-500 text-xs font-medium">Total Penalty</p>
-              <p className="text-lg font-bold text-orange-600">
+              <p className="text-sm sm:text-base font-black text-amber-700">
                 ₹{(
                   txSummary.totalPenalty !== undefined
                     ? txSummary.totalPenalty
                     : transactions
                       .filter(t => ['penalty', 'fine', 'cancellation_fee', 'debit'].includes(t.type))
-                      .reduce((sum, t) => sum + t.amount, 0)
+                      .reduce((sum, t) => sum + (Number(t.amount) || 0), 0)
                 ).toLocaleString('en-IN')}
               </p>
             </div>
           </div>
 
-          {/* Recent Transactions List */}
+          {/* Recent Activity List */}
           <div>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-base font-bold text-black">Recent Transactions</h3>
-              {txPagination.total > 0 && (
-                <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">
-                  {txPagination.total} {txPagination.total === 1 ? 'transaction' : 'transactions'}
-                </span>
-              )}
+            <div className="flex items-center justify-between mb-2 px-0.5">
+              <div className="flex items-center gap-1.5">
+                <h3 className="font-bold text-xs uppercase tracking-wider text-slate-500">Recent Activity</h3>
+                {txPagination.total > 0 && (
+                  <span className="text-[10.5px] font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.2 rounded-full">
+                    {txPagination.total} {txPagination.total === 1 ? 'record' : 'records'}
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => navigate('/user/wallet/history')}
+                className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-0.5 transition-colors group"
+              >
+                <span>View Passbook</span>
+                <FiChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+              </button>
             </div>
 
-            <div className={`space-y-3 transition-opacity ${txLoading ? 'opacity-50' : 'opacity-100'}`}>
+            <div className={`space-y-2 transition-opacity ${txLoading ? 'opacity-50' : 'opacity-100'}`}>
               {loading ? (
-                <div className="text-center py-20">
+                <div className="text-center py-12">
                   <LogoLoader fullScreen={false} />
-                  <p className="text-sm text-gray-500 mt-4">Loading transactions...</p>
+                  <p className="text-xs text-slate-500 mt-3 font-medium">Loading activity...</p>
                 </div>
               ) : transactions.length === 0 ? (
-                <div className="text-center py-12 bg-gray-50 rounded-xl">
-                  <p className="text-sm text-gray-500">No wallet activity yet</p>
+                <div className="text-center py-8 bg-white border border-slate-100 rounded-xl shadow-xs">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-2">
+                    <IoReceiptOutline className="w-5 h-5" />
+                  </div>
+                  <p className="text-slate-800 font-bold text-sm mb-0.5">No wallet activity yet</p>
+                  <p className="text-xs text-slate-400">Your refunds and payments will appear here</p>
                 </div>
               ) : (
-                transactions.map((item, index) => {
-                  const date = new Date(item.date);
-                  const formattedDate = date.toLocaleDateString('en-IN', {
-                    day: 'numeric',
-                    month: 'short',
-                    year: 'numeric'
-                  });
+                transactions.slice(0, 5).map((item, index) => {
+                  const rawDate = item.createdAt || item.date || item.timestamp;
+                  const parsedDate = rawDate ? new Date(rawDate) : null;
+                  const formattedDate = parsedDate && !isNaN(parsedDate.getTime())
+                    ? parsedDate.toLocaleDateString('en-IN', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric'
+                      })
+                    : 'Recent';
 
-                  // Determine styles based on transaction type
-                  let typeStyle = { color: 'text-gray-600', bg: 'bg-gray-100', icon: '?', sign: '' };
+                  // Subtle, calm categorization (NO loud warning borders)
+                  const isCredit = ['credit', 'refund', 'topup', 'referral', 'cashback', 'cash_collected'].includes(item.type);
+                  const isPenalty = ['penalty', 'fine', 'cancellation_fee', 'debit'].includes(item.type);
 
-                  if (['credit', 'refund', 'topup', 'referral', 'cashback', 'cash_collected'].includes(item.type)) {
-                    typeStyle = { color: 'text-green-600', bg: 'bg-green-50', icon: '↓', sign: '' };
-                  } else if (['payment', 'withdrawal'].includes(item.type)) {
-                    typeStyle = { color: 'text-red-600', bg: 'bg-red-50', icon: '↑', sign: '-' };
-                  } else if (['penalty', 'fine', 'cancellation_fee', 'debit'].includes(item.type)) {
-                    typeStyle = { color: 'text-orange-600', bg: 'bg-orange-50', icon: '!', sign: '-' };
-                  }
+                  const iconBg = isCredit 
+                    ? 'bg-emerald-50 text-emerald-600' 
+                    : isPenalty 
+                      ? 'bg-amber-50 text-amber-600' 
+                      : 'bg-slate-100 text-slate-600';
+
+                  const amountColor = isCredit 
+                    ? 'text-emerald-600' 
+                    : isPenalty 
+                      ? 'text-amber-700' 
+                      : 'text-slate-900';
+
+                  const amountSign = isCredit ? '+' : '-';
 
                   return (
                     <div
-                      key={item.id || index}
-                      className="flex items-center justify-between p-4 bg-white border border-gray-100 rounded-xl shadow-sm hover:shadow-md transition-shadow"
+                      key={item.id || item._id || index}
+                      onClick={() => navigate('/user/wallet/history')}
+                      className="flex items-center justify-between p-3 bg-white border border-slate-100 hover:border-slate-200 rounded-xl shadow-[0_1px_2px_rgba(0,0,0,0.02)] hover:shadow-xs transition-all cursor-pointer group"
                     >
-                      <div className="flex items-center gap-3 flex-1">
-                        <div
-                          className={`w-10 h-10 rounded-full flex items-center justify-center ${typeStyle.bg}`}
-                        >
-                          <span className={`text-lg font-bold ${typeStyle.color}`}>
-                            {item.type === 'penalty' ? '!' : typeStyle.sign}
-                          </span>
+                      <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${iconBg}`}>
+                          {isCredit ? (
+                            <FiArrowDown className="w-4 h-4" />
+                          ) : isPenalty ? (
+                            <FiAlertCircle className="w-4 h-4" />
+                          ) : (
+                            <FiArrowUp className="w-4 h-4 text-slate-500" />
+                          )}
                         </div>
-                        <div className="flex-1">
-                          <p className="text-sm font-semibold text-gray-900 line-clamp-1">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs sm:text-sm font-bold text-slate-900 truncate group-hover:text-emerald-700 transition-colors">
                             {item.description || item.title || 'Transaction'}
                           </p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <p className="text-xs text-gray-500">{formattedDate}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-[10.5px] text-slate-400 font-medium">{formattedDate}</span>
                             {item.type && (
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded capitalize ${typeStyle.bg} ${typeStyle.color}`}>
-                                {item.type}
+                              <span className={`text-[9.5px] font-semibold px-1.5 py-0.2 rounded ${
+                                isCredit 
+                                  ? 'bg-emerald-50 text-emerald-700' 
+                                  : isPenalty 
+                                    ? 'bg-amber-50 text-amber-700' 
+                                    : 'bg-slate-100 text-slate-600'
+                              }`}>
+                                {item.type.replace(/_/g, ' ')}
                               </span>
                             )}
                           </div>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p
-                          className={`text-sm font-bold ${typeStyle.color}`}
-                        >
-                          {typeStyle.sign}₹{item.amount.toLocaleString('en-IN')}
+                      <div className="text-right shrink-0 ml-2">
+                        <p className={`text-xs sm:text-sm font-black ${amountColor}`}>
+                          {amountSign}₹{Number(item.amount || 0).toLocaleString('en-IN')}
                         </p>
                         {item.balanceAfter !== undefined && (
-                          <p className="text-[10px] text-gray-400 mt-0.5">
-                            Bal: ₹{item.balanceAfter.toLocaleString('en-IN')}
+                          <p className="text-[10px] text-slate-400 mt-0.5 font-medium">
+                            Bal: ₹{Number(item.balanceAfter).toLocaleString('en-IN')}
                           </p>
                         )}
                       </div>
@@ -393,69 +449,30 @@ const Wallet = () => {
               )}
             </div>
 
-            {/* Transactions Pagination Controls */}
-            {!loading && txPagination.total > 0 && (
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-gray-100 text-xs text-gray-500 mt-3">
-                <div className="flex items-center gap-2">
-                  <span>
-                    Showing <span className="font-bold text-gray-900">{(txPagination.page - 1) * txPagination.limit + 1}</span> - <span className="font-bold text-gray-900">{Math.min(txPagination.page * txPagination.limit, txPagination.total)}</span> of <span className="font-bold text-gray-900">{txPagination.total}</span>
-                  </span>
-                  {txLoading && <FiLoader className="w-3.5 h-3.5 animate-spin text-teal-600" />}
-                </div>
-
-                {txPagination.pages > 1 && (
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => loadTransactions(txPagination.page - 1, txLimit)}
-                      disabled={txPagination.page <= 1 || txLoading}
-                      className="px-3 py-1.5 rounded-xl border border-gray-200 bg-white font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1 shadow-sm active:scale-95"
-                    >
-                      <FiChevronLeft className="w-3.5 h-3.5" />
-                      <span>Prev</span>
-                    </button>
-
-                    <div className="flex items-center gap-1">
-                      {[...Array(txPagination.pages)].map((_, i) => {
-                        const p = i + 1;
-                        if (txPagination.pages > 6 && Math.abs(p - txPagination.page) > 2 && p !== 1 && p !== txPagination.pages) {
-                          if (Math.abs(p - txPagination.page) === 3) {
-                            return <span key={p} className="px-1 text-gray-400">...</span>;
-                          }
-                          return null;
-                        }
-                        const isActive = p === txPagination.page;
-                        return (
-                          <button
-                            key={p}
-                            onClick={() => loadTransactions(p, txLimit)}
-                            disabled={txLoading}
-                            className={`min-w-[32px] h-8 px-2 rounded-xl text-xs font-bold transition-all ${isActive
-                                ? 'bg-teal-600 text-white shadow-sm shadow-teal-600/30'
-                                : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
-                              }`}
-                          >
-                            {p}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    <button
-                      onClick={() => loadTransactions(txPagination.page + 1, txLimit)}
-                      disabled={txPagination.page >= txPagination.pages || txLoading}
-                      className="px-3 py-1.5 rounded-xl border border-gray-200 bg-white font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1 shadow-sm active:scale-95"
-                    >
-                      <span>Next</span>
-                      <FiChevronRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
-              </div>
+            {/* View Full History Link */}
+            {!loading && transactions.length > 0 && (
+              <button
+                onClick={() => navigate('/user/wallet/history')}
+                className="w-full mt-2.5 py-2.5 px-4 rounded-xl border border-slate-200/80 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 flex items-center justify-center gap-1.5 transition-all shadow-xs active:scale-95"
+              >
+                <span>View Complete Passbook & History</span>
+                <FiChevronRight className="w-3.5 h-3.5 text-slate-400" />
+              </button>
             )}
           </div>
 
           {/* Withdrawal History Section */}
-          <div className="mt-8">
+          <div className="mt-4">
+            <div className="flex items-center justify-between mb-2 px-0.5">
+              <h3 className="font-bold text-xs uppercase tracking-wider text-slate-500">Payout Requests</h3>
+              <button
+                onClick={() => navigate('/user/wallet/history?tab=withdrawals')}
+                className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-0.5 transition-colors group"
+              >
+                <span>All Payouts</span>
+                <FiChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+              </button>
+            </div>
             <WithdrawalHistoryList refreshTrigger={historyRefreshKey} />
           </div>
         </main>
