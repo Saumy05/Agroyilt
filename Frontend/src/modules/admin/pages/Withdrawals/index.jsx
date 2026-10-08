@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   FiDollarSign,
   FiClock,
@@ -12,7 +12,13 @@ import {
   FiExternalLink,
   FiCopy,
   FiTrendingUp,
-  FiAlertCircle
+  FiAlertCircle,
+  FiGrid,
+  FiList,
+  FiSearch,
+  FiChevronLeft,
+  FiChevronRight,
+  FiCalendar
 } from 'react-icons/fi';
 import { toastManager } from '../../../../utils/toastManager';
 import Modal from '../../components/Modal';
@@ -20,15 +26,64 @@ import Button from '../../components/Button';
 import withdrawalService from '../../../../services/withdrawalService';
 import { exportToCSV } from '../../../../utils/csvExport';
 
+// Formatted Date Input component (Forces DD/MM/YYYY display for Indian standard)
+const FormattedDateInput = ({ value, onChange, min, max, placeholder = 'DD/MM/YYYY' }) => {
+  const formattedDisplay = useMemo(() => {
+    if (!value) return '';
+    const parts = value.split('-');
+    if (parts.length === 3) {
+      const [year, month, day] = parts;
+      return `${day}/${month}/${year}`;
+    }
+    return value;
+  }, [value]);
+
+  return (
+    <div className="relative inline-flex items-center">
+      <input
+        type="text"
+        readOnly
+        value={formattedDisplay}
+        placeholder={placeholder}
+        onClick={(e) => {
+          const dateInput = e.currentTarget.nextElementSibling;
+          if (dateInput && dateInput.showPicker) {
+            dateInput.showPicker();
+          } else if (dateInput) {
+            dateInput.focus();
+          }
+        }}
+        className="w-28 px-2.5 py-1 bg-white border border-gray-200 rounded-lg text-[11px] font-mono font-bold text-gray-800 outline-none cursor-pointer focus:ring-2 focus:ring-blue-500 hover:border-gray-300 transition-all shadow-2xs"
+      />
+      <input
+        type="date"
+        value={value}
+        min={min}
+        max={max}
+        onChange={(e) => onChange(e.target.value)}
+        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+      />
+      <FiCalendar className="w-3.5 h-3.5 text-gray-400 absolute right-2 pointer-events-none" />
+    </div>
+  );
+};
+
 const WithdrawalsPage = () => {
   const [loading, setLoading] = useState(true);
   const [withdrawals, setWithdrawals] = useState([]);
   const [actionLoading, setActionLoading] = useState(false);
 
-  // Filters
+  // Filters & Search & View Mode & Pagination
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [roleFilter, setRoleFilter] = useState('ALL');
   const [workerTypeFilter, setWorkerTypeFilter] = useState('ALL');
+  const [timeFilter, setTimeFilter] = useState('ALL'); // 'ALL' | 'TODAY' | 'THIS_WEEK' | 'THIS_MONTH' | 'CUSTOM'
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'table'
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(12);
 
   // Modals state
   const [activeModal, setActiveModal] = useState(null);
@@ -51,6 +106,11 @@ const WithdrawalsPage = () => {
     loadWithdrawals();
   }, [statusFilter, roleFilter, workerTypeFilter]);
 
+  // Reset pagination when filters or search change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, roleFilter, workerTypeFilter, searchQuery, timeFilter, startDate, endDate, itemsPerPage]);
+
   const loadWithdrawals = async () => {
     try {
       setLoading(true);
@@ -69,6 +129,78 @@ const WithdrawalsPage = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Client-side search and time filtering
+  const filteredWithdrawals = useMemo(() => {
+    return withdrawals.filter(item => {
+      // 1. Text Search Filter
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const name = (item.requester?.name || item.vendorId?.name || '').toLowerCase();
+        const phone = (item.requester?.phone || item.vendorId?.phone || '').toLowerCase();
+        const acc = (item.bankAccountMasked || item.bankDetailsSnapshot?.accountNumber || item.bankDetails?.accountNumber || '').toLowerCase();
+        const ref = (item.paymentReference || item.transactionReference || item._id || '').toLowerCase();
+        const amt = String(item.amountINR || item.amount || '');
+        const match = name.includes(q) || phone.includes(q) || acc.includes(q) || ref.includes(q) || amt.includes(q);
+        if (!match) return false;
+      }
+
+      // 2. Time / Period Filter
+      if (timeFilter !== 'ALL') {
+        const itemDate = new Date(item.requestDate || item.createdAt || 0);
+        const now = new Date();
+
+        if (timeFilter === 'TODAY') {
+          const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          if (itemDate < startOfToday) return false;
+        } else if (timeFilter === 'THIS_WEEK') {
+          const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          if (itemDate < sevenDaysAgo) return false;
+        } else if (timeFilter === 'THIS_MONTH') {
+          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+          if (itemDate < startOfMonth) return false;
+        } else if (timeFilter === 'CUSTOM') {
+          if (startDate) {
+            const start = new Date(startDate);
+            start.setHours(0, 0, 0, 0);
+            if (itemDate < start) return false;
+          }
+          if (endDate) {
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999);
+            if (itemDate > end) return false;
+          }
+        }
+      }
+
+      return true;
+    });
+  }, [withdrawals, searchQuery, timeFilter, startDate, endDate]);
+
+  // Client-side pagination
+  const totalPages = Math.ceil(filteredWithdrawals.length / itemsPerPage) || 1;
+  const paginatedWithdrawals = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredWithdrawals.slice(start, start + itemsPerPage);
+  }, [filteredWithdrawals, currentPage, itemsPerPage]);
+
+  const handleStartDateChange = (val) => {
+    setStartDate(val);
+    // If start date is later than end date, auto-align end date to match start date
+    if (val && endDate && val > endDate) {
+      setEndDate(val);
+    }
+  };
+
+  const handleEndDateChange = (val) => {
+    // If end date is earlier than start date, inform admin and auto-align end date
+    if (val && startDate && val < startDate) {
+      toastManager.error('End date cannot be earlier than start date');
+      setEndDate(startDate);
+      return;
+    }
+    setEndDate(val);
   };
 
   const closeModals = () => {
@@ -200,10 +332,10 @@ const WithdrawalsPage = () => {
   };
 
   const handleExport = () => {
-    if (withdrawals.length === 0) {
+    if (filteredWithdrawals.length === 0) {
       return toastManager.error('No withdrawal records to export');
     }
-    exportToCSV(withdrawals, 'withdrawal_requests', [
+    exportToCSV(filteredWithdrawals, 'withdrawal_requests', [
       { key: 'requester.name', label: 'Requester Name' },
       { key: 'requesterRole', label: 'Role' },
       { key: 'workerType', label: 'Worker Type' },
@@ -212,6 +344,22 @@ const WithdrawalsPage = () => {
       { key: 'requestDate', label: 'Requested Date', type: 'date' },
       { key: 'paymentReference', label: 'Reference / UTR' }
     ]);
+  };
+
+  const handleExportBankBatch = () => {
+    const pendingList = filteredWithdrawals.filter(w => ['PENDING', 'ADMIN_ACCEPTED', 'PROCESSING'].includes((w.status || '').toUpperCase()));
+    if (pendingList.length === 0) {
+      return toastManager.error('No pending or accepted requests available for bank batch export');
+    }
+    exportToCSV(pendingList, 'bank_payout_batch', [
+      { key: 'requester.name', label: 'Beneficiary Name' },
+      { key: 'bankDetailsSnapshot.accountNumber', label: 'Account Number' },
+      { key: 'bankDetailsSnapshot.ifscCode', label: 'IFSC Code' },
+      { key: 'bankDetailsSnapshot.bankName', label: 'Bank Name' },
+      { key: 'amount', label: 'Amount INR' },
+      { key: '_id', label: 'Payment Reference ID' }
+    ]);
+    toastManager.success(`Exported ${pendingList.length} records for Corporate Bank Batch Transfer!`);
   };
 
   const formatDate = (date) => {
@@ -232,7 +380,7 @@ const WithdrawalsPage = () => {
   const completedAmount = completedRequests.reduce((sum, w) => sum + (w.amount || 0), 0);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-black text-gray-900 tracking-tight">Withdrawal Requests</h1>
@@ -242,62 +390,139 @@ const WithdrawalsPage = () => {
       </div>
 
       {/* Dashboard KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-orange-100 hover:shadow-md transition-all">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="bg-white rounded-xl p-3.5 shadow-2xs border border-orange-100 hover:shadow-xs transition-all">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Total Pending Amount</p>
-              <h3 className="text-2xl font-black text-gray-800 tracking-tight">₹{pendingAmount.toLocaleString()}</h3>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Total Pending Amount</p>
+              <h3 className="text-xl font-black text-gray-800 tracking-tight">₹{pendingAmount.toLocaleString()}</h3>
             </div>
-            <div className="p-3 rounded-xl bg-orange-50 text-orange-600">
-              <FiDollarSign className="w-5 h-5" />
+            <div className="p-2.5 rounded-lg bg-orange-50 text-orange-600 shrink-0">
+              <FiDollarSign className="w-4 h-4" />
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-blue-100 hover:shadow-md transition-all">
+        <div className="bg-white rounded-xl p-3.5 shadow-2xs border border-blue-100 hover:shadow-xs transition-all">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Pending Requests</p>
-              <h3 className="text-2xl font-black text-gray-800 tracking-tight">{pendingRequests.length}</h3>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Pending Requests</p>
+              <h3 className="text-xl font-black text-gray-800 tracking-tight">{pendingRequests.length}</h3>
             </div>
-            <div className="p-3 rounded-xl bg-blue-50 text-blue-600">
-              <FiClock className="w-5 h-5" />
+            <div className="p-2.5 rounded-lg bg-blue-50 text-blue-600 shrink-0">
+              <FiClock className="w-4 h-4" />
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-emerald-100 hover:shadow-md transition-all">
+        <div className="bg-white rounded-xl p-3.5 shadow-2xs border border-emerald-100 hover:shadow-xs transition-all">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Completed Payouts</p>
-              <h3 className="text-2xl font-black text-gray-800 tracking-tight">₹{completedAmount.toLocaleString()}</h3>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Completed Payouts</p>
+              <h3 className="text-xl font-black text-gray-800 tracking-tight">₹{completedAmount.toLocaleString()}</h3>
             </div>
-            <div className="p-3 rounded-xl bg-emerald-50 text-emerald-600">
-              <FiCheck className="w-5 h-5" />
+            <div className="p-2.5 rounded-lg bg-emerald-50 text-emerald-600 shrink-0">
+              <FiCheck className="w-4 h-4" />
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-purple-100 hover:shadow-md transition-all">
+        <div className="bg-white rounded-xl p-3.5 shadow-2xs border border-purple-100 hover:shadow-xs transition-all">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Total Requests</p>
-              <h3 className="text-2xl font-black text-gray-800 tracking-tight">{withdrawals.length}</h3>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Total Requests</p>
+              <h3 className="text-xl font-black text-gray-800 tracking-tight">{withdrawals.length}</h3>
             </div>
-            <div className="p-3 rounded-xl bg-purple-50 text-purple-600">
-              <FiTrendingUp className="w-5 h-5" />
+            <div className="p-2.5 rounded-lg bg-purple-50 text-purple-600 shrink-0">
+              <FiTrendingUp className="w-4 h-4" />
             </div>
           </div>
         </div>
       </div>
 
       {/* Main Container */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-6">
+      <div className="bg-white rounded-2xl shadow-2xs border border-gray-100 p-4 sm:p-5 space-y-4">
+        {/* Top Control Bar: Search + Batch Actions + View Toggle */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-gray-100">
+          {/* Search Input */}
+          <div className="relative flex-1 max-w-md">
+            <FiSearch className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by name, phone, account, UTR, amount..."
+              className="w-full pl-9 pr-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <FiX className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Quick Actions & View Mode Toggle */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleExportBankBatch}
+              title="Download NEFT / NACH batch CSV for corporate banking portal upload"
+              className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200/80 rounded-xl text-[11px] font-bold hover:bg-emerald-100 flex items-center gap-1.5 transition-all shadow-2xs"
+            >
+              <FiDownload className="w-3.5 h-3.5" />
+              Bank Payout Batch CSV
+            </button>
+
+            <button
+              onClick={handleExport}
+              className="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-[11px] font-bold hover:bg-gray-50 flex items-center gap-1 shadow-2xs transition-all"
+            >
+              <FiDownload className="w-3.5 h-3.5" />
+              Export CSV
+            </button>
+
+            <button
+              onClick={loadWithdrawals}
+              className="p-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-xs hover:bg-gray-50 transition-colors shadow-2xs"
+              title="Refresh"
+            >
+              <FiRefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+
+            {/* View Mode Switcher (Grid vs Table) */}
+            <div className="flex items-center p-0.5 bg-gray-100 rounded-xl border border-gray-200 ml-1">
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`p-1.5 rounded-lg transition-all ${
+                  viewMode === 'grid'
+                    ? 'bg-white text-blue-600 shadow-2xs font-bold'
+                    : 'text-gray-500 hover:text-gray-800'
+                }`}
+                title="Grid Card View"
+              >
+                <FiGrid className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setViewMode('table')}
+                className={`p-1.5 rounded-lg transition-all ${
+                  viewMode === 'table'
+                    ? 'bg-white text-blue-600 shadow-2xs font-bold'
+                    : 'text-gray-500 hover:text-gray-800'
+                }`}
+                title="Compact Table View"
+              >
+                <FiList className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Filter Toolbar */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-gray-100">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-2">
           {/* Status Filter Tabs */}
-          <div className="flex flex-wrap items-center gap-1.5 bg-gray-50 p-1.5 rounded-xl border border-gray-200">
+          <div className="flex flex-wrap items-center gap-1 bg-gray-50 p-1 rounded-xl border border-gray-200/80">
             {[
               { id: 'ALL', label: 'All Requests' },
               { id: 'PENDING', label: 'Pending' },
@@ -309,10 +534,10 @@ const WithdrawalsPage = () => {
               <button
                 key={tab.id}
                 onClick={() => setStatusFilter(tab.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
                   statusFilter === tab.id
-                    ? 'bg-white text-gray-900 shadow-sm border border-gray-200 font-bold'
-                    : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'
+                    ? 'bg-white text-gray-900 shadow-2xs border border-gray-200/80 font-bold'
+                    : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100/60'
                 }`}
               >
                 {tab.label}
@@ -320,15 +545,60 @@ const WithdrawalsPage = () => {
             ))}
           </div>
 
-          {/* Secondary Filters & Actions */}
-          <div className="flex flex-wrap items-center gap-3">
+          {/* Secondary Filters */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Time / Period Filter */}
+            <div className="flex items-center gap-1.5">
+              <FiCalendar className="w-3.5 h-3.5 text-gray-400" />
+              <span className="text-[11px] font-semibold text-gray-500">Period:</span>
+              <select
+                value={timeFilter}
+                onChange={(e) => setTimeFilter(e.target.value)}
+                className="px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-[11px] font-medium text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="ALL">All Time</option>
+                <option value="TODAY">Today</option>
+                <option value="THIS_WEEK">Last 7 Days</option>
+                <option value="THIS_MONTH">This Month</option>
+                <option value="CUSTOM">Custom Date Range</option>
+              </select>
+            </div>
+
+            {/* Custom Date Range Pickers */}
+            {timeFilter === 'CUSTOM' && (
+              <div className="flex items-center gap-1.5 animate-fadeIn">
+                <FormattedDateInput
+                  value={startDate}
+                  onChange={handleStartDateChange}
+                  max={endDate || undefined}
+                  placeholder="DD/MM/YYYY"
+                />
+                <span className="text-gray-400 text-xs">to</span>
+                <FormattedDateInput
+                  value={endDate}
+                  onChange={handleEndDateChange}
+                  min={startDate || undefined}
+                  placeholder="DD/MM/YYYY"
+                />
+                {(startDate || endDate) && (
+                  <button
+                    onClick={() => { setStartDate(''); setEndDate(''); }}
+                    className="p-1 text-xs text-gray-400 hover:text-gray-700"
+                    title="Clear date range"
+                  >
+                    <FiX className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* Role Filter */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-gray-500">Role:</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-semibold text-gray-500">Role:</span>
               <select
                 value={roleFilter}
                 onChange={(e) => setRoleFilter(e.target.value)}
-                className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
+                className="px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-[11px] font-medium text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="ALL">All Roles</option>
                 <option value="farmer">Farmer / User</option>
@@ -339,12 +609,12 @@ const WithdrawalsPage = () => {
 
             {/* Worker Type filter (visible if worker role selected) */}
             {roleFilter === 'worker' && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-gray-500">Worker Type:</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-semibold text-gray-500">Type:</span>
                 <select
                   value={workerTypeFilter}
                   onChange={(e) => setWorkerTypeFilter(e.target.value)}
-                  className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
+                  className="px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-[11px] font-medium text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="ALL">All Worker Types</option>
                   <option value="WORKER">Independent</option>
@@ -352,40 +622,209 @@ const WithdrawalsPage = () => {
                 </select>
               </div>
             )}
-
-            <button
-              onClick={handleExport}
-              className="px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-50 flex items-center gap-1.5 shadow-sm transition-all"
-            >
-              <FiDownload className="w-3.5 h-3.5" />
-              Export CSV
-            </button>
-
-            <button
-              onClick={loadWithdrawals}
-              className="p-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-xs hover:bg-gray-50 transition-colors shadow-sm"
-              title="Refresh"
-            >
-              <FiRefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            </button>
           </div>
         </div>
 
-        {/* List of Requests */}
+        {/* List / Table of Requests */}
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-20">
-            <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-gray-500 mt-4 text-xs font-medium">Loading withdrawal requests...</p>
+          <div className="flex flex-col items-center justify-center py-16">
+            <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-gray-500 mt-3 text-xs font-medium">Loading withdrawal requests...</p>
           </div>
-        ) : withdrawals.length === 0 ? (
-          <div className="text-center py-16 bg-gray-50/50 rounded-2xl border border-dashed border-gray-200">
-            <FiCheck className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-            <p className="text-gray-700 font-bold text-base">No withdrawal requests found</p>
-            <p className="text-gray-400 text-xs mt-1">There are no records matching your current filter selection.</p>
+        ) : filteredWithdrawals.length === 0 ? (
+          <div className="text-center py-12 bg-gray-50/50 rounded-xl border border-dashed border-gray-200">
+            <FiCheck className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+            <p className="text-gray-700 font-bold text-sm">No withdrawal requests found</p>
+            <p className="text-gray-400 text-xs mt-0.5">There are no records matching your current search or filter selection.</p>
+          </div>
+        ) : viewMode === 'table' ? (
+          /* ========================================================= */
+          /* HIGH-DENSITY COMPACT TABLE VIEW (FOR 50+ REQUESTS) */
+          /* ========================================================= */
+          <div className="overflow-x-auto border border-gray-200 rounded-xl shadow-2xs">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-gray-50 text-gray-500 font-bold uppercase text-[10px] border-b border-gray-200 tracking-wider">
+                <tr>
+                  <th className="py-2.5 px-3">Requester</th>
+                  <th className="py-2.5 px-3">Role</th>
+                  <th className="py-2.5 px-3">Requested Date</th>
+                  <th className="py-2.5 px-3">Bank Details</th>
+                  <th className="py-2.5 px-3 text-right">Amount</th>
+                  <th className="py-2.5 px-3 text-center">Status</th>
+                  <th className="py-2.5 px-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 font-medium">
+                {paginatedWithdrawals.map((request) => {
+                  const requesterName = request.requester?.name || request.vendorId?.name || 'User';
+                  const requesterPhone = request.requester?.phone || request.vendorId?.phone || '';
+                  const role = (request.requesterRole || (request.vendorId ? 'vendor' : 'user')).toLowerCase();
+                  const workerType = request.workerType;
+                  const amount = request.amountINR || request.amount || 0;
+                  const status = (request.status || 'PENDING').toUpperCase();
+
+                  return (
+                    <tr key={request._id} className="hover:bg-blue-50/40 transition-colors">
+                      <td className="py-2.5 px-3">
+                        <div className="font-bold text-gray-900">{requesterName}</div>
+                        {requesterPhone && <div className="text-[10px] text-gray-400 font-mono">{requesterPhone}</div>}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold uppercase ${
+                          role === 'vendor'
+                            ? 'bg-blue-100 text-blue-800'
+                            : role === 'worker'
+                            ? 'bg-purple-100 text-purple-800'
+                            : 'bg-emerald-100 text-emerald-800'
+                        }`}>
+                          {role === 'farmer' || role === 'user' ? 'Farmer' : role === 'vendor' ? 'Vendor' : 'Worker'}
+                        </span>
+                        {role === 'worker' && workerType && (
+                          <span className="ml-1 px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-amber-100 text-amber-800">
+                            {workerType === 'TEAM_LEADER' ? 'TL' : 'Ind'}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 text-gray-600 whitespace-nowrap">
+                        {formatDate(request.requestDate || request.createdAt)}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <div className="font-mono font-bold text-gray-800 text-[11px]">
+                          {request.bankAccountMasked || '••••'}
+                        </div>
+                        <button
+                          onClick={() => openViewBankDetails(request)}
+                          className="text-[10px] font-bold text-blue-600 hover:underline inline-flex items-center gap-0.5 mt-0.5"
+                        >
+                          <FiFileText className="w-3 h-3" /> Details
+                        </button>
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-black text-gray-900 text-sm">
+                        ₹{amount.toLocaleString()}
+                      </td>
+                      <td className="py-2.5 px-3 text-center">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
+                          status === 'COMPLETED'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : status === 'ADMIN_ACCEPTED'
+                            ? 'bg-blue-50 text-blue-700 border-blue-200'
+                            : status === 'PROCESSING'
+                            ? 'bg-purple-50 text-purple-700 border-purple-200'
+                            : status === 'REJECTED'
+                            ? 'bg-red-50 text-red-700 border-red-200'
+                            : 'bg-amber-50 text-amber-700 border-amber-200'
+                        }`}>
+                          {status === 'ADMIN_ACCEPTED' ? 'Accepted' : status}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          {status === 'PENDING' && (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setSelectedItem(request);
+                                  setActiveModal('accept_withdrawal');
+                                }}
+                                className="px-2 py-1 bg-blue-600 text-white rounded font-bold text-[11px] hover:bg-blue-700"
+                              >
+                                Accept
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSelectedItem(request);
+                                  setActiveModal('complete_withdrawal');
+                                }}
+                                className="px-2 py-1 bg-emerald-600 text-white rounded font-bold text-[11px] hover:bg-emerald-700"
+                              >
+                                Complete
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSelectedItem(request);
+                                  setActiveModal('reject_withdrawal');
+                                }}
+                                className="px-2 py-1 bg-white border border-red-200 text-red-600 rounded font-bold text-[11px] hover:bg-red-50"
+                              >
+                                Reject
+                              </button>
+                            </>
+                          )}
+
+                          {status === 'ADMIN_ACCEPTED' && (
+                            <>
+                              <button
+                                onClick={() => handleMarkProcessing(request)}
+                                className="px-2 py-1 bg-white border border-purple-200 text-purple-700 rounded font-bold text-[11px] hover:bg-purple-50"
+                              >
+                                Process
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSelectedItem(request);
+                                  setActiveModal('complete_withdrawal');
+                                }}
+                                className="px-2 py-1 bg-emerald-600 text-white rounded font-bold text-[11px] hover:bg-emerald-700"
+                              >
+                                Complete
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSelectedItem(request);
+                                  setActiveModal('reject_withdrawal');
+                                }}
+                                className="px-2 py-1 bg-white border border-red-200 text-red-600 rounded font-bold text-[11px] hover:bg-red-50"
+                              >
+                                Reject
+                              </button>
+                            </>
+                          )}
+
+                          {status === 'PROCESSING' && (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setSelectedItem(request);
+                                  setActiveModal('complete_withdrawal');
+                                }}
+                                className="px-2 py-1 bg-emerald-600 text-white rounded font-bold text-[11px] hover:bg-emerald-700"
+                              >
+                                Complete
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSelectedItem(request);
+                                  setActiveModal('reject_withdrawal');
+                                }}
+                                className="px-2 py-1 bg-white border border-red-200 text-red-600 rounded font-bold text-[11px] hover:bg-red-50"
+                              >
+                                Reject
+                              </button>
+                            </>
+                          )}
+
+                          {status === 'COMPLETED' && request.paymentProof && (
+                            <button
+                              onClick={() => setViewProofItem(request)}
+                              className="px-2 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded font-bold text-[11px] hover:bg-emerald-100 flex items-center gap-1"
+                            >
+                              <FiEye className="w-3 h-3" /> Proof
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {withdrawals.map(request => {
+          /* ========================================================= */
+          /* GRID VIEW (3 CARDS PER ROW ON DESKTOP) */
+          /* ========================================================= */
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
+            {paginatedWithdrawals.map(request => {
               const requesterName = request.requester?.name || request.vendorId?.name || 'User';
               const requesterPhone = request.requester?.phone || request.vendorId?.phone || '';
               const role = (request.requesterRole || (request.vendorId ? 'vendor' : 'user')).toLowerCase();
@@ -396,142 +835,144 @@ const WithdrawalsPage = () => {
               return (
                 <div
                   key={request._id}
-                  className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200 hover:border-blue-300 transition-all space-y-4"
+                  className="bg-white rounded-xl p-3.5 shadow-2xs border border-gray-200/90 hover:border-blue-300 transition-all space-y-3 flex flex-col justify-between"
                 >
-                  {/* Card Header */}
-                  <div className="flex justify-between items-start">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-11 h-11 rounded-xl flex items-center justify-center font-bold text-base ${
-                        role === 'vendor'
-                          ? 'bg-blue-50 text-blue-700'
-                          : role === 'worker'
-                          ? 'bg-purple-50 text-purple-700'
-                          : 'bg-emerald-50 text-emerald-700'
-                      }`}>
-                        {requesterName.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-bold text-gray-900 text-sm">{requesterName}</h3>
-                          {/* Role Badge */}
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase ${
-                            role === 'vendor'
-                              ? 'bg-blue-100 text-blue-800'
-                              : role === 'worker'
-                              ? 'bg-purple-100 text-purple-800'
-                              : 'bg-emerald-100 text-emerald-800'
-                          }`}>
-                            {role === 'farmer' || role === 'user' ? 'Farmer' : role === 'vendor' ? 'Vendor' : 'Worker'}
-                          </span>
-                          {/* Worker Type Badge */}
-                          {role === 'worker' && workerType && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide bg-amber-100 text-amber-800">
-                              {workerType === 'TEAM_LEADER' ? 'Team Leader' : 'Independent'}
+                  <div className="space-y-3">
+                    {/* Card Header */}
+                    <div className="flex justify-between items-start gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center font-black text-xs shrink-0 ${
+                          role === 'vendor'
+                            ? 'bg-blue-50 text-blue-700 border border-blue-100'
+                            : role === 'worker'
+                            ? 'bg-purple-50 text-purple-700 border border-purple-100'
+                            : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                        }`}>
+                          {requesterName.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <h3 className="font-bold text-gray-900 text-xs truncate max-w-[110px] sm:max-w-[130px]">{requesterName}</h3>
+                            {/* Role Badge */}
+                            <span className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold tracking-wide uppercase ${
+                              role === 'vendor'
+                                ? 'bg-blue-100/80 text-blue-800'
+                                : role === 'worker'
+                                ? 'bg-purple-100/80 text-purple-800'
+                                : 'bg-emerald-100/80 text-emerald-800'
+                            }`}>
+                              {role === 'farmer' || role === 'user' ? 'Farmer' : role === 'vendor' ? 'Vendor' : 'Worker'}
                             </span>
+                            {/* Worker Type Badge */}
+                            {role === 'worker' && workerType && (
+                              <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold tracking-wide bg-amber-100 text-amber-800">
+                                {workerType === 'TEAM_LEADER' ? 'TL' : 'Ind'}
+                              </span>
+                            )}
+                          </div>
+                          {requesterPhone && (
+                            <p className="text-[11px] text-gray-400 font-mono mt-0.5">{requesterPhone}</p>
                           )}
                         </div>
-                        {requesterPhone && (
-                          <p className="text-xs text-gray-500 font-mono mt-0.5">{requesterPhone}</p>
-                        )}
                       </div>
-                    </div>
 
-                    {/* Amount & Status Badge */}
-                    <div className="text-right">
-                      <p className="text-2xl font-black text-gray-900">₹{amount.toLocaleString()}</p>
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase mt-1 border ${
-                        status === 'COMPLETED'
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          : status === 'ADMIN_ACCEPTED'
-                          ? 'bg-blue-50 text-blue-700 border-blue-200'
-                          : status === 'PROCESSING'
-                          ? 'bg-purple-50 text-purple-700 border-purple-200'
-                          : status === 'REJECTED'
-                          ? 'bg-red-50 text-red-700 border-red-200'
-                          : 'bg-amber-50 text-amber-700 border-amber-200'
-                      }`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${
+                      {/* Amount & Status Badge */}
+                      <div className="text-right shrink-0">
+                        <p className="text-lg font-black text-gray-900 leading-none">₹{amount.toLocaleString()}</p>
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase mt-1 border ${
                           status === 'COMPLETED'
-                            ? 'bg-emerald-500'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                             : status === 'ADMIN_ACCEPTED'
-                            ? 'bg-blue-500'
+                            ? 'bg-blue-50 text-blue-700 border-blue-200'
                             : status === 'PROCESSING'
-                            ? 'bg-purple-500'
+                            ? 'bg-purple-50 text-purple-700 border-purple-200'
                             : status === 'REJECTED'
-                            ? 'bg-red-500'
-                            : 'bg-amber-500'
-                        }`} />
-                        {status === 'ADMIN_ACCEPTED' ? 'Accepted' : status}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Bank Details & Timing Snapshot */}
-                  <div className="bg-gray-50 rounded-xl p-3.5 space-y-2 text-xs border border-gray-100">
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-500">Requested Date</span>
-                      <span className="font-semibold text-gray-700">{formatDate(request.requestDate || request.createdAt)}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-500">Bank Account</span>
-                      <span className="font-mono font-bold text-gray-800">
-                        {request.bankAccountMasked || '••••'}
-                      </span>
-                    </div>
-                    {(request.bankDetails?.ifscCode || request.bankDetails?.ifsc) && (
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-500">IFSC & Bank</span>
-                        <span className="font-medium text-gray-800">
-                          {request.bankDetails.ifscCode || request.bankDetails.ifsc} {request.bankDetails.bankName ? `(${request.bankDetails.bankName})` : ''}
+                            ? 'bg-red-50 text-red-700 border-red-200'
+                            : 'bg-amber-50 text-amber-700 border-amber-200'
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${
+                            status === 'COMPLETED'
+                              ? 'bg-emerald-500'
+                              : status === 'ADMIN_ACCEPTED'
+                              ? 'bg-blue-500'
+                              : status === 'PROCESSING'
+                              ? 'bg-purple-500'
+                              : status === 'REJECTED'
+                              ? 'bg-red-500'
+                              : 'bg-amber-500'
+                          }`} />
+                          {status === 'ADMIN_ACCEPTED' ? 'Accepted' : status}
                         </span>
                       </div>
+                    </div>
+
+                    {/* Bank Details & Timing Snapshot */}
+                    <div className="bg-gray-50/80 rounded-lg p-2.5 space-y-1.5 text-[11px] border border-gray-100">
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-400">Requested</span>
+                        <span className="font-semibold text-gray-700">{formatDate(request.requestDate || request.createdAt)}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-400">Account</span>
+                        <span className="font-mono font-bold text-gray-800">
+                          {request.bankAccountMasked || '••••'}
+                        </span>
+                      </div>
+                      {(request.bankDetails?.ifscCode || request.bankDetails?.ifsc) && (
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-400">IFSC / Bank</span>
+                          <span className="font-medium text-gray-800 truncate max-w-[150px]">
+                            {request.bankDetails.ifscCode || request.bankDetails.ifsc} {request.bankDetails.bankName ? `(${request.bankDetails.bankName})` : ''}
+                          </span>
+                        </div>
+                      )}
+                      <div className="pt-1.5 border-t border-gray-200/60 flex justify-end">
+                        <button
+                          onClick={() => openViewBankDetails(request)}
+                          className="text-[11px] font-bold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1"
+                        >
+                          <FiFileText className="w-3 h-3" />
+                          View Full Bank Details
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Rejection Note if Rejected */}
+                    {status === 'REJECTED' && (
+                      <div className="bg-red-50/80 border border-red-200 rounded-lg p-2 text-[11px] text-red-700">
+                        <p className="font-bold mb-0.5">Rejection Reason:</p>
+                        <p className="text-[11px] leading-tight">{request.rejectionReason || 'No reason specified'}</p>
+                      </div>
                     )}
-                    <div className="pt-2 border-t border-gray-200 flex justify-end">
-                      <button
-                        onClick={() => openViewBankDetails(request)}
-                        className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1"
-                      >
-                        <FiFileText className="w-3.5 h-3.5" />
-                        View Full Payout Bank Details
-                      </button>
-                    </div>
-                  </div>
 
-                  {/* Rejection Note if Rejected */}
-                  {status === 'REJECTED' && (
-                    <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-700">
-                      <p className="font-bold mb-0.5">Rejection Reason:</p>
-                      <p>{request.rejectionReason || 'No reason specified'}</p>
-                    </div>
-                  )}
-
-                  {/* Payment Details if Completed */}
-                  {status === 'COMPLETED' && (
-                    <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-800 flex justify-between items-center">
-                      <div>
-                        <p className="font-bold flex items-center gap-1 text-emerald-700">
-                          <FiCheck className="w-4 h-4" /> Payout Completed
-                        </p>
-                        {request.paymentReference && (
-                          <p className="text-[11px] font-mono text-emerald-900 mt-0.5">
-                            Ref / UTR: {request.paymentReference}
+                    {/* Payment Details if Completed */}
+                    {status === 'COMPLETED' && (
+                      <div className="bg-emerald-50/80 border border-emerald-200 rounded-lg p-2 text-[11px] text-emerald-800 flex justify-between items-center">
+                        <div>
+                          <p className="font-bold flex items-center gap-1 text-emerald-700 text-xs">
+                            <FiCheck className="w-3.5 h-3.5" /> Payout Completed
                           </p>
+                          {request.paymentReference && (
+                            <p className="text-[10px] font-mono text-emerald-900 mt-0.5">
+                              Ref: {request.paymentReference}
+                            </p>
+                          )}
+                        </div>
+                        {request.paymentProof && (
+                          <button
+                            onClick={() => setViewProofItem(request)}
+                            className="px-2.5 py-1 bg-emerald-600 text-white rounded-md font-bold text-[11px] hover:bg-emerald-700 flex items-center gap-1 shadow-2xs transition-all"
+                          >
+                            <FiEye className="w-3 h-3" />
+                            Proof
+                          </button>
                         )}
                       </div>
-                      {request.paymentProof && (
-                        <button
-                          onClick={() => setViewProofItem(request)}
-                          className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg font-bold text-xs hover:bg-emerald-700 flex items-center gap-1 shadow-sm transition-all"
-                        >
-                          <FiEye className="w-3.5 h-3.5" />
-                          View Proof
-                        </button>
-                      )}
-                    </div>
-                  )}
+                    )}
+                  </div>
 
                   {/* Action Buttons */}
-                  <div className="pt-1 flex items-center gap-2">
+                  <div className="pt-1 flex items-center gap-1.5">
                     {status === 'PENDING' && (
                       <>
                         <button
@@ -539,7 +980,7 @@ const WithdrawalsPage = () => {
                             setSelectedItem(request);
                             setActiveModal('accept_withdrawal');
                           }}
-                          className="px-3 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-xs shadow-sm hover:bg-blue-700 active:scale-95 transition-all"
+                          className="px-2.5 py-2 bg-blue-600 text-white rounded-lg font-bold text-xs shadow-2xs hover:bg-blue-700 active:scale-95 transition-all"
                         >
                           Accept
                         </button>
@@ -548,7 +989,7 @@ const WithdrawalsPage = () => {
                             setSelectedItem(request);
                             setActiveModal('complete_withdrawal');
                           }}
-                          className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl font-bold text-xs shadow-sm hover:bg-emerald-700 active:scale-95 transition-all"
+                          className="flex-1 py-2 bg-emerald-600 text-white rounded-lg font-bold text-xs shadow-2xs hover:bg-emerald-700 active:scale-95 transition-all"
                         >
                           Finalize Payout
                         </button>
@@ -557,7 +998,7 @@ const WithdrawalsPage = () => {
                             setSelectedItem(request);
                             setActiveModal('reject_withdrawal');
                           }}
-                          className="px-3 py-2.5 bg-white border border-red-200 text-red-600 rounded-xl font-bold text-xs hover:bg-red-50 active:scale-95 transition-all"
+                          className="px-2.5 py-2 bg-white border border-red-200 text-red-600 rounded-lg font-bold text-xs hover:bg-red-50 active:scale-95 transition-all"
                         >
                           Reject
                         </button>
@@ -568,25 +1009,25 @@ const WithdrawalsPage = () => {
                       <>
                         <button
                           onClick={() => handleMarkProcessing(request)}
-                          className="px-3 py-2.5 bg-white border border-purple-200 text-purple-700 rounded-xl font-bold text-xs hover:bg-purple-50 active:scale-95 transition-all"
+                          className="px-2.5 py-2 bg-white border border-purple-200 text-purple-700 rounded-lg font-bold text-[11px] hover:bg-purple-50 active:scale-95 transition-all"
                         >
-                          Mark Processing
+                          Processing
                         </button>
                         <button
                           onClick={() => {
                             setSelectedItem(request);
                             setActiveModal('complete_withdrawal');
                           }}
-                          className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl font-bold text-xs shadow-sm hover:bg-emerald-700 active:scale-95 transition-all"
+                          className="flex-1 py-2 bg-emerald-600 text-white rounded-lg font-bold text-xs shadow-2xs hover:bg-emerald-700 active:scale-95 transition-all"
                         >
-                          Complete Payout (Upload Proof)
+                          Complete Payout
                         </button>
                         <button
                           onClick={() => {
                             setSelectedItem(request);
                             setActiveModal('reject_withdrawal');
                           }}
-                          className="px-3 py-2.5 bg-white border border-red-200 text-red-600 rounded-xl font-bold text-xs hover:bg-red-50 active:scale-95 transition-all"
+                          className="px-2.5 py-2 bg-white border border-red-200 text-red-600 rounded-lg font-bold text-xs hover:bg-red-50 active:scale-95 transition-all"
                         >
                           Reject
                         </button>
@@ -600,16 +1041,16 @@ const WithdrawalsPage = () => {
                             setSelectedItem(request);
                             setActiveModal('complete_withdrawal');
                           }}
-                          className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl font-bold text-xs shadow-sm hover:bg-emerald-700 active:scale-95 transition-all"
+                          className="flex-1 py-2 bg-emerald-600 text-white rounded-lg font-bold text-xs shadow-2xs hover:bg-emerald-700 active:scale-95 transition-all"
                         >
-                          Complete Payout (Upload Proof)
+                          Complete Payout
                         </button>
                         <button
                           onClick={() => {
                             setSelectedItem(request);
                             setActiveModal('reject_withdrawal');
                           }}
-                          className="px-4 py-2.5 bg-white border border-red-200 text-red-600 rounded-xl font-bold text-xs hover:bg-red-50 active:scale-95 transition-all"
+                          className="px-3 py-2 bg-white border border-red-200 text-red-600 rounded-lg font-bold text-xs hover:bg-red-50 active:scale-95 transition-all"
                         >
                           Reject
                         </button>
@@ -619,6 +1060,59 @@ const WithdrawalsPage = () => {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Pagination Bar */}
+        {!loading && filteredWithdrawals.length > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-gray-100 text-xs text-gray-500">
+            <div className="flex items-center gap-3">
+              <span>
+                Showing <span className="font-bold text-gray-900">{Math.min((currentPage - 1) * itemsPerPage + 1, filteredWithdrawals.length)}</span> to{' '}
+                <span className="font-bold text-gray-900">{Math.min(currentPage * itemsPerPage, filteredWithdrawals.length)}</span> of{' '}
+                <span className="font-bold text-gray-900">{filteredWithdrawals.length}</span> requests
+              </span>
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-400">Per page:</span>
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                  className="px-2 py-1 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-800 outline-none"
+                >
+                  <option value={12}>12</option>
+                  <option value={24}>24</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
+            </div>
+
+            {totalPages > 1 && (
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage <= 1}
+                  className="px-2.5 py-1 rounded-lg border border-gray-200 bg-white text-gray-700 font-bold text-xs hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 transition-all shadow-2xs"
+                >
+                  <FiChevronLeft className="w-3.5 h-3.5" />
+                  <span>Prev</span>
+                </button>
+
+                <span className="px-2 font-bold text-gray-800">
+                  {currentPage} / {totalPages}
+                </span>
+
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage >= totalPages}
+                  className="px-2.5 py-1 rounded-lg border border-gray-200 bg-white text-gray-700 font-bold text-xs hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 transition-all shadow-2xs"
+                >
+                  <span>Next</span>
+                  <FiChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
