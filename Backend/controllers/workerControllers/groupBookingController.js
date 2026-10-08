@@ -268,8 +268,8 @@ exports.createGroupRequest = async (req, res) => {
     if (Number(farmerOfferedRatePerWorker) <= 0) {
       return res.status(400).json({ success: false, message: 'Offered rate must be greater than 0.' });
     }
-    if (toMins(endTime) <= toMins(startTime)) {
-      return res.status(400).json({ success: false, message: 'End time must be after start time.' });
+    if (toMins(endTime) === toMins(startTime)) {
+      return res.status(400).json({ success: false, message: 'End time cannot be the same as start time.' });
     }
     const scheduledDateObj = new Date(scheduledDate);
     if (isNaN(scheduledDateObj.getTime()) || scheduledDateObj < new Date(new Date().setHours(0,0,0,0))) {
@@ -342,9 +342,11 @@ exports.createGroupRequest = async (req, res) => {
       createDoc.minDailyRate = minDailyRate ? Number(minDailyRate) : Number(farmerOfferedRatePerWorker);
       createDoc.maxDailyRate = maxDailyRate ? Number(maxDailyRate) : Number(farmerOfferedRatePerWorker);
     } else {
+      let rawDiff = toMins(endTime) - toMins(startTime);
+      if (rawDiff <= 0) rawDiff += 24 * 60;
       const durMins = durationMinutes
         ? Number(durationMinutes)
-        : (toMins(endTime) - toMins(startTime)) || 60;
+        : rawDiff || 60;
       createDoc.durationMinutes = Math.max(durMins, 1);
     }
 

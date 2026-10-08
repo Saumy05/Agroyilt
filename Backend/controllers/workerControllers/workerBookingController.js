@@ -126,8 +126,8 @@ exports.createSingleRequest = async (req, res) => {
     if (!workerId || !scheduledDate || !startTime || !endTime || farmerOfferedRate === undefined) {
       return res.status(400).json({ success: false, message: 'workerId, scheduledDate, startTime, endTime, and farmerOfferedRate are required.' });
     }
-    if (toMins(endTime) <= toMins(startTime)) {
-      return res.status(400).json({ success: false, message: 'End time must be after start time.' });
+    if (toMins(endTime) === toMins(startTime)) {
+      return res.status(400).json({ success: false, message: 'End time cannot be the same as start time.' });
     }
     const scheduledDateObj = new Date(scheduledDate);
     if (isNaN(scheduledDateObj.getTime()) || scheduledDateObj < new Date(new Date().setHours(0,0,0,0))) {

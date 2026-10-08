@@ -27,7 +27,9 @@ const { sendNotificationToUser, sendNotificationToWorker } = require('../../serv
 const {
   getBookingScheduledExpiry,
   isBookingExpired,
-  expireWorkerBookingRequest
+  expireWorkerBookingRequest,
+  getIstDateString,
+  addDaysToIstDate
 } = require('../../services/workerBookingExpiryService');
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -375,6 +377,45 @@ const notify = async ({
  *
  * @param {string|ObjectId} workerId - Candidate worker ID
  * @param {Date|string} scheduledDate - Target work date
+/**
+ * Converts a slot defined by a date, startTime and endTime into an absolute
+ * timestamp interval { startMs, endMs } in IST. Automatically handles overnight
+ * shifts that wrap past midnight to the next calendar day.
+ */
+const getSlotIntervalMs = (dateInput, startStr, endStr) => {
+  if (!dateInput || !startStr) return null;
+  const startMins = parseTimeToMinutes(startStr);
+  if (startMins === null) return null;
+
+  const istDateStr = getIstDateString(dateInput);
+  if (!istDateStr) return null;
+
+  const [sH, sM] = [Math.floor(startMins / 60), startMins % 60];
+  const startMs = new Date(`${istDateStr}T${String(sH).padStart(2, '0')}:${String(sM).padStart(2, '0')}:00+05:30`).getTime();
+
+  let endMins = parseTimeToMinutes(endStr);
+  let endMs;
+  if (endMins === null) {
+    endMs = startMs + 60 * 60 * 1000;
+  } else if (endMins <= startMins) {
+    // Overnight: finishes next calendar day
+    const nextIstDateStr = addDaysToIstDate(istDateStr, 1);
+    const [eH, eM] = [Math.floor(endMins / 60), endMins % 60];
+    endMs = new Date(`${nextIstDateStr}T${String(eH).padStart(2, '0')}:${String(eM).padStart(2, '0')}:00+05:30`).getTime();
+  } else {
+    const [eH, eM] = [Math.floor(endMins / 60), endMins % 60];
+    endMs = new Date(`${istDateStr}T${String(eH).padStart(2, '0')}:${String(eM).padStart(2, '0')}:00+05:30`).getTime();
+  }
+
+  return { startMs, endMs };
+};
+
+/**
+ * Check if a worker has an existing active booking on scheduledDate between startTime-endTime.
+ * Fully supports overnight shifts crossing midnight by comparing absolute IST timestamps.
+ *
+ * @param {string|ObjectId} workerId - Worker ID
+ * @param {Date|string} scheduledDate - Booking date
  * @param {string} startTime - Requested start time "HH:mm"
  * @param {string} endTime - Requested end time "HH:mm"
  * @param {string|ObjectId} [excludeRequestId=null] - Request ID to exclude from conflict check
@@ -388,21 +429,19 @@ const hasTimeConflict = async (workerId, scheduledDate, startTime, endTime, excl
       return true;
     }
 
-    const reqStartMins = parseTimeToMinutes(startTime);
-    const reqEndMins = parseTimeToMinutes(endTime);
-
-    if (reqStartMins === null || reqEndMins === null) {
-      console.warn(`[hasTimeConflict] Invalid time format for requested slot: start=${startTime}, end=${endTime}`);
-      return true;
-    }
-
     const targetDate = (scheduledDate instanceof Date) ? scheduledDate : new Date(scheduledDate);
     if (isNaN(targetDate.getTime())) {
       console.warn(`[hasTimeConflict] Invalid scheduledDate: ${scheduledDate}`);
       return true;
     }
 
-    // 48h search window in MongoDB to ensure timezone shifts (UTC vs IST) are captured
+    const reqSlot = getSlotIntervalMs(targetDate, startTime, endTime);
+    if (!reqSlot) {
+      console.warn(`[hasTimeConflict] Invalid time format for requested slot: start=${startTime}, end=${endTime}`);
+      return true;
+    }
+
+    // 48h search window in MongoDB to ensure timezone shifts (UTC vs IST) and overnight spans are captured
     const windowStart = new Date(targetDate);
     windowStart.setDate(windowStart.getDate() - 1);
     windowStart.setHours(0, 0, 0, 0);
@@ -446,12 +485,9 @@ const hasTimeConflict = async (workerId, scheduledDate, startTime, endTime, excl
         continue;
       }
 
-      if (!isSameCalendarDate(targetDate, b.scheduledDate)) {
-        continue;
-      }
-
-      const { startMins, endMins, startStr, endStr } = extractDocTimeRange(b);
-      if (doTimesOverlap(startMins, endMins, reqStartMins, reqEndMins)) {
+      const { startStr, endStr } = extractDocTimeRange(b);
+      const bSlot = getSlotIntervalMs(b.scheduledDate, startStr, endStr);
+      if (bSlot && (bSlot.startMs < reqSlot.endMs && bSlot.endMs > reqSlot.startMs)) {
         const existDateDisplay = getCalendarDateStrings(b.scheduledDate)[0] || String(b.scheduledDate);
         console.log(`[CONFLICT CHECK] Worker: ${workerId} | Requested: ${reqDateDisplay} ${startTime}-${endTime} | Existing Booking (${b.bookingNumber || b._id}): ${existDateDisplay} ${startStr}-${endStr} (Status: ${b.status}) | Conflict: true`);
         return true;
@@ -487,12 +523,9 @@ const hasTimeConflict = async (workerId, scheduledDate, startTime, endTime, excl
       .lean();
 
     for (const r of activeRequests) {
-      if (!isSameCalendarDate(targetDate, r.scheduledDate)) {
-        continue;
-      }
-
-      const { startMins, endMins, startStr, endStr } = extractDocTimeRange(r);
-      if (doTimesOverlap(startMins, endMins, reqStartMins, reqEndMins)) {
+      const { startStr, endStr } = extractDocTimeRange(r);
+      const rSlot = getSlotIntervalMs(r.scheduledDate, startStr, endStr);
+      if (rSlot && (rSlot.startMs < reqSlot.endMs && rSlot.endMs > reqSlot.startMs)) {
         const existDateDisplay = getCalendarDateStrings(r.scheduledDate)[0] || String(r.scheduledDate);
         console.log(`[CONFLICT CHECK] Worker: ${workerId} | Requested: ${reqDateDisplay} ${startTime}-${endTime} | Existing Request (${r._id}): ${existDateDisplay} ${startStr}-${endStr} (Status: ${r.status}) | Conflict: true`);
         return true;
@@ -507,12 +540,9 @@ const hasTimeConflict = async (workerId, scheduledDate, startTime, endTime, excl
     }).select('_id scheduledDate startTime endTime status workTitle').lean();
 
     for (const g of groupRequests) {
-      if (!isSameCalendarDate(targetDate, g.scheduledDate)) {
-        continue;
-      }
-
-      const { startMins, endMins, startStr, endStr } = extractDocTimeRange(g);
-      if (doTimesOverlap(startMins, endMins, reqStartMins, reqEndMins)) {
+      const { startStr, endStr } = extractDocTimeRange(g);
+      const gSlot = getSlotIntervalMs(g.scheduledDate, startStr, endStr);
+      if (gSlot && (gSlot.startMs < reqSlot.endMs && gSlot.endMs > reqSlot.startMs)) {
         const existDateDisplay = getCalendarDateStrings(g.scheduledDate)[0] || String(g.scheduledDate);
         console.log(`[CONFLICT CHECK] Worker: ${workerId} | Requested: ${reqDateDisplay} ${startTime}-${endTime} | Existing GroupRequest (${g._id}): ${existDateDisplay} ${startStr}-${endStr} (Status: ${g.status}) | Conflict: true`);
         return true;
@@ -881,7 +911,8 @@ exports.createFarmerRequest = async (req, res) => {
         requestType:   'independent_broadcast',
         scheduledDate: { $gte: dateStart, $lte: dateEnd },
         startTime,
-        status: { $in: ['pending', 'matching', 'awaiting_farmer_confirmation'] }
+        status: { $in: ['pending', 'matching', 'awaiting_farmer_confirmation'] },
+        expiresAt: { $gt: new Date() }
       });
       if (existingActive) {
         return res.status(409).json({
@@ -904,7 +935,8 @@ exports.createFarmerRequest = async (req, res) => {
         bookingType: 'DAILY',
         startDate:   { $lte: eDate },
         endDate:     { $gte: sDate },
-        status: { $in: ['pending', 'matching', 'awaiting_farmer_confirmation'] }
+        status: { $in: ['pending', 'matching', 'awaiting_farmer_confirmation'] },
+        expiresAt: { $gt: new Date() }
       });
       if (existingDaily) {
         return res.status(409).json({
@@ -976,14 +1008,14 @@ exports.createFarmerRequest = async (req, res) => {
 
       let calcDurationMinutes = 60;
       if (req.body.durationMinutes && Number(req.body.durationMinutes) > 0) {
-        calcDurationMinutes = Math.max(60, Math.round(Number(req.body.durationMinutes) / 60) * 60);
+        calcDurationMinutes = Math.max(15, Math.round(Number(req.body.durationMinutes)));
       } else if (startTime && endTime) {
         const [sH, sM] = startTime.split(':').map(Number);
         const [eH, eM] = endTime.split(':').map(Number);
         if (!isNaN(sH) && !isNaN(eH)) {
           let diffMinutes = (eH * 60 + (eM || 0)) - (sH * 60 + (sM || 0));
           if (diffMinutes < 0) diffMinutes += 24 * 60;
-          if (diffMinutes > 0) calcDurationMinutes = Math.max(60, Math.round(diffMinutes / 60) * 60);
+          if (diffMinutes > 0) calcDurationMinutes = diffMinutes;
         }
       }
 
@@ -3166,14 +3198,14 @@ exports.farmerSelectWorkers = async (req, res) => {
       baseRate = Number(request.maxRate || request.minRate || 0);
       let durationHours = 1;
       if (request.durationMinutes && Number(request.durationMinutes) > 0) {
-        durationHours = Math.max(1, Math.round(Number(request.durationMinutes) / 60));
+        durationHours = Math.max(0.5, Number((Number(request.durationMinutes) / 60).toFixed(2)));
       } else if (request.startTime && request.endTime) {
         const [sH, sM] = request.startTime.split(':').map(Number);
         const [eH, eM] = request.endTime.split(':').map(Number);
         if (!isNaN(sH) && !isNaN(eH)) {
           let diffMinutes = (eH * 60 + (eM || 0)) - (sH * 60 + (sM || 0));
           if (diffMinutes < 0) diffMinutes += 24 * 60;
-          if (diffMinutes > 0) durationHours = Math.max(1, Math.round(diffMinutes / 60));
+          if (diffMinutes > 0) durationHours = Math.max(0.5, Number((diffMinutes / 60).toFixed(2)));
         }
       }
       maxWorkerPaise = Math.round(rupeesToPaise(baseRate) * selectedWorkerIds.length * durationHours);

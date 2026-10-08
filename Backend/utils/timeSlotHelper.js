@@ -16,10 +16,28 @@
  *  "12:00 AM" -> 0
  *  "12:00 PM" -> 720
  */
+// Customers book in local (Indian) time while servers usually run in UTC.
+// Override with APP_TZ_OFFSET_MINUTES (IST = 330).
+const APP_TZ_OFFSET_MINUTES = Number(process.env.APP_TZ_OFFSET_MINUTES ?? 330);
+
 function parseTimeToMinutes(timeStr) {
   if (!timeStr || typeof timeStr !== 'string') return null;
   const str = timeStr.trim();
   if (!str) return null;
+
+  // Match instant keywords: "Now", "ASAP"
+  if (/^(now|asap)$/i.test(str)) {
+    const local = new Date(Date.now() + APP_TZ_OFFSET_MINUTES * 60000);
+    return local.getUTCHours() * 60 + local.getUTCMinutes();
+  }
+
+  // Match relative duration offsets: "45 mins", "60 min", "+45 mins"
+  const relMatch = str.match(/^\+?(\d+)\s*(?:mins?|minutes?)$/i);
+  if (relMatch) {
+    const local = new Date(Date.now() + APP_TZ_OFFSET_MINUTES * 60000);
+    const nowMins = local.getUTCHours() * 60 + local.getUTCMinutes();
+    return (nowMins + parseInt(relMatch[1], 10)) % 1440;
+  }
 
   // Match 12-hour format: "09:00 AM", "9:30 pm", "1:15 PM", "12:00 PM", "12:30 AM"
   const match12 = str.match(/^(\d{1,2}):(\d{2})\s*(am|pm)$/i);
@@ -136,9 +154,6 @@ function isIntervalOverlapping(slotA, slotB) {
   return intA.startMinutes < intB.endMinutes && intA.endMinutes > intB.startMinutes;
 }
 
-// Customers book in local (Indian) time while servers usually run in UTC.
-// Override with APP_TZ_OFFSET_MINUTES (IST = 330).
-const APP_TZ_OFFSET_MINUTES = Number(process.env.APP_TZ_OFFSET_MINUTES ?? 330);
 const MAX_ADVANCE_DAYS = 90;
 
 /** "YYYY-MM-DD" calendar date of an instant, in the app's timezone. */
@@ -157,10 +172,15 @@ function validateSchedule(scheduledDate, timeSlot, now = new Date()) {
   const dateKey = appDateKey(scheduledDate);
   if (!dateKey) return { ok: false, message: 'Valid scheduled date is required' };
 
+  const rawStart = typeof timeSlot?.start === 'string' ? timeSlot.start.trim() : '';
+  const rawEnd = typeof timeSlot?.end === 'string' ? timeSlot.end.trim() : '';
+  const isInstant = /^(now|asap)$/i.test(rawStart) || timeSlot?.isInstant === true;
+  const isFullDay = (rawStart === '00:00' && (rawEnd === '23:59' || rawEnd === '24:00')) || timeSlot?.isFullDay === true;
+
   const start = parseTimeToMinutes(timeSlot?.start);
   const end = parseTimeToMinutes(timeSlot?.end);
   if (start === null || end === null) return { ok: false, message: 'Valid time slot is required' };
-  if (end <= start) return { ok: false, message: 'End time must be later than start time' };
+  if (!isInstant && end <= start) return { ok: false, message: 'End time must be later than start time' };
 
   const todayKey = appDateKey(now);
   if (dateKey < todayKey) return { ok: false, message: 'You cannot book a date in the past.' };
@@ -168,7 +188,7 @@ function validateSchedule(scheduledDate, timeSlot, now = new Date()) {
   const maxKey = appDateKey(new Date(now.getTime() + MAX_ADVANCE_DAYS * 86400000));
   if (dateKey > maxKey) return { ok: false, message: `Bookings can be made at most ${MAX_ADVANCE_DAYS} days in advance.` };
 
-  if (dateKey === todayKey) {
+  if (dateKey === todayKey && !isInstant && !isFullDay) {
     const local = new Date(now.getTime() + APP_TZ_OFFSET_MINUTES * 60000);
     const nowMinutes = local.getUTCHours() * 60 + local.getUTCMinutes();
     if (start <= nowMinutes) return { ok: false, message: 'This time slot has already passed. Please select a future time.' };

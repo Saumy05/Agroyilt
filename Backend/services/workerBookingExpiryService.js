@@ -476,5 +476,7 @@ module.exports = {
   isBookingExpired,
   expireWorkerBookingRequest,
   checkAndExpireWorkerRequests,
-  startWorkerBookingExpiryScheduler
+  startWorkerBookingExpiryScheduler,
+  getIstDateString,
+  addDaysToIstDate
 };

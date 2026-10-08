@@ -204,7 +204,7 @@ const calculateEndTime = (startTimeStr, hours) => {
   if (!startTimeStr) return '';
   const [sh, sm] = startTimeStr.split(':').map(Number);
   if (isNaN(sh)) return '';
-  const totalMins = sh * 60 + (sm || 0) + (Number(hours) || 1) * 60;
+  const totalMins = Math.round(sh * 60 + (sm || 0) + (Number(hours) || 1) * 60);
   const wrapped = totalMins % (24 * 60);
   const eh = Math.floor(wrapped / 60);
   const em = wrapped % 60;
@@ -270,6 +270,15 @@ const WorkerRequestForm = () => {
 
   const today = new Date().toISOString().split('T')[0];
 
+  const getDefaultStartTime = () => {
+    const now = new Date();
+    const nextHour = now.getHours() + 1;
+    if (nextHour >= 24) return '08:00';
+    return `${String(nextHour).padStart(2, '0')}:00`;
+  };
+  const defaultStartTime = getDefaultStartTime();
+  const defaultEndTime = calculateEndTime(defaultStartTime, 1);
+
   const initialCat = targetedWorker?.skills?.[0] || targetedWorker?.primaryService || '';
   const initialTemplate = WORK_CATEGORY_DATA[initialCat];
 
@@ -282,9 +291,9 @@ const WorkerRequestForm = () => {
     requiredWorkers: '1',
     // HOURLY fields
     scheduledDate:   '',
-    startTime:       '09:00',
+    startTime:       defaultStartTime,
     durationHours:   '1',
-    endTime:         '10:00',
+    endTime:         defaultEndTime,
     // DAILY fields
     startDate:       '',
     numberOfDays:    '1',
@@ -402,6 +411,25 @@ const WorkerRequestForm = () => {
     if (errors.endTime) setErrors(prev => ({ ...prev, endTime: '' }));
   };
 
+  const handleEndTimeChange = (e) => {
+    const val = e.target.value;
+    if (!val) {
+      setFormData(prev => ({ ...prev, endTime: '' }));
+      return;
+    }
+    const [sh, sm] = (formData.startTime || '08:00').split(':').map(Number);
+    const [eh, em] = val.split(':').map(Number);
+    let diff = (eh * 60 + (em || 0)) - (sh * 60 + (sm || 0));
+    if (diff < 0) diff += 24 * 60;
+    const computedHours = Math.max(0.5, Number((diff / 60).toFixed(1)));
+    setFormData(prev => ({
+      ...prev,
+      endTime: val,
+      durationHours: String(computedHours)
+    }));
+    if (errors.endTime) setErrors(prev => ({ ...prev, endTime: '' }));
+  };
+
   const handleDurationSelect = (hours) => {
     const hrsStr = String(hours);
     const computedEnd = calculateEndTime(formData.startTime, hours);
@@ -480,8 +508,23 @@ const WorkerRequestForm = () => {
       if (formData.startTime && formData.endTime) {
         const [sh, sm] = formData.startTime.split(':').map(Number);
         const [eh, em] = formData.endTime.split(':').map(Number);
-        if (eh * 60 + em <= sh * 60 + sm) {
-          e.endTime = 'End time must be after start time.';
+        if (eh * 60 + em === sh * 60 + sm) {
+          e.endTime = 'End time cannot be the same as start time.';
+        }
+      }
+
+      if (formData.scheduledDate && formData.scheduledDate === today && formData.startTime && formData.endTime) {
+        const now = new Date();
+        const nowMins = now.getHours() * 60 + now.getMinutes();
+        const [sh, sm] = formData.startTime.split(':').map(Number);
+        const [eh, em] = formData.endTime.split(':').map(Number);
+        const startMins = sh * 60 + (sm || 0);
+        const endMins = eh * 60 + (em || 0);
+        const isOvernight = endMins < startMins;
+
+        // If daytime shift and window has already elapsed today
+        if (!isOvernight && endMins <= nowMins) {
+          e.startTime = 'This scheduled window has already passed for today. Please select an upcoming start time.';
         }
       }
     }
@@ -538,8 +581,16 @@ const WorkerRequestForm = () => {
         payload.scheduledDate = formData.scheduledDate;
         payload.startTime     = formData.startTime;
         payload.endTime       = formData.endTime;
-        payload.durationMinutes = (Number(formData.durationHours) || 1) * 60;
-        payload.durationHours = Number(formData.durationHours) || 1;
+        let diffMinutes = 60;
+        const [sh, sm] = formData.startTime.split(':').map(Number);
+        const [eh, em] = formData.endTime.split(':').map(Number);
+        if (!isNaN(sh) && !isNaN(eh)) {
+          diffMinutes = (eh * 60 + (em || 0)) - (sh * 60 + (sm || 0));
+          if (diffMinutes < 0) diffMinutes += 24 * 60;
+        }
+        const calcHours = Number((diffMinutes / 60).toFixed(1));
+        payload.durationMinutes = diffMinutes;
+        payload.durationHours = Number(formData.durationHours) || calcHours;
         payload.minRate       = minR;
         payload.maxRate       = maxR;
       }
@@ -960,21 +1011,40 @@ const WorkerRequestForm = () => {
                   </div>
 
                   <div className="space-y-3">
-                    <div>
-                      <label className="text-[11px] font-bold text-slate-600 mb-1 block">Start Time *</label>
-                      <div className="relative">
-                        <FiClock className="absolute left-3 top-2.5 text-slate-400" size={14} />
-                        <input
-                          type="time"
-                          name="startTime"
-                          id="hourly-start-time"
-                          value={formData.startTime}
-                          onChange={handleStartTimeChange}
-                          step="900"
-                          className={`w-full bg-slate-50/80 border rounded-xl pl-9 pr-2.5 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white ${errors.startTime ? 'border-red-300' : 'border-slate-200'}`}
-                        />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-600 mb-1 block">Start Time *</label>
+                        <div className="relative">
+                          <FiClock className="absolute left-3 top-2.5 text-slate-400" size={14} />
+                          <input
+                            type="time"
+                            name="startTime"
+                            id="hourly-start-time"
+                            value={formData.startTime}
+                            onChange={handleStartTimeChange}
+                            step="900"
+                            className={`w-full bg-slate-50/80 border rounded-xl pl-9 pr-2.5 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white ${errors.startTime ? 'border-red-300' : 'border-slate-200'}`}
+                          />
+                        </div>
+                        <FieldError name="startTime" />
                       </div>
-                      <FieldError name="startTime" />
+
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-600 mb-1 block">End Time *</label>
+                        <div className="relative">
+                          <FiClock className="absolute left-3 top-2.5 text-slate-400" size={14} />
+                          <input
+                            type="time"
+                            name="endTime"
+                            id="hourly-end-time"
+                            value={formData.endTime}
+                            onChange={handleEndTimeChange}
+                            step="900"
+                            className={`w-full bg-slate-50/80 border rounded-xl pl-9 pr-2.5 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white ${errors.endTime ? 'border-red-300' : 'border-slate-200'}`}
+                          />
+                        </div>
+                        <FieldError name="endTime" />
+                      </div>
                     </div>
 
                     <div>
@@ -986,8 +1056,8 @@ const WorkerRequestForm = () => {
                           Hourly Rate: ₹{formData.minRate || 0}/hr
                         </span>
                       </div>
-                      <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5">
-                        {[1, 2, 3, 4, 5, 6, 8].map(h => (
+                      <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5">
+                        {[1, 2, 3, 4, 5, 6, 7.5, 8].map(h => (
                           <button
                             key={h}
                             type="button"

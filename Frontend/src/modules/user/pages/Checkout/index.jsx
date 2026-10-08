@@ -344,10 +344,10 @@ const Checkout = () => {
         const now = new Date();
         finalDate = now;
         finalTime = "ASAP";
-        finalTimeSlot = { start: "Now", end: "45 mins" };
+        finalTimeSlot = { start: "Now", end: "45 mins", isInstant: true };
       } else if (rentalType === 'daily' || rentalType === 'monthly' || rentalType === 'land_based') {
         finalTime = 'Full Day';
-        finalTimeSlot = { start: '00:00', end: '23:59' };
+        finalTimeSlot = { start: '00:00', end: '23:59', isFullDay: true };
       }
 
       const response = await bookingService.create({
@@ -552,12 +552,13 @@ const Checkout = () => {
         finalTimeDisplay = 'Full Day';
         timeSlotObj = { 
           start: '00:00', 
-          end: '23:59' 
+          end: '23:59',
+          isFullDay: true
         };
       } else if (bookingType === 'instant') {
         finalDate = new Date();
         finalTimeDisplay = "ASAP";
-        timeSlotObj = { start: "Now", end: "45 mins" };
+        timeSlotObj = { start: "Now", end: "45 mins", isInstant: true };
       } else {
         finalTimeDisplay = getTimeSlots().find(slot => slot.value === selectedTime) ?.display || selectedTime;
       }
