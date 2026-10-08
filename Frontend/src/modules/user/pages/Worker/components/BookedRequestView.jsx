@@ -15,6 +15,7 @@ import DisputeModal from '../../../../../components/common/DisputeModal';
 import ExtensionModal from '../../BookingTrack/components/ExtensionModal';
 import AddWorkersModal from '../../BookingTrack/components/AddWorkersModal';
 import DecreaseWorkerModal from '../../BookingTrack/components/DecreaseWorkerModal';
+import ActiveWorkMonitoringHub from '../../BookingTrack/components/ActiveWorkMonitoringHub';
 import FarmerWorkerQrModal from './FarmerWorkerQrModal';
 import { workLength } from '../../../../../utils/workerPayment';
 
@@ -125,6 +126,48 @@ const BookedRequestView = ({ request, onRefresh }) => {
   const startDiff = bookedStart && firstStart ? Math.round((firstStart - bookedStart) / 60000) : null;
   const currentDay = Math.max(...workers.map(w => Number(w.currentDayIndex) || 1), 1);
 
+  const effectiveTrackingData = useMemo(() => {
+    let dur = Number(tracking?.durationMinutes);
+    if (!dur || isNaN(dur)) {
+      if (request.durationMinutes) {
+        dur = Number(request.durationMinutes);
+      } else if (request.startTime && request.endTime) {
+        const [sH, sM] = String(request.startTime).split(':').map(Number);
+        const [eH, eM] = String(request.endTime).split(':').map(Number);
+        if (!isNaN(sH) && !isNaN(eH)) {
+          let diff = (eH * 60 + (eM || 0)) - (sH * 60 + (sM || 0));
+          if (diff < 0) diff += 24 * 60;
+          if (diff > 0) dur = diff;
+        }
+      } else if (request.durationHours) {
+        dur = Number(request.durationHours) * 60;
+      }
+    }
+    return {
+      durationMinutes: dur || 60,
+      bookingType: tracking?.bookingType || request.bookingType || 'HOURLY',
+      startTime: tracking?.startTime || request.startTime,
+      endTime: tracking?.endTime || request.endTime,
+      scheduledDate: tracking?.scheduledDate || request.scheduledDate,
+      paymentSummary: tracking?.paymentSummary || request.paymentSummary,
+      ...tracking
+    };
+  }, [tracking, request]);
+
+  const isWorkInProgress = useMemo(() => {
+    if (allDone) return false;
+    const hasActiveWorkers = workers.some(w => {
+      const js = (w.journeyStatus || '').toUpperCase();
+      const ws = (w.workStatus || '').toUpperCase();
+      return ['IN_PROGRESS', 'WORK_SUBMITTED'].includes(js) ||
+        ['IN_PROGRESS', 'SUBMITTED'].includes(ws) ||
+        Boolean(w.workStartedAt && !w.completedAt && js !== 'COMPLETED' && js !== 'CANCELLED');
+    });
+    if (hasActiveWorkers) return true;
+    if (['in_progress', 'partially_completed'].includes(request.status) && anyStarted) return true;
+    return false;
+  }, [allDone, workers, request.status, anyStarted]);
+
   const rateWorker = async (worker, data) => {
     const res = await bookingService.addReview(worker.bookingId, data);
     if (res?.success === false) throw new Error(res.message || 'Could not save the rating');
@@ -200,9 +243,9 @@ const BookedRequestView = ({ request, onRefresh }) => {
         )}
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          {['JOURNEY_STARTED', 'ARRIVED'].includes(w.journeyStatus) && (
+          {['JOURNEY_STARTED', 'ARRIVED', 'IN_PROGRESS', 'WORK_SUBMITTED'].includes(w.journeyStatus) && (
             <button type="button" onClick={() => navigate(`/user/booking/${id}/track`, { state: { fromHistory: true } })}
-              className="px-3 py-2 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-1.5">
+              className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-colors">
               <FiNavigation size={13} /> Track live
             </button>
           )}
@@ -295,6 +338,16 @@ const BookedRequestView = ({ request, onRefresh }) => {
             </div>
             <button type="button" onClick={() => setModal({ rate: unrated[0] })} className="px-4 py-2.5 rounded-xl bg-amber-500 text-white text-sm font-black shrink-0">Rate</button>
           </div>
+        )}
+
+        {/* Live Work Monitoring Hub (Live Work Timer) */}
+        {isWorkInProgress && (
+          <ActiveWorkMonitoringHub
+            trackingData={effectiveTrackingData}
+            workers={workers}
+            onOpenExtensionModal={!allDone ? () => setModal('extend') : undefined}
+            showEndOtpCard={false}
+          />
         )}
 
         {/* Codes to give in person */}

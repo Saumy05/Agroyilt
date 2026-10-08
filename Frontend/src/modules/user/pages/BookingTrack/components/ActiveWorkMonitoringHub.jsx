@@ -16,18 +16,22 @@ import { workLength } from '../../../../../utils/workerPayment';
 const ActiveWorkMonitoringHub = ({
   trackingData,
   workers = [],
-  onOpenExtensionModal
+  onOpenExtensionModal,
+  showEndOtpCard = true,
+  showNextStepTip = true
 }) => {
   const [elapsed, setElapsed] = useState('00:00:00');
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   // Filter workers who are actively working on site
   const activeWorkers = useMemo(() => {
-    return workers.filter(w =>
-      ['IN_PROGRESS', 'WORK_SUBMITTED'].includes(w.journeyStatus) ||
-      w.workStatus === 'IN_PROGRESS' ||
-      w.workStatus === 'SUBMITTED'
-    );
+    return workers.filter(w => {
+      const js = (w.journeyStatus || '').toUpperCase();
+      const ws = (w.workStatus || '').toUpperCase();
+      return ['IN_PROGRESS', 'WORK_SUBMITTED'].includes(js) ||
+        ['IN_PROGRESS', 'SUBMITTED'].includes(ws) ||
+        Boolean(w.workStartedAt && !w.completedAt && js !== 'COMPLETED' && js !== 'CANCELLED');
+    });
   }, [workers]);
 
   const primaryWorker = activeWorkers[0] || workers[0] || {};
@@ -278,71 +282,75 @@ const ActiveWorkMonitoringHub = ({
       {/* ── Next Step: End OTP Card ── */}
       {workerWithEndOtp?.completionOtp ? (
         // STATE B: Worker has stopped work → OTP is ready to share
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-gradient-to-r from-emerald-50 to-teal-50 border-2 border-emerald-400 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3"
-        >
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-600/20">
-                <FiKey className="w-5 h-5" />
-              </div>
-              <div>
-                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-200/70 px-2 py-0.5 rounded-md">
-                  {workerWithEndOtp.workerName || 'Worker'} stopped work
-                </span>
-                <h4 className="text-sm font-black text-slate-900 mt-0.5">
-                  Farmer Completion OTP
-                </h4>
-              </div>
-            </div>
-            <span className="text-xs font-bold text-emerald-700">
-              Only share after inspecting work
-            </span>
-          </div>
-
-          <p className="text-xs text-slate-600 font-medium">
-            Inspect the work done by <strong className="text-slate-800">{workerWithEndOtp.workerName}</strong>. If satisfied, share this 4-digit End OTP to release payment and complete the job:
-          </p>
-
-          <div className="bg-white rounded-2xl p-3 sm:p-4 border-2 border-emerald-300 flex items-center justify-between gap-3 shadow-xs">
-            <div className="flex items-center gap-2">
-              {String(workerWithEndOtp.completionOtp).split('').map((digit, i) => (
-                <div
-                  key={i}
-                  className="w-10 h-12 sm:w-12 sm:h-14 rounded-xl bg-emerald-50 border-2 border-emerald-300 text-emerald-900 font-mono font-black text-2xl flex items-center justify-center shadow-xs"
-                >
-                  {digit}
+        showEndOtpCard ? (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-gradient-to-r from-emerald-50 to-teal-50 border-2 border-emerald-400 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3"
+          >
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-600/20">
+                  <FiKey className="w-5 h-5" />
                 </div>
-              ))}
+                <div>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-200/70 px-2 py-0.5 rounded-md">
+                    {workerWithEndOtp.workerName || 'Worker'} stopped work
+                  </span>
+                  <h4 className="text-sm font-black text-slate-900 mt-0.5">
+                    Farmer Completion OTP
+                  </h4>
+                </div>
+              </div>
+              <span className="text-xs font-bold text-emerald-700">
+                Only share after inspecting work
+              </span>
             </div>
 
-            <button
-              type="button"
-              onClick={() => handleCopyEndOtp(workerWithEndOtp.completionOtp)}
-              className="px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-sm transition-all"
-            >
-              <FiCopy size={14} />
-              <span>Copy Code</span>
-            </button>
-          </div>
-        </motion.div>
+            <p className="text-xs text-slate-600 font-medium">
+              Inspect the work done by <strong className="text-slate-800">{workerWithEndOtp.workerName}</strong>. If satisfied, share this 4-digit End OTP to release payment and complete the job:
+            </p>
+
+            <div className="bg-white rounded-2xl p-3 sm:p-4 border-2 border-emerald-300 flex items-center justify-between gap-3 shadow-xs">
+              <div className="flex items-center gap-2">
+                {String(workerWithEndOtp.completionOtp).split('').map((digit, i) => (
+                  <div
+                    key={i}
+                    className="w-10 h-12 sm:w-12 sm:h-14 rounded-xl bg-emerald-50 border-2 border-emerald-300 text-emerald-900 font-mono font-black text-2xl flex items-center justify-center shadow-xs"
+                  >
+                    {digit}
+                  </div>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleCopyEndOtp(workerWithEndOtp.completionOtp)}
+                className="px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-sm transition-all"
+              >
+                <FiCopy size={14} />
+                <span>Copy Code</span>
+              </button>
+            </div>
+          </motion.div>
+        ) : null
       ) : (
         // STATE A: Worker is actively working → Informative reassurance card
-        <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-4 flex items-start gap-3.5">
-          <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0 mt-0.5 font-bold shadow-xs">
-            <FiInfo className="w-5 h-5 text-amber-700" />
+        showNextStepTip ? (
+          <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-4 flex items-start gap-3.5">
+            <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0 mt-0.5 font-bold shadow-xs">
+              <FiInfo className="w-5 h-5 text-amber-700" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-black uppercase tracking-wider text-slate-700 mb-0.5 flex items-center gap-1.5">
+                <span>Next Step: End OTP Verification</span>
+              </p>
+              <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                When <strong className="text-slate-900">{workerNamesDisplay}</strong> finishes and taps <em>"Stop Work"</em> on their phone, your 4-digit End OTP will automatically appear right here for verification and completion.
+              </p>
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-black uppercase tracking-wider text-slate-700 mb-0.5 flex items-center gap-1.5">
-              <span>Next Step: End OTP Verification</span>
-            </p>
-            <p className="text-xs text-slate-600 font-medium leading-relaxed">
-              When <strong className="text-slate-900">{workerNamesDisplay}</strong> finishes and taps <em>"Stop Work"</em> on their phone, your 4-digit End OTP will automatically appear right here for verification and completion.
-            </p>
-          </div>
-        </div>
+        ) : null
       )}
 
       {/* ── Extend Time Action Button ── */}
