@@ -202,26 +202,17 @@ const AdminHeader = ({ onMenuClick }) => {
           <div className="relative">
             <Button
               data-notification-button
-              onClick={toggleNotifications}
+              onClick={() => navigate('/admin/notifications')}
               variant="icon"
               className="text-gray-700 hover:bg-gray-50"
+              title="Notifications"
               icon={FiBell}
             />
             {unreadCount > 0 && (
-              <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 rounded-full text-[10px] text-white flex items-center justify-center font-bold border-2 border-white">
+              <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 rounded-full text-[10px] text-white flex items-center justify-center font-bold border-2 border-white pointer-events-none">
                 {unreadCount > 99 ? '99+' : unreadCount}
               </span>
             )}
-
-            <NotificationWindow
-              isOpen={showNotifications}
-              onClose={() => setShowNotifications(false)}
-              position="right"
-              notifications={notifications}
-              onMarkAsRead={handleMarkAsRead}
-              onMarkAllAsRead={handleMarkAllAsRead}
-              onDelete={handleDelete}
-            />
           </div>
 
           {/* Admin Profile Section */}
