@@ -239,62 +239,60 @@ const Wallet = () => {
     <div className="min-h-screen pb-24" style={{ background: themeColors.backgroundGradient }}>
       <Header title="My Wallet" onBack={() => navigate('/worker/dashboard', { replace: true })} />
 
-      <main className="px-4 py-6">
-        {/* Balance Card */}
-        <div className="rounded-3xl p-6 shadow-xl relative overflow-hidden mb-6 bg-gradient-to-br from-emerald-700 via-emerald-800 to-green-900 border border-emerald-600/30">
+      <main className="px-4 py-4 sm:py-5">
+        {/* Balance Card - Compact Mobile View */}
+        <div className="rounded-2xl p-4 sm:p-5 shadow-lg relative overflow-hidden mb-4 bg-gradient-to-br from-emerald-700 via-emerald-800 to-green-900 border border-emerald-600/30">
           {/* Subtle ambient decorative accents */}
-          <div className="absolute -top-12 -right-12 w-44 h-44 bg-white/10 rounded-full blur-2xl pointer-events-none" />
-          <div className="absolute -bottom-10 -left-10 w-36 h-36 bg-emerald-500/20 rounded-full blur-xl pointer-events-none" />
+          <div className="absolute -top-10 -right-10 w-36 h-36 bg-white/10 rounded-full blur-xl pointer-events-none" />
+          <div className="absolute -bottom-8 -left-8 w-28 h-28 bg-emerald-500/20 rounded-full blur-lg pointer-events-none" />
 
           <div className="relative z-10 text-white">
-            <div className="flex justify-between items-start">
+            <div className="flex justify-between items-center mb-3">
               <div>
-                <p className="text-emerald-100/80 text-xs font-semibold uppercase tracking-wider mb-1">Available Balance</p>
-                <p className="text-3xl sm:text-4xl font-black mb-1 tracking-tight">
+                <p className="text-emerald-100/80 text-[11px] font-bold uppercase tracking-wider mb-0.5">Available Balance</p>
+                <p className="text-2xl sm:text-3xl font-black tracking-tight">
                   ₹{Number(wallet?.balance ?? wallet?.wallet?.balance ?? 0).toLocaleString('en-IN')}
                 </p>
-                {Number(wallet?.outstandingDues || 0) > 0 && (
-                  <div className="mt-3 mb-1 bg-rose-500/30 border border-rose-200/40 rounded-2xl px-3.5 py-2.5 backdrop-blur-sm">
-                    <p className="text-sm font-black text-white">You owe the app ₹{Number(wallet.outstandingDues).toLocaleString('en-IN')}</p>
-                    <p className="text-[11px] text-rose-100 mt-0.5 leading-relaxed">
-                      Platform fees, commission or penalties your balance could not cover.
-                      {wallet?.maxDuesAllowed ? ` Above ₹${Number(wallet.maxDuesAllowed).toLocaleString('en-IN')} you cannot take new jobs.` : ''}
-                    </p>
-                    {wallet?.isRestricted && (
-                      <p className="text-[11px] font-bold text-white mt-1">Your account is restricted: {wallet.restrictionReason || 'dues limit crossed'}</p>
-                    )}
-                    <button
-                      onClick={() => setShowPayDues(true)}
-                      className="mt-2 w-full bg-white text-rose-700 hover:bg-rose-50 font-black py-2 rounded-xl text-xs active:scale-[0.98] transition-all shadow-sm"
-                    >
-                      Pay ₹{Number(wallet.outstandingDues).toLocaleString('en-IN')} Dues
-                    </button>
-                  </div>
-                )}
                 {Number(wallet?.reservedWithdrawal || wallet?.wallet?.reservedWithdrawal || 0) > 0 && (
-                  <p className="text-xs text-emerald-200/90 mb-2 font-medium">
-                    ₹{Number(wallet?.reservedWithdrawal || wallet?.wallet?.reservedWithdrawal || 0).toLocaleString('en-IN')} reserved in pending withdrawal
+                  <p className="text-[10px] text-emerald-200/90 font-medium mt-0.5">
+                    ₹{Number(wallet?.reservedWithdrawal || wallet?.wallet?.reservedWithdrawal || 0).toLocaleString('en-IN')} pending withdrawal
                   </p>
                 )}
               </div>
-              <div className="w-12 h-12 rounded-2xl bg-white/15 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-inner">
-                <IoWallet className="w-6 h-6 text-emerald-100" />
+              <div className="w-10 h-10 rounded-xl bg-white/15 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-inner">
+                <IoWallet className="w-5 h-5 text-emerald-100" />
               </div>
             </div>
 
-            <div className="mt-5 flex flex-col sm:flex-row gap-2.5">
+            {Number(wallet?.outstandingDues || 0) > 0 && (
+              <div className="mb-3 bg-rose-500/30 border border-rose-200/40 rounded-xl p-2.5 backdrop-blur-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-black text-white">You owe ₹{Number(wallet.outstandingDues).toLocaleString('en-IN')} dues</p>
+                  <button
+                    onClick={() => setShowPayDues(true)}
+                    className="bg-white text-rose-700 hover:bg-rose-50 font-black px-2.5 py-1 rounded-lg text-[11px] active:scale-[0.98] transition-all shadow-xs shrink-0"
+                  >
+                    Pay Now
+                  </button>
+                </div>
+                {wallet?.isRestricted && (
+                  <p className="text-[10px] font-bold text-white mt-1">Account restricted: {wallet.restrictionReason || 'dues limit crossed'}</p>
+                )}
+              </div>
+            )}
+
+            <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowWithdrawModal(true)}
-                className="w-full bg-white hover:bg-emerald-50 text-emerald-950 font-black py-3 px-4 rounded-2xl shadow-lg shadow-emerald-950/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-sm"
+                className="flex-1 bg-white hover:bg-emerald-50 text-emerald-950 font-black py-2.5 px-3.5 rounded-xl shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-1.5 text-xs"
               >
-                <FiArrowUp className="w-4 h-4 text-emerald-700 stroke-[2.5]" />
-                Request Withdrawal
+                <FiArrowUp className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5]" />
+                <span>Request Withdrawal</span>
               </button>
-            </div>
-
-            <div className="mt-3.5 w-full bg-black/15 text-emerald-100/90 py-1.5 px-3 rounded-xl font-semibold text-[11px] text-center border border-white/10 flex items-center justify-center gap-1.5 backdrop-blur-xs">
-              <FiShield className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
-              <span>{(wallet?.vendorId || wallet?.wallet?.vendorId) ? 'Payments are managed by your Vendor' : 'Direct Platform Payouts Active'}</span>
+              <div className="bg-black/20 text-emerald-100/90 py-2 px-2.5 rounded-xl font-semibold text-[10px] text-center border border-white/10 flex items-center justify-center gap-1 shrink-0 backdrop-blur-xs">
+                <FiShield className="w-3 h-3 text-emerald-300 shrink-0" />
+                <span>{(wallet?.vendorId || wallet?.wallet?.vendorId) ? 'Vendor Payouts' : 'Direct Payouts'}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -374,17 +372,20 @@ const Wallet = () => {
 
         {/* Transactions/Ledger */}
         <div>
-          <h3 className="font-bold text-gray-800 mb-4">Transaction History</h3>
+          <div className="flex items-center justify-between mb-3 px-0.5">
+            <h3 className="font-bold text-xs uppercase tracking-wider text-slate-500">Transaction History</h3>
+            <span className="text-[11px] text-slate-400 font-medium">{historyItems.length} record{historyItems.length === 1 ? '' : 's'}</span>
+          </div>
           {historyItems.length === 0 ? (
-            <div className="bg-white rounded-3xl p-8 text-center shadow-sm border border-slate-100">
-              <div className="w-16 h-16 rounded-3xl bg-emerald-50 flex items-center justify-center mx-auto mb-4 text-emerald-600">
-                <IoWalletOutline className="w-8 h-8" />
+            <div className="bg-white rounded-2xl p-6 text-center shadow-xs border border-slate-100">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center mx-auto mb-3 text-emerald-600">
+                <IoWalletOutline className="w-6 h-6" />
               </div>
-              <p className="text-slate-800 font-bold mb-1">No transactions yet</p>
-              <p className="text-xs text-slate-500">Your payments will appear here</p>
+              <p className="text-slate-800 font-bold text-sm mb-0.5">No transactions yet</p>
+              <p className="text-xs text-slate-400">Your payments will appear here</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {historyItems.map((item) => {
                 if (item.kind === 'job') {
                   const entries = sortEntries(item.entries);
@@ -392,24 +393,24 @@ const Wallet = () => {
                   const deducted = entries.filter(e => effectOf(e.type) === 'debit').reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
                   const credited = entries.filter(e => effectOf(e.type) === 'credit').reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
                   return (
-                    <div key={item.id} className="bg-white rounded-2xl p-4.5 shadow-sm border border-slate-100 border-l-4 border-l-emerald-600 hover:shadow-md transition-all">
-                      <div className="flex items-center justify-between mb-3">
+                    <div key={item.id} className="bg-white rounded-xl p-3.5 sm:p-4 shadow-xs border border-slate-100 border-l-4 border-l-emerald-600 hover:shadow-sm transition-all">
+                      <div className="flex items-center justify-between mb-2.5">
                         <div className="flex items-center gap-2 truncate">
-                          <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-                          <p className="font-black text-slate-900 text-sm truncate">{item.title}</p>
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                          <p className="font-bold text-slate-900 text-xs sm:text-sm truncate">{item.title}</p>
                           {cash && (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200/60 shrink-0">
+                            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-amber-50 text-amber-800 border border-amber-200/60 shrink-0">
                               Cash Job
                             </span>
                           )}
                         </div>
-                        <span className="text-xs text-slate-400 shrink-0 ml-2 font-medium">{formatDate(item.date)}</span>
+                        <span className="text-[11px] text-slate-400 shrink-0 ml-2 font-medium">{formatDate(item.date)}</span>
                       </div>
-                      <div className="space-y-2 text-sm bg-slate-50/70 p-3 rounded-xl border border-slate-100 mb-3">
+                      <div className="space-y-1.5 text-xs bg-slate-50/80 p-2.5 rounded-lg border border-slate-100 mb-2.5">
                         {entries.map(e => (
                           <div key={e._id} className="flex justify-between items-center gap-3">
-                            <span className="text-slate-600 text-xs font-semibold flex items-center gap-1.5">
-                              {e.type === 'cash_collected' ? <FaWallet className="text-amber-600 w-3 h-3" /> : null}
+                            <span className="text-slate-600 text-[11px] font-semibold flex items-center gap-1.5">
+                              {e.type === 'cash_collected' ? <FaWallet className="text-amber-600 w-2.5 h-2.5" /> : null}
                               {getTransactionLabel(e.type, e)}
                               {e.type === 'cash_collected' && <span className="text-[10px] text-slate-400 font-normal">(in hand)</span>}
                             </span>
@@ -418,9 +419,9 @@ const Wallet = () => {
                         ))}
                       </div>
                       {filter === 'all' && (cash || credited > 0) && (
-                        <div className="flex justify-between items-center pt-2 border-t border-dashed border-slate-200 text-sm">
-                          <span className="font-bold text-slate-700 text-xs uppercase tracking-wide">{cash ? 'You kept' : 'Added to wallet'}</span>
-                          <span className="font-black text-emerald-700 text-base">
+                        <div className="flex justify-between items-center pt-1.5 border-t border-dashed border-slate-200 text-xs">
+                          <span className="font-bold text-slate-600 text-[11px] uppercase tracking-wide">{cash ? 'You kept' : 'Added to wallet'}</span>
+                          <span className="font-black text-emerald-700 text-sm">
                             ₹{((cash ? Number(cash.amount) || 0 : credited) - (cash ? deducted : 0)).toLocaleString('en-IN')}
                           </span>
                         </div>
@@ -435,13 +436,13 @@ const Wallet = () => {
                   <div
                     key={txn._id}
                     onClick={() => handleTransactionClick(txn)}
-                    className={`bg-white rounded-2xl p-4 shadow-sm border border-slate-100 border-l-4 ${
+                    className={`bg-white rounded-xl p-3 sm:p-3.5 shadow-xs border border-slate-100 border-l-4 ${
                       isPayment ? 'border-l-emerald-500' : effect === 'debit' ? 'border-l-rose-500' : effect === 'cash' ? 'border-l-amber-500' : 'border-l-emerald-500'
-                    } ${txn.type === 'worker_payment' ? 'cursor-pointer hover:shadow-md active:scale-[0.98] transition-all' : ''}`}
+                    } ${txn.type === 'worker_payment' ? 'cursor-pointer hover:shadow-sm active:scale-[0.98] transition-all' : ''}`}
                   >
-                    <div className="flex items-center gap-3.5">
+                    <div className="flex items-center gap-3">
                       <div
-                        className={`w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 ${
+                        className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
                           isPayment ? 'bg-emerald-50 text-emerald-600' : effect === 'debit' ? 'bg-rose-50 text-rose-600' : effect === 'cash' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-600'
                         }`}
                       >
@@ -451,27 +452,27 @@ const Wallet = () => {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between mb-0.5">
                           <div className="flex items-center gap-1.5 truncate">
-                            <p className="font-bold text-slate-900 text-sm truncate">{getTransactionLabel(txn.type, txn)}</p>
+                            <p className="font-bold text-slate-900 text-xs truncate">{getTransactionLabel(txn.type, txn)}</p>
                             {isPayment && (
-                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
+                              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-md bg-emerald-100 text-emerald-800">
                                 Online
                               </span>
                             )}
                           </div>
-                          <p className={`text-base font-black ${isPayment ? 'text-slate-900' : amountColor(txn)}`}>{amountText(txn)}</p>
+                          <p className={`text-sm font-black ${isPayment ? 'text-slate-900' : amountColor(txn)}`}>{amountText(txn)}</p>
                         </div>
 
-                        <p className="text-xs text-slate-500 line-clamp-1 mb-1">{txn.description}</p>
+                        <p className="text-[11px] text-slate-500 line-clamp-1 mb-0.5">{txn.description}</p>
 
                         <div className="flex items-center gap-2">
-                          <span className="text-[11px] text-slate-400 font-medium">{formatDate(txn.createdAt)}</span>
+                          <span className="text-[10px] text-slate-400 font-medium">{formatDate(txn.createdAt)}</span>
                           {txn.status !== 'completed' && (
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${txn.status === 'pending' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'}`}>
+                            <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full ${txn.status === 'pending' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'}`}>
                               {txn.status}
                             </span>
                           )}
                           {txn.type === 'worker_payment' && (
-                            <span className="text-[11px] text-emerald-700 font-bold ml-auto">Tap for details →</span>
+                            <span className="text-[10px] text-emerald-700 font-bold ml-auto">Details →</span>
                           )}
                         </div>
                       </div>
