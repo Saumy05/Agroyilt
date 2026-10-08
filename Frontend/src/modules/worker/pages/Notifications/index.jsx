@@ -158,28 +158,55 @@ const Notifications = () => {
     return true;
   });
 
-  const getNotificationIcon = (type = '') => {
-    const t = type.toLowerCase();
-    if (t.includes('team')) return <span className="text-lg">👥</span>;
-    if (t.includes('payment') || t.includes('wallet') || t.includes('settled') || t.includes('earning')) return <span className="text-lg font-bold">₹</span>;
-    if (t.includes('job') || t.includes('booking') || t.includes('work') || t.includes('journey') || t.includes('extension')) return <FiBriefcase className="w-5 h-5" />;
-    return <FiBell className="w-5 h-5" />;
+  const cleanTitle = (title) => {
+    if (!title) return '';
+    return title.replace(/^[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2300}-\u{23FF}\u{2B50}\u{203C}\u{2049}\u{25AA}\u{25AB}\u{25B6}\u{25C0}\u{25FB}-\u{25FE}]+\s*/gu, '').trim();
   };
 
-  const getNotificationColor = (type = '') => {
+  const getNotificationIcon = (type = '') => {
     const t = type.toLowerCase();
-    if (t.includes('team')) return '#8B5CF6';
-    if (t.includes('payment') || t.includes('wallet') || t.includes('settled') || t.includes('earning')) return '#10B981';
-    if (t.includes('job') || t.includes('booking') || t.includes('work') || t.includes('journey') || t.includes('extension')) return '#3B82F6';
-    return themeColors.button;
+    if (t.includes('team')) return <span className="text-sm font-bold">👥</span>;
+    if (t.includes('payment') || t.includes('wallet') || t.includes('settled') || t.includes('earning')) return <span className="text-sm font-black">₹</span>;
+    if (t.includes('job') || t.includes('booking') || t.includes('work') || t.includes('journey') || t.includes('extension')) return <FiBriefcase className="w-4 h-4" />;
+    return <FiBell className="w-4 h-4" />;
+  };
+
+  const getNotificationGradient = (type = '') => {
+    const t = type.toLowerCase();
+    if (t.includes('team')) return 'bg-gradient-to-br from-purple-500 to-indigo-600 shadow-purple-500/20';
+    if (t.includes('payment') || t.includes('wallet') || t.includes('settled') || t.includes('earning')) return 'bg-gradient-to-br from-emerald-500 to-green-600 shadow-emerald-500/20';
+    if (t.includes('job') || t.includes('booking') || t.includes('work') || t.includes('journey') || t.includes('extension')) return 'bg-gradient-to-br from-blue-500 to-indigo-600 shadow-blue-500/20';
+    return 'bg-gradient-to-br from-emerald-600 to-teal-700 shadow-emerald-600/20';
   };
 
   const formatTime = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return dateString;
+
+    const now = new Date();
+    const diffMs = now - date;
+    const diffSecs = Math.floor(diffMs / 1000);
+    const diffMins = Math.floor(diffSecs / 60);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffSecs < 60) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays === 1) {
+      const timeStr = date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+      return `Yesterday, ${timeStr}`;
+    }
+    if (diffDays < 7) return `${diffDays}d ago`;
+
+    return date.toLocaleDateString('en-IN', {
+      day: '2-digit',
       month: 'short',
-      day: 'numeric',
+      year: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
+      hour12: true
     });
   };
 
@@ -187,11 +214,11 @@ const Notifications = () => {
     <div className="min-h-screen pb-20" style={{ background: themeColors.backgroundGradient }}>
       <Header title="Notifications" />
 
-      <main className="px-4 py-6">
+      <main className="px-3.5 py-4 max-w-2xl mx-auto space-y-3">
         {/* Filter Buttons */}
-        <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
           {[
-            { id: 'all', label: 'All' },
+            { id: 'all', label: `All (${notifications.length})` },
             { id: 'job', label: 'Jobs & Requests' },
             { id: 'team', label: 'Team' },
             { id: 'payment', label: 'Earnings & Payments' },
@@ -199,20 +226,11 @@ const Notifications = () => {
             <button
               key={filterOption.id}
               onClick={() => setFilter(filterOption.id)}
-              className={`px-4 py-2 rounded-full font-semibold text-sm whitespace-nowrap transition-all ${filter === filterOption.id
-                ? 'text-white'
-                : 'bg-white text-gray-600'
-                }`}
-              style={
+              className={`px-3.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap transition-all ${
                 filter === filterOption.id
-                  ? {
-                    background: themeColors.button,
-                    boxShadow: `0 2px 8px ${themeColors.button}40`,
-                  }
-                  : {
-                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
-                  }
-              }
+                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+                  : 'bg-white text-gray-600 border border-gray-200/80 hover:bg-gray-50 shadow-2xs'
+              }`}
             >
               {filterOption.label}
             </button>
@@ -221,139 +239,120 @@ const Notifications = () => {
 
         {/* Action Buttons */}
         {notifications.length > 0 && (
-          <div className="flex justify-end gap-3 mb-4">
-            {notifications.some(n => !n.isRead) && (
+          <div className="flex items-center justify-between px-1 pt-0.5 pb-0.5">
+            <span className="text-[11px] font-semibold text-gray-400">
+              Showing {filteredNotifications.length} notification{filteredNotifications.length !== 1 ? 's' : ''}
+            </span>
+            <div className="flex items-center gap-3">
+              {notifications.some(n => !n.isRead) && (
+                <button
+                  onClick={handleMarkAllRead}
+                  className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 transition-colors flex items-center gap-1"
+                >
+                  <FiCheck className="w-3 h-3" />
+                  Mark Read
+                </button>
+              )}
               <button
-                onClick={handleMarkAllRead}
-                className="text-xs font-bold uppercase tracking-wider text-gray-500 hover:text-gray-800 transition-colors"
+                onClick={handleClearAll}
+                className="text-[11px] font-bold text-red-500 hover:text-red-700 transition-colors flex items-center gap-1"
               >
-                Mark Read
+                <FiTrash2 className="w-3 h-3" /> Clear All
               </button>
-            )}
-            <button
-              onClick={handleClearAll}
-              className="text-xs font-bold uppercase tracking-wider text-red-500 hover:text-red-700 transition-colors flex items-center gap-1"
-            >
-              <FiTrash2 className="w-3 h-3" /> Clear All
-            </button>
+            </div>
           </div>
         )}
 
         {loading ? (
-          <div className="space-y-4">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-50 animate-pulse">
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-slate-100 shrink-0"></div>
-                  <div className="flex-1 space-y-3 py-1">
-                    <div className="flex justify-between items-start">
-                      <div className="h-4 w-32 bg-slate-100 rounded"></div>
-                      <div className="h-3 w-16 bg-slate-100 rounded"></div>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="h-3 w-full bg-slate-100 rounded"></div>
-                      <div className="h-3 w-2/3 bg-slate-100 rounded"></div>
-                    </div>
+          <div className="space-y-2.5">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="bg-white rounded-xl p-3 shadow-2xs border border-gray-100 animate-pulse">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-gray-100 shrink-0"></div>
+                  <div className="flex-1 space-y-1.5 py-0.5">
+                    <div className="h-3.5 w-1/3 bg-gray-100 rounded"></div>
+                    <div className="h-3 w-4/5 bg-gray-100 rounded"></div>
+                    <div className="h-2 w-1/4 bg-gray-50 rounded"></div>
                   </div>
                 </div>
               </div>
             ))}
           </div>
         ) : filteredNotifications.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-              <FiBell className="w-8 h-8 text-gray-400" />
+          <div className="bg-white rounded-2xl p-8 text-center border border-gray-100 shadow-2xs space-y-2.5">
+            <div className="w-12 h-12 mx-auto bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600">
+              <FiBell className="w-6 h-6" />
             </div>
-            <h3 className="text-gray-900 font-bold text-lg mb-1">No notifications</h3>
-            <p className="text-gray-500 text-sm max-w-xs">You'll see notifications here when you receive job assignments or payments.</p>
+            <div>
+              <p className="text-gray-900 font-bold text-sm">No Notifications</p>
+              <p className="text-xs text-gray-500 mt-0.5">You will see notifications here when you receive job assignments or payments.</p>
+            </div>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-2.5">
             {filteredNotifications.map((notif) => {
-              const iconColor = getNotificationColor(notif.type);
               const isUnread = !notif.isRead;
 
               return (
                 <div
                   key={notif._id}
                   onClick={() => handleNotificationClick(notif)}
-                  className={`relative overflow-hidden bg-white rounded-2xl transition-all duration-300 group cursor-pointer hover:shadow-lg ${isUnread ? 'shadow-md border-b-2' : 'shadow-sm opacity-90'}`}
-                  style={{
-                    borderColor: isUnread ? iconColor + '40' : '#F3F4F6',
-                    transform: isUnread ? 'scale(1.01)' : 'scale(1)',
-                  }}
+                  className={`group relative bg-white rounded-xl p-3 transition-all cursor-pointer border ${
+                    isUnread
+                      ? 'border-emerald-200/90 bg-gradient-to-r from-emerald-50/40 via-white to-white shadow-xs'
+                      : 'border-gray-100 hover:border-gray-200 shadow-2xs hover:shadow-xs'
+                  }`}
                 >
-                  {/* Unread Indicator Bar */}
-                  {isUnread && (
-                    <div
-                      className="absolute left-0 top-0 bottom-0 w-1.5"
-                      style={{ background: iconColor }}
-                    />
-                  )}
+                  <div className="flex items-start gap-2.5">
+                    {/* Icon Badge */}
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0 shadow-2xs ${getNotificationGradient(notif.type)}`}>
+                      {getNotificationIcon(notif.type)}
+                    </div>
 
-                  <div className={`p-4 ${isUnread ? 'pl-5' : 'pl-4'}`}>
-                    <div className="flex items-start gap-4">
-                      <div
-                        className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm"
-                        style={{
-                          background: isUnread ? iconColor : '#F3F4F6',
-                          color: isUnread ? '#FFFFFF' : '#9CA3AF'
-                        }}
-                      >
-                        {getNotificationIcon(notif.type)}
+                    {/* Content */}
+                    <div className="flex-1 min-w-0 pr-14">
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        {isUnread && (
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 shadow-2xs" title="Unread" />
+                        )}
+                        <h3 className={`text-xs sm:text-sm tracking-tight text-gray-900 leading-tight truncate ${isUnread ? 'font-black text-gray-950' : 'font-bold'}`}>
+                          {cleanTitle(notif.title)}
+                        </h3>
                       </div>
-                      <div className="flex-1 min-w-0 pr-6">
-                        <div className="flex justify-between items-start mb-1">
-                          <h4 className={`text-base ${isUnread ? 'font-bold text-gray-900' : 'font-semibold text-gray-700'}`}>
-                            {notif.title}
-                          </h4>
-                          <span className="text-xs text-gray-400 whitespace-nowrap font-medium">
-                            {formatTime(notif.createdAt)}
-                          </span>
-                        </div>
-                        <p className={`text-sm leading-relaxed mb-3 ${isUnread ? 'text-gray-600' : 'text-gray-500'}`}>
-                          {notif.message}
-                        </p>
 
-                        <div className="flex items-center justify-between mt-2">
-                          <span
-                            className="text-xs font-bold uppercase tracking-wide flex items-center gap-1 transition-colors group-hover:underline"
-                            style={{ color: iconColor }}
-                          >
-                            {(notif.type || '').toLowerCase().includes('team')
-                              ? 'View Team'
-                              : (notif.type || '').toLowerCase().includes('wallet') || (notif.type || '').toLowerCase().includes('settled') || (notif.type || '').toLowerCase().includes('payment')
-                              ? 'View Wallet'
-                              : ['worker_booking_request', 'new_booking_request', 'job_request'].includes((notif.type || '').toLowerCase())
-                              ? 'View Requests'
-                              : 'View Details'}
-                            <FiChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
-                          </span>
-                        </div>
+                      <p className="text-[11px] sm:text-xs text-gray-600 leading-snug line-clamp-2">
+                        {notif.message}
+                      </p>
+
+                      <div className="mt-2 flex items-center justify-between text-[10px] text-gray-400 font-medium">
+                        <span>{formatTime(notif.createdAt)}</span>
+                        <span className="text-emerald-700 font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+                          View details <FiChevronRight className="w-2.5 h-2.5" />
+                        </span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Actions: Mark Read & Delete - Positioned absolute top-right */}
-                  <div className="absolute top-3 right-3 flex gap-2">
+                  {/* Actions Top Right */}
+                  <div className="absolute top-2.5 right-2.5 flex items-center gap-1">
                     {isUnread && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           handleMarkAsRead(notif._id);
                         }}
-                        className="p-1 rounded-full bg-gray-50 hover:bg-gray-100 text-green-600 transition-colors shadow-sm"
+                        className="p-1 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors shadow-2xs"
                         title="Mark as read"
                       >
-                        <FiCheck className="w-3.5 h-3.5" />
+                        <FiCheck className="w-3 h-3" />
                       </button>
                     )}
                     <button
                       onClick={(e) => handleDelete(e, notif._id)}
-                      className="p-1 rounded-full bg-gray-50 hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors shadow-sm"
+                      className="p-1 rounded-lg bg-gray-50 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors shadow-2xs"
                       title="Delete"
                     >
-                      <FiX className="w-3.5 h-3.5" />
+                      <FiX className="w-3 h-3" />
                     </button>
                   </div>
                 </div>

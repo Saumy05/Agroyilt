@@ -1,4 +1,4 @@
-﻿import api from '../../../services/api';
+import api from '../../../services/api';
 
 /**
  * Notification Service
@@ -6,6 +6,37 @@
  */
 
 const BASE_URL = '/notifications';
+
+export const formatNotificationTime = (dateStr) => {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return dateStr;
+
+  const now = new Date();
+  const diffMs = now - date;
+  const diffSecs = Math.floor(diffMs / 1000);
+  const diffMins = Math.floor(diffSecs / 60);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffSecs < 60) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays === 1) {
+    const timeStr = date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+    return `Yesterday, ${timeStr}`;
+  }
+  if (diffDays < 7) return `${diffDays}d ago`;
+
+  return date.toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  });
+};
 
 /**
  * Get all notifications
@@ -26,7 +57,7 @@ export const getNotifications = async (filters = {}) => {
         ...n,
         id: n._id,
         read: n.isRead,
-        time: new Date(n.createdAt).toLocaleString()
+        time: formatNotificationTime(n.createdAt)
       }));
     }
     return [];
@@ -51,7 +82,7 @@ export const markAsRead = async (notificationId) => {
         ...n,
         id: n._id,
         read: n.isRead,
-        time: new Date(n.createdAt).toLocaleString()
+        time: formatNotificationTime(n.createdAt)
       };
     }
     return null;
