@@ -1,13 +1,13 @@
 import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { FiHome, FiGift, FiShoppingCart, FiUser, FiCalendar } from 'react-icons/fi';
-import { HiHome, HiGift, HiShoppingCart, HiUser, HiCalendar } from 'react-icons/hi';
+import { FiHome, FiUser, FiCalendar } from 'react-icons/fi';
+import { HiHome, HiUser, HiCalendar } from 'react-icons/hi';
+import { HiOutlineWallet, HiWallet } from 'react-icons/hi2';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useCart } from '../../../../context/CartContext';
 import { useKeyboardVisibility } from '../../../../hooks/useKeyboardVisibility';
 import { themeColors } from '../../../../theme';
 
-// Agriculture-themed colors for each nav item (layout unchanged)
+// Agriculture-themed colors for each nav item
 const navItemColors = {
   home: {
     defaultIcon: themeColors.brand.teal,     // #2E7D32
@@ -25,7 +25,7 @@ const navItemColors = {
     bg: '#E3F2E1',
     shadow: 'rgba(46, 125, 50, 0.45)'
   },
-  cart: {
+  wallet: {
     defaultIcon: themeColors.brand.teal,
     activeIcon: '#1B5E20',
     primary: '#1B5E20',
@@ -47,30 +47,28 @@ const BottomNav = React.memo(() => {
   const navigate = useNavigate();
   const location = useLocation();
   const navRef = useRef(null);
-  const { cartCount } = useCart();
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 });
   const { isKeyboardOpen, keyboardHeight } = useKeyboardVisibility();
 
   const navItems = useMemo(() => [
     { id: 'home', label: 'Home', icon: FiHome, filledIcon: HiHome, path: '/user' },
     { id: 'bookings', label: 'Bookings', icon: FiCalendar, filledIcon: HiCalendar, path: '/user/my-bookings' },
-    { id: 'cart', label: 'Cart', icon: FiShoppingCart, filledIcon: HiShoppingCart, path: '/user/cart', isCart: true },
+    { id: 'wallet', label: 'Wallet', icon: HiOutlineWallet, filledIcon: HiWallet, path: '/user/wallet' },
     { id: 'account', label: 'Profile', icon: FiUser, filledIcon: HiUser, path: '/user/account' },
   ], []);
 
   const getActiveTab = () => {
-    if (location.pathname === '/user' || location.pathname === '/user/') return 'home';
-    if (location.pathname === '/user/my-bookings') return 'bookings';
-    if (location.pathname === '/user/cart') return 'cart';
-    if (location.pathname === '/user/account') return 'account';
+    const path = location.pathname;
+    if (path === '/user' || path === '/user/') return 'home';
+    if (path.startsWith('/user/my-bookings') || path.startsWith('/user/booking/')) return 'bookings';
+    if (path.startsWith('/user/wallet')) return 'wallet';
+    if (path.startsWith('/user/account') || path.startsWith('/user/settings')) return 'account';
     return 'home';
   };
 
   const activeTab = getActiveTab();
   const activeIndex = navItems.findIndex(item => item.id === activeTab);
-  const activeColor = navItemColors[activeTab];
-
-
+  const activeColor = navItemColors[activeTab] || navItemColors.home;
 
   // Update indicator position when active tab changes
   useEffect(() => {
@@ -174,15 +172,6 @@ const BottomNav = React.memo(() => {
                         color: isActive ? itemColor.activeIcon : itemColor.defaultIcon,
                       }}
                     />
-                    {item.isCart && cartCount > 0 && (
-                      <motion.span
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
-                        className="absolute -top-1.5 -right-2.5 bg-gradient-to-br from-red-500 to-red-600 text-white text-[9px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center border-2 border-white shadow-lg"
-                      >
-                        {cartCount > 9 ? '9+' : cartCount}
-                      </motion.span>
-                    )}
                   </motion.div>
                   <motion.span
                     animate={{
