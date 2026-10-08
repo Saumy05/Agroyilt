@@ -358,17 +358,24 @@ const AllWorkers = () => {
                       </div>
                     </td>
                     <td className="py-4 px-4">
-                      {worker.workerType === 'TEAM_LEADER' ? (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200/80 shadow-2xs">
-                          <FiUsers className="text-purple-600" size={13} />
-                          Team Leader
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200/80 shadow-2xs">
-                          <FiUser className="text-blue-600" size={13} />
-                          Independent
-                        </span>
-                      )}
+                      <div className="flex flex-col items-start gap-1">
+                        {worker.workerType === 'TEAM_LEADER' ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200/80 shadow-2xs">
+                            <FiUsers className="text-purple-600" size={13} />
+                            Team Leader
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200/80 shadow-2xs">
+                            <FiUser className="text-blue-600" size={13} />
+                            Independent
+                          </span>
+                        )}
+                        {worker.hasBike && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60" title="Has Personal Bike (Up to 25km radius)">
+                            🛵 Bike Commuter
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-4 px-4">
                       <div className="flex flex-wrap gap-1">
@@ -603,17 +610,29 @@ const AllWorkers = () => {
                       </div>
                     )}
 
-                    {/* Verification Documents (Aadhar Card) Section */}
+                    {/* Verification Documents (Aadhar & Driving License) Section */}
                     <div className="space-y-3">
                       <div className="flex items-center justify-between flex-wrap gap-2">
                         <h4 className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-700 flex items-center gap-2">
                           <FiShield className="text-blue-600" /> Verification Documents
                         </h4>
-                        {selectedWorker.aadhar?.number && (
-                          <span className="text-xs font-bold px-2.5 py-1 bg-blue-50 text-blue-700 rounded-lg border border-blue-100">
-                            Aadhar: {selectedWorker.aadhar.number}
-                          </span>
-                        )}
+                        <div className="flex items-center flex-wrap gap-1.5">
+                          {selectedWorker.hasBike && (
+                            <span className="text-xs font-bold px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-100 flex items-center gap-1">
+                              🛵 Bike Commuter
+                            </span>
+                          )}
+                          {selectedWorker.aadhar?.number && (
+                            <span className="text-xs font-bold px-2.5 py-1 bg-blue-50 text-blue-700 rounded-lg border border-blue-100">
+                              Aadhar: {selectedWorker.aadhar.number}
+                            </span>
+                          )}
+                          {selectedWorker.drivingLicense?.number && (
+                            <span className="text-xs font-bold px-2.5 py-1 bg-purple-50 text-purple-700 rounded-lg border border-purple-100">
+                              DL: {selectedWorker.drivingLicense.number}
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
@@ -696,6 +715,50 @@ const AllWorkers = () => {
                             </div>
                           )}
                         </div>
+
+                        {/* Driving License Document */}
+                        {(selectedWorker.drivingLicense?.document || selectedWorker.hasBike || selectedWorker.drivingLicense?.number) && (
+                          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 sm:p-4 flex flex-col justify-between sm:col-span-2">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                                <FiFileText className="text-purple-600" /> Driving License (DL)
+                              </span>
+                              {selectedWorker.drivingLicense?.document && (
+                                <a
+                                  href={selectedWorker.drivingLicense.document}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-xs text-blue-600 hover:text-blue-800 font-bold inline-flex items-center gap-1 hover:underline"
+                                >
+                                  Full View <FiExternalLink size={12} />
+                                </a>
+                              )}
+                            </div>
+
+                            {selectedWorker.drivingLicense?.document ? (
+                              <div 
+                                onClick={() => setPreviewImage(selectedWorker.drivingLicense.document)}
+                                className="relative group rounded-xl overflow-hidden bg-slate-900/5 aspect-[16/10] border border-slate-200 flex items-center justify-center cursor-pointer"
+                              >
+                                <img
+                                  src={selectedWorker.drivingLicense.document}
+                                  alt="Driving License"
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                />
+                                <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-bold text-xs gap-1.5">
+                                  <FiEye size={16} /> Click to Zoom
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="rounded-xl border-2 border-dashed border-slate-200 aspect-[16/10] flex flex-col items-center justify-center text-slate-400 p-4 text-center">
+                                <FiFileText size={24} className="mb-1 text-slate-300" />
+                                <span className="text-xs font-semibold">
+                                  {selectedWorker.drivingLicense?.number ? `DL #${selectedWorker.drivingLicense.number} (Photo not uploaded)` : 'DL Photo not provided'}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
 

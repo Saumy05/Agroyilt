@@ -88,6 +88,24 @@ const workerSchema = new mongoose.Schema({
       default: null
     }
   },
+  // Commute & Transport Details
+  hasBike: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  drivingLicense: {
+    number: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: null
+    },
+    document: {
+      type: String, // Cloudinary URL
+      default: null
+    }
+  },
   approvalStatus: {
     type: String,
     enum: ['pending', 'approved', 'rejected', 'suspended'],

@@ -120,7 +120,18 @@ const register = async (req, res) => {
     }
 
     // verificationToken handling
-    const { name, email, verificationToken, aadharNumber, aadharDocument, aadharBackDocument, workerType } = req.body;
+    const { 
+      name, 
+      email, 
+      verificationToken, 
+      aadharNumber, 
+      aadharDocument, 
+      aadharBackDocument, 
+      workerType,
+      hasBike,
+      drivingLicenseNumber,
+      drivingLicenseDocument
+    } = req.body;
     let phone = req.body.phone;
 
     if (verificationToken) {
@@ -150,6 +161,7 @@ const register = async (req, res) => {
     // Upload Aadhar
     let aadharUrl = aadharDocument || null;
     let aadharBackUrl = aadharBackDocument || null;
+    let dlUrl = drivingLicenseDocument || null;
 
     if (aadharUrl && aadharUrl.startsWith('data:')) {
       const uploadRes = await cloudinaryService.uploadFile(aadharUrl, { folder: 'workers/documents' });
@@ -159,6 +171,11 @@ const register = async (req, res) => {
     if (aadharBackUrl && aadharBackUrl.startsWith('data:')) {
       const uploadRes = await cloudinaryService.uploadFile(aadharBackUrl, { folder: 'workers/documents' });
       if (uploadRes.success) aadharBackUrl = uploadRes.url;
+    }
+
+    if (dlUrl && dlUrl.startsWith('data:')) {
+      const uploadRes = await cloudinaryService.uploadFile(dlUrl, { folder: 'workers/documents' });
+      if (uploadRes.success) dlUrl = uploadRes.url;
     }
 
     // Validate workerType
@@ -178,6 +195,11 @@ const register = async (req, res) => {
         number: req.body.aadhar || aadharNumber,
         document: aadharUrl,
         backDocument: aadharBackUrl
+      },
+      hasBike: Boolean(hasBike === true || hasBike === 'true'),
+      drivingLicense: {
+        number: drivingLicenseNumber ? String(drivingLicenseNumber).trim().toUpperCase() : null,
+        document: dlUrl
       },
       status: WORKER_STATUS.OFFLINE,
       workerType: validWorkerType,

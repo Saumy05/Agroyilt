@@ -40,6 +40,8 @@ const getProfile = async (req, res) => {
         isOnline: Boolean(worker.isOnline),
         profilePhoto: worker.profilePhoto || null,
         workerType: worker.workerType || 'WORKER',
+        hasBike: Boolean(worker.hasBike),
+        drivingLicense: worker.drivingLicense || null,
         teamId: worker.teamId || null,
         settings: worker.settings || { notifications: true, language: 'en' },
         isPhoneVerified: worker.isPhoneVerified || false,

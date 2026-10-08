@@ -15,6 +15,8 @@ const workerSignupSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
   phoneNumber: z.string().regex(/^[6-9]\d{9}$/, "Please enter a valid 10-digit Indian phone number"),
   aadhar: z.string().regex(/^\d{12}$/, "Aadhar number must be exactly 12 digits"),
+  hasBike: z.boolean().optional(),
+  drivingLicenseNumber: z.string().optional()
 });
 
 const WorkerSignup = () => {
@@ -27,7 +29,10 @@ const WorkerSignup = () => {
     phoneNumber: '',
     aadhar: '',
     aadharDocument: null,
-    aadharBackDocument: null
+    aadharBackDocument: null,
+    hasBike: false,
+    drivingLicenseNumber: '',
+    drivingLicenseDocument: null
   });
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [otpToken, setOtpToken] = useState('');
@@ -120,7 +125,10 @@ const WorkerSignup = () => {
 
     const reader = new FileReader();
     reader.onloadend = () => {
-      const fieldName = type === 'aadhar' ? 'aadharDocument' : 'aadharBackDocument';
+      let fieldName = 'aadharDocument';
+      if (type === 'aadharBack') fieldName = 'aadharBackDocument';
+      if (type === 'drivingLicense') fieldName = 'drivingLicenseDocument';
+
       setFormData(prev => ({
         ...prev,
         [fieldName]: file
@@ -134,7 +142,10 @@ const WorkerSignup = () => {
   };
 
   const removeDocument = (type) => {
-    const fieldName = type === 'aadhar' ? 'aadharDocument' : 'aadharBackDocument';
+    let fieldName = 'aadharDocument';
+    if (type === 'aadharBack') fieldName = 'aadharBackDocument';
+    if (type === 'drivingLicense') fieldName = 'drivingLicenseDocument';
+
     setFormData(prev => ({
       ...prev,
       [fieldName]: null
@@ -153,7 +164,9 @@ const WorkerSignup = () => {
       name: formData.name,
       email: formData.email,
       phoneNumber: formData.phoneNumber,
-      aadhar: formData.aadhar
+      aadhar: formData.aadhar,
+      hasBike: formData.hasBike,
+      drivingLicenseNumber: formData.drivingLicenseNumber
     });
 
     if (!validationResult.success) {
@@ -171,20 +184,14 @@ const WorkerSignup = () => {
       toastManager.error('Please upload Aadhar Back document');
       return;
     }
-    e.preventDefault();
-
-    // const errors = validateForm(); // undefined function 'validateForm', removed call as validation is done above via Zod (line 122) or not needed. 
-    // Wait, check original code... line 141: `const errors = validateForm();`. That function is NOT defined in the viewed file snippet!
-    // It might be an oversight in original code or imported? 
-    // I see `workerSignupSchema` used at line 122. So explicit validateForm might be legacy.
-    // I will remove line 141-145 if validation matches Zod.
 
     setIsLoading(true);
 
     if (verificationToken) {
       try {
         const aadharDoc = documentPreview.aadhar || null;
-        const aadharBackDoc = documentPreview.aadharBack || null; // Add this
+        const aadharBackDoc = documentPreview.aadharBack || null;
+        const dlDoc = documentPreview.drivingLicense || null;
         const registerData = {
           name: formData.name,
           email: formData.email,
@@ -192,6 +199,9 @@ const WorkerSignup = () => {
           aadhar: formData.aadhar,
           aadharDocument: aadharDoc,
           aadharBackDocument: aadharBackDoc,
+          hasBike: Boolean(formData.hasBike),
+          drivingLicenseNumber: formData.hasBike ? formData.drivingLicenseNumber : undefined,
+          drivingLicenseDocument: formData.hasBike ? dlDoc : undefined,
           verificationToken,
           workerType: new URLSearchParams(location.search).get('type') || 'WORKER',
           referralCode: referralCode || undefined
@@ -276,6 +286,7 @@ const WorkerSignup = () => {
     try {
       const aadharDoc = documentPreview.aadhar || null;
       const aadharBackDoc = documentPreview.aadharBack || null;
+      const dlDoc = documentPreview.drivingLicense || null;
       const registerData = {
         name: formData.name,
         email: formData.email,
@@ -283,6 +294,9 @@ const WorkerSignup = () => {
         aadhar: formData.aadhar,
         aadharDocument: aadharDoc,
         aadharBackDocument: aadharBackDoc,
+        hasBike: Boolean(formData.hasBike),
+        drivingLicenseNumber: formData.hasBike ? formData.drivingLicenseNumber : undefined,
+        drivingLicenseDocument: formData.hasBike ? dlDoc : undefined,
         otp: otpValue,
         token: otpToken,
         workerType: new URLSearchParams(location.search).get('type') || 'WORKER',
@@ -466,6 +480,103 @@ const WorkerSignup = () => {
                       <span className="text-xs text-gray-500 font-bold">Upload Back</span>
                       <input type="file" className="hidden" accept="image/*,application/pdf" onChange={(e) => handleDocumentUpload(e, 'aadharBack')} />
                     </label>
+                  </div>
+                )}
+              </div>
+
+              {/* Commute & Vehicle Section */}
+              <div className="animate-stagger-6 animate-fade-in border-t border-gray-100 pt-5 mt-2">
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-sm font-bold text-gray-900">
+                    Commute & Vehicle
+                  </label>
+                  <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-100">
+                    Priority Matching
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 mb-3">
+                  Do you have a personal bike or two-wheeler for traveling to farm jobs?
+                </p>
+
+                {/* Yes / No Toggle Cards */}
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <button
+                    type="button"
+                    onClick={() => setFormData(p => ({ ...p, hasBike: true }))}
+                    className={`flex items-center gap-2.5 p-3 rounded-xl border-2 text-left transition-all ${
+                      formData.hasBike
+                        ? 'border-[#347989] bg-[#347989]/5 text-gray-900 shadow-sm ring-1 ring-[#347989]/20'
+                        : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                    }`}
+                  >
+                    <span className="text-2xl shrink-0">🛵</span>
+                    <div>
+                      <div className="text-xs font-bold leading-tight">Yes, have a bike</div>
+                      <div className="text-[10px] text-gray-400 mt-0.5">Travel up to 25 km</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFormData(p => ({ ...p, hasBike: false, drivingLicenseNumber: '', drivingLicenseDocument: null }))}
+                    className={`flex items-center gap-2.5 p-3 rounded-xl border-2 text-left transition-all ${
+                      !formData.hasBike
+                        ? 'border-[#347989] bg-[#347989]/5 text-gray-900 shadow-sm ring-1 ring-[#347989]/20'
+                        : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                    }`}
+                  >
+                    <span className="text-2xl shrink-0">🚶</span>
+                    <div>
+                      <div className="text-xs font-bold leading-tight">No personal bike</div>
+                      <div className="text-[10px] text-gray-400 mt-0.5">Nearby & shared travel</div>
+                    </div>
+                  </button>
+                </div>
+
+                {/* Conditional DL fields if Bike = Yes */}
+                {formData.hasBike && (
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-4 animate-fade-in">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1">
+                        Driving License (DL) Number <span className="text-gray-400 font-normal">(Optional)</span>
+                      </label>
+                      <input
+                        type="text"
+                        name="drivingLicenseNumber"
+                        value={formData.drivingLicenseNumber}
+                        onChange={(e) => setFormData(p => ({ ...p, drivingLicenseNumber: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 20) }))}
+                        className="block w-full px-3.5 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-offset-2 outline-none uppercase font-mono tracking-wider transition-all hover:border-gray-400 bg-white"
+                        style={{ '--tw-ring-color': brandColor }}
+                        placeholder="e.g. DL1420210012345"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                        Driving License Photo <span className="text-gray-400 font-normal">(Front Photo - Optional)</span>
+                      </label>
+                      {documentPreview.drivingLicense ? (
+                        <div className="relative group overflow-hidden rounded-xl border border-gray-200 bg-white">
+                          <img src={documentPreview.drivingLicense} className="w-full h-32 object-cover" alt="DL Preview" />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <button type="button" onClick={() => removeDocument('drivingLicense')} className="bg-red-500 text-white rounded-full p-2 shadow-xl hover:bg-red-600 transition-colors">
+                              <FiX size={18} />
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-gray-200 rounded-xl hover:bg-white transition-all hover:border-[#347989] group bg-white/70">
+                          <label className="flex flex-col items-center cursor-pointer w-full h-full justify-center">
+                            <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-full mb-1 group-hover:scale-110 transition-transform">
+                              <FiUpload className="w-5 h-5" />
+                            </div>
+                            <span className="text-xs text-gray-600 font-bold">Upload DL Photo</span>
+                            <span className="text-[10px] text-gray-400">JPG, PNG or PDF up to 5MB</span>
+                            <input type="file" className="hidden" accept="image/*,application/pdf" onChange={(e) => handleDocumentUpload(e, 'drivingLicense')} />
+                          </label>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
