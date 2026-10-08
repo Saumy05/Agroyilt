@@ -1,6 +1,17 @@
-import React, { useState, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiBriefcase, FiClock, FiCheckCircle, FiXCircle, FiMapPin, FiChevronRight, FiUser, FiSearch } from 'react-icons/fi';
+import { 
+  FiBriefcase, 
+  FiClock, 
+  FiCheckCircle, 
+  FiXCircle, 
+  FiMapPin, 
+  FiChevronRight, 
+  FiUser, 
+  FiSearch,
+  FiX,
+  FiCalendar
+} from 'react-icons/fi';
 import { workerTheme as themeColors } from '../../../../theme';
 import Header from '../../components/layout/Header';
 import workerService from '../../../../services/workerService';
@@ -18,7 +29,7 @@ const AssignedJobs = () => {
     const html = document.documentElement;
     const body = document.body;
     const root = document.getElementById('root');
-    const bgStyle = themeColors.backgroundGradient;
+    const bgStyle = '#F8FAFC'; // Clean soft background
 
     if (html) html.style.background = bgStyle;
     if (body) body.style.background = bgStyle;
@@ -61,321 +72,347 @@ const AssignedJobs = () => {
     };
   }, []);
 
-  const getStatusColor = (status) => {
-    const colors = {
-      'pending': '#F59E0B',
-      'searching': '#F59E0B',
-      'requested': '#6366F1',
-      'confirmed': '#3B82F6',
-      'assigned': '#3B82F6',
-      'visited': '#8B5CF6',
-      'in_progress': '#F59E0B',
-      'on_the_way': '#F59E0B',
-      'journey_started': '#F59E0B',
-      'work_done': '#10B981',
-      'awaiting_payment': '#EF6820',
-      'completed': '#10B981',
-      'cancelled': '#EF4444',
-      'rejected': '#EF4444',
-    };
-    return colors[status] || '#6B7280';
-  };
-
-  const getStatusLabel = (status) => {
-    const labels = {
-      'pending': 'Pending',
-      'confirmed': 'Assigned',
-      'in_progress': 'In Progress',
-      'on_the_way': 'On The Way',
-      'journey_started': 'On The Way',
-      'visited': 'Reached',
-      'work_done': 'Work Done',
-      'awaiting_payment': 'Awaiting Payment',
-      'completed': 'Completed',
-      'cancelled': 'Cancelled',
-      'rejected': 'Rejected',
-    };
-    return labels[status] || status;
-  };
-
-  const hexToRgba = (hex, alpha) => {
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-  };
-
-  const filteredJobs = jobs.filter(job => {
-    const status = (job.status || '').toLowerCase();
-
-    let matchesFilter = false;
-    if (filter === 'all') {
-      matchesFilter = true;
-    } else if (filter === 'confirmed') {
-      matchesFilter = ['confirmed', 'assigned', 'pending'].includes(status);
-    } else if (filter === 'in_progress') {
-      matchesFilter = ['in_progress', 'started', 'reached', 'visited', 'work_done', 'on_the_way', 'journey_started', 'awaiting_payment'].includes(status);
-    } else if (filter === 'completed') {
-      matchesFilter = ['completed', 'worker_paid', 'paid'].includes(status);
+  const getStatusBadge = (status) => {
+    const s = (status || '').toLowerCase();
+    switch (s) {
+      case 'completed':
+      case 'work_done':
+        return {
+          label: 'Completed',
+          bg: 'bg-emerald-50 text-emerald-700 border-emerald-200/80',
+          dot: 'bg-emerald-500',
+          accent: '#10B981'
+        };
+      case 'in_progress':
+      case 'on_the_way':
+      case 'journey_started':
+      case 'visited':
+        return {
+          label: s === 'visited' ? 'Reached' : 'In Progress',
+          bg: 'bg-amber-50 text-amber-700 border-amber-200/80',
+          dot: 'bg-amber-500 animate-ping',
+          accent: '#F59E0B'
+        };
+      case 'confirmed':
+      case 'assigned':
+        return {
+          label: 'Assigned',
+          bg: 'bg-blue-50 text-blue-700 border-blue-200/80',
+          dot: 'bg-blue-500',
+          accent: '#3B82F6'
+        };
+      case 'pending':
+      case 'searching':
+      case 'requested':
+        return {
+          label: 'Pending',
+          bg: 'bg-purple-50 text-purple-700 border-purple-200/80',
+          dot: 'bg-purple-500',
+          accent: '#8B5CF6'
+        };
+      case 'cancelled':
+      case 'rejected':
+        return {
+          label: 'Cancelled',
+          bg: 'bg-rose-50 text-rose-700 border-rose-200/80',
+          dot: 'bg-rose-500',
+          accent: '#EF4444'
+        };
+      default:
+        return {
+          label: status || 'Unknown',
+          bg: 'bg-slate-50 text-slate-700 border-slate-200/80',
+          dot: 'bg-slate-400',
+          accent: '#64748B'
+        };
     }
+  };
 
-    const matchesSearch = searchQuery === '' ||
-      job.serviceName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      job.userId?.name?.toLowerCase().includes(searchQuery.toLowerCase());
+  // Counts for filter pills
+  const counts = useMemo(() => {
+    const total = jobs.length;
+    let pending = 0;
+    let active = 0;
+    let completed = 0;
 
-    return matchesFilter && matchesSearch;
-  });
+    jobs.forEach(job => {
+      const s = (job.status || '').toLowerCase();
+      if (['confirmed', 'assigned', 'pending', 'searching', 'requested'].includes(s)) pending++;
+      else if (['in_progress', 'on_the_way', 'journey_started', 'visited'].includes(s)) active++;
+      else if (['completed', 'work_done'].includes(s)) completed++;
+    });
+
+    return { total, pending, active, completed };
+  }, [jobs]);
+
+  const filteredJobs = useMemo(() => {
+    return jobs.filter(job => {
+      const status = (job.status || '').toLowerCase();
+
+      let matchesFilter = false;
+      if (filter === 'all') {
+        matchesFilter = true;
+      } else if (filter === 'confirmed') {
+        matchesFilter = ['confirmed', 'assigned', 'pending', 'searching', 'requested'].includes(status);
+      } else if (filter === 'in_progress') {
+        matchesFilter = ['in_progress', 'on_the_way', 'journey_started', 'visited'].includes(status);
+      } else if (filter === 'completed') {
+        matchesFilter = ['completed', 'work_done'].includes(status);
+      }
+
+      const matchesSearch = searchQuery === '' ||
+        job.serviceName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        job.serviceId?.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        job.userId?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        job.farmerName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        job.bookingNumber?.toLowerCase().includes(searchQuery.toLowerCase());
+
+      return matchesFilter && matchesSearch;
+    });
+  }, [jobs, filter, searchQuery]);
 
   return (
-    <div className="min-h-screen pb-32" style={{ background: themeColors.backgroundGradient }}>
-      <Header title="My Jobs" showSearch={true} onBack={() => navigate('/worker/dashboard')} />
+    <div className="min-h-screen pb-32 bg-slate-50/60">
+      <Header title="My Jobs" showSearch={false} onBack={() => navigate('/worker/dashboard')} />
 
-      <main className="px-4 py-6">
+      <main className="px-4 py-4 max-w-lg mx-auto">
         {/* Search Bar */}
-        <div className="mb-4">
-          <div className="relative">
-            <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+        <div className="mb-3.5">
+          <div className="relative flex items-center">
+            <FiSearch className="absolute left-3.5 w-4 h-4 text-slate-400 pointer-events-none" />
             <input
               type="text"
-              placeholder="Search jobs..."
+              placeholder="Search by work, farmer or ID..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 bg-white rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-0"
-              style={{ focusRingColor: themeColors.button }}
+              className="w-full pl-10 pr-9 py-2.5 bg-white rounded-xl border border-slate-200/80 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition-all shadow-2xs"
             />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+              >
+                <FiX className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Filter Buttons */}
-        <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide">
+        {/* Filter Pills */}
+        <div className="flex gap-2 mb-4 overflow-x-auto pb-1 scrollbar-hide">
           {[
-            { id: 'all', label: 'All' },
-            { id: 'confirmed', label: 'Pending' },
-            { id: 'in_progress', label: 'Active' },
-            { id: 'completed', label: 'Completed' },
-          ].map((filterOption) => (
-            <button
-              key={filterOption.id}
-              onClick={() => setFilter(filterOption.id)}
-              className={`px-4 py-2 rounded-full font-semibold text-sm whitespace-nowrap transition-all ${filter === filterOption.id
-                ? 'text-white'
-                : 'bg-white text-gray-700'
+            { id: 'all', label: 'All', count: counts.total },
+            { id: 'confirmed', label: 'Pending', count: counts.pending },
+            { id: 'in_progress', label: 'Active', count: counts.active },
+            { id: 'completed', label: 'Completed', count: counts.completed },
+          ].map((item) => {
+            const isActive = filter === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setFilter(item.id)}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full font-semibold text-xs whitespace-nowrap transition-all active:scale-95 cursor-pointer ${
+                  isActive
+                    ? 'bg-emerald-700 text-white shadow-sm shadow-emerald-700/25'
+                    : 'bg-white text-slate-600 border border-slate-200/80 hover:bg-slate-50'
                 }`}
-              style={
-                filter === filterOption.id
-                  ? {
-                    background: themeColors.button,
-                    boxShadow: `0 2px 8px ${themeColors.button}40`,
-                  }
-                  : {
-                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-                  }
-              }
-            >
-              {filterOption.label}
-            </button>
-          ))}
+              >
+                <span>{item.label}</span>
+                {item.count > 0 && (
+                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                    isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
+                  }`}>
+                    {item.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* Jobs List */}
         {loading ? (
           <div className="py-2">
-            <SkeletonList count={5} cardHeight="140px" />
+            <SkeletonList count={4} cardHeight="150px" />
           </div>
         ) : filteredJobs.length === 0 ? (
-          <div
-            className="bg-white rounded-xl p-8 text-center shadow-md"
-            style={{
-              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-            }}
-          >
-            <FiBriefcase className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-            <p className="text-gray-600 font-semibold mb-2">No jobs found</p>
-            <p className="text-sm text-gray-500">
-              {searchQuery ? 'Try a different search term' : 'No jobs assigned at the moment'}
+          <div className="bg-white rounded-2xl p-8 text-center border border-slate-100 shadow-xs mt-2">
+            <div className="w-14 h-14 mx-auto mb-3 rounded-2xl bg-slate-50 text-slate-400 flex items-center justify-center">
+              <FiBriefcase className="w-7 h-7" />
+            </div>
+            <h3 className="text-slate-800 font-bold text-base mb-1">No jobs found</h3>
+            <p className="text-xs text-slate-500 max-w-xs mx-auto mb-4">
+              {searchQuery ? `No jobs matching "${searchQuery}"` : 'No assigned farm work under this tab right now.'}
             </p>
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-all"
+              >
+                Clear Search
+              </button>
+            )}
           </div>
         ) : (
           <div className="space-y-3">
             {filteredJobs.map((job) => {
-              const statusColor = getStatusColor(job.status);
+              const badge = getStatusBadge(job.status);
+              const statusLower = (job.status || '').toLowerCase();
+              const isCompleted = ['completed', 'work_done'].includes(statusLower);
+              const isActive = ['in_progress', 'journey_started', 'visited'].includes(statusLower);
+
+              // Financial payout calculation
+              const earningAmount = job.workerNetEarning || job.paymentSummary?.netEarning || (
+                job.workerFinancials?.netEarnings ?? (
+                  job.finalAmount 
+                    ? (job.providerType === 'WORKER' || job.bookingNumber?.startsWith('WRK-') ? Math.round(job.finalAmount * 0.9) : job.finalAmount) 
+                    : 0
+                )
+              );
+
+              // Date formatting
+              const dateStr = job.scheduledDate ? new Date(job.scheduledDate).toLocaleDateString('en-IN', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric'
+              }) : (job.createdAt ? new Date(job.createdAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A');
+
+              // Time formatting
+              let startTimeStr = job.scheduledTime || '';
+              let startDate = null;
+              if (job.startedAt) startDate = new Date(job.startedAt);
+              else if (job.inProgressAt) startDate = new Date(job.inProgressAt);
+              else if (job.createdAt) startDate = new Date(job.createdAt);
+
+              if (!startTimeStr && startDate) {
+                startTimeStr = startDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+              }
+
+              let endDate = null;
+              let endTimeStr = '';
+              if (isCompleted) {
+                if (job.completedAt) endDate = new Date(job.completedAt);
+                else if (job.workDoneAt) endDate = new Date(job.workDoneAt);
+                else if (job.updatedAt) endDate = new Date(job.updatedAt);
+
+                if (endDate) {
+                  endTimeStr = endDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+                }
+              }
+
+              let durationStr = null;
+              if (isCompleted && endDate && startDate && endDate >= startDate) {
+                const diffMs = endDate.getTime() - startDate.getTime();
+                const totalSecs = Math.floor(diffMs / 1000);
+                const hours = Math.floor(totalSecs / 3600);
+                const mins = Math.floor((totalSecs % 3600) / 60);
+                const secs = totalSecs % 60;
+                if (hours > 0) durationStr = `${hours}h ${mins}m`;
+                else if (mins > 0) durationStr = `${mins}m ${secs}s`;
+                else durationStr = `${secs}s`;
+              }
 
               return (
                 <div
                   key={job._id}
                   onClick={() => {
                     if (job.__type === 'IndWorkerAssignment') {
-                      // Group/confirmed booking — navigate to DAILY tracking or assignment detail
                       navigate(`/worker/job/${job._id}`, { state: { fromJobs: true, isAssignment: true, assignmentData: job } });
                     } else {
                       navigate(`/worker/job/${job._id}`, { state: { fromJobs: true } });
                     }
                   }}
-                  className="rounded-xl p-4 shadow-lg cursor-pointer active:scale-98 transition-all duration-200 relative overflow-hidden"
-                  style={{
-                    background: 'linear-gradient(135deg, #FFFFFF 0%, #F9FAFB 100%)',
-                    boxShadow: `0 8px 24px ${hexToRgba(statusColor, 0.15)}, 0 4px 12px ${hexToRgba(statusColor, 0.1)}, 0 0 0 2px ${hexToRgba(statusColor, 0.2)}`,
-                    border: `2px solid ${hexToRgba(statusColor, 0.3)}`,
-                  }}
+                  className="bg-white rounded-2xl p-4 border border-slate-100 shadow-2xs hover:shadow-md transition-all duration-200 cursor-pointer active:scale-[0.99] group relative overflow-hidden"
                 >
-                  {/* Left border accent */}
-                  <div
-                    className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl"
-                    style={{
-                      background: `linear-gradient(180deg, ${statusColor} 0%, ${statusColor}dd 100%)`,
-                    }}
+                  {/* Left status color accent line */}
+                  <div 
+                    className="absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl" 
+                    style={{ backgroundColor: badge.accent }} 
                   />
 
-                  <div className="relative z-10 pl-2">
-                    {/* Header Section */}
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <div
-                            className="p-1.5 rounded-lg"
-                            style={{
-                              background: `${statusColor}15`,
-                            }}
-                          >
-                            <FiBriefcase className="w-4 h-4" style={{ color: statusColor }} />
-                          </div>
-                          <h3 className="font-bold text-gray-800 text-base">{job.serviceName || job.serviceId?.title || 'Farm Work'}</h3>
+                  {/* Header Row: Title + Status + Price */}
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+                          <FiBriefcase className="w-4 h-4" />
                         </div>
-                        <div className="ml-8 mb-2">
-                          <span
-                            className="text-xs font-bold px-3 py-1.5 rounded-full"
-                            style={{
-                              background: `linear-gradient(135deg, ${statusColor} 0%, ${statusColor}dd 100%)`,
-                              color: '#FFFFFF',
-                              boxShadow: `0 2px 8px ${hexToRgba(statusColor, 0.3)}`,
-                            }}
-                          >
-                            {getStatusLabel(job.status)}
-                          </span>
-                        </div>
+                        <h3 className="font-bold text-slate-800 text-[15px] truncate">
+                          {job.serviceName || job.serviceId?.title || 'Farm Work'}
+                        </h3>
                       </div>
-                      <div
-                        className="px-3 py-2 rounded-lg font-bold text-lg"
-                        style={{
-                          background: `linear-gradient(135deg, ${themeColors.button}15 0%, ${themeColors.button}10 100%)`,
-                          color: themeColors.button,
-                          border: `1px solid ${hexToRgba(themeColors.button, 0.2)}`,
-                        }}
-                      >
-                        ₹{job.workerNetEarning || job.paymentSummary?.netEarning || (job.workerFinancials?.netEarnings ?? (job.finalAmount ? (job.providerType === 'WORKER' || job.bookingNumber?.startsWith('WRK-') ? Math.round(job.finalAmount * 0.9) : job.finalAmount) : 0))}
+                      
+                      {/* Status Badge Pill */}
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${badge.bg}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
+                          {badge.label}
+                        </span>
+                        {job.bookingNumber && (
+                          <span className="text-[11px] font-medium text-slate-400">
+                            #{job.bookingNumber}
+                          </span>
+                        )}
                       </div>
                     </div>
 
-                    {/* Info Section */}
-                    <div className="space-y-2.5">
-                      <div className="flex items-center gap-2 text-sm">
-                        <div className="p-1 rounded" style={{ background: 'rgba(0, 0, 0, 0.03)' }}>
-                          <FiUser className="w-4 h-4" style={{ color: statusColor }} />
-                        </div>
-                        <span className="text-gray-700 font-medium">{job.userId?.name || job.farmerName || 'Customer'}</span>
+                    {/* Net Payout Price */}
+                    <div className="text-right shrink-0">
+                      <div className="text-lg font-black text-slate-900 tracking-tight">
+                        ₹{earningAmount}
                       </div>
+                      <span className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wider block">
+                        Net Payout
+                      </span>
+                    </div>
+                  </div>
 
-                      <div className="flex items-center gap-2 text-sm">
-                        <div className="p-1 rounded" style={{ background: 'rgba(0, 0, 0, 0.03)' }}>
-                          <FiMapPin className="w-4 h-4" style={{ color: statusColor }} />
+                  {/* Details Section */}
+                  <div className="space-y-2 pt-2.5 border-t border-slate-100/80 text-xs text-slate-600">
+                    {/* Farmer/Customer */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-6 h-6 rounded-lg bg-slate-100 text-slate-500 flex items-center justify-center shrink-0">
+                          <FiUser className="w-3.5 h-3.5" />
                         </div>
-                        <span className="text-gray-700 font-medium truncate">{job.address?.addressLine1 || 'Address not available'}</span>
+                        <span className="font-semibold text-slate-700 truncate">
+                          {job.userId?.name || job.farmerName || 'Customer'}
+                        </span>
                       </div>
+                      <FiChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0" />
+                    </div>
 
-                      {(() => {
-                        const statusLower = (job.status || '').toLowerCase();
-                        const isCompleted = ['completed', 'work_done'].includes(statusLower);
-                        const isActive = ['in_progress', 'journey_started', 'visited'].includes(statusLower);
+                    {/* Address / Location */}
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-lg bg-slate-100 text-slate-500 flex items-center justify-center shrink-0">
+                        <FiMapPin className="w-3.5 h-3.5" />
+                      </div>
+                      <span className="text-slate-500 truncate">
+                        {job.address?.addressLine1 || job.address?.city || 'Address not available'}
+                      </span>
+                    </div>
 
-                        const dateStr = job.scheduledDate ? new Date(job.scheduledDate).toLocaleDateString('en-IN', {
-                          month: 'numeric',
-                          day: 'numeric',
-                          year: 'numeric'
-                        }) : (job.createdAt ? new Date(job.createdAt).toLocaleDateString('en-IN') : 'N/A');
-
-                        let startTimeStr = job.scheduledTime || '';
-                        let startDate = null;
-                        if (job.startedAt) startDate = new Date(job.startedAt);
-                        else if (job.inProgressAt) startDate = new Date(job.inProgressAt);
-                        else if (job.createdAt) startDate = new Date(job.createdAt);
-
-                        if (!startTimeStr && startDate) {
-                          startTimeStr = startDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-                        }
-
-                        let endDate = null;
-                        let endTimeStr = '';
-                        if (isCompleted) {
-                          if (job.completedAt) endDate = new Date(job.completedAt);
-                          else if (job.workDoneAt) endDate = new Date(job.workDoneAt);
-                          else if (job.updatedAt) endDate = new Date(job.updatedAt);
-
-                          if (endDate) {
-                            endTimeStr = endDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-                          }
-                        }
-
-                        let durationStr = null;
-                        if (isCompleted && endDate && startDate && endDate >= startDate) {
-                          const diffMs = endDate.getTime() - startDate.getTime();
-                          const totalSecs = Math.floor(diffMs / 1000);
-                          const hours = Math.floor(totalSecs / 3600);
-                          const mins = Math.floor((totalSecs % 3600) / 60);
-                          const secs = totalSecs % 60;
-                          if (hours > 0) durationStr = `${hours}h ${mins}m ${secs}s`;
-                          else if (mins > 0) durationStr = `${mins}m ${secs}s`;
-                          else durationStr = `${secs}s`;
-                        }
-
-                        if (isCompleted) {
-                          return (
-                            <div className="flex items-start gap-2 text-xs">
-                              <div className="p-1 rounded bg-emerald-50 text-emerald-600 shrink-0 mt-0.5">
-                                <FiClock className="w-3.5 h-3.5" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex flex-wrap items-center gap-1 text-gray-700 font-medium">
-                                  <span>{dateStr}</span>
-                                  <span>•</span>
-                                  <span className="font-bold text-emerald-800">
-                                    {startTimeStr} {endTimeStr ? `→ ${endTimeStr}` : ''}
-                                  </span>
-                                  {durationStr && (
-                                    <span className="bg-emerald-100/70 text-emerald-800 text-[10px] font-black px-1.5 py-0.5 rounded-md">
-                                      {durationStr}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        }
-
-                        if (isActive) {
-                          return (
-                            <div className="flex items-center gap-2 text-xs">
-                              <div className="p-1 rounded bg-amber-50 text-amber-600 shrink-0">
-                                <FiClock className="w-3.5 h-3.5" />
-                              </div>
-                              <span className="text-amber-800 font-bold flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
-                                In Progress • Started at {startTimeStr || 'N/A'}
-                              </span>
-                            </div>
-                          );
-                        }
-
-                        return (
-                          <div className="flex items-center gap-2 text-sm">
-                            <div className="p-1 rounded" style={{ background: 'rgba(0, 0, 0, 0.03)' }}>
-                              <FiClock className="w-4 h-4" style={{ color: statusColor }} />
-                            </div>
-                            <span className="text-gray-700 font-medium">
-                              {dateStr} • {startTimeStr || 'N/A'}
+                    {/* Date & Time Schedule */}
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-lg bg-slate-100 text-slate-500 flex items-center justify-center shrink-0">
+                        <FiClock className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-medium text-slate-600">{dateStr}</span>
+                        {startTimeStr && (
+                          <>
+                            <span>•</span>
+                            <span className="font-semibold text-slate-800">
+                              {startTimeStr} {endTimeStr ? `→ ${endTimeStr}` : ''}
                             </span>
-                          </div>
-                        );
-                      })()}
+                          </>
+                        )}
+                        {durationStr && (
+                          <span className="ml-1 px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-700 font-bold text-[10px]">
+                            {durationStr}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

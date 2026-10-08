@@ -28,6 +28,7 @@ import LogoLoader from '../../../../components/common/LogoLoader';
 import NotificationBell from '../../components/common/NotificationBell';
 import WithdrawalModal from '../../../../components/common/WithdrawalModal';
 import useBodyScrollLock from '../../../../hooks/useBodyScrollLock';
+import { themeColors } from '../../../../theme';
 
 const TYPE_CONFIG = {
   credit: { label: 'Credit', kind: 'credit' },
