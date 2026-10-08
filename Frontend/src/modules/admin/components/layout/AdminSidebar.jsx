@@ -6,9 +6,13 @@ import {
   FiUsers,
   FiBriefcase,
   FiUser,
+  FiUserCheck,
   FiShoppingBag,
   FiGrid,
   FiDollarSign,
+  FiCreditCard,
+  FiArrowUpRight,
+  FiRepeat,
   FiFileText,
   FiBell,
   FiSettings,
@@ -24,6 +28,9 @@ import {
   FiGift,
   FiShield,
   FiMapPin,
+  FiKey,
+  FiShoppingCart,
+  FiPieChart,
 } from "react-icons/fi";
 import adminMenu from "../../config/adminMenu.json";
 import dashboardService from "../../services/dashboardService";
@@ -33,18 +40,18 @@ import authStorage from "../../../../utils/authStorage";
 const iconMap = {
   Dashboard: FiHome,
   Farmers: FiUsers,
-  Workers: FiUser,
-  "Vendors": FiBriefcase,
+  Workers: FiUserCheck,
+  Vendors: FiBriefcase,
   Bookings: FiShoppingBag,
   "User Catalog": FiGrid,
-  Payments: FiDollarSign,
-  Reports: FiFileText,
+  Payments: FiCreditCard,
+  Withdrawals: FiArrowUpRight,
+  Settlements: FiRepeat,
+  Reports: FiPieChart,
   Notifications: FiBell,
   Reviews: FiStar,
-  Withdrawals: FiDollarSign,
-  Settlements: FiDollarSign,
   Settings: FiSettings,
-  "Agri Marketplace": FiShoppingBag,
+  "Agri Marketplace": FiShoppingCart,
   "Soil Testing": FiActivity,
   Disputes: FiAlertTriangle,
   "Equipment Catalog": FiGrid,
@@ -53,9 +60,10 @@ const iconMap = {
   "Machinery Approvals": FiTruck,
   Referrals: FiGift,
   "Admin Management": FiShield,
-  "Roles": FiShield,
+  Roles: FiKey,
   "Geographic Management": FiMapPin,
-  "My Salary": FiDollarSign,
+  "My Salary": FiCreditCard,
+  "Help & Support": FiAlertTriangle,
 };
 
 // Helper function to convert child name to route path
@@ -527,8 +535,23 @@ const AdminSidebar = ({ isOpen, onClose }) => {
       </div>
 
       {/* Navigation Menu */}
-      <nav className="flex-1 overflow-y-auto p-3 scrollbar-admin lg:pb-3">
-        {filteredMenu.map((item) => renderMenuItem(item))}
+      <nav className="flex-1 overflow-y-auto p-3 scrollbar-admin lg:pb-3 space-y-1">
+        {filteredMenu.map((item, index) => {
+          const showCategoryHeader =
+            item.category &&
+            (index === 0 || filteredMenu[index - 1].category !== item.category);
+
+          return (
+            <div key={item.route || index}>
+              {showCategoryHeader && (
+                <div className="px-4 pt-3 pb-1 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  {item.category}
+                </div>
+              )}
+              {renderMenuItem(item)}
+            </div>
+          );
+        })}
       </nav>
     </div>
   );
