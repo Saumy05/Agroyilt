@@ -127,7 +127,7 @@ const AssignedJobs = () => {
   });
 
   return (
-    <div className="min-h-screen pb-20" style={{ background: themeColors.backgroundGradient }}>
+    <div className="min-h-screen pb-32" style={{ background: themeColors.backgroundGradient }}>
       <Header title="My Jobs" showSearch={true} onBack={() => navigate('/worker/dashboard')} />
 
       <main className="px-4 py-6">

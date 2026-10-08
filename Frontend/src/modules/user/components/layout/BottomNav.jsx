@@ -113,7 +113,7 @@ const BottomNav = React.memo(() => {
 
           {/* Animated Sliding Indicator */}
           <motion.div
-            className="absolute -top-3 h-1 rounded-full"
+            className="absolute -top-2 h-1 rounded-full"
             animate={{
               left: indicatorStyle.left,
               width: indicatorStyle.width,
