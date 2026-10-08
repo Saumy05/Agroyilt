@@ -75,23 +75,23 @@ exports.getMyTeam = async (req, res) => {
 
     if (worker.workerType === 'TEAM_LEADER') {
       if (!worker.teamId) {
-        return res.status(200).json({ success: true, team: null, members: [] });
+        return res.status(200).json({ success: true, team: null, members: [], isIndependent: false });
       }
       
       const team = worker.teamId;
       const members = await Worker.find({ teamId: team._id, _id: { $ne: req.userId } })
         .select('name phone status workerType skills rating profilePhoto dailyRate hourlyRate experience experienceYears serviceCategory serviceCategories isOfflineMember managedByLeaderId');
-      return res.status(200).json({ success: true, team, members });
+      return res.status(200).json({ success: true, team, members, isIndependent: false });
     } else {
-      // WORKER
+      // WORKER (Single Active Team model: 0 or 1 team at any moment)
       if (!worker.teamId) {
-        return res.status(200).json({ success: true, team: null });
+        return res.status(200).json({ success: true, team: null, isIndependent: true });
       }
       
       const team = worker.teamId;
       const leader = await Worker.findById(team.leaderId)
         .select('name phone status workerType skills rating profilePhoto dailyRate hourlyRate experience experienceYears serviceCategory serviceCategories');
-      return res.status(200).json({ success: true, team, leader });
+      return res.status(200).json({ success: true, team, leader, isIndependent: false });
     }
   } catch (error) {
     console.error('getMyTeam error:', error);
@@ -107,50 +107,38 @@ exports.getMyTeam = async (req, res) => {
 exports.searchEligibleWorkers = async (req, res) => {
   try {
     const { query } = req.query;
-    let filter = { _id: { $ne: req.userId } };
+    const noTeamWorkerCondition = {
+      workerType: 'WORKER',
+      $or: [{ teamId: null }, { teamId: { $exists: false } }]
+    };
 
-    // If query is provided, filter by name or phone
+    let filter = {
+      _id: { $ne: req.userId },
+      isOfflineMember: { $ne: true }
+    };
+
     if (query && query.length >= 3) {
-      filter.$or = [
-        { name: { $regex: query, $options: 'i' } },
-        { phone: { $regex: query, $options: 'i' } }
+      filter.$and = [
+        {
+          $or: [
+            { name: { $regex: query, $options: 'i' } },
+            { phone: { $regex: query, $options: 'i' } }
+          ]
+        },
+        {
+          $or: [
+            noTeamWorkerCondition,
+            { workerType: 'TEAM_LEADER' }
+          ]
+        }
       ];
     } else if (query && query.length > 0 && query.length < 3) {
       return res.status(400).json({ success: false, message: 'Search query must be at least 3 characters' });
-    }
-
-    // Only get eligible workers: 
-    // 1. Regular workers without a team (excluding offline members who have no app/phone)
-    // 2. Team leaders (who can be merged)
-    filter = {
-      ...filter,
-      isOfflineMember: { $ne: true },
-      $or: [
-        { workerType: 'WORKER', teamId: null },
+    } else {
+      filter.$or = [
+        noTeamWorkerCondition,
         { workerType: 'TEAM_LEADER' }
-      ]
-    };
-    
-    // If there was a search query, we need an $and to combine the search $or with the eligibility $or
-    if (query && query.length >= 3) {
-      filter = {
-        _id: { $ne: req.userId },
-        isOfflineMember: { $ne: true },
-        $and: [
-          {
-            $or: [
-              { name: { $regex: query, $options: 'i' } },
-              { phone: { $regex: query, $options: 'i' } }
-            ]
-          },
-          {
-            $or: [
-              { workerType: 'WORKER', teamId: null },
-              { workerType: 'TEAM_LEADER' }
-            ]
-          }
-        ]
-      };
+      ];
     }
 
     const workers = await Worker.find(filter)
@@ -317,9 +305,34 @@ exports.acceptRequest = async (req, res) => {
     if (!targetTeam) throw new Error('Target team no longer exists');
 
     if (request.type === 'JOIN_WORKER') {
-      if (receiver.teamId) throw new Error('You are already in a team');
+      if (receiver.teamId) throw new Error('You are already in a team. Leave your current team first.');
+
+      // Active Job Guard: Cannot join a team while performing an active on-field job
+      const Booking = require('../../models/Booking');
+      const { BOOKING_STATUS } = require('../../utils/constants');
+      const activeJob = await Booking.findOne({
+        $or: [
+          { workerId: receiver._id },
+          { assignedWorkers: receiver._id },
+          { selectedWorkers: receiver._id }
+        ],
+        status: {
+          $in: [
+            BOOKING_STATUS.CONFIRMED,
+            BOOKING_STATUS.ASSIGNED,
+            BOOKING_STATUS.JOURNEY_STARTED,
+            BOOKING_STATUS.VISITED,
+            BOOKING_STATUS.IN_PROGRESS
+          ]
+        }
+      }).session(session);
+
+      if (activeJob) {
+        throw new Error('Cannot join team while you have an active on-field job in progress. Please complete your current booking first.');
+      }
 
       receiver.teamId = targetTeam._id;
+      receiver.managedByLeaderId = targetTeam.leaderId;
       await receiver.save({ session });
 
       targetTeam.memberCount += 1;
@@ -386,6 +399,7 @@ exports.acceptRequest = async (req, res) => {
       await sendTeamNotification(request.senderId, 'Merge Accepted', `${receiver.name} merged their team into yours.`, 'team', 'team_merge_accepted');
     } else if (request.type === 'MIGRATION_TRANSFER') {
       receiver.teamId = targetTeam._id;
+      receiver.managedByLeaderId = targetTeam.leaderId;
       await receiver.save({ session });
       
       request.status = 'ACCEPTED';
@@ -481,6 +495,30 @@ exports.leaveTeam = async (req, res) => {
     if (!worker.teamId || worker.workerType === 'TEAM_LEADER') {
       throw new Error('Only active workers can leave teams');
     }
+
+    // Safety Guard: Worker cannot leave team while having an active on-field job in progress
+    const Booking = require('../../models/Booking');
+    const { BOOKING_STATUS } = require('../../utils/constants');
+    const activeJob = await Booking.findOne({
+      $or: [
+        { workerId: worker._id },
+        { assignedWorkers: worker._id },
+        { selectedWorkers: worker._id }
+      ],
+      status: {
+        $in: [
+          BOOKING_STATUS.CONFIRMED,
+          BOOKING_STATUS.ASSIGNED,
+          BOOKING_STATUS.JOURNEY_STARTED,
+          BOOKING_STATUS.VISITED,
+          BOOKING_STATUS.IN_PROGRESS
+        ]
+      }
+    }).session(session);
+
+    if (activeJob) {
+      throw new Error('Cannot leave team while you have an active on-field job in progress. Please complete your current booking first.');
+    }
     
     const team = await Team.findById(worker.teamId).session(session);
     if (team) {
@@ -490,6 +528,7 @@ exports.leaveTeam = async (req, res) => {
     }
     
     worker.teamId = null;
+    worker.managedByLeaderId = null;
     await worker.save({ session });
     
     await session.commitTransaction();
@@ -520,6 +559,30 @@ exports.removeMember = async (req, res) => {
     if (!member || !member.teamId || member.teamId.toString() !== leader.teamId.toString()) {
       throw new Error('Member not found in your team');
     }
+
+    // Safety Guard: Cannot remove member while they have an active on-field job in progress
+    const Booking = require('../../models/Booking');
+    const { BOOKING_STATUS } = require('../../utils/constants');
+    const activeJob = await Booking.findOne({
+      $or: [
+        { workerId: member._id },
+        { assignedWorkers: member._id },
+        { selectedWorkers: member._id }
+      ],
+      status: {
+        $in: [
+          BOOKING_STATUS.CONFIRMED,
+          BOOKING_STATUS.ASSIGNED,
+          BOOKING_STATUS.JOURNEY_STARTED,
+          BOOKING_STATUS.VISITED,
+          BOOKING_STATUS.IN_PROGRESS
+        ]
+      }
+    }).session(session);
+
+    if (activeJob) {
+      throw new Error('Cannot remove member while they have an active on-field job in progress. Please wait for the current booking to finish.');
+    }
     
     const team = await Team.findById(leader.teamId).session(session);
     if (team) {
@@ -532,6 +595,7 @@ exports.removeMember = async (req, res) => {
       await Worker.findByIdAndDelete(member._id).session(session);
     } else {
       member.teamId = null;
+      member.managedByLeaderId = null;
       await member.save({ session });
       await sendTeamNotification(member._id, 'Removed from Team', `You have been removed from the team by the leader.`, 'team', 'team_member_removed');
     }

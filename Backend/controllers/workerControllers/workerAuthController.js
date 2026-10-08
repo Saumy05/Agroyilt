@@ -249,7 +249,16 @@ const register = async (req, res) => {
           pushData: { type: 'admin_alert', link: '/admin/workers/all' }
         });
       }
-    } catch (e) { console.error('Notify admin error for worker:', e); }
+    } catch (e) { 
+      console.error('Notify admin error for worker:', e); 
+    }
+
+    // Send Welcome Email if email is present
+    if (worker.email) {
+      sendWelcomeEmail(worker.email, worker.name).catch(err => {
+        console.warn('[AUTH] Welcome email send error (non-fatal):', err.message);
+      });
+    }
 
     const tokens = generateTokenPair({
       userId: worker._id,
@@ -264,8 +273,13 @@ const register = async (req, res) => {
         name: worker.name,
         email: worker.email,
         phone: worker.phone,
+        workerType: worker.workerType,
+        teamId: worker.teamId || null,
+        hasBike: Boolean(worker.hasBike),
         status: worker.status,
-        approvalStatus: worker.approvalStatus || 'pending'
+        approvalStatus: worker.approvalStatus || 'pending',
+        isMpinSet: false,
+        serviceCategories: worker.serviceCategories || []
       },
       ...tokens
     });
@@ -336,6 +350,24 @@ const login = async (req, res) => {
       });
     }
 
+    // Check Registration Fee
+    if (worker.registrationFeeStatus !== 'PAID') {
+      const jwt = require('jsonwebtoken');
+      const preAuthToken = jwt.sign(
+        { userId: worker._id, role: 'WORKER', isPreAuth: true },
+        process.env.JWT_SECRET,
+        { expiresIn: '30m' }
+      );
+      
+      return res.status(403).json({
+        success: false,
+        code: 'REGISTRATION_FEE_REQUIRED',
+        message: 'A one-time registration fee is required to activate your Worker account.',
+        preAuthToken,
+        role: 'WORKER'
+      });
+    }
+
     const tokens = generateTokenPair({
       userId: worker._id,
       role: USER_ROLES.WORKER
@@ -349,7 +381,12 @@ const login = async (req, res) => {
         name: worker.name,
         email: worker.email,
         phone: worker.phone,
+        workerType: worker.workerType,
+        teamId: worker.teamId || null,
+        hasBike: Boolean(worker.hasBike),
         status: worker.status,
+        approvalStatus: workerApproval,
+        isMpinSet: Boolean(worker.isMpinSet),
         serviceCategories: worker.serviceCategories || []
       },
       ...tokens
@@ -561,8 +598,14 @@ const loginWithMpin = async (req, res) => {
         name: worker.name,
         email: worker.email,
         phone: worker.phone,
-        serviceType: worker.serviceType,
-        aadharVerified: worker.aadhar?.isVerified || false
+        workerType: worker.workerType,
+        teamId: worker.teamId || null,
+        hasBike: Boolean(worker.hasBike),
+        status: worker.status,
+        approvalStatus: workerApproval,
+        isMpinSet: true,
+        serviceCategories: worker.serviceCategories || [],
+        aadharVerified: Boolean(worker.aadhar?.document)
       },
       ...tokens
     });

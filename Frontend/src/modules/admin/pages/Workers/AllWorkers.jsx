@@ -50,9 +50,9 @@ const AllWorkers = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [workerTypeFilter, setWorkerTypeFilter] = useState(''); // '' | 'INDEPENDENT' | 'TEAM_LEADER'
+  const [workerTypeFilter, setWorkerTypeFilter] = useState(''); // '' | 'INDEPENDENT' | 'TEAM_MEMBER' | 'TEAM_LEADER'
   const [createdByMe, setCreatedByMe] = useState(false);
-  const [typeCounts, setTypeCounts] = useState({ total: 0, independent: 0, teamLeader: 0, myRegistrations: 0 });
+  const [typeCounts, setTypeCounts] = useState({ total: 0, independent: 0, teamMember: 0, teamLeader: 0, myRegistrations: 0 });
   const [actionLoading, setActionLoading] = useState(null);
 
   // Worker Details & Document Modal State
@@ -101,7 +101,12 @@ const AllWorkers = () => {
     try {
       const res = await workerService.getWorkerDetails(worker._id);
       if (res && res.success) {
-        setSelectedWorker(res.data.worker || res.data);
+        const workerObj = res.data.worker || res.data;
+        setSelectedWorker({
+          ...workerObj,
+          team: res.data.team || workerObj.teamId || null,
+          teamMembers: res.data.teamMembers || []
+        });
         setWorkerStats(res.data.stats || null);
       }
     } catch (err) {
@@ -223,6 +228,26 @@ const AllWorkers = () => {
                 workerTypeFilter === 'INDEPENDENT' ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-700'
               }`}>
                 {typeCounts.independent}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setWorkerTypeFilter('TEAM_MEMBER')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              workerTypeFilter === 'TEAM_MEMBER'
+                ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/20'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+            }`}
+          >
+            <FiUsers size={13} className={workerTypeFilter === 'TEAM_MEMBER' ? 'text-white' : 'text-indigo-600'} />
+            <span>Team Members</span>
+            {typeCounts.teamMember > 0 && (
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
+                workerTypeFilter === 'TEAM_MEMBER' ? 'bg-white/20 text-white' : 'bg-indigo-100 text-indigo-700'
+              }`}>
+                {typeCounts.teamMember}
               </span>
             )}
           </button>
@@ -364,6 +389,16 @@ const AllWorkers = () => {
                             <FiUsers className="text-purple-600" size={13} />
                             Team Leader
                           </span>
+                        ) : worker.teamId ? (
+                          <div className="flex flex-col gap-0.5">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/80 shadow-2xs">
+                              <FiUsers className="text-indigo-600" size={13} />
+                              Team Member
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-medium truncate max-w-[140px]" title={`Leader: ${worker.teamId.leaderId?.name || worker.managedByLeaderId?.name || 'Leader'}`}>
+                              Leader: {worker.teamId.leaderId?.name || worker.managedByLeaderId?.name || 'Assigned'}
+                            </span>
+                          </div>
                         ) : (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200/80 shadow-2xs">
                             <FiUser className="text-blue-600" size={13} />
@@ -566,7 +601,38 @@ const AllWorkers = () => {
                         </div>
                         <div className="flex items-center gap-2 self-start sm:self-auto">
                           <span className="px-3 py-1.5 bg-white rounded-xl border border-purple-200 text-xs font-bold text-purple-700 shadow-2xs">
-                            👥 {selectedWorker.team?.memberCount || 0} Team Members
+                            👥 {selectedWorker.teamMembers?.length || selectedWorker.team?.memberCount || 0} Team Members
+                          </span>
+                        </div>
+                      </div>
+                    ) : (selectedWorker.team || selectedWorker.teamId) ? (
+                      <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-50 via-blue-50 to-indigo-50/60 border border-indigo-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold shrink-0 shadow-sm shadow-indigo-500/20">
+                            <FiUsers size={18} />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-black uppercase tracking-wider bg-indigo-200 text-indigo-800 px-2 py-0.5 rounded-md">
+                                Crew Member
+                              </span>
+                              <span className="text-xs font-bold text-slate-700">
+                                Team: {selectedWorker.team?.name || selectedWorker.teamId?.name || 'Assigned Farm Team'}
+                              </span>
+                            </div>
+                            <p className="text-xs text-indigo-950 font-semibold mt-1">
+                              Team Leader: <span className="font-extrabold">{selectedWorker.team?.leaderId?.name || selectedWorker.teamId?.leaderId?.name || selectedWorker.managedByLeaderId?.name || 'Assigned Leader'}</span>
+                              {(selectedWorker.team?.leaderId?.phone || selectedWorker.teamId?.leaderId?.phone || selectedWorker.managedByLeaderId?.phone) && (
+                                <span className="text-slate-500 font-normal ml-1.5">
+                                  ({selectedWorker.team?.leaderId?.phone || selectedWorker.teamId?.leaderId?.phone || selectedWorker.managedByLeaderId?.phone})
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="self-start sm:self-auto">
+                          <span className="px-3 py-1.5 bg-white rounded-xl border border-indigo-200 text-xs font-bold text-indigo-700 shadow-2xs">
+                            Active Member
                           </span>
                         </div>
                       </div>
@@ -577,7 +643,38 @@ const AllWorkers = () => {
                         </div>
                         <div>
                           <p className="font-bold text-blue-950">Independent Farm Worker</p>
-                          <p className="text-blue-700 text-[11px] mt-0.5">Direct individual worker available for single-worker farm bookings and tasks.</p>
+                          <p className="text-blue-700 text-[11px] mt-0.5">Direct individual worker available for single-worker farm bookings (No current team).</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Team Members Roster for Team Leader */}
+                    {selectedWorker.workerType === 'TEAM_LEADER' && selectedWorker.teamMembers?.length > 0 && (
+                      <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                            Team Roster ({selectedWorker.teamMembers.length} Members)
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {selectedWorker.teamMembers.map((m, idx) => (
+                            <div key={m._id || idx} className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-slate-100 text-xs shadow-2xs">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="w-6 h-6 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-[10px]">
+                                  {m.name ? m.name[0] : 'W'}
+                                </div>
+                                <div className="truncate">
+                                  <p className="font-bold text-slate-800 truncate">{m.name}</p>
+                                  <p className="text-[10px] text-slate-400">{m.phone || 'No phone'}</p>
+                                </div>
+                              </div>
+                              {m.hasBike && (
+                                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
+                                  🛵
+                                </span>
+                              )}
+                            </div>
+                          ))}
                         </div>
                       </div>
                     )}

@@ -662,10 +662,10 @@ const Dashboard = () => {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-bold text-gray-800 leading-tight">
-                  {workerProfile.workerType === 'TEAM_LEADER' ? 'Team Roster' : 'My Team'}
+                  {workerProfile.workerType === 'TEAM_LEADER' ? 'Team Roster' : (workerProfile.teamId ? 'My Team' : 'Work & Teams')}
                 </p>
                 <p className="text-[10px] text-gray-400 font-medium mt-0.5 truncate">
-                  {workerProfile.workerType === 'TEAM_LEADER' ? 'Dispatch & recruit' : 'Crew members'}
+                  {workerProfile.workerType === 'TEAM_LEADER' ? 'Dispatch & recruit' : (workerProfile.teamId ? 'Crew & leader' : 'Independent (0 teams)')}
                 </p>
               </div>
             </div>

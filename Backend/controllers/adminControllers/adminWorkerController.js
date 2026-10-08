@@ -32,12 +32,18 @@ const getAllWorkers = async (req, res) => {
       query.isActive = isActive === 'true';
     }
 
-    // Filter by Worker Type (TEAM_LEADER vs INDEPENDENT / WORKER)
+    // Filter by Worker Type (TEAM_LEADER vs TEAM_MEMBER vs INDEPENDENT / WORKER)
     if (workerType && workerType !== 'all') {
       const typeUpper = workerType.toUpperCase();
       if (typeUpper === 'TEAM_LEADER') {
         query.workerType = 'TEAM_LEADER';
-      } else if (typeUpper === 'INDEPENDENT' || typeUpper === 'WORKER') {
+      } else if (typeUpper === 'TEAM_MEMBER') {
+        query.workerType = { $ne: 'TEAM_LEADER' };
+        query.teamId = { $ne: null };
+      } else if (typeUpper === 'INDEPENDENT') {
+        query.workerType = { $ne: 'TEAM_LEADER' };
+        query.$or = [{ teamId: null }, { teamId: { $exists: false } }];
+      } else if (typeUpper === 'WORKER') {
         query.workerType = { $ne: 'TEAM_LEADER' };
       }
     }
@@ -71,6 +77,15 @@ const getAllWorkers = async (req, res) => {
       Worker.find(finalQuery)
         .select('-password')
         .populate('createdByAdmin', 'name email role')
+        .populate({
+          path: 'teamId',
+          select: 'name status memberCount leaderId',
+          populate: {
+            path: 'leaderId',
+            select: 'name phone profilePhoto'
+          }
+        })
+        .populate('managedByLeaderId', 'name phone profilePhoto')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(parseInt(limit))
@@ -118,9 +133,13 @@ const getAllWorkers = async (req, res) => {
       ? { $and: [baseCountQuery, scopeFilter] }
       : baseCountQuery;
 
-    const [totalWorkersCount, independentCount, teamLeaderCount, myWorkersCount] = await Promise.all([
+    const noTeamCond = { $or: [{ teamId: null }, { teamId: { $exists: false } }] };
+    const hasTeamCond = { teamId: { $ne: null } };
+
+    const [totalWorkersCount, independentCount, teamMemberCount, teamLeaderCount, myWorkersCount] = await Promise.all([
       Worker.countDocuments(finalBaseCount),
-      Worker.countDocuments({ ...finalBaseCount, workerType: { $ne: 'TEAM_LEADER' } }),
+      Worker.countDocuments({ ...finalBaseCount, workerType: { $ne: 'TEAM_LEADER' }, ...noTeamCond }),
+      Worker.countDocuments({ ...finalBaseCount, workerType: { $ne: 'TEAM_LEADER' }, ...hasTeamCond }),
       Worker.countDocuments({ ...finalBaseCount, workerType: 'TEAM_LEADER' }),
       req.user?._id ? Worker.countDocuments({ createdByAdmin: req.user._id }) : 0
     ]);
@@ -131,6 +150,7 @@ const getAllWorkers = async (req, res) => {
       counts: {
         total: totalWorkersCount,
         independent: independentCount,
+        teamMember: teamMemberCount,
         teamLeader: teamLeaderCount,
         myRegistrations: myWorkersCount
       },
@@ -198,14 +218,26 @@ const getWorkerDetails = async (req, res) => {
 
     // If Team Leader or linked to a team, fetch team details
     let team = null;
+    let teamMembers = [];
     if (worker.workerType === 'TEAM_LEADER' || worker.teamId) {
       try {
         const Team = require('../../models/Team');
         if (worker.teamId) {
-          team = await Team.findById(worker.teamId).lean();
+          team = await Team.findById(worker.teamId)
+            .populate('leaderId', 'name phone profilePhoto workerType status')
+            .lean();
         }
         if (!team) {
-          team = await Team.findOne({ leaderId: worker._id }).lean();
+          team = await Team.findOne({ leaderId: worker._id })
+            .populate('leaderId', 'name phone profilePhoto workerType status')
+            .lean();
+        }
+
+        // If this worker is a Team Leader, fetch their team roster
+        if (team && team._id) {
+          teamMembers = await Worker.find({ teamId: team._id, _id: { $ne: worker._id } })
+            .select('name phone status skills rating profilePhoto dailyRate hourlyRate hasBike')
+            .lean();
         }
       } catch (teamErr) {
         console.error('Error fetching team for worker:', teamErr);
@@ -217,6 +249,7 @@ const getWorkerDetails = async (req, res) => {
       data: {
         worker,
         team,
+        teamMembers,
         stats: jobStats[0] || {
           totalJobs: 0,
           completedJobs: 0,
