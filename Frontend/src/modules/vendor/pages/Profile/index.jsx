@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiUser, FiEdit2, FiMapPin, FiPhone, FiMail, FiBriefcase, FiStar, FiArrowRight, FiSettings, FiChevronRight, FiCreditCard, FiLogOut, FiTrash2, FiClock, FiCheckCircle, FiPackage, FiActivity, FiGift, FiX, FiHelpCircle } from 'react-icons/fi';
+import { FiUser, FiEdit2, FiMapPin, FiPhone, FiMail, FiBriefcase, FiStar, FiArrowRight, FiSettings, FiChevronRight, FiCreditCard, FiLogOut, FiTrash2, FiClock, FiCheckCircle, FiPackage, FiActivity, FiGift, FiX, FiHelpCircle, FiShield } from 'react-icons/fi';
 import { FaWallet, FaTractor } from 'react-icons/fa';
 import { toastManager } from '../../../../utils/toastManager';
 import { vendorTheme as themeColors } from '../../../../theme';
@@ -178,109 +178,80 @@ const Profile = () => {
   }
 
   return (
-    <div className="min-h-screen pb-20" style={{ background: themeColors.backgroundGradient }}>
+    <div className="min-h-screen pb-24" style={{ background: themeColors.backgroundGradient }}>
       <Header title="Profile" />
 
-      <main className="px-4 pt-3 pb-8 max-w-lg mx-auto space-y-3">
-        {/* Profile Header Card with Phone & Email */}
+      <main className="px-4 pt-3 pb-8 max-w-lg mx-auto">
+        {/* Profile Hero Card */}
         <div
           onClick={() => navigate('/vendor/profile/details')}
-          className="rounded-2xl p-4 shadow-sm relative overflow-hidden cursor-pointer group active:scale-[0.99] transition-all duration-300"
-          style={{
-            background: themeColors.button,
-            border: `1.5px solid ${themeColors.button}`,
-            boxShadow: `0 6px 20px ${hexToRgba(themeColors.button, 0.25)}`,
-          }}
+          className="bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 rounded-2xl p-4 sm:p-5 text-white shadow-lg relative overflow-hidden border border-emerald-500/25 cursor-pointer group active:scale-[0.99] transition-all mb-3.5"
         >
-          {/* Decorative Patterns */}
-          <div
-            className="absolute top-0 right-0 w-32 h-32 rounded-full opacity-10"
-            style={{
-              background: `radial-gradient(circle, rgba(255, 255, 255, 0.4) 0%, transparent 70%)`,
-              transform: 'translate(30px, -30px)',
-            }}
-          />
-          <div
-            className="absolute bottom-0 left-0 w-24 h-24 rounded-full opacity-8"
-            style={{
-              background: `radial-gradient(circle, rgba(255, 255, 255, 0.3) 0%, transparent 70%)`,
-              transform: 'translate(-20px, 20px)',
-            }}
-          />
+          {/* Ambient Decorative Glow */}
+          <div className="absolute -top-12 -right-12 w-44 h-44 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+          <div className="absolute -bottom-10 -left-10 w-36 h-36 bg-emerald-400/15 rounded-full blur-xl pointer-events-none" />
 
           <div className="relative z-10">
             <div className="flex items-center gap-3.5">
-              {/* Profile Photo - Circle with Rating Below */}
-              <div className="flex flex-col items-center flex-shrink-0">
-                <div
-                  className="rounded-full flex items-center justify-center overflow-hidden"
-                  style={{
-                    background: 'rgba(255, 255, 255, 0.35)',
-                    backdropFilter: 'blur(15px)',
-                    boxShadow: '0 4px 14px rgba(0, 0, 0, 0.2), inset 0 2px 4px rgba(255, 255, 255, 0.5)',
-                    border: '2.5px solid rgba(255, 255, 255, 0.6)',
-                    width: '64px',
-                    height: '64px',
-                  }}
-                >
+              {/* Profile Photo with Rating Below */}
+              <div className="flex flex-col items-center shrink-0">
+                <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-2xl bg-white/20 border-2 border-white/60 p-0.5 flex items-center justify-center shadow-md backdrop-blur-md overflow-hidden">
                   {profile.photo ? (
                     <img
                       src={profile.photo}
                       alt={profile.name}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full rounded-xl object-cover"
                     />
                   ) : (
                     <FiUser className="w-8 h-8 text-white" />
                   )}
                 </div>
-                {/* Star Rating Below Photo */}
                 {profile.rating > 0 && (
-                  <div className="flex items-center gap-1 px-2 py-0.5 mt-1 rounded-full bg-white/25 backdrop-blur-sm">
-                    <FiStar className="w-3 h-3 text-yellow-300" style={{ filter: 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3))' }} />
-                    <span className="text-[11px] font-bold text-white">{profile.rating.toFixed(1)}</span>
+                  <div className="flex items-center gap-1 px-2 py-0.5 mt-1.5 rounded-full bg-white/20 backdrop-blur-sm border border-white/20">
+                    <FiStar className="w-3 h-3 text-yellow-300 fill-yellow-300" />
+                    <span className="text-[10.5px] font-bold text-white">{profile.rating.toFixed(1)}</span>
                   </div>
                 )}
               </div>
 
-              {/* Name and Info */}
-              <div className="flex-1 min-w-0 flex flex-col justify-center">
-                <h2 className="text-base font-bold text-white leading-tight truncate">{profile.name}</h2>
+              {/* Name & Contact Info */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-base sm:text-lg font-black text-white leading-tight capitalize truncate">
+                    {profile.businessName || profile.name}
+                  </h2>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate('/vendor/profile/details');
+                    }}
+                    className="p-1 sm:px-2.5 sm:py-1 rounded-xl bg-white/15 hover:bg-white/25 border border-white/20 text-white text-xs font-bold transition-all active:scale-95 flex items-center gap-1 shadow-xs backdrop-blur-md shrink-0"
+                    title="View Profile Details"
+                  >
+                    <span className="hidden sm:inline">Details</span>
+                    <FiChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
                 {profile.businessName && profile.businessName !== profile.name && (
-                  <p className="text-white/90 text-xs mt-0.5 font-medium truncate">{profile.businessName}</p>
+                  <p className="text-emerald-100/90 text-xs font-medium truncate mt-0.5">{profile.name}</p>
                 )}
 
-                {/* Phone and Email */}
-                <div className="space-y-1 mt-1.5">
+                {/* Contact Pill Row */}
+                <div className="flex flex-wrap items-center gap-1.5 mt-2">
                   {profile.phone && (
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <div className="p-1 rounded-md bg-white/15 backdrop-blur-sm flex-shrink-0">
-                        <FiPhone className="w-3 h-3 text-white" />
-                      </div>
-                      <span className="text-xs text-white/95 font-medium truncate">{profile.phone}</span>
-                    </div>
+                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-100 bg-white/15 px-2 py-0.5 rounded-lg border border-white/15">
+                      <FiPhone className="w-3 h-3 text-emerald-200 shrink-0" />
+                      <span>{profile.phone}</span>
+                    </span>
                   )}
                   {profile.email && (
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <div className="p-1 rounded-md bg-white/15 backdrop-blur-sm flex-shrink-0">
-                        <FiMail className="w-3 h-3 text-white" />
-                      </div>
-                      <span className="text-[11px] text-white/95 font-medium truncate" title={profile.email}>{profile.email}</span>
-                    </div>
+                    <span className="inline-flex items-center gap-1 text-[10.5px] font-medium text-emerald-100 bg-white/15 px-2 py-0.5 rounded-lg border border-white/15 truncate max-w-[180px]" title={profile.email}>
+                      <FiMail className="w-3 h-3 text-emerald-200 shrink-0" />
+                      <span className="truncate">{profile.email}</span>
+                    </span>
                   )}
                 </div>
-              </div>
-
-              {/* Arrow Button Visual Cue */}
-              <div
-                className="p-2.5 rounded-xl flex-shrink-0 transition-all duration-300 group-hover:scale-105 group-hover:translate-x-0.5 self-center"
-                style={{
-                  background: 'rgba(255, 255, 255, 0.25)',
-                  backdropFilter: 'blur(10px)',
-                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.4)',
-                  border: '1px solid rgba(255, 255, 255, 0.35)',
-                }}
-              >
-                <FiArrowRight className="w-4.5 h-4.5 text-white" style={{ fontWeight: 'bold' }} />
               </div>
             </div>
           </div>
@@ -288,159 +259,340 @@ const Profile = () => {
 
         {/* Out of Stock Alert Banner */}
         {hasOutOfStockProducts && (
-          <div className="p-3 bg-rose-50 rounded-2xl border border-rose-100 flex items-center gap-3 shadow-xs">
-            <div className="w-9 h-9 rounded-xl bg-rose-500 flex items-center justify-center text-white flex-shrink-0">
+          <div className="p-3 bg-rose-50 rounded-2xl border border-rose-100 flex items-center gap-3 shadow-xs mb-3">
+            <div className="w-9 h-9 rounded-xl bg-rose-500 flex items-center justify-center text-white shrink-0">
               <FiPackage className="w-4.5 h-4.5" />
             </div>
             <div className="flex-1 min-w-0">
               <h4 className="text-[11px] font-black text-rose-800 uppercase tracking-wider">Product Out of Stock</h4>
               <p className="text-[10px] font-bold text-rose-500 mt-0.5 leading-snug">One or more items in your store are out of stock.</p>
             </div>
-            <button onClick={() => navigate('/vendor/store')} className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white text-[9px] font-black rounded-lg uppercase tracking-wider transition-all flex-shrink-0">
+            <button onClick={() => navigate('/vendor/store')} className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white text-[9px] font-black rounded-lg uppercase tracking-wider transition-all shrink-0">
               Update
             </button>
           </div>
         )}
 
-        {/* Three Cards Section - Horizontal */}
-        <div className="grid grid-cols-3 gap-2.5">
-          {/* Active Jobs */}
+        {/* Three Hub Shortcuts - Horizontal */}
+        <div className="grid grid-cols-3 gap-2.5 mb-4">
           <button
             onClick={() => navigate('/vendor/jobs')}
-            className="flex flex-col items-center justify-center p-3 rounded-2xl active:scale-95 transition-all duration-200 relative overflow-hidden bg-white shadow-xs border border-gray-100 hover:shadow-sm"
+            className="flex flex-col items-center justify-center p-3 rounded-2xl active:scale-95 transition-all duration-200 relative overflow-hidden bg-white shadow-xs border border-slate-100 hover:border-slate-200 group"
           >
-            <div
-              className="w-9 h-9 rounded-xl flex items-center justify-center mb-1.5"
-              style={{
-                backgroundColor: hexToRgba(themeColors.button, 0.1),
-              }}
-            >
-              <FiBriefcase className="w-4.5 h-4.5" style={{ color: themeColors.button }} />
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-1.5 bg-emerald-50 text-emerald-700 group-hover:scale-105 transition-transform">
+              <FiBriefcase className="w-4.5 h-4.5" />
             </div>
-            <span className="text-[11px] font-bold text-gray-800 text-center leading-tight">
+            <span className="text-[11px] font-bold text-slate-800 text-center leading-tight">
               Field Operations
             </span>
           </button>
 
-          {/* Wallet */}
           <button
             onClick={() => navigate('/vendor/wallet')}
-            className="flex flex-col items-center justify-center p-3 rounded-2xl active:scale-95 transition-all duration-200 relative overflow-hidden bg-white shadow-xs border border-gray-100 hover:shadow-sm"
+            className="flex flex-col items-center justify-center p-3 rounded-2xl active:scale-95 transition-all duration-200 relative overflow-hidden bg-white shadow-xs border border-slate-100 hover:border-slate-200 group"
           >
-            <div
-              className="w-9 h-9 rounded-xl flex items-center justify-center mb-1.5"
-              style={{
-                backgroundColor: hexToRgba(themeColors.button, 0.1),
-              }}
-            >
-              <FaWallet className="w-4.5 h-4.5" style={{ color: themeColors.button }} />
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-1.5 bg-teal-50 text-teal-700 group-hover:scale-105 transition-transform">
+              <FaWallet className="w-4.5 h-4.5" />
             </div>
-            <span className="text-[11px] font-bold text-gray-800 text-center leading-tight">
+            <span className="text-[11px] font-bold text-slate-800 text-center leading-tight">
               Wallet
             </span>
           </button>
 
-          {/* Machinery Fleet */}
           <button
             onClick={() => navigate('/vendor/equipment')}
-            className="flex flex-col items-center justify-center p-3 rounded-2xl active:scale-95 transition-all duration-200 relative overflow-hidden bg-white shadow-xs border border-gray-100 hover:shadow-sm"
+            className="flex flex-col items-center justify-center p-3 rounded-2xl active:scale-95 transition-all duration-200 relative overflow-hidden bg-white shadow-xs border border-slate-100 hover:border-slate-200 group"
           >
-            <div
-              className="w-9 h-9 rounded-xl flex items-center justify-center mb-1.5"
-              style={{
-                backgroundColor: hexToRgba(themeColors.button, 0.1),
-              }}
-            >
-              <FaTractor className="w-4.5 h-4.5" style={{ color: themeColors.button }} />
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-1.5 bg-amber-50 text-amber-700 group-hover:scale-105 transition-transform">
+              <FaTractor className="w-4.5 h-4.5" />
             </div>
-            <span className="text-[11px] font-bold text-gray-800 text-center leading-tight">
+            <span className="text-[11px] font-bold text-slate-800 text-center leading-tight">
               Equipment Fleet
             </span>
           </button>
         </div>
 
-        {/* Menu List Section */}
-        <div className="space-y-2">
-          {menuItems.map((item) => {
-            const IconComponent = item.icon;
-            return (
-              <button
-                key={item.id}
-                onClick={() => {
-                  if (item.onClick) {
-                    item.onClick();
-                  } else if (item.path) {
-                    navigate(item.path);
-                  }
-                }}
-                className="w-full flex items-center justify-between p-3.5 bg-white rounded-2xl shadow-xs border border-gray-100/90 hover:border-teal-200 hover:shadow-xs transition-all active:scale-[0.99]"
-              >
-                <div className="flex items-center gap-3.5">
-                  {item.customIcon ? (
-                    <div
-                      className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                      style={{
-                        backgroundColor: hexToRgba(themeColors.button, 0.1),
-                        border: `1px solid ${hexToRgba(themeColors.button, 0.15)}`,
-                      }}
-                    >
-                      <span className="text-sm font-bold" style={{ color: themeColors.button }}>{item.customIcon}</span>
-                    </div>
-                  ) : (
-                    IconComponent && (
-                      <div
-                        className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 relative"
-                        style={{ backgroundColor: hexToRgba(themeColors.button, 0.1) }}
-                      >
-                        <IconComponent className="w-5 h-5" style={{ color: themeColors.button }} />
-                        {item.id === 12 && hasOutOfStockProducts && (
-                          <>
-                            <span className="absolute -top-1 -right-1 w-3 h-3 bg-rose-500 rounded-full border-2 border-white shadow-sm animate-ping" style={{ animationDuration: '1.5s' }} />
-                            <span className="absolute -top-1 -right-1 w-3 h-3 bg-rose-500 rounded-full border-2 border-white shadow-sm" />
-                          </>
-                        )}
-                      </div>
-                    )
-                  )}
-                  <span className="text-sm font-semibold text-gray-800 text-left flex items-center gap-2">
-                    {item.label}
-                    {item.id === 12 && hasOutOfStockProducts && (
-                      <span className="animate-pulse bg-rose-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm shadow-rose-500/20">
+        {/* Group 1: Fleet & Agri-Store Operations */}
+        <div className="mb-3.5">
+          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 pl-1">Fleet & Store</h3>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-xs divide-y divide-slate-100 overflow-hidden">
+            <button
+              onClick={() => navigate('/vendor/equipment')}
+              className="w-full p-3.5 sm:p-4 flex items-center justify-between hover:bg-slate-50 transition-colors text-left group"
+            >
+              <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <FaTractor className="w-4.5 h-4.5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="font-bold text-xs sm:text-sm text-slate-800 block truncate">Machinery & Equipment Fleet</span>
+                  <span className="text-[11px] text-slate-400 font-medium block truncate">Manage tractors, harvesters & operators</span>
+                </div>
+              </div>
+              <FiChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
+            </button>
+
+            <button
+              onClick={() => navigate('/vendor/store')}
+              className="w-full p-3.5 sm:p-4 flex items-center justify-between hover:bg-slate-50 transition-colors text-left group"
+            >
+              <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <FiPackage className="w-4.5 h-4.5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-xs sm:text-sm text-slate-800 block truncate">My Agri-Store (Supplies)</span>
+                    {hasOutOfStockProducts && (
+                      <span className="animate-pulse bg-rose-500 text-white text-[8.5px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0 shadow-xs">
                         Out of Stock
                       </span>
                     )}
-                  </span>
+                  </div>
+                  <span className="text-[11px] text-slate-400 font-medium block truncate">Sell seeds, fertilizers, feeds & tools</span>
                 </div>
-                <div className="w-7 h-7 rounded-lg bg-gray-50 flex items-center justify-center">
-                  <FiChevronRight className="w-4 h-4 text-gray-400" />
+              </div>
+              <FiChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
+            </button>
+
+            <button
+              onClick={() => navigate('/vendor/maintenance')}
+              className="w-full p-3.5 sm:p-4 flex items-center justify-between hover:bg-slate-50 transition-colors text-left group"
+            >
+              <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <FiClock className="w-4.5 h-4.5" />
                 </div>
-              </button>
-            );
-          })}
+                <div className="min-w-0 flex-1">
+                  <span className="font-bold text-xs sm:text-sm text-slate-800 block truncate">Maintenance Calendar</span>
+                  <span className="text-[11px] text-slate-400 font-medium block truncate">Service schedules, oil changes & fitness</span>
+                </div>
+              </div>
+              <FiChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
+            </button>
+
+            <button
+              onClick={() => navigate('/vendor/soil-tests')}
+              className="w-full p-3.5 sm:p-4 flex items-center justify-between hover:bg-slate-50 transition-colors text-left group"
+            >
+              <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <FiActivity className="w-4.5 h-4.5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="font-bold text-xs sm:text-sm text-slate-800 block truncate">Soil Test Requests</span>
+                  <span className="text-[11px] text-slate-400 font-medium block truncate">Farmer soil sampling & health reports</span>
+                </div>
+              </div>
+              <FiChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
+            </button>
+          </div>
         </div>
 
-        {/* Action Buttons: Logout & Delete */}
-        <div className="space-y-2 pt-1">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setShowLogoutModal(true);
-            }}
-            className="w-full font-bold text-sm py-3 rounded-xl active:scale-[0.98] transition-all text-white flex items-center justify-center gap-2 cursor-pointer bg-red-500 hover:bg-red-600 shadow-sm"
-          >
-            <FiLogOut className="w-4.5 h-4.5" />
-            Logout
-          </button>
+        {/* Group 2: Finance & Settlements */}
+        <div className="mb-3.5">
+          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 pl-1">Finance & Settlements</h3>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-xs divide-y divide-slate-100 overflow-hidden">
+            <button
+              onClick={() => navigate('/vendor/wallet/settlements')}
+              className="w-full p-3.5 sm:p-4 flex items-center justify-between hover:bg-slate-50 transition-colors text-left group"
+            >
+              <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <FaWallet className="w-4.5 h-4.5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="font-bold text-xs sm:text-sm text-slate-800 block truncate">Wallet Settlements & History</span>
+                  <span className="text-[11px] text-slate-400 font-medium block truncate">Earnings passbook, dues & daily payouts</span>
+                </div>
+              </div>
+              <FiChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
+            </button>
+
+            <button
+              onClick={() => setShowBankModal(true)}
+              className="w-full p-3.5 sm:p-4 flex items-center justify-between hover:bg-slate-50 transition-colors text-left group"
+            >
+              <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                <div className="w-9 h-9 rounded-xl bg-cyan-50 text-cyan-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <FiCreditCard className="w-4.5 h-4.5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="font-bold text-xs sm:text-sm text-slate-800 block truncate">Bank Account & Payout Details</span>
+                  <span className="text-[11px] text-slate-400 font-medium block truncate">Manage bank account for earnings transfer</span>
+                </div>
+              </div>
+              <FiChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
+            </button>
+
+            <button
+              onClick={() => navigate('/vendor/referrals')}
+              className="w-full p-3.5 sm:p-4 flex items-center justify-between hover:bg-slate-50 transition-colors text-left group"
+            >
+              <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <FiGift className="w-4.5 h-4.5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-xs sm:text-sm text-slate-800 block truncate">Refer & Earn</span>
+                    <span className="text-[9px] font-bold text-amber-700 bg-amber-100/80 px-1.5 py-0.2 rounded uppercase">Reward</span>
+                  </div>
+                  <span className="text-[11px] text-slate-400 font-medium block truncate">Invite fellow vendors & farmers for bonuses</span>
+                </div>
+              </div>
+              <FiChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
+            </button>
+          </div>
+        </div>
+
+        {/* Group 3: Business & Compliance */}
+        <div className="mb-3.5">
+          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 pl-1">Business & KYC</h3>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-xs divide-y divide-slate-100 overflow-hidden">
+            <button
+              onClick={() => navigate('/vendor/business-details')}
+              className="w-full p-3.5 sm:p-4 flex items-center justify-between hover:bg-slate-50 transition-colors text-left group"
+            >
+              <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <FiBriefcase className="w-4.5 h-4.5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="font-bold text-xs sm:text-sm text-slate-800 block truncate">Business Profile & Registrations</span>
+                  <span className="text-[11px] text-slate-400 font-medium block truncate">GSTIN, business registration & trade details</span>
+                </div>
+              </div>
+              <FiChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
+            </button>
+
+            <button
+              onClick={() => navigate('/vendor/compliance')}
+              className="w-full p-3.5 sm:p-4 flex items-center justify-between hover:bg-slate-50 transition-colors text-left group"
+            >
+              <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <FiCheckCircle className="w-4.5 h-4.5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="font-bold text-xs sm:text-sm text-slate-800 block truncate">Legal Compliance</span>
+                  <span className="text-[11px] text-slate-400 font-medium block truncate">Platform partner verification & legal checks</span>
+                </div>
+              </div>
+              <FiChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
+            </button>
+
+            <button
+              onClick={() => navigate('/vendor/address-management')}
+              className="w-full p-3.5 sm:p-4 flex items-center justify-between hover:bg-slate-50 transition-colors text-left group"
+            >
+              <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <FiMapPin className="w-4.5 h-4.5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="font-bold text-xs sm:text-sm text-slate-800 block truncate">Manage Address & Base</span>
+                  <span className="text-[11px] text-slate-400 font-medium block truncate">Machinery yard and workshop location</span>
+                </div>
+              </div>
+              <FiChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
+            </button>
+
+            <button
+              onClick={() => navigate('/vendor/my-ratings')}
+              className="w-full p-3.5 sm:p-4 flex items-center justify-between hover:bg-slate-50 transition-colors text-left group"
+            >
+              <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                <div className="w-9 h-9 rounded-xl bg-yellow-50 text-yellow-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <FiStar className="w-4.5 h-4.5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="font-bold text-xs sm:text-sm text-slate-800 block truncate">My Ratings & Reviews</span>
+                  <span className="text-[11px] text-slate-400 font-medium block truncate">Farmer customer ratings and feedback</span>
+                </div>
+              </div>
+              <FiChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
+            </button>
+          </div>
+        </div>
+
+        {/* Group 4: Settings & Support */}
+        <div className="mb-6">
+          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 pl-1">Settings & Support</h3>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-xs divide-y divide-slate-100 overflow-hidden">
+            <button
+              onClick={() => navigate('/vendor/settings')}
+              className="w-full p-3.5 sm:p-4 flex items-center justify-between hover:bg-slate-50 transition-colors text-left group"
+            >
+              <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <FiSettings className="w-4.5 h-4.5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="font-bold text-xs sm:text-sm text-slate-800 block truncate">Settings</span>
+                  <span className="text-[11px] text-slate-400 font-medium block truncate">Security, password & app notifications</span>
+                </div>
+              </div>
+              <FiChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
+            </button>
+
+            <button
+              onClick={() => navigate('/vendor/help-support')}
+              className="w-full p-3.5 sm:p-4 flex items-center justify-between hover:bg-slate-50 transition-colors text-left group"
+            >
+              <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <FiHelpCircle className="w-4.5 h-4.5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="font-bold text-xs sm:text-sm text-slate-800 block truncate">Help & Support</span>
+                  <span className="text-[11px] text-slate-400 font-medium block truncate">Dedicated 24/7 AgroYilt partner helpline</span>
+                </div>
+              </div>
+              <FiChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
+            </button>
+
+            <button
+              onClick={() => navigate('/vendor/about-groo')}
+              className="w-full p-3.5 sm:p-4 flex items-center justify-between hover:bg-slate-50 transition-colors text-left group"
+            >
+              <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <FiShield className="w-4.5 h-4.5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="font-bold text-xs sm:text-sm text-slate-800 block truncate">About AgroYilt</span>
+                  <span className="text-[11px] text-slate-400 font-medium block truncate">Platform terms, privacy & partner guidelines</span>
+                </div>
+              </div>
+              <FiChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
+            </button>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setShowLogoutModal(true);
+              }}
+              className="w-full p-3.5 sm:p-4 flex items-center justify-between hover:bg-rose-50/50 transition-colors text-left group"
+            >
+              <div className="flex items-center gap-3.5">
+                <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <FiLogOut className="w-4.5 h-4.5" />
+                </div>
+                <span className="font-bold text-xs sm:text-sm text-rose-600">Logout</span>
+              </div>
+              <FiChevronRight className="w-4 h-4 text-rose-400 shrink-0" />
+            </button>
+          </div>
 
           <button
             type="button"
             onClick={() => setShowDeleteConfirm(true)}
-            className="w-full font-semibold text-xs py-2.5 rounded-xl transition-all flex items-center justify-center gap-1.5 border border-red-300 text-red-500 hover:bg-red-50 active:scale-[0.98]"
+            className="w-full mt-3 py-2 text-center text-xs font-bold text-rose-400 hover:text-rose-600 transition-colors"
           >
-            <FiTrash2 className="w-4 h-4" />
-            Delete Account
+            Delete Account Permanently
           </button>
         </div>
       </main>
