@@ -1,28 +1,60 @@
-import React, { useRef, useEffect, useState, memo, useMemo } from 'react';
+import React, { useState, useEffect, memo, useMemo, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { FiHome, FiBriefcase, FiUser } from 'react-icons/fi';
 import { HiHome, HiBriefcase, HiUser } from 'react-icons/hi';
-import { IoWalletOutline, IoWallet } from 'react-icons/io5';
-import { FiBell } from 'react-icons/fi';
-import { gsap } from 'gsap';
+import { HiOutlineWallet, HiWallet } from 'react-icons/hi2';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useKeyboardVisibility } from '../../../../hooks/useKeyboardVisibility';
-import { workerTheme as themeColors } from '../../../../theme';
-import api from '../../../../services/api';
+import { themeColors } from '../../../../theme';
+
+// Agriculture-themed colors matching User and Vendor apps
+const navItemColors = {
+  home: {
+    defaultIcon: themeColors.brand.teal,     // #2E7D32
+    activeIcon: '#1B5E20',
+    primary: '#1B5E20',
+    gradient: themeColors.gradient,
+    bg: '#E3F2E1',
+    shadow: 'rgba(46, 125, 50, 0.45)'
+  },
+  jobs: {
+    defaultIcon: themeColors.brand.teal,
+    activeIcon: '#1B5E20',
+    primary: '#1B5E20',
+    gradient: themeColors.gradient,
+    bg: '#E3F2E1',
+    shadow: 'rgba(46, 125, 50, 0.45)'
+  },
+  wallet: {
+    defaultIcon: themeColors.brand.teal,
+    activeIcon: '#1B5E20',
+    primary: '#1B5E20',
+    gradient: themeColors.gradient,
+    bg: '#E3F2E1',
+    shadow: 'rgba(46, 125, 50, 0.45)'
+  },
+  profile: {
+    defaultIcon: themeColors.brand.teal,
+    activeIcon: '#1B5E20',
+    primary: '#1B5E20',
+    gradient: themeColors.gradient,
+    bg: '#E3F2E1',
+    shadow: 'rgba(46, 125, 50, 0.45)'
+  }
+};
 
 const BottomNav = memo(() => {
   const navigate = useNavigate();
   const location = useLocation();
-  const iconRefs = useRef({});
-  const activeAnimations = useRef({});
+  const navRef = useRef(null);
+  const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 });
   const [pendingJobsCount, setPendingJobsCount] = useState(0);
-  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
   const { isKeyboardOpen, keyboardHeight } = useKeyboardVisibility();
 
-  // Load counts
+  // Load pending jobs count from localStorage & custom event
   useEffect(() => {
     const updatePendingCount = () => {
       try {
-        // Count pending assigned jobs (waiting for accept/reject)
         const assignedJobs = JSON.parse(localStorage.getItem('workerAssignedJobs') || '[]');
         const pendingJobs = assignedJobs.filter(job =>
           job.workerStatus === 'PENDING'
@@ -33,43 +65,55 @@ const BottomNav = memo(() => {
       }
     };
 
-    const fetchUnreadCount = async () => {
-      try {
-        const res = await api.get('/notifications/worker');
-        if (res.data.success && typeof res.data.unreadCount === 'number') {
-          setUnreadNotificationsCount(res.data.unreadCount);
-        }
-      } catch (error) {
-        // Silent fail
-      }
-    };
-
     updatePendingCount();
-    fetchUnreadCount();
 
     window.addEventListener('storage', updatePendingCount);
     window.addEventListener('workerJobsUpdated', updatePendingCount);
 
-    const interval = setInterval(fetchUnreadCount, 60000);
-
     return () => {
       window.removeEventListener('storage', updatePendingCount);
       window.removeEventListener('workerJobsUpdated', updatePendingCount);
-      clearInterval(interval);
     };
   }, []);
 
-  const navItems = useMemo(() => {
-    return [
-      { path: '/worker/dashboard', icon: FiHome, activeIcon: HiHome, label: 'Home' },
-      { path: '/worker/jobs', icon: FiBriefcase, activeIcon: HiBriefcase, label: 'Jobs', badge: pendingJobsCount },
-      { path: '/worker/wallet', icon: IoWalletOutline, activeIcon: IoWallet, label: 'Wallet' },
-      { path: '/worker/notifications', icon: FiBell, activeIcon: FiBell, label: 'Alerts', badge: unreadNotificationsCount },
-      { path: '/worker/profile', icon: FiUser, activeIcon: HiUser, label: 'Profile' },
-    ];
-  }, [pendingJobsCount, unreadNotificationsCount]);
+  const navItems = useMemo(() => [
+    { id: 'home', label: 'Home', icon: FiHome, filledIcon: HiHome, path: '/worker/dashboard' },
+    { id: 'jobs', label: 'Jobs', icon: FiBriefcase, filledIcon: HiBriefcase, path: '/worker/jobs', badge: pendingJobsCount },
+    { id: 'wallet', label: 'Wallet', icon: HiOutlineWallet, filledIcon: HiWallet, path: '/worker/wallet' },
+    { id: 'profile', label: 'Profile', icon: FiUser, filledIcon: HiUser, path: '/worker/profile' },
+  ], [pendingJobsCount]);
 
-  const handleNavClick = (path) => {
+  const getActiveTab = () => {
+    const path = location.pathname;
+    if (path === '/worker' || path === '/worker/' || path.startsWith('/worker/dashboard')) return 'home';
+    if (path.startsWith('/worker/jobs') || path.startsWith('/worker/job/') || path.startsWith('/worker/booking-requests') || path.startsWith('/worker/group-requests')) return 'jobs';
+    if (path.startsWith('/worker/wallet')) return 'wallet';
+    if (path.startsWith('/worker/profile') || path.startsWith('/worker/settings') || path.startsWith('/worker/team') || path.startsWith('/worker/referrals')) return 'profile';
+    return 'home';
+  };
+
+  const activeTab = getActiveTab();
+  const activeIndex = navItems.findIndex(item => item.id === activeTab);
+  const activeColor = navItemColors[activeTab] || navItemColors.home;
+
+  // Update sliding indicator position when active tab changes
+  useEffect(() => {
+    if (navRef.current) {
+      const buttons = navRef.current.querySelectorAll('button');
+      if (buttons[activeIndex]) {
+        const button = buttons[activeIndex];
+        const navRect = navRef.current.getBoundingClientRect();
+        const buttonRect = button.getBoundingClientRect();
+
+        setIndicatorStyle({
+          left: buttonRect.left - navRect.left + (buttonRect.width / 2) - 16, // Center the 32px indicator
+          width: 32
+        });
+      }
+    }
+  }, [activeIndex, activeTab]);
+
+  const handleTabClick = (path) => {
     if (location.pathname !== path) {
       navigate(path);
     }
@@ -77,101 +121,113 @@ const BottomNav = memo(() => {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-xl border-t border-emerald-100/80 px-2 pb-[env(safe-area-inset-bottom,20px)] pt-1.5 z-[60] shadow-[0_-4px_24px_rgba(46,125,50,0.06)]"
+      className="fixed bottom-0 left-0 right-0 z-40 w-full"
       style={{
         WebkitBackfaceVisibility: 'hidden',
         bottom: isKeyboardOpen ? `-${keyboardHeight}px` : undefined,
       }}
     >
-      <div className="flex items-center justify-around px-2 py-1.5">
-        {navItems.map((item) => {
-          const isActive = location.pathname === item.path ||
-            (item.path === '/worker/dashboard' && location.pathname === '/worker');
-          const IconComponent = isActive ? item.activeIcon : item.icon;
+      <div
+        className="w-full pb-2 pt-2 px-2"
+        style={{
+          background: 'rgba(255, 255, 255, 0.98)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          boxShadow: '0 -4px 30px rgba(0, 0, 0, 0.08)',
+          borderTop: '1px solid rgba(229, 231, 235, 0.6)',
+        }}
+      >
+        <div ref={navRef} className="flex items-center justify-around max-w-md mx-auto relative">
+          {/* Animated Sliding Indicator */}
+          <motion.div
+            className="absolute -top-3 h-1 rounded-full"
+            animate={{
+              left: indicatorStyle.left,
+              width: indicatorStyle.width,
+              background: activeColor?.gradient || navItemColors.home.gradient,
+            }}
+            transition={{
+              type: "spring",
+              stiffness: 380,
+              damping: 30
+            }}
+            style={{
+              boxShadow: `0 2px 12px ${activeColor?.shadow || navItemColors.home.shadow}`,
+            }}
+          />
 
-          return (
-            <button
-              key={item.path}
-              onClick={() => handleNavClick(item.path)}
-              className="flex flex-col items-center justify-center relative w-16 h-13 rounded-xl transition-all duration-300 group"
-              style={{
-                // No inline background here
-              }}
-              onMouseEnter={(e) => {
-                if (!isActive) {
-                  gsap.to(e.currentTarget, { scale: 1.05, duration: 0.2 });
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isActive) {
-                  gsap.to(e.currentTarget, { scale: 1.0, duration: 0.2 });
-                }
-              }}
-            >
-              {/* Active Indicator Bar - Sleek Emerald Pill */}
-              {isActive && (
-                <div
-                  className="absolute -top-1.5 w-7 h-1 rounded-full bg-emerald-600 shadow-[0_2px_8px_rgba(46,125,50,0.4)]"
-                />
-              )}
+          {navItems.map((item) => {
+            const IconComponent = activeTab === item.id ? item.filledIcon : item.icon;
+            const isActive = activeTab === item.id;
+            const itemColor = navItemColors[item.id] || navItemColors.home;
 
-              {/* Active Background - Very Subtle Teal Tint */}
-              {isActive && (
-                <div
-                  className="absolute inset-0 rounded-xl scale-90"
-                  style={{ backgroundColor: `${themeColors.brand.teal}0A` }}
-                />
-              )}
-
-              <div className="relative z-10 flex flex-col items-center justify-center">
-                <div className="relative mb-0.5">
-                  <IconComponent
-                    ref={(el) => {
-                      iconRefs.current[item.path] = el;
-                    }}
-                    className={`w-6 h-6 transition-all duration-300 ${isActive ? 'scale-110' : 'text-gray-400 group-hover:text-gray-600'}`}
-                    style={{
-                      color: isActive ? themeColors.button : '#9CA3AF',
-                      filter: isActive ? `drop-shadow(0 2px 4px ${themeColors.brand.teal}1A)` : 'none'
-                    }}
-                  />
-                  {item.badge !== undefined && item.badge > 0 && (
-                    <span
-                      className="absolute bg-gradient-to-br from-red-500 to-red-600 text-white text-xs font-bold rounded-full flex items-center justify-center"
+            return (
+              <motion.button
+                key={item.id}
+                onClick={() => handleTabClick(item.path)}
+                whileTap={{ scale: 0.9 }}
+                className="flex flex-col items-center justify-center w-14 h-11 rounded-2xl transition-all duration-200 relative"
+              >
+                {/* Active Background Glow */}
+                <AnimatePresence>
+                  {isActive && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.8 }}
+                      transition={{ duration: 0.2 }}
+                      className="absolute inset-1 rounded-xl"
                       style={{
-                        top: '-6px',
-                        right: '-8px',
-                        minWidth: '18px',
-                        height: '18px',
-                        padding: '0 4px',
-                        fontSize: '10px',
-                        lineHeight: '18px',
-                        border: '2px solid white',
-                        boxShadow: '0 2px 5px rgba(239, 68, 68, 0.4)',
-                        zIndex: 50,
+                        background: itemColor.bg,
                       }}
-                    >
-                      {item.badge > 9 ? '9+' : item.badge}
-                    </span>
+                    />
                   )}
+                </AnimatePresence>
+
+                <div className="relative z-10 flex flex-col items-center justify-center">
+                  <motion.div
+                    className="relative mb-0.5"
+                    animate={{
+                      scale: isActive ? 1.1 : 1,
+                      y: isActive ? -2 : 0
+                    }}
+                    transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                  >
+                    <IconComponent
+                      className="w-6 h-6 transition-colors duration-200"
+                      style={{
+                        color: isActive ? itemColor.activeIcon : itemColor.defaultIcon,
+                      }}
+                    />
+                    {item.badge !== undefined && item.badge > 0 && (
+                      <motion.span
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        className="absolute -top-1.5 -right-2.5 bg-gradient-to-br from-red-500 to-red-600 text-white text-[9px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center border-2 border-white shadow-lg"
+                      >
+                        {item.badge > 9 ? '9+' : item.badge}
+                      </motion.span>
+                    )}
+                  </motion.div>
+                  <motion.span
+                    animate={{
+                      color: isActive ? itemColor.primary : '#6B7280',
+                      fontWeight: isActive ? 600 : 500
+                    }}
+                    className="text-[10px]"
+                  >
+                    {item.label}
+                  </motion.span>
                 </div>
-                <span
-                  className={`text-[10px] transition-colors duration-300 ${isActive ? 'font-bold' : 'font-medium text-gray-500'}`}
-                  style={{
-                    color: isActive ? themeColors.button : '#6B7280',
-                  }}
-                >
-                  {item.label}
-                </span>
-              </div>
-            </button>
-          );
-        })}
+              </motion.button>
+            );
+          })}
+        </div>
       </div>
     </nav>
   );
 });
 
 BottomNav.displayName = 'BottomNav';
-export default BottomNav;
 
+export default BottomNav;
