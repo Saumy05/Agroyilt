@@ -13,8 +13,12 @@ const walletTransactionSchema = new mongoose.Schema({
     required: true
   },
   amount: {
-    type: Number, // Integer in paise
+    type: Number, // In INR (Rupees)
     required: true
+  },
+  description: {
+    type: String,
+    default: null
   },
   reason: {
     type: String,

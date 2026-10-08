@@ -446,8 +446,9 @@ const createWithdrawalRequest = async (userIdOrObj, rawRole, amountINR, clientNo
       await WalletTransaction.create({
         walletId: walletDoc._id,
         type: 'debit',
-        amount: amountPaise,
+        amount: numINR,
         reason: 'payout',
+        description: `Withdrawal to Bank (${maskAccountNumber(b.accountNumber)})`,
         referenceId: withdrawal._id.toString(),
         idempotencyKey: `wd_req_${withdrawal._id.toString()}`,
         status: 'pending'

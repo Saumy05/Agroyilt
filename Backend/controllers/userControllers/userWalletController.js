@@ -219,6 +219,14 @@ const getWalletTransactions = async (req, res) => {
       }).sort({ createdAt: -1 }).limit(500).lean()
     ]);
 
+    // Build fast lookup map for generalTxns by referenceId and _id
+    const gtMap = new Map();
+    generalTxns.forEach(gt => {
+      const ref = gt.referenceId || (gt.bookingId ? gt.bookingId.toString() : null) || gt._id.toString();
+      if (ref) gtMap.set(ref, gt);
+      gtMap.set(gt._id.toString(), gt);
+    });
+
     // Merge and deduplicate by referenceId / idempotencyKey
     const seenRefs = new Set();
     const merged = [];
@@ -226,13 +234,41 @@ const getWalletTransactions = async (req, res) => {
     walletTxns.forEach(wt => {
       const ref = wt.referenceId || wt.gatewayTransactionId || wt.idempotencyKey || wt._id.toString();
       seenRefs.add(ref);
+      if (wt.referenceId) seenRefs.add(wt.referenceId.toString());
+
+      const matchingGt = gtMap.get(ref) || (wt.referenceId ? gtMap.get(wt.referenceId.toString()) : null);
+
+      // Resolve authoritative amount in INR
+      let finalAmount = wt.amount;
+      if (matchingGt && typeof matchingGt.amount === 'number' && matchingGt.amount > 0) {
+        finalAmount = matchingGt.amount;
+      } else if (wt.reason === 'payout' && wt.amount >= 1000) {
+        // Fallback protection against legacy amounts stored in paise
+        finalAmount = wt.amount / 100;
+      }
+
+      // Resolve user-friendly type
+      const finalType = (wt.reason === 'payout' || matchingGt?.type === 'withdrawal')
+        ? 'withdrawal'
+        : (matchingGt?.type || wt.type || 'credit');
+
+      // Resolve clear description
+      const finalDesc = matchingGt?.description || wt.description || (
+        wt.reason === 'payout' ? 'Bank Payout / Withdrawal' :
+        wt.reason === 'refund' ? 'Booking Unused Reserve Refund' :
+        wt.reason === 'topup' ? 'Wallet Top-up' :
+        wt.reason === 'referral_reward' ? 'Referral Reward' :
+        wt.reason === 'referral_reversal' ? 'Referral Reward Reversal' :
+        (wt.reason || 'Wallet Credit')
+      );
+
       merged.push({
         id: wt._id,
-        type: wt.type || 'credit',
-        amount: wt.amount,
-        description: wt.description || (wt.reason === 'refund' ? 'Booking Unused Reserve Refund' : (wt.reason === 'topup' ? 'Wallet Top-up' : (wt.reason === 'referral_reward' ? 'Referral Reward' : (wt.reason === 'referral_reversal' ? 'Referral Reward Reversal' : (wt.reason || 'Wallet Credit'))))),
+        type: finalType,
+        amount: finalAmount,
+        description: finalDesc,
         date: wt.createdAt,
-        status: wt.status || 'completed',
+        status: matchingGt?.status || wt.status || 'completed',
         balanceAfter: wt.balanceAfter,
         referenceId: wt.referenceId
       });

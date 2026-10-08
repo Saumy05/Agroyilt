@@ -41,6 +41,7 @@ const TYPE_CONFIG = {
   booking_payment: { label: 'Booking Payment', kind: 'debit' },
   worker_payment: { label: 'Worker Payment', kind: 'debit' },
   withdrawal: { label: 'Withdrawal', kind: 'debit' },
+  payout: { label: 'Withdrawal', kind: 'debit' },
   platform_fee: { label: 'Platform Fee', kind: 'debit' },
   convenience_fee: { label: 'Convenience Fee', kind: 'debit' },
   gst: { label: 'GST', kind: 'debit' },
