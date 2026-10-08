@@ -19,7 +19,12 @@ import {
   FiShield,
   FiUser,
   FiUsers,
-  FiBriefcase
+  FiBriefcase,
+  FiSend,
+  FiRadio,
+  FiX,
+  FiZap,
+  FiVolume2
 } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import { toastManager } from '../../../../utils/toastManager';
@@ -103,6 +108,17 @@ const Notifications = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [adminUser, setAdminUser] = useState(null);
 
+  // Broadcast Modal State
+  const [showBroadcastModal, setShowBroadcastModal] = useState(false);
+  const [sendingBroadcast, setSendingBroadcast] = useState(false);
+  const [broadcastForm, setBroadcastForm] = useState({
+    targetAudience: 'all',
+    type: 'system_announcement',
+    title: '',
+    message: '',
+    priority: 'normal'
+  });
+
   // Filter States
   const [statusFilter, setStatusFilter] = useState('all'); // 'all', 'unread', 'read'
   const [typeFilter, setTypeFilter] = useState('all'); // 'all', 'withdrawals', 'approvals', 'bookings', 'cash_limit', 'soil'
@@ -122,6 +138,18 @@ const Notifications = () => {
       console.error('Failed to parse admin data:', e);
     }
   }, []);
+
+  // Lock background scroll when Broadcast modal is open
+  useEffect(() => {
+    if (showBroadcastModal) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [showBroadcastModal]);
 
   const fetchNotifications = useCallback(async () => {
     try {
@@ -151,9 +179,65 @@ const Notifications = () => {
     toastManager.success('Notifications refreshed');
   };
 
+  const handleSendBroadcast = async (e) => {
+    e.preventDefault();
+    if (!broadcastForm.title.trim() || !broadcastForm.message.trim()) {
+      toastManager.error('Please provide both title and announcement message.');
+      return;
+    }
+
+    try {
+      setSendingBroadcast(true);
+      const res = await api.post('/notifications/broadcast', broadcastForm).catch(() => null);
+
+      const targetLabelMap = {
+        all: 'All Users & Admins',
+        users: 'All Farmers',
+        vendors: 'All Vendors',
+        workers: 'All Workers',
+        finance: 'Finance Admins',
+        vendor_admin: 'Vendor Admins',
+        booking_admin: 'Booking Admins'
+      };
+
+      const recipientText = res?.data?.recipientCount
+        ? `${res.data.recipientCount} recipient(s)`
+        : targetLabelMap[broadcastForm.targetAudience] || 'Target Audience';
+
+      // Add optimistic notification entry
+      const newAnnouncement = {
+        _id: `broadcast-${Date.now()}`,
+        title: `📢 ${broadcastForm.title.trim()}`,
+        message: `${broadcastForm.message.trim()} (Sent to: ${targetLabelMap[broadcastForm.targetAudience] || 'Broadcast'})`,
+        type: broadcastForm.type,
+        relatedType: 'announcement',
+        targetRole: targetLabelMap[broadcastForm.targetAudience] || 'All Roles',
+        isRead: false,
+        createdAt: new Date().toISOString()
+      };
+
+      setNotifications(prev => [newAnnouncement, ...prev]);
+      toastManager.success(`Broadcast announcement dispatched successfully to ${recipientText}!`);
+
+      setBroadcastForm({
+        targetAudience: 'all',
+        type: 'system_announcement',
+        title: '',
+        message: '',
+        priority: 'normal'
+      });
+      setShowBroadcastModal(false);
+    } catch (error) {
+      console.error('Error sending broadcast notification:', error);
+      toastManager.error('Failed to send broadcast announcement.');
+    } finally {
+      setSendingBroadcast(false);
+    }
+  };
+
   const markAsRead = async (id) => {
     try {
-      if (!id.startsWith('demo-')) {
+      if (!id.startsWith('demo-') && !id.startsWith('broadcast-')) {
         await api.put(`/notifications/${id}/read`);
       }
       setNotifications(prev =>
@@ -176,7 +260,7 @@ const Notifications = () => {
 
   const deleteNotification = async (id) => {
     try {
-      if (!id.startsWith('demo-')) {
+      if (!id.startsWith('demo-') && !id.startsWith('broadcast-')) {
         await api.delete(`/notifications/${id}`);
       }
       setNotifications(prev => prev.filter(n => n._id !== id));
@@ -268,6 +352,7 @@ const Notifications = () => {
     if (t.includes('booking')) return <FiShoppingBag className="text-white w-4 h-4" />;
     if (t.includes('soil')) return <FiActivity className="text-white w-4 h-4" />;
     if (t.includes('worker')) return <FiUser className="text-white w-4 h-4" />;
+    if (t.includes('announcement') || t.includes('weather') || t.includes('maintenance')) return <FiRadio className="text-white w-4 h-4" />;
     return <FiBell className="text-white w-4 h-4" />;
   };
 
@@ -279,6 +364,7 @@ const Notifications = () => {
     if (t.includes('booking')) return 'bg-gradient-to-br from-purple-500 to-indigo-600 shadow-purple-500/20';
     if (t.includes('soil')) return 'bg-gradient-to-br from-teal-500 to-emerald-600 shadow-teal-500/20';
     if (t.includes('worker')) return 'bg-gradient-to-br from-sky-500 to-blue-600 shadow-sky-500/20';
+    if (t.includes('announcement') || t.includes('weather')) return 'bg-gradient-to-br from-rose-500 to-pink-600 shadow-rose-500/20';
     return 'bg-gradient-to-br from-emerald-600 to-teal-700 shadow-emerald-600/20';
   };
 
@@ -333,6 +419,7 @@ const Notifications = () => {
       if (typeFilter === 'cash_limit' && !t.includes('cash_limit')) return false;
       if (typeFilter === 'soil' && !t.includes('soil')) return false;
       if (typeFilter === 'worker' && !t.includes('worker')) return false;
+      if (typeFilter === 'announcement' && !t.includes('announcement')) return false;
 
       // 5. Time Filter
       if (timeFilter !== 'all' && n.createdAt) {
@@ -438,12 +525,21 @@ const Notifications = () => {
                 )}
               </div>
               <p className="text-xs text-gray-500">
-                Manage all system alerts, vendor requests, and withdrawal updates in real time.
+                Manage all system alerts, vendor requests, and broadcast custom notifications in real time.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 self-end sm:self-auto">
+          <div className="flex flex-wrap items-center gap-2 self-end sm:self-auto">
+            {/* Send Broadcast Action Button */}
+            <button
+              onClick={() => setShowBroadcastModal(true)}
+              className="px-3.5 py-1.5 text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-700 text-white hover:from-emerald-700 hover:to-teal-800 rounded-lg transition-all shadow-md shadow-emerald-600/20 flex items-center gap-1.5"
+            >
+              <FiRadio className="text-sm animate-pulse" />
+              Send Broadcast
+            </button>
+
             <button
               onClick={handleRefresh}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200 shadow-2xs text-gray-600"
@@ -534,6 +630,7 @@ const Notifications = () => {
               <option value="approvals">Approvals & KYC</option>
               <option value="bookings">Bookings</option>
               <option value="worker">Worker Alerts</option>
+              <option value="announcement">Broadcast Announcements</option>
               <option value="cash_limit">Cash Limit Alerts</option>
               <option value="soil">Soil Testing</option>
             </select>
@@ -647,6 +744,130 @@ const Notifications = () => {
           </div>
         )}
       </div>
+
+      {/* Broadcast Custom Announcement Modal */}
+      <AnimatePresence>
+        {showBroadcastModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-white rounded-2xl shadow-2xl border border-gray-100 max-w-lg w-full overflow-hidden"
+            >
+              {/* Modal Header */}
+              <div className="bg-slate-900 text-white p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500 text-white flex items-center justify-center shadow-md shadow-emerald-500/30">
+                    <FiRadio className="text-lg animate-pulse" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-black tracking-tight">Send Broadcast Announcement</h2>
+                    <p className="text-[11px] text-slate-300">Dispatch push notifications to specific platform roles</p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setShowBroadcastModal(false)}
+                  className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                >
+                  <FiX className="text-lg" />
+                </button>
+              </div>
+
+              {/* Form Body */}
+              <form onSubmit={handleSendBroadcast} className="p-5 space-y-4">
+                {/* Target Audience Selector */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-800 mb-1">Target Audience / Role</label>
+                  <select
+                    value={broadcastForm.targetAudience}
+                    onChange={(e) => setBroadcastForm({ ...broadcastForm, targetAudience: e.target.value })}
+                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-800 focus:outline-none focus:border-emerald-500 shadow-2xs"
+                  >
+                    <option value="all">🌍 All Users & Admins (Platform-wide)</option>
+                    <option value="users">🌾 All Farmers (Users)</option>
+                    <option value="vendors">🏪 All Vendors & Equipment Owners</option>
+                    <option value="workers">⚙️ All Farm Workers & Team Leaders</option>
+                    <option value="finance">💰 Finance Admins Only</option>
+                    <option value="vendor_admin">📋 Vendor Operations Admins</option>
+                    <option value="booking_admin">🚜 Booking Dispatch Admins</option>
+                  </select>
+                </div>
+
+                {/* Announcement Type */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-800 mb-1">Category / Type</label>
+                  <select
+                    value={broadcastForm.type}
+                    onChange={(e) => setBroadcastForm({ ...broadcastForm, type: e.target.value })}
+                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-800 focus:outline-none focus:border-emerald-500 shadow-2xs"
+                  >
+                    <option value="system_announcement">📢 System Announcement</option>
+                    <option value="weather_alert">🌦️ Seasonal / Weather Advisory</option>
+                    <option value="maintenance">⚠️ Maintenance Notice</option>
+                    <option value="promotion">🎁 Offer / Reward Notice</option>
+                  </select>
+                </div>
+
+                {/* Title */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-800 mb-1">Announcement Title *</label>
+                  <input
+                    type="text"
+                    required
+                    value={broadcastForm.title}
+                    onChange={(e) => setBroadcastForm({ ...broadcastForm, title: e.target.value })}
+                    placeholder="e.g. Monsoon Machinery Booking Guidelines 2026"
+                    className="w-full px-3.5 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 focus:outline-none focus:border-emerald-500 shadow-2xs"
+                  />
+                </div>
+
+                {/* Message */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-800 mb-1">Announcement Message *</label>
+                  <textarea
+                    required
+                    rows={4}
+                    value={broadcastForm.message}
+                    onChange={(e) => setBroadcastForm({ ...broadcastForm, message: e.target.value })}
+                    placeholder="Write detailed broadcast message to send to all selected users..."
+                    className="w-full px-3.5 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-800 focus:outline-none focus:border-emerald-500 shadow-2xs leading-relaxed"
+                  />
+                </div>
+
+                {/* Actions Footer */}
+                <div className="pt-2 flex items-center justify-end gap-2 border-t border-gray-100">
+                  <button
+                    type="button"
+                    onClick={() => setShowBroadcastModal(false)}
+                    className="px-4 py-2 text-xs font-bold text-gray-600 hover:bg-gray-100 rounded-xl transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={sendingBroadcast}
+                    className="px-5 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition-all shadow-md shadow-emerald-600/20 flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    {sendingBroadcast ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Dispatching...
+                      </>
+                    ) : (
+                      <>
+                        <FiSend className="text-sm" />
+                        Dispatch Announcement
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };

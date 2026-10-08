@@ -10,7 +10,8 @@ const {
   markAsRead,
   markAllAsRead,
   deleteNotification,
-  deleteAllNotifications
+  deleteAllNotifications,
+  broadcastNotification
 } = require('../controllers/notificationControllers/notificationController');
 
 // Routes
@@ -18,6 +19,7 @@ router.get('/user', authenticate, isUser, getUserNotifications);
 router.get('/vendor', authenticate, isVendor, getVendorNotifications);
 router.get('/worker', authenticate, isWorker, getWorkerNotifications);
 router.get('/admin', authenticate, isAdmin, getAdminNotifications);
+router.post('/broadcast', authenticate, isAdmin, broadcastNotification);
 router.put('/:id/read', authenticate, markAsRead);
 router.put('/read-all', authenticate, markAllAsRead);
 router.delete('/delete-all', authenticate, deleteAllNotifications);

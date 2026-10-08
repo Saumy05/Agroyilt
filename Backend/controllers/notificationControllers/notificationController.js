@@ -492,6 +492,78 @@ const deleteAllNotifications = async (req, res) => {
   }
 };
 
+/**
+ * Send Broadcast Custom Announcement Notification (Admin Only)
+ */
+const broadcastNotification = async (req, res) => {
+  try {
+    const { targetAudience = 'all', title, message, type = 'system_announcement', priority = 'normal' } = req.body;
+
+    if (!title || !message) {
+      return res.status(400).json({
+        success: false,
+        message: 'Title and message are required'
+      });
+    }
+
+    const User = require('../../models/User');
+    const Vendor = require('../../models/Vendor');
+    const Worker = require('../../models/Worker');
+    const Admin = require('../../models/Admin');
+
+    let recipientCount = 0;
+    const notificationsToCreate = [];
+
+    if (targetAudience === 'all' || targetAudience === 'users') {
+      const users = await User.find({ isActive: { $ne: false } }).select('_id');
+      users.forEach(u => {
+        notificationsToCreate.push({ userId: u._id, title, message, type });
+      });
+      recipientCount += users.length;
+    }
+
+    if (targetAudience === 'all' || targetAudience === 'vendors') {
+      const vendors = await Vendor.find({ isApproved: true }).select('_id');
+      vendors.forEach(v => {
+        notificationsToCreate.push({ vendorId: v._id, title, message, type });
+      });
+      recipientCount += vendors.length;
+    }
+
+    if (targetAudience === 'all' || targetAudience === 'workers') {
+      const workers = await Worker.find({ isApproved: true }).select('_id');
+      workers.forEach(w => {
+        notificationsToCreate.push({ workerId: w._id, title, message, type });
+      });
+      recipientCount += workers.length;
+    }
+
+    if (targetAudience === 'all' || targetAudience === 'admins' || targetAudience.includes('admin')) {
+      const admins = await Admin.find({ isActive: { $ne: false } }).select('_id');
+      admins.forEach(a => {
+        notificationsToCreate.push({ adminId: a._id, title, message, type });
+      });
+      recipientCount += admins.length;
+    }
+
+    if (notificationsToCreate.length > 0) {
+      await Notification.insertMany(notificationsToCreate);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Broadcast announcement dispatched successfully to ${recipientCount} recipient(s).`,
+      recipientCount
+    });
+  } catch (error) {
+    console.error('Broadcast notification error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to broadcast notification. Please try again.'
+    });
+  }
+};
+
 module.exports = {
   createNotification,
   getUserNotifications,
@@ -501,6 +573,7 @@ module.exports = {
   markAsRead,
   markAllAsRead,
   deleteNotification,
-  deleteAllNotifications
+  deleteAllNotifications,
+  broadcastNotification
 };
 
