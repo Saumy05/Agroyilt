@@ -154,30 +154,30 @@ const EquipmentInventory = () => {
     const s = (status || '').toLowerCase();
     if (s === 'approved' || s === 'active') {
       return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          <span>Live & Bookable</span>
+          <span>Live</span>
         </span>
       );
     }
     if (s === 'pending') {
       return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200/60">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200/60">
           <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-          <span>In Verification</span>
+          <span>In Review</span>
         </span>
       );
     }
     if (s === 'rejected') {
       return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200/60">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200/60">
           <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-          <span>Action Required</span>
+          <span>Action Req.</span>
         </span>
       );
     }
     return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-50 text-slate-500 border border-slate-200">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-50 text-slate-500 border border-slate-200">
         <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
         <span>Paused</span>
       </span>
@@ -202,21 +202,20 @@ const EquipmentInventory = () => {
         </div>
 
         {/* List Skeleton */}
-        <div className="max-w-xl mx-auto px-4 pt-4 space-y-4">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="bg-white rounded-3xl border border-slate-100 p-4 shadow-sm animate-pulse space-y-4">
-              <div className="flex gap-3.5">
-                <div className="w-22 h-22 rounded-2xl bg-slate-200/70 shrink-0" />
-                <div className="flex-1 space-y-2.5 py-1">
-                  <div className="flex justify-between">
-                    <div className="h-4 w-20 bg-slate-200 rounded-full" />
-                    <div className="h-6 w-14 bg-slate-100 rounded-full" />
+        <div className="max-w-xl mx-auto px-4 pt-3 space-y-2.5">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="bg-white rounded-2xl border border-slate-100 p-3 shadow-xs animate-pulse">
+              <div className="flex gap-3 items-center">
+                <div className="w-16 h-16 rounded-xl bg-slate-200/70 shrink-0" />
+                <div className="flex-1 space-y-2 py-0.5">
+                  <div className="flex justify-between items-center">
+                    <div className="h-3.5 w-16 bg-slate-200 rounded-md" />
+                    <div className="h-5 w-12 bg-slate-100 rounded-lg" />
                   </div>
-                  <div className="h-5 w-36 bg-slate-200 rounded-md" />
-                  <div className="h-4 w-28 bg-slate-100 rounded-full" />
+                  <div className="h-4 w-32 bg-slate-200/80 rounded" />
+                  <div className="h-3 w-20 bg-slate-100 rounded" />
                 </div>
               </div>
-              <div className="h-10 bg-slate-100/70 rounded-2xl" />
             </div>
           ))}
         </div>
@@ -391,7 +390,7 @@ const EquipmentInventory = () => {
             </button>
           </div>
         ) : (
-          <div className="space-y-3.5">
+          <div className="space-y-2 sm:space-y-2.5">
             <AnimatePresence mode="popLayout">
               {filteredEquipment.map(item => {
                 const category = parseBilingualTitle(item.categoryId?.title || item.requestedCategoryName);
@@ -404,16 +403,16 @@ const EquipmentInventory = () => {
                   <motion.div 
                     key={item._id}
                     layout
-                    initial={{ opacity: 0, y: 10 }}
+                    initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.97 }}
-                    transition={{ duration: 0.2 }}
-                    className="bg-white rounded-3xl border border-slate-100/90 shadow-[0_4px_20px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_25px_rgba(46,125,50,0.06)] hover:border-emerald-200/50 transition-all overflow-hidden group"
+                    transition={{ duration: 0.18 }}
+                    className="bg-white rounded-2xl border border-slate-100 shadow-[0_2px_10px_rgba(46,125,50,0.03)] hover:shadow-[0_4px_16px_rgba(46,125,50,0.06)] hover:border-emerald-200/50 transition-all overflow-hidden group"
                   >
-                    {/* Top Row: Thumbnail + Details + Actions */}
-                    <div className="p-4 sm:p-5 flex gap-3.5 sm:gap-4 items-start">
-                      {/* Machine Thumbnail */}
-                      <div className="relative w-22 h-22 sm:w-24 sm:h-24 rounded-2xl overflow-hidden bg-emerald-50/40 border border-slate-150 shrink-0 group/media">
+                    {/* Compact Main Content Row */}
+                    <div className="p-3 sm:p-3.5 flex gap-3 items-center">
+                      {/* Machine Thumbnail (compact: 66px x 66px) */}
+                      <div className="relative w-16 h-16 sm:w-18 sm:h-18 rounded-xl overflow-hidden bg-emerald-50/40 border border-slate-150 shrink-0 group/media">
                         {item.images && item.images[0] ? (
                           <img 
                             src={toAssetUrl(item.images[0])} 
@@ -431,142 +430,125 @@ const EquipmentInventory = () => {
                           className="w-full h-full flex flex-col items-center justify-center text-emerald-300 bg-emerald-50/60"
                           style={{ display: item.images && item.images[0] ? 'none' : 'flex' }}
                         >
-                          <FaTractor className="w-8 h-8 text-emerald-400/60" />
+                          <FaTractor className="w-6 h-6 text-emerald-400/60" />
                         </div>
 
                         {/* Mode badge on top of image */}
-                        <span className={`absolute top-1.5 left-1.5 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider backdrop-blur-md shadow-2xs ${
+                        <span className={`absolute top-1 left-1 px-1.5 py-0.2 rounded text-[8px] font-black uppercase tracking-wider backdrop-blur-md shadow-2xs ${
                           item.listingType === 'rental'
                             ? 'bg-amber-600/90 text-white'
                             : 'bg-emerald-700/90 text-white'
                         }`}>
                           {item.listingType === 'rental' ? 'Rental' : 'Service'}
                         </span>
-
-                        {/* Image count pill */}
-                        {item.images?.length > 1 && (
-                          <span className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-[8px] font-bold text-white shadow-xs">
-                            📷 {item.images.length}
-                          </span>
-                        )}
                       </div>
 
                       {/* Main Info Block */}
                       <div className="flex-1 min-w-0">
-                        {/* Header Row: Category Badge & Quick Actions */}
-                        <div className="flex items-center justify-between gap-2 mb-1">
+                        {/* Row 1: Badges & Quick Action Icons */}
+                        <div className="flex items-center justify-between gap-1.5 mb-1">
                           <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
-                            <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-[10px] font-black uppercase tracking-wider border border-emerald-200/60">
+                            <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 text-[10px] font-black uppercase tracking-wider border border-emerald-200/60">
                               {category.primary}
                             </span>
-                            {(item.horsepower || item.hp) && (
-                              <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">
-                                {item.horsepower || item.hp} HP
-                              </span>
-                            )}
+                            <StatusBadge status={item.status} />
                           </div>
 
-                          {/* Quick Action Icons */}
-                          <div className="flex items-center gap-1.5 shrink-0">
+                          {/* Quick Action Icons (compact: 26px x 26px) */}
+                          <div className="flex items-center gap-1 shrink-0">
                             <button 
                               onClick={() => navigate(`/vendor/equipment/edit/${item._id}`)}
-                              className="w-8 h-8 rounded-full bg-slate-50 hover:bg-emerald-50 text-slate-400 hover:text-emerald-700 flex items-center justify-center transition-colors border border-slate-200/70 shadow-2xs active:scale-95 cursor-pointer"
-                              title="Edit machine specs & pricing"
+                              className="w-7 h-7 rounded-lg bg-slate-50 hover:bg-emerald-50 text-slate-400 hover:text-emerald-700 flex items-center justify-center transition-colors border border-slate-200/60 shadow-2xs active:scale-95 cursor-pointer"
+                              title="Edit machine"
                             >
-                              <FiEdit2 className="w-3.5 h-3.5" />
+                              <FiEdit2 className="w-3 h-3" />
                             </button>
                             <button 
                               onClick={() => setDeleteModalItem(item)}
-                              className="w-8 h-8 rounded-full bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 flex items-center justify-center transition-colors border border-slate-200/70 shadow-2xs active:scale-95 cursor-pointer"
-                              title="Remove machine from inventory"
+                              className="w-7 h-7 rounded-lg bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 flex items-center justify-center transition-colors border border-slate-200/60 shadow-2xs active:scale-95 cursor-pointer"
+                              title="Remove machine"
                             >
-                              <FiTrash2 className="w-3.5 h-3.5" />
+                              <FiTrash2 className="w-3 h-3" />
                             </button>
                           </div>
                         </div>
 
-                        {/* Machine Name */}
-                        <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight leading-snug break-words">
-                          {item.name}
-                        </h3>
-
-                        {/* Model Number if present */}
-                        {item.modelNumber && (
-                          <p className="text-xs text-slate-500 font-medium mt-0.5">
-                            Model: <span className="font-bold text-slate-700">{item.modelNumber}</span>
-                          </p>
-                        )}
-
-                        {/* Status Badge */}
-                        <div className="mt-1.5">
-                          <StatusBadge status={item.status} />
+                        {/* Row 2: Machine Name & Model */}
+                        <div className="flex items-baseline gap-1.5 min-w-0">
+                          <h3 className="text-sm sm:text-base font-black text-slate-900 tracking-tight leading-snug truncate">
+                            {item.name}
+                          </h3>
+                          {item.modelNumber && (
+                            <span className="text-[11px] text-slate-500 font-medium truncate shrink-0">
+                              • Model: {item.modelNumber}
+                            </span>
+                          )}
+                          {(item.horsepower || item.hp) && (
+                            <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.2 rounded shrink-0">
+                              {item.horsepower || item.hp} HP
+                            </span>
+                          )}
                         </div>
+
+                        {/* Row 3: Configured Attachments (if any) */}
+                        {Array.isArray(item.implements) && item.implements.length > 0 && (
+                          <div className="flex flex-wrap items-center gap-1 mt-1">
+                            {item.implements.map((impl, idx) => {
+                              const rawTitle = impl.subCategoryId?.title || impl.subCategoryId?.name || 'Attachment';
+                              const title = rawTitle.split('(')[0].trim();
+                              const hourlyAdd = Number(impl.pricing?.hourly?.price) || 0;
+                              const acreAdd = Number(impl.pricing?.land_based?.price) || 0;
+
+                              let addonLabel = '';
+                              if (hourlyAdd > 0) addonLabel = `+₹${hourlyAdd}/hr`;
+                              else if (acreAdd > 0) addonLabel = `+₹${acreAdd}/ac`;
+
+                              return (
+                                <span 
+                                  key={idx} 
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-50 border border-slate-200/60 text-[10px] font-medium text-slate-700"
+                                >
+                                  <FiTool className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                                  <span>{title}</span>
+                                  {addonLabel && (
+                                    <span className="text-emerald-700 font-bold">
+                                      ({addonLabel})
+                                    </span>
+                                  )}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     </div>
 
-                    {/* Configured Attachments */}
-                    {Array.isArray(item.implements) && item.implements.length > 0 && (
-                      <div className="px-4 sm:px-5 pb-2.5">
-                        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                          {item.implements.map((impl, idx) => {
-                            const rawTitle = impl.subCategoryId?.title || impl.subCategoryId?.name || 'Attachment';
-                            const title = rawTitle.split('(')[0].trim();
-                            const hourlyAdd = Number(impl.pricing?.hourly?.price) || 0;
-                            const acreAdd = Number(impl.pricing?.land_based?.price) || 0;
-
-                            let addonLabel = '';
-                            if (hourlyAdd > 0) {
-                              addonLabel = `+₹${hourlyAdd}/hr`;
-                            } else if (acreAdd > 0) {
-                              addonLabel = `+₹${acreAdd}/ac`;
-                            }
-
-                            return (
-                              <span 
-                                key={idx} 
-                                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100/90 border border-slate-200/60 text-xs font-medium text-slate-700"
-                              >
-                                <FiTool className="w-3 h-3 text-slate-400 shrink-0" />
-                                <span>{title}</span>
-                                {addonLabel && (
-                                  <span className="text-emerald-700 font-bold text-[11px]">
-                                    ({addonLabel})
-                                  </span>
-                                )}
-                              </span>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Rejection Alert Banner */}
+                    {/* Rejection Alert Banner (compact) */}
                     {item.status === 'rejected' && item.rejectionReason && (
-                      <div className="mx-4 sm:mx-5 mb-3 p-3 rounded-2xl bg-rose-50 border border-rose-200/80 flex items-start gap-2.5 text-rose-800">
-                        <FiAlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
-                        <div className="text-xs">
-                          <span className="font-black uppercase tracking-wider text-[10px] text-rose-700 block">Verification Feedback:</span>
-                          <p className="font-semibold mt-0.5">{item.rejectionReason}</p>
+                      <div className="mx-3 mb-2 p-2 rounded-xl bg-rose-50 border border-rose-200/80 flex items-start gap-2 text-rose-800 text-[11px]">
+                        <FiAlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-rose-600" />
+                        <div className="min-w-0 flex-1">
+                          <p className="font-semibold leading-tight">{item.rejectionReason}</p>
                           <button 
                             onClick={() => navigate(`/vendor/equipment/edit/${item._id}`)}
-                            className="mt-1.5 text-[11px] font-black text-rose-700 hover:underline flex items-center gap-1 cursor-pointer"
+                            className="mt-1 text-[10px] font-black text-rose-700 hover:underline flex items-center gap-0.5 cursor-pointer"
                           >
-                            <span>Update Machine & Resubmit</span>
+                            <span>Fix & Resubmit</span>
                             <FiChevronRight className="w-3 h-3" />
                           </button>
                         </div>
                       </div>
                     )}
 
-                    {/* Clean Pricing Strip */}
-                    <div className="bg-slate-50/70 border-t border-slate-100 px-4 sm:px-5 py-2.5 flex items-center justify-between">
-                      <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+                    {/* Slim Bottom Pricing Strip */}
+                    <div className="bg-slate-50/70 border-t border-slate-100 px-3 sm:px-3.5 py-1.5 flex items-center justify-between text-xs">
+                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                         {hasHourly && (
-                          <div className="flex items-baseline gap-1">
-                            <span className="text-base sm:text-lg font-black text-slate-900">
+                          <div className="flex items-baseline gap-0.5">
+                            <span className="text-sm sm:text-base font-black text-slate-900">
                               {formatRupee(item.pricing.hourly.price)}
                             </span>
-                            <span className="text-xs font-medium text-slate-400">/hr</span>
+                            <span className="text-[10px] font-medium text-slate-400">/hr</span>
                           </div>
                         )}
 
@@ -575,11 +557,11 @@ const EquipmentInventory = () => {
                         )}
 
                         {hasAcre && (
-                          <div className="flex items-baseline gap-1">
-                            <span className="text-base sm:text-lg font-black text-slate-900">
+                          <div className="flex items-baseline gap-0.5">
+                            <span className="text-sm sm:text-base font-black text-slate-900">
                               {formatRupee(item.pricing.land_based.price)}
                             </span>
-                            <span className="text-xs font-medium text-slate-400">/acre</span>
+                            <span className="text-[10px] font-medium text-slate-400">/acre</span>
                           </div>
                         )}
 
@@ -588,27 +570,27 @@ const EquipmentInventory = () => {
                         )}
 
                         {hasDaily && (
-                          <div className="flex items-baseline gap-1">
-                            <span className="text-base sm:text-lg font-black text-slate-900">
+                          <div className="flex items-baseline gap-0.5">
+                            <span className="text-sm sm:text-base font-black text-slate-900">
                               {formatRupee(item.pricing.daily?.price || item.pricing.monthly?.price)}
                             </span>
-                            <span className="text-xs font-medium text-slate-400">/day</span>
+                            <span className="text-[10px] font-medium text-slate-400">/day</span>
                           </div>
                         )}
 
                         {!hasHourly && !hasAcre && !hasDaily && (
-                          <span className="text-xs font-semibold text-slate-400 italic">
-                            No active rates configured
+                          <span className="text-[11px] font-semibold text-slate-400 italic">
+                            No rates set
                           </span>
                         )}
                       </div>
 
                       <button
                         onClick={() => navigate(`/vendor/equipment/edit/${item._id}`)}
-                        className="text-xs font-bold text-emerald-800 hover:text-emerald-900 flex items-center gap-1 shrink-0 group-hover:translate-x-0.5 transition-transform cursor-pointer"
+                        className="text-[11px] font-bold text-emerald-800 hover:text-emerald-900 flex items-center gap-0.5 shrink-0 group-hover:translate-x-0.5 transition-transform cursor-pointer"
                       >
                         <span>Configure</span>
-                        <FiChevronRight className="w-4 h-4" />
+                        <FiChevronRight className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </motion.div>
