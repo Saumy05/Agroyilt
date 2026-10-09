@@ -58,10 +58,11 @@ const toAssetUrl = (url) => {
 };
 
 
-// Dynamic Countdown Timer & Alert for active machinery rentals (Customer side)
+// Dynamic Countdown & Overdue/Overtime Timer for active machinery rentals (Customer side)
 const RentalTimer = ({ booking }) => {
   const [timeLeft, setTimeLeft] = useState(0);
-  const [isExpired, setIsExpired] = useState(false);
+  const [isOverdue, setIsOverdue] = useState(false);
+  const [overdueMs, setOverdueMs] = useState(0);
 
   useEffect(() => {
     if (!booking) return;
@@ -80,13 +81,16 @@ const RentalTimer = ({ booking }) => {
     const targetMs = startedTime + durationMs;
 
     const updateTimer = () => {
-      const remaining = targetMs - Date.now();
+      const now = Date.now();
+      const remaining = targetMs - now;
       if (remaining <= 0) {
         setTimeLeft(0);
-        setIsExpired(true);
+        setIsOverdue(true);
+        setOverdueMs(Math.abs(remaining));
       } else {
         setTimeLeft(remaining);
-        setIsExpired(false);
+        setIsOverdue(false);
+        setOverdueMs(0);
       }
     };
 
@@ -102,45 +106,101 @@ const RentalTimer = ({ booking }) => {
 
   if (!isTimeBased || !isActive || !booking.startedAt) return null;
 
+  const rate = booking.equipmentId?.pricing?.hourly?.price || booking.basePrice || 25;
+  const unitLabel = booking.rental_type === 'hourly' ? 'hr' : booking.rental_type === 'daily' ? 'day' : 'month';
+
   // Format timeLeft in HH:MM:SS or Days Hours Mins
-  const formatTime = () => {
-    const totalSecs = Math.floor(timeLeft / 1000);
+  const formatTime = (ms) => {
+    const totalSecs = Math.floor(ms / 1000);
     const secs = totalSecs % 60;
     const totalMins = Math.floor(totalSecs / 60);
     const mins = totalMins % 60;
     const hours = Math.floor(totalMins / 60);
 
-    if (booking.rental_type === 'hourly') {
-      return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-    } else {
+    if (hours >= 24) {
       const days = Math.floor(hours / 24);
       const remainingHours = hours % 24;
-      if (days > 0) {
-        return `${days} Day(s) ${remainingHours} Hour(s) ${mins} Min(s)`;
-      }
-      return `${remainingHours} Hour(s) ${mins} Min(s) ${secs} Sec(s)`;
+      return `${days}d ${remainingHours}h ${mins}m ${secs}s`;
     }
+    return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   };
 
-  return (
-    <div className={`p-4 rounded-2xl border flex items-center gap-3.5 shadow-sm transition-all duration-300 ${
-      isExpired
-        ? 'bg-orange-50 border-orange-200 text-orange-700 animate-pulse'
-        : 'bg-teal-50 border-teal-100 text-teal-700'
-    }`}>
-      <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
-        isExpired ? 'bg-orange-500 text-white' : 'bg-teal-500 text-white'
-      }`}>
-        <FiClock className="w-5 h-5 animate-spin" style={{ animationDuration: isExpired ? '1.5s' : '8s' }} />
+  const overdueUnits = booking.rental_type === 'daily'
+    ? Math.max(1, Math.ceil(overdueMs / 86400000))
+    : Math.max(1, Math.ceil(overdueMs / 3600000));
+  const estimatedExtraCost = overdueUnits * rate;
+
+  if (isOverdue) {
+    return (
+      <div className="rounded-2xl border border-amber-300 bg-gradient-to-br from-amber-50 to-orange-50 p-4 text-amber-900 shadow-sm transition-all duration-300 space-y-2.5">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-sm animate-pulse">
+            <FiAlertTriangle className="w-5 h-5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <h4 className="text-xs font-black uppercase tracking-wider text-amber-900">
+                Rental Overdue — Extra Time
+              </h4>
+              <span className="text-[10px] font-black bg-amber-200/80 text-amber-900 px-1.5 py-0.2 rounded uppercase">
+                Active
+              </span>
+            </div>
+            <p className="text-base font-black text-amber-800 font-mono mt-0.5">
+              +{formatTime(overdueMs)} Overtime
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-white/80 backdrop-blur-xs rounded-xl p-2.5 border border-amber-200/60 text-xs space-y-1">
+          <div className="flex justify-between items-center font-bold text-amber-900">
+            <span>Accruing Rate:</span>
+            <span className="font-mono">₹{rate}/{unitLabel}</span>
+          </div>
+          <div className="flex justify-between items-center text-amber-800 font-bold border-t border-amber-100 pt-1">
+            <span>Estimated Extra Charge:</span>
+            <span className="font-mono text-orange-700">+₹{estimatedExtraCost.toFixed(2)}</span>
+          </div>
+        </div>
+
+        <p className="text-[11px] text-amber-800/90 leading-relaxed font-medium">
+          The agreed rental return time has passed. Extra time will be charged upon return at the listed rate until the owner confirms your Return OTP.
+        </p>
+
+        {booking.vendorId?.phone && (
+          <div className="pt-0.5 flex items-center gap-2">
+            <a
+              href={`tel:${booking.vendorId.phone}`}
+              className="flex-1 py-2 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-sm transition-all"
+            >
+              <FiPhone className="w-3.5 h-3.5" />
+              <span>Call Owner ({booking.vendorId?.name || 'Owner'})</span>
+            </a>
+          </div>
+        )}
       </div>
-      <div className="flex-1">
-        <h4 className="text-sm font-black uppercase tracking-wider mb-0.5">
-          {isExpired ? 'Rental Time Completed' : 'Rental In-Progress'}
-        </h4>
-        <p className="text-xs font-semibold opacity-95">
-          {isExpired
-            ? 'Your rental duration has ended. The driver will collect the equipment soon.'
-            : `Time Remaining: ${formatTime()}`}
+    );
+  }
+
+  return (
+    <div className="p-4 rounded-2xl border border-teal-100 bg-teal-50 text-teal-700 flex items-center gap-3.5 shadow-sm transition-all duration-300">
+      <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 bg-teal-500 text-white">
+        <FiClock className="w-5 h-5 animate-spin" style={{ animationDuration: '8s' }} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <h4 className="text-xs font-black uppercase tracking-wider mb-0.5 text-teal-900">
+            Rental In-Progress (Active)
+          </h4>
+          <span className="text-[10px] font-bold bg-teal-100 text-teal-800 px-1.5 py-0.2 rounded uppercase">
+            ₹{rate}/{unitLabel}
+          </span>
+        </div>
+        <p className="text-sm font-black text-teal-800 font-mono">
+          Time Remaining: {formatTime(timeLeft)}
+        </p>
+        <p className="text-[11px] text-teal-700/80 font-medium mt-0.5">
+          Return equipment before deadline to avoid overtime charges.
         </p>
       </div>
     </div>
@@ -204,6 +264,16 @@ const BookingDetails = () => {
       /tractor|rotavator|harvester|tiller|cultivator|agriculture|agri|machinery|equipment|drone/.test(catStr) ||
       typeStr.includes('machinery') ||
       Boolean(booking.equipmentId)
+    );
+  }, [booking]);
+
+  const isRental = useMemo(() => {
+    if (!booking) return false;
+    return (
+      booking.fulfillmentMode === 'rental' ||
+      booking.categoryId?.fulfillmentMode === 'rental' ||
+      booking.equipmentId?.listingType === 'rental' ||
+      (booking.rental_type && (booking.requiresDriver === false || booking.categoryId?.requiresDriver === false))
     );
   }, [booking]);
 
@@ -440,15 +510,21 @@ const BookingDetails = () => {
 
   const getStatusLabel = (status) => {
     switch (status) {
-      case 'confirmed': return 'Confirmed';
+      case 'confirmed':
+      case 'accepted':
+        return isRental ? 'Ready for Handover' : 'Confirmed';
       case 'journey_started': return isAgri ? 'Equipment En Route' : 'Agent En Route';
       case 'visited': return isAgri ? 'Equipment Arrived' : 'Agent Arrived';
-      case 'in_progress': return isAgri ? 'Equipment Working' : 'In Progress';
-      case 'work_done': return 'Work Completed'; // Payment Pending
-      case 'completed': return 'Completed';
+      case 'in_progress': return isRental ? 'Rental Active (In Use)' : (isAgri ? 'Equipment Working' : 'In Progress');
+      case 'work_done': return isRental ? 'Rental Ended (Return Pending)' : 'Work Completed'; // Payment Pending
+      case 'completed': return isRental ? 'Returned & Completed' : 'Completed';
       case 'cancelled': return 'Cancelled';
+      case 'rejected':
+      case 'vendor_rejected':
+        return isRental ? 'Owner Declined' : 'Request Rejected';
       case 'requested':
       case 'searching': {
+        if (isRental) return 'Awaiting Owner Confirmation';
         const isWorker = booking?.providerType === 'WORKER' || /labour|labor|worker|shramik|majdoor/i.test(booking?.serviceCategory || '');
         return isAgri ? 'Finding Driver' : (isWorker ? 'Finding Worker' : 'Finding Expert');
       }
@@ -904,12 +980,18 @@ const BookingDetails = () => {
             </div>
           )}
 
-          {/* Worker bookings: real work time (price is fixed). Machinery: live play/pause billing timer */}
+          {/* Worker bookings: real work time (price is fixed). Machinery: live play/pause billing timer. Rental: countdown/overdue timer */}
           {booking.providerType === 'WORKER' ? (
             <div className="mb-4">
               <WorkerWorkTime workTime={booking.workTime} />
             </div>
-          ) : (booking.serviceTimer || booking.equipmentId || booking.rental_type || ['in_progress', 'visited', 'completed'].includes(booking.status?.toLowerCase())) ? (
+          ) : isRental ? (
+            booking.status?.toLowerCase() === 'in_progress' ? (
+              <div className="mb-4">
+                <RentalTimer booking={booking} />
+              </div>
+            ) : null
+          ) : (booking.serviceTimer && ['RUNNING', 'PAUSED'].includes(booking.serviceTimer?.status)) || (['in_progress', 'visited'].includes(booking.status?.toLowerCase()) && !['requested', 'searching'].includes(booking.status?.toLowerCase())) ? (
             <div className="mb-4">
               <LiveServiceTimer
                 booking={booking}
@@ -917,9 +999,7 @@ const BookingDetails = () => {
                 onStatusChange={loadBooking}
               />
             </div>
-          ) : (
-            <RentalTimer booking={booking} />
-          )}
+          ) : null}
 
 
           {/* Visual Progress Stepper */}
@@ -930,7 +1010,7 @@ const BookingDetails = () => {
                 <div className="flex-1">
                   <p className="font-black text-sm">Booking {booking.status.toLowerCase().replace('_', ' ')}</p>
                   <p className="text-xs text-red-600 mt-0.5">
-                    {booking.rejectionReason || 'The selected vendor was unable to take this booking.'}
+                    {booking.rejectionReason || (isRental ? 'The equipment owner was unable to accept this rental request.' : 'The selected vendor was unable to take this booking.')}
                   </p>
                 </div>
               </div>
@@ -950,53 +1030,68 @@ const BookingDetails = () => {
               <div className="flex justify-between relative z-10">
                 {/* Step 1: Booked */}
                 <div className="flex flex-col items-center gap-2 w-1/4">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${['pending', 'requested', 'searching', 'confirmed', 'assigned', 'journey_started', 'visited', 'in_progress', 'work_done', 'completed'].includes(booking.status?.toLowerCase())
-                    ? 'bg-teal-600 text-white shadow-lg shadow-teal-200' : 'bg-gray-100 text-gray-400'
-                    }`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
+                    ['pending', 'requested', 'searching', 'confirmed', 'accepted', 'assigned', 'journey_started', 'visited', 'in_progress', 'work_done', 'completed'].includes(booking.status?.toLowerCase())
+                      ? 'bg-teal-600 text-white shadow-lg shadow-teal-200' : 'bg-gray-100 text-gray-400'
+                  }`}>
                     <FiCheckCircle className="w-4 h-4" />
                   </div>
                   <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide text-center">Booked</p>
                 </div>
 
-                {/* Step 2: Assigned / Handover Prep */}
+                {/* Step 2: Handover (Rental) / Assigned (Service) */}
                 <div className="flex flex-col items-center gap-2 w-1/4">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
-                    ['assigned', 'journey_started', 'visited', 'in_progress', 'work_done', 'completed'].includes(booking.status?.toLowerCase()) ||
-                    ((booking.requiresDriver === false || booking.categoryId?.requiresDriver === false) && ['confirmed', 'accepted'].includes(booking.status?.toLowerCase())) ||
-                    (['confirmed', 'accepted'].includes(booking.status?.toLowerCase()) && (booking.serviceCategory?.toLowerCase() === 'machinery' || booking.categoryTitle?.toLowerCase() === 'machinery'))
-                    ? 'bg-teal-600 text-white shadow-lg shadow-teal-200' : 'bg-gray-100 text-gray-400'
-                    }`}>
-                    2
+                    isRental
+                      ? (['confirmed', 'accepted', 'assigned', 'in_progress', 'work_done', 'completed'].includes(booking.status?.toLowerCase())
+                          ? 'bg-teal-600 text-white shadow-lg shadow-teal-200' : 'bg-gray-100 text-gray-400')
+                      : (['assigned', 'journey_started', 'visited', 'in_progress', 'work_done', 'completed'].includes(booking.status?.toLowerCase()) ||
+                         ((booking.requiresDriver === false || booking.categoryId?.requiresDriver === false) && ['confirmed', 'accepted'].includes(booking.status?.toLowerCase())) ||
+                         (['confirmed', 'accepted'].includes(booking.status?.toLowerCase()) && (booking.serviceCategory?.toLowerCase() === 'machinery' || booking.categoryTitle?.toLowerCase() === 'machinery')))
+                          ? 'bg-teal-600 text-white shadow-lg shadow-teal-200' : 'bg-gray-100 text-gray-400'
+                  }`}>
+                    {isRental && ['in_progress', 'work_done', 'completed'].includes(booking.status?.toLowerCase()) ? <FiCheckCircle className="w-4 h-4" /> : 2}
                   </div>
                   <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide text-center">
-                    {(booking.serviceCategory?.toLowerCase() === 'machinery' || booking.categoryTitle?.toLowerCase() === 'machinery' || booking.providerType === 'MACHINERY')
-                      ? 'Dispatched'
-                      : ((booking.requiresDriver === false || booking.categoryId?.requiresDriver === false) ? 'Handover' : 'Assigned')}
+                    {isRental
+                      ? 'Handover'
+                      : ((booking.serviceCategory?.toLowerCase() === 'machinery' || booking.categoryTitle?.toLowerCase() === 'machinery' || booking.providerType === 'MACHINERY')
+                          ? 'Dispatched'
+                          : ((booking.requiresDriver === false || booking.categoryId?.requiresDriver === false) ? 'Handover' : 'Assigned'))}
                   </p>
                 </div>
 
-                {/* Step 3: In Progress */}
+                {/* Step 3: In Use (Rental) / Field Work (Service) */}
                 <div className="flex flex-col items-center gap-2 w-1/4">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${['journey_started', 'visited', 'in_progress', 'work_done', 'completed'].includes(booking.status?.toLowerCase())
-                    ? 'bg-teal-600 text-white shadow-lg shadow-teal-200' : 'bg-gray-100 text-gray-400'
-                    }`}>
-                    3
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
+                    isRental
+                      ? (['in_progress', 'work_done', 'completed'].includes(booking.status?.toLowerCase())
+                          ? 'bg-teal-600 text-white shadow-lg shadow-teal-200' : 'bg-gray-100 text-gray-400')
+                      : (['journey_started', 'visited', 'in_progress', 'work_done', 'completed'].includes(booking.status?.toLowerCase())
+                          ? 'bg-teal-600 text-white shadow-lg shadow-teal-200' : 'bg-gray-100 text-gray-400')
+                  }`}>
+                    {isRental && ['work_done', 'completed'].includes(booking.status?.toLowerCase()) ? <FiCheckCircle className="w-4 h-4" /> : 3}
                   </div>
                   <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide text-center">
-                    {(booking.serviceCategory?.toLowerCase() === 'machinery' || booking.categoryTitle?.toLowerCase() === 'machinery' || booking.providerType === 'MACHINERY')
-                      ? 'Field Work'
-                      : 'Started'}
+                    {isRental
+                      ? 'In Use'
+                      : ((booking.serviceCategory?.toLowerCase() === 'machinery' || booking.categoryTitle?.toLowerCase() === 'machinery' || booking.providerType === 'MACHINERY')
+                          ? 'Field Work'
+                          : 'Started')}
                   </p>
                 </div>
 
-                {/* Step 4: Done */}
+                {/* Step 4: Returned (Rental) / Completed (Service) */}
                 <div className="flex flex-col items-center gap-2 w-1/4">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${['work_done', 'completed'].includes(booking.status?.toLowerCase())
-                    ? 'bg-teal-600 text-white shadow-lg shadow-teal-200' : 'bg-gray-100 text-gray-400'
-                    }`}>
-                    4
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
+                    ['work_done', 'completed'].includes(booking.status?.toLowerCase())
+                      ? 'bg-teal-600 text-white shadow-lg shadow-teal-200' : 'bg-gray-100 text-gray-400'
+                  }`}>
+                    {['completed'].includes(booking.status?.toLowerCase()) ? <FiCheckCircle className="w-4 h-4" /> : 4}
                   </div>
-                  <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide text-center">Completed</p>
+                  <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide text-center">
+                    {isRental ? 'Returned' : 'Completed'}
+                  </p>
                 </div>
               </div>
               {/* Connect lines */}
@@ -1004,8 +1099,10 @@ const BookingDetails = () => {
                 <div className="h-full bg-teal-500 transition-all duration-1000" style={{
                   width:
                     ['work_done', 'completed'].includes(booking.status?.toLowerCase()) ? '100%' :
-                      ['journey_started', 'visited', 'in_progress'].includes(booking.status?.toLowerCase()) ? '66%' :
-                        (['assigned'].includes(booking.status?.toLowerCase()) || (['confirmed', 'accepted'].includes(booking.status?.toLowerCase()) && (booking.requiresDriver === false || booking.categoryId?.requiresDriver === false || booking.serviceCategory?.toLowerCase() === 'machinery'))) ? '33%' : '0%'
+                      ['in_progress'].includes(booking.status?.toLowerCase()) ? '66%' :
+                        (isRental
+                          ? (['confirmed', 'accepted', 'assigned'].includes(booking.status?.toLowerCase()) ? '33%' : '0%')
+                          : (['assigned'].includes(booking.status?.toLowerCase()) || (['confirmed', 'accepted'].includes(booking.status?.toLowerCase()) && (booking.requiresDriver === false || booking.categoryId?.requiresDriver === false || booking.serviceCategory?.toLowerCase() === 'machinery'))) ? '33%' : '0%')
                 }}></div>
               </div>
             </div>
@@ -1031,16 +1128,18 @@ const BookingDetails = () => {
                   </div>
                   <div>
                     <h3 className="text-lg font-black text-gray-900 leading-tight">
-                      {booking.vendorId ? 'Waiting for Vendor Confirmation' : 'Finding Your Expert'}
+                      {isRental ? 'Waiting for Owner Confirmation' : (booking.vendorId ? 'Waiting for Vendor Confirmation' : 'Finding Your Expert')}
                     </h3>
                     <p className="text-[10px] font-bold text-amber-600 uppercase tracking-widest">
-                      {booking.vendorId ? 'Request Sent' : 'Search in Progress'}
+                      {isRental ? 'Rental Request Sent' : (booking.vendorId ? 'Request Sent' : 'Search in Progress')}
                     </p>
                   </div>
                 </div>
 
                 <p className="text-sm text-gray-600 mb-4 leading-relaxed font-medium">
-                  {booking.vendorId ? (
+                  {isRental ? (
+                    <>Your equipment rental request was sent directly to <span className="font-bold text-gray-900">{booking.vendorId?.businessName || booking.vendorId?.name || 'the equipment owner'}</span>. You will receive an immediate confirmation once accepted.</>
+                  ) : booking.vendorId ? (
                     <>Your booking request was sent directly to <span className="font-bold text-gray-900">{booking.vendorId?.businessName || booking.vendorId?.name || 'the selected vendor'}</span>. You will receive an immediate confirmation once they accept.</>
                   ) : (
                     <>We've sent your request to verified experts in your area. You'll be notified automatically as soon as someone accepts.</>
@@ -1050,15 +1149,178 @@ const BookingDetails = () => {
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-50 rounded-xl p-3 border border-gray-100">
                     <span className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-ping"></span>
-                    <span>{booking.vendorId ? 'Vendor has 15 minutes to respond' : 'Awaiting response...'}</span>
+                    <span>{booking.vendorId ? 'Owner has 15 minutes to respond' : 'Awaiting response...'}</span>
                   </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Service Partner Card */}
-          {(booking.workerId || booking.assignedTo || booking.vendorId) && ['accepted', 'confirmed', 'assigned', 'journey_started', 'visited', 'in_progress', 'work_done'].includes(booking.status?.toLowerCase()) && (
+          {/* Equipment Rental: Owner & Pickup Hub */}
+          {isRental && (booking.vendorId || booking.equipmentId) && (
+            <div className="bg-white rounded-3xl p-5 shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-gray-100 space-y-4">
+              {/* Header */}
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-teal-50 flex items-center justify-center text-teal-600 font-bold">
+                    <FiPackage className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-black uppercase tracking-wider text-gray-900">Equipment Rental Details</h3>
+                    <p className="text-[10px] text-gray-400 font-medium">Self-Pickup & Return by Farmer</p>
+                  </div>
+                </div>
+                <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-100 uppercase tracking-wider">
+                  Self Drive / Use
+                </span>
+              </div>
+
+              {/* Equipment Info */}
+              <div className="flex items-center gap-3 bg-gray-50/80 rounded-2xl p-3 border border-gray-100">
+                <div className="w-14 h-14 rounded-xl bg-white overflow-hidden border border-gray-200 shrink-0 flex items-center justify-center">
+                  {booking.equipmentId?.images?.[0] ? (
+                    <img
+                      src={toAssetUrl(booking.equipmentId.images[0])}
+                      alt={booking.equipmentId?.name || 'Equipment'}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <FiPackage className="w-6 h-6 text-gray-400" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-sm font-black text-gray-900 truncate">
+                    {booking.equipmentId?.name || booking.serviceName || 'Rental Equipment'}
+                  </h4>
+                  <p className="text-xs text-gray-500 font-medium mt-0.5">
+                    Rate: <span className="font-bold text-gray-900">₹{booking.basePrice || booking.equipmentId?.pricing?.hourly?.price || 25}</span> / {booking.rental_type === 'hourly' ? 'Hour' : booking.rental_type === 'daily' ? 'Day' : 'Slot'}
+                  </p>
+                  <p className="text-[11px] text-teal-700 font-bold mt-0.5">
+                    Duration: {booking.estimatedDuration || 1} {booking.rental_type === 'hourly' ? 'Hour(s)' : 'Day(s)'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Owner Contact */}
+              {booking.vendorId && (
+                <div className="bg-emerald-50/50 rounded-2xl p-3.5 border border-emerald-100 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-11 h-11 rounded-full bg-emerald-100 flex items-center justify-center shrink-0 border border-emerald-200 text-emerald-800 font-black text-sm">
+                      {booking.vendorId?.profilePhoto ? (
+                        <img
+                          src={toAssetUrl(booking.vendorId.profilePhoto)}
+                          alt={booking.vendorId.name}
+                          className="w-full h-full rounded-full object-cover"
+                        />
+                      ) : (
+                        (booking.vendorId.name || 'O').charAt(0).toUpperCase()
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <h4 className="text-sm font-black text-gray-900 truncate">
+                          {booking.vendorId?.businessName || booking.vendorId?.name || 'Equipment Owner'}
+                        </h4>
+                        <span className="inline-flex items-center text-[9px] font-bold text-emerald-700 bg-emerald-100 px-1 py-0.2 rounded shrink-0">
+                          Verified
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-600 font-medium mt-0.5">
+                        {booking.vendorId?.phone || 'Contact Available'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {booking.vendorId?.phone && (
+                    <a
+                      href={`tel:${booking.vendorId.phone}`}
+                      className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm shadow-emerald-600/20 transition-all shrink-0"
+                    >
+                      <FiPhone className="w-3.5 h-3.5" />
+                      <span>Call Owner</span>
+                    </a>
+                  )}
+                </div>
+              )}
+
+              {/* Pickup Address & Directions */}
+              {(() => {
+                const ownerAddr = booking.vendorId?.address?.fullAddress ||
+                  booking.vendorId?.address?.addressLine1 ||
+                  booking.equipmentId?.pickupLocation?.address ||
+                  (typeof booking.vendorId?.address === 'string' ? booking.vendorId.address : null);
+                const lat = booking.vendorId?.address?.lat || booking.equipmentId?.pickupLocation?.lat;
+                const lng = booking.vendorId?.address?.lng || booking.equipmentId?.pickupLocation?.lng;
+                const mapQuery = (lat && lng) ? `${lat},${lng}` : encodeURIComponent(ownerAddr || 'Satna, Madhya Pradesh');
+
+                return (
+                  <div className="bg-slate-50 rounded-2xl p-3.5 border border-slate-100 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <FiMapPin className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Equipment Pickup Location</p>
+                          <p className="text-xs font-bold text-gray-800 leading-snug mt-0.5">
+                            {ownerAddr || 'Owner Registered Location (Satna, MP)'}
+                          </p>
+                        </div>
+                      </div>
+                      <a
+                        href={`https://maps.google.com/maps?q=${mapQuery}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 rounded-lg text-[11px] font-bold border border-slate-200 flex items-center gap-1 shadow-2xs shrink-0 transition-all"
+                      >
+                        <FiMapPin className="w-3 h-3 text-red-500" />
+                        <span>Directions</span>
+                      </a>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Scheduled Timing & Return Deadline */}
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="bg-indigo-50/60 rounded-xl p-2.5 border border-indigo-100/80">
+                  <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-wide">Pickup Time</p>
+                  <p className="font-black text-gray-900 mt-0.5">
+                    {formatDate(booking.scheduledDate)}
+                  </p>
+                  <p className="text-[11px] text-gray-600 font-medium">
+                    {booking.scheduledTime || booking.timeSlot?.start || '12:00 PM'}
+                  </p>
+                </div>
+                <div className="bg-amber-50/60 rounded-xl p-2.5 border border-amber-100/80">
+                  <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wide">Return Deadline</p>
+                  <p className="font-black text-gray-900 mt-0.5">
+                    {booking.startedAt
+                      ? (() => {
+                          const start = new Date(booking.startedAt).getTime();
+                          const durMs = (booking.estimatedDuration || 1) * (booking.rental_type === 'daily' ? 86400000 : 3600000);
+                          const deadline = new Date(start + durMs);
+                          return deadline.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+                        })()
+                      : formatDate(booking.scheduledDate)
+                    }
+                  </p>
+                  <p className="text-[11px] text-gray-600 font-medium">
+                    {booking.startedAt
+                      ? (() => {
+                          const start = new Date(booking.startedAt).getTime();
+                          const durMs = (booking.estimatedDuration || 1) * (booking.rental_type === 'daily' ? 86400000 : 3600000);
+                          const deadline = new Date(start + durMs);
+                          return deadline.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+                        })()
+                      : (booking.timeSlot?.end || (booking.scheduledTime ? booking.scheduledTime.split('-')[1]?.trim() : '01:00 PM'))
+                    }
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Service Partner Card (Only for non-rental bookings) */}
+          {!isRental && (booking.workerId || booking.assignedTo || booking.vendorId) && ['accepted', 'confirmed', 'assigned', 'journey_started', 'visited', 'in_progress', 'work_done'].includes(booking.status?.toLowerCase()) && (
             <div className="bg-white rounded-2xl p-3.5 shadow-[0_4px_16px_rgb(0,0,0,0.04)] border border-gray-100 transition-all hover:shadow-[0_4px_16px_rgb(0,0,0,0.08)]">
               <div className="flex justify-between items-center mb-3">
                 {['accepted', 'confirmed', 'assigned', 'journey_started', 'visited', 'in_progress'].includes(booking.status?.toLowerCase()) ? (
@@ -1147,7 +1409,11 @@ const BookingDetails = () => {
                   let otpTitle = '';
                   let otpDesc = '';
 
-                  if (booking.status?.toLowerCase() === 'journey_started' && booking.visitOtp) {
+                  if (isRental) {
+                    otpValue = booking.driver_start_otp || booking.visitOtp;
+                    otpTitle = 'Pickup Handover OTP';
+                    otpDesc = 'Share with owner at pickup to verify & collect equipment';
+                  } else if (booking.status?.toLowerCase() === 'journey_started' && booking.visitOtp) {
                     otpValue = booking.visitOtp;
                     otpTitle = 'Arrival OTP';
                     otpDesc = 'Share when professional arrives';
@@ -1214,13 +1480,15 @@ const BookingDetails = () => {
                         <div className="flex items-center justify-center gap-1.5 text-white text-[11px]">
                           <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse shadow-[0_0_6px_rgba(74,222,128,0.5)] shrink-0"></span>
                           <p className="font-medium text-center">
-                            {isAgri 
-                              ? (['journey_started', 'visited'].includes(booking.status?.toLowerCase())
-                                  ? `${serviceLabel} & operator en route` 
-                                  : `${serviceLabel} & operator ready to start`)
-                              : ((booking.requiresDriver === false || booking.categoryId?.requiresDriver === false) 
-                                ? 'Ready for equipment handover' 
-                                : 'Waiting for professional to arrive')}
+                            {isRental
+                              ? 'Show this OTP to owner at pickup location to collect equipment'
+                              : isAgri 
+                                ? (['journey_started', 'visited'].includes(booking.status?.toLowerCase())
+                                    ? `${serviceLabel} & operator en route` 
+                                    : `${serviceLabel} & operator ready to start`)
+                                : ((booking.requiresDriver === false || booking.categoryId?.requiresDriver === false) 
+                                  ? 'Ready for equipment handover' 
+                                  : 'Waiting for professional to arrive')}
                           </p>
                         </div>
                       </div>
@@ -1501,12 +1769,16 @@ const BookingDetails = () => {
                   </div>
                   <div>
                     <h3 className="text-sm text-white font-bold leading-tight">
-                      {isAgri 
-                        ? 'Field Service Completion OTP' 
-                        : ((booking.requiresDriver === false || booking.categoryId?.requiresDriver === false) ? 'Return Verification' : 'Completion Verification')}
+                      {isRental
+                        ? 'Equipment Return OTP'
+                        : isAgri 
+                          ? 'Field Service Completion OTP' 
+                          : ((booking.requiresDriver === false || booking.categoryId?.requiresDriver === false) ? 'Return Verification' : 'Completion Verification')}
                     </h3>
                     <p className="text-teal-50 text-[10px] font-medium opacity-80 uppercase tracking-wider leading-tight">
-                      {isAgri ? 'Service End OTP' : ((booking.requiresDriver === false || booking.categoryId?.requiresDriver === false) ? 'Return OTP' : 'Verification OTP')}
+                      {isRental
+                        ? 'Return OTP'
+                        : (isAgri ? 'Service End OTP' : ((booking.requiresDriver === false || booking.categoryId?.requiresDriver === false) ? 'Return OTP' : 'Verification OTP'))}
                     </p>
                   </div>
                 </div>
@@ -1535,11 +1807,13 @@ const BookingDetails = () => {
                 </div>
 
                 <p className="text-center text-[10px] text-teal-100 font-medium bg-black/10 rounded-lg py-1.5 px-2.5 border border-white/5 leading-relaxed">
-                  {isAgri
-                    ? `Share with the ${serviceLabel.toLowerCase()} operator ONLY after field work finishes to stop the live timer.`
-                    : ((booking.requiresDriver === false || booking.categoryId?.requiresDriver === false)
-                        ? "Share ONLY after equipment is returned and you've verified its condition."
-                        : "Share ONLY after equipment has finished and you've verified the work.")
+                  {isRental
+                    ? "Share with the equipment owner ONLY after returning the equipment in good condition to stop billing."
+                    : isAgri
+                      ? `Share with the ${serviceLabel.toLowerCase()} operator ONLY after field work finishes to stop the live timer.`
+                      : ((booking.requiresDriver === false || booking.categoryId?.requiresDriver === false)
+                          ? "Share ONLY after equipment is returned and you've verified its condition."
+                          : "Share ONLY after equipment has finished and you've verified the work.")
                   }
                 </p>
               </div>
@@ -1579,20 +1853,22 @@ const BookingDetails = () => {
                   <div className="absolute top-4 left-4 right-4 flex justify-between pointer-events-none">
                     <div className="bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-xl shadow-sm border border-white/50 flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_10px_rgba(59₹30,246,0.5)]"></span>
-                      <span className="text-xs font-bold text-gray-700">Destination</span>
+                      <span className="text-xs font-bold text-gray-700">{isRental ? 'Farm / Work Destination' : 'Destination'}</span>
                     </div>
                   </div>
 
                   {/* Track Button Overlay - Always visible but distinct */}
-                  <div className="absolute inset-0 flex items-center justify-center bg-transparent pointer-events-none">
-                    <div className="pointer-events-auto bg-white text-gray-900 px-5 py-2.5 rounded-full text-sm font-bold flex items-center gap-2 shadow-lg hover:scale-105 active:scale-95 transition-all border border-gray-100" onClick={() => navigate(`/user/booking/${booking.parentRequestId || booking._id || booking.id}/track`)}>
-                      <FiMapPin className="w-4 h-4 text-red-500" /> View on Map
+                  {!isRental && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-transparent pointer-events-none">
+                      <div className="pointer-events-auto bg-white text-gray-900 px-5 py-2.5 rounded-full text-sm font-bold flex items-center gap-2 shadow-lg hover:scale-105 active:scale-95 transition-all border border-gray-100" onClick={() => navigate(`/user/booking/${booking.parentRequestId || booking._id || booking.id}/track`)}>
+                        <FiMapPin className="w-4 h-4 text-red-500" /> View on Map
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* Dedicated Track Button */}
-                {['confirmed', 'assigned', 'journey_started', 'visited', 'in_progress'].includes(booking.status?.toLowerCase()) && (
+                {!isRental && ['confirmed', 'assigned', 'journey_started', 'visited', 'in_progress'].includes(booking.status?.toLowerCase()) && (
                   <button
                     onClick={() => navigate(`/user/booking/${booking.parentRequestId || booking._id || booking.id}/track`)}
                     className="w-full py-4 bg-gradient-to-r from-gray-900 to-gray-800 text-white rounded-2xl font-bold shadow-lg shadow-gray-200 active:scale-95 transition-all flex items-center justify-center gap-3 hover:shadow-xl"

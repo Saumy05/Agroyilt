@@ -1243,8 +1243,9 @@ const getBookingById = async (req, res) => {
       .select('+visitOtp +paymentOtp +driver_start_otp +driver_end_otp +start_kilometer_photo +end_kilometer_photo') // Include secure OTPs and trip photos
       .populate('userId', 'name phone email')
       .populate('vendorId', 'name businessName phone email address profilePhoto')
+      .populate('equipmentId', 'name modelNumber year description images pricing listingType pickupLocation address')
       .populate('serviceId', 'title description iconUrl images')
-      .populate('categoryId', 'title slug requiresDriver')
+      .populate('categoryId', 'title slug requiresDriver fulfillmentMode')
       .populate('workerId', 'name phone rating totalJobs location profilePhoto');
 
     if (!booking) {

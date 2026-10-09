@@ -126,9 +126,10 @@ const getBookingById = async (req, res) => {
       ]
     })
       .populate('userId', 'name phone email profilePhoto')
-      .populate('vendorId', 'name businessName phone email')
+      .populate('vendorId', 'name businessName phone email address profilePhoto')
+      .populate('equipmentId', 'name modelNumber year description images pricing listingType pickupLocation address')
       .populate('serviceId', 'title description iconUrl images')
-      .populate('categoryId', 'title slug trackingType requiresDriver')
+      .populate('categoryId', 'title slug trackingType requiresDriver fulfillmentMode')
       .populate('workerId', 'name phone rating totalJobs completedJobs');
 
     if (!booking) {
