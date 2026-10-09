@@ -295,9 +295,14 @@ const FarmerRequestDetail = () => {
                 </p>
                 <p className="text-sm font-bold text-slate-700">
                   {request.bookingType === 'DAILY'
-                    ? 'Full Day (Daily Rate)'
-                    : `${request.startTime || '00:00'} - ${request.endTime || '00:00'}`}
+                    ? '9-Hr Shift (8h work + 1h lunch break)'
+                    : `${request.startTime || '00:00'} - ${request.endTime || '00:00'} (${Math.round((request.durationMinutes || 60) / 60)}h active work)`}
                 </p>
+                {request.bookingType === 'DAILY' && (
+                  <p className="text-[11px] font-semibold text-emerald-700">
+                    Report by {request.reportingTime || '09:00 AM'}
+                  </p>
+                )}
               </div>
             </div>
 

@@ -102,6 +102,16 @@ const workerService = {
     return response.data;
   },
 
+  startBreak: async (assignmentId) => {
+    const response = await api.post(`/workers/assignments/${assignmentId}/start-break`);
+    return response.data;
+  },
+
+  resumeBreak: async (assignmentId) => {
+    const response = await api.post(`/workers/assignments/${assignmentId}/resume-break`);
+    return response.data;
+  },
+
   // ── Daily Booking Multi-day Lifecycle ──
   startDailyDay: async (assignmentId) => {
     const response = await api.post(`/workers/assignments/${assignmentId}/daily/start-day`);

@@ -234,6 +234,18 @@ confirmFarmerRequest: async (id, accept) => {
     const response = await api.post(`/users/group-request/${id}/generate-completion-otp`);
     return response.data;
   },
+
+  /** Farmer starts a 1-hour lunch break for an assignment */
+  startBreak: async (requestId, assignmentId) => {
+    const response = await api.post(`/users/farmer-worker-request/${requestId}/assignment/${assignmentId}/start-break`);
+    return response.data;
+  },
+
+  /** Farmer resumes work early after a lunch break for an assignment */
+  resumeBreak: async (requestId, assignmentId) => {
+    const response = await api.post(`/users/farmer-worker-request/${requestId}/assignment/${assignmentId}/resume-break`);
+    return response.data;
+  },
 };
 
 export default workerBookingService;

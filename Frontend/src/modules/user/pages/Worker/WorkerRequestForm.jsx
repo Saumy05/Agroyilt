@@ -268,7 +268,42 @@ const WorkerRequestForm = () => {
   const [hasUserEditedTitle, setHasUserEditedTitle] = useState(false);
   const [hasUserEditedDesc, setHasUserEditedDesc] = useState(false);
 
-  const today = new Date().toISOString().split('T')[0];
+  // Local calendar date helper
+  const getLocalDateString = (d = new Date()) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const today = getLocalDateString(new Date());
+
+  const getTomorrowDateString = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return getLocalDateString(d);
+  };
+  const tomorrow = getTomorrowDateString();
+
+  // If currently after 18:00 (6 PM), same-day daily farm work is closed; advance min daily start date to tomorrow
+  const isLateEvening = new Date().getHours() >= 18;
+  const minDailyStartDate = isLateEvening ? tomorrow : today;
+  // If after 23:00, same-day hourly work has closed; advance min hourly date to tomorrow
+  const isLateNight = new Date().getHours() >= 23;
+  const minHourlyDate = isLateNight ? tomorrow : today;
+
+  // Calculates minimum allowed upcoming time for today with buffer (default 30 mins)
+  const getMinTimeForToday = (bufferMinutes = 30) => {
+    const now = new Date();
+    const roundedNow = new Date(now.getTime() + bufferMinutes * 60000);
+    const rem = roundedNow.getMinutes() % 15;
+    if (rem !== 0) {
+      roundedNow.setMinutes(roundedNow.getMinutes() + (15 - rem));
+    }
+    const h = roundedNow.getHours();
+    const m = roundedNow.getMinutes();
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  };
 
   const getDefaultStartTime = () => {
     const now = new Date();
@@ -295,7 +330,7 @@ const WorkerRequestForm = () => {
     durationHours:   '1',
     endTime:         defaultEndTime,
     // DAILY fields
-    startDate:       '',
+    startDate:       isLateEvening ? tomorrow : '',
     numberOfDays:    '1',
     reportingTime:   '09:00',
     // Rates
@@ -399,6 +434,31 @@ const WorkerRequestForm = () => {
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
   };
 
+  const handleDateChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => {
+      const next = { ...prev, [name]: value };
+      // If switching to today, auto-adjust time if previously selected time has already passed
+      if (value === today) {
+        const minTime = getMinTimeForToday(30);
+        if (name === 'scheduledDate' && (!prev.startTime || prev.startTime < minTime)) {
+          next.startTime = minTime;
+          next.endTime = calculateEndTime(minTime, prev.durationHours || 1);
+          toast.success(`Start time adjusted to ${formatTime12H(minTime)} (earliest available today)`, { id: 'time-adj-toast' });
+        }
+        if (name === 'startDate' && (!prev.reportingTime || prev.reportingTime < minTime)) {
+          next.reportingTime = minTime;
+          toast.success(`Reporting time adjusted to ${formatTime12H(minTime)} (earliest available today)`, { id: 'time-adj-toast' });
+        }
+      }
+      return next;
+    });
+
+    if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
+    if (name === 'scheduledDate' && errors.startTime) setErrors(prev => ({ ...prev, startTime: '' }));
+    if (name === 'startDate' && errors.reportingTime) setErrors(prev => ({ ...prev, reportingTime: '' }));
+  };
+
   const handleStartTimeChange = (e) => {
     const val = e.target.value;
     const computedEnd = calculateEndTime(val, formData.durationHours || 1);
@@ -407,8 +467,41 @@ const WorkerRequestForm = () => {
       startTime: val,
       endTime: computedEnd
     }));
+
+    if (formData.scheduledDate === today && val) {
+      const minTime = getMinTimeForToday(30);
+      if (val < minTime) {
+        setErrors(prev => ({
+          ...prev,
+          startTime: `Selected time (${formatTime12H(val)}) has already passed today. Earliest available start is ${formatTime12H(minTime)}.`
+        }));
+        return;
+      }
+    }
+
     if (errors.startTime) setErrors(prev => ({ ...prev, startTime: '' }));
     if (errors.endTime) setErrors(prev => ({ ...prev, endTime: '' }));
+  };
+
+  const handleReportingTimeChange = (e) => {
+    const val = e.target.value;
+    setFormData(prev => ({
+      ...prev,
+      reportingTime: val
+    }));
+
+    if (formData.startDate === today && val) {
+      const minTime = getMinTimeForToday(30);
+      if (val < minTime) {
+        setErrors(prev => ({
+          ...prev,
+          reportingTime: `Reporting time (${formatTime12H(val)}) has already passed today. Earliest available time is ${formatTime12H(minTime)}.`
+        }));
+        return;
+      }
+    }
+
+    if (errors.reportingTime) setErrors(prev => ({ ...prev, reportingTime: '' }));
   };
 
   const handleEndTimeChange = (e) => {
@@ -490,17 +583,36 @@ const WorkerRequestForm = () => {
       e.requiredWorkers = 'Enter a valid positive number of workers.';
 
     if (formData.bookingType === 'DAILY') {
-      if (!formData.startDate)
+      if (!formData.startDate) {
         e.startDate = 'Please select a start date.';
+      } else if (formData.startDate < today) {
+        e.startDate = 'Start date cannot be in the past.';
+      } else if (isLateEvening && formData.startDate === today) {
+        e.startDate = `It is evening (${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}). Same-day daily bookings are closed; please choose tomorrow (${formatToDDMMYYYY(tomorrow)}) or later.`;
+      }
+
       const days = parseInt(formData.numberOfDays, 10);
       if (!formData.numberOfDays || isNaN(days) || days < 1)
         e.numberOfDays = 'Number of days must be at least 1.';
-      if (!formData.reportingTime)
+
+      if (!formData.reportingTime) {
         e.reportingTime = 'Please choose what time workers should arrive each day.';
+      } else if (formData.startDate === today) {
+        const minTimeToday = getMinTimeForToday(30);
+        if (formData.reportingTime < minTimeToday) {
+          e.reportingTime = `Reporting time has already passed for today. Earliest available reporting time is ${formatTime12H(minTimeToday)}, or please select tomorrow.`;
+        }
+      }
     } else {
       // HOURLY
-      if (!formData.scheduledDate)
+      if (!formData.scheduledDate) {
         e.scheduledDate = 'Please select a date.';
+      } else if (formData.scheduledDate < today) {
+        e.scheduledDate = 'Scheduled date cannot be in the past.';
+      } else if (isLateNight && formData.scheduledDate === today) {
+        e.scheduledDate = `It is late night. Same-day hourly bookings are closed; please choose tomorrow (${formatToDDMMYYYY(tomorrow)}) or later.`;
+      }
+
       if (!formData.startTime)
         e.startTime = 'Start time is required.';
       if (!formData.endTime)
@@ -513,18 +625,10 @@ const WorkerRequestForm = () => {
         }
       }
 
-      if (formData.scheduledDate && formData.scheduledDate === today && formData.startTime && formData.endTime) {
-        const now = new Date();
-        const nowMins = now.getHours() * 60 + now.getMinutes();
-        const [sh, sm] = formData.startTime.split(':').map(Number);
-        const [eh, em] = formData.endTime.split(':').map(Number);
-        const startMins = sh * 60 + (sm || 0);
-        const endMins = eh * 60 + (em || 0);
-        const isOvernight = endMins < startMins;
-
-        // If daytime shift and window has already elapsed today
-        if (!isOvernight && endMins <= nowMins) {
-          e.startTime = 'This scheduled window has already passed for today. Please select an upcoming start time.';
+      if (formData.scheduledDate && formData.scheduledDate === today && formData.startTime) {
+        const minTimeToday = getMinTimeForToday(30);
+        if (formData.startTime < minTimeToday) {
+          e.startTime = `Start time cannot be in the past. Earliest available start time for today is ${formatTime12H(minTimeToday)}.`;
         }
       }
     }
@@ -885,7 +989,7 @@ const WorkerRequestForm = () => {
                       className="relative cursor-pointer group"
                       onClick={(e) => {
                         const input = e.currentTarget.querySelector('input[type="date"]');
-                        try { input?.showPicker(); } catch (err) { input?.focus(); }
+                        try { input?.showPicker(); } catch { input?.focus(); }
                       }}
                     >
                       {/* Visible formatted DD/MM/YYYY display */}
@@ -904,16 +1008,16 @@ const WorkerRequestForm = () => {
                         type="date"
                         name="startDate"
                         id="daily-start-date"
-                        min={today}
+                        min={minDailyStartDate}
                         value={formData.startDate}
-                        onChange={handleChange}
+                        onChange={handleDateChange}
                         onClick={(e) => {
-                          try { e.target.showPicker(); } catch (err) {}
+                          try { e.target.showPicker(); } catch { /* ignore */ }
                         }}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault();
-                            try { e.target.showPicker(); } catch (err) {}
+                            try { e.target.showPicker(); } catch { /* ignore */ }
                           }
                         }}
                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
@@ -950,11 +1054,23 @@ const WorkerRequestForm = () => {
                       type="time"
                       name="reportingTime"
                       id="daily-reporting-time"
+                      min={formData.startDate === today ? getMinTimeForToday(30) : undefined}
                       value={formData.reportingTime}
-                      onChange={handleChange}
+                      onChange={handleReportingTimeChange}
                       className={`w-full bg-slate-50/80 border rounded-xl px-3 py-2 text-xs sm:text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white ${errors.reportingTime ? 'border-red-300' : 'border-slate-200'}`}
                     />
-                    <p className="text-[10px] text-slate-400 mt-0.5">Workers should arrive by this time every day.</p>
+                    {formData.startDate === today ? (
+                      <p className="text-[10px] text-amber-600 font-semibold mt-0.5 flex items-center gap-1">
+                        <span>⏱️</span>
+                        <span>Today's earliest arrival: {formatTime12H(getMinTimeForToday(30))}</span>
+                      </p>
+                    ) : isLateEvening && !formData.startDate ? (
+                      <p className="text-[10px] text-slate-500 mt-0.5">
+                        🌙 Evening notice: Daily shifts start tomorrow onwards.
+                      </p>
+                    ) : (
+                      <p className="text-[10px] text-slate-400 mt-0.5">Workers should arrive by this time every day.</p>
+                    )}
                     <FieldError name="reportingTime" />
                   </div>
                 </div>
@@ -967,7 +1083,7 @@ const WorkerRequestForm = () => {
                       className="relative cursor-pointer group"
                       onClick={(e) => {
                         const input = e.currentTarget.querySelector('input[type="date"]');
-                        try { input?.showPicker(); } catch (err) { input?.focus(); }
+                        try { input?.showPicker(); } catch { input?.focus(); }
                       }}
                     >
                       {/* Visible formatted DD/MM/YYYY display */}
@@ -986,16 +1102,16 @@ const WorkerRequestForm = () => {
                         type="date"
                         name="scheduledDate"
                         id="hourly-scheduled-date"
-                        min={today}
+                        min={minHourlyDate}
                         value={formData.scheduledDate}
-                        onChange={handleChange}
+                        onChange={handleDateChange}
                         onClick={(e) => {
-                          try { e.target.showPicker(); } catch (err) {}
+                          try { e.target.showPicker(); } catch { /* ignore */ }
                         }}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault();
-                            try { e.target.showPicker(); } catch (err) {}
+                            try { e.target.showPicker(); } catch { /* ignore */ }
                           }
                         }}
                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
@@ -1020,12 +1136,19 @@ const WorkerRequestForm = () => {
                             type="time"
                             name="startTime"
                             id="hourly-start-time"
+                            min={formData.scheduledDate === today ? getMinTimeForToday(30) : undefined}
                             value={formData.startTime}
                             onChange={handleStartTimeChange}
                             step="900"
                             className={`w-full bg-slate-50/80 border rounded-xl pl-9 pr-2.5 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white ${errors.startTime ? 'border-red-300' : 'border-slate-200'}`}
                           />
                         </div>
+                        {formData.scheduledDate === today && (
+                          <p className="text-[10px] text-amber-600 font-semibold mt-1 flex items-center gap-1">
+                            <span>⏱️</span>
+                            <span>Today's earliest start: {formatTime12H(getMinTimeForToday(30))}</span>
+                          </p>
+                        )}
                         <FieldError name="startTime" />
                       </div>
 

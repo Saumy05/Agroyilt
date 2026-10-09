@@ -227,6 +227,15 @@ const getShiftSummary = (startTime, endTime, hourlyRate, workersCount, durationH
   };
 };
 
+const formatTime12H = (hhmm) => {
+  if (!hhmm) return '';
+  const [h, m] = hhmm.split(':').map(Number);
+  if (isNaN(h)) return hhmm;
+  const period = h >= 12 ? 'PM' : 'AM';
+  const displayH = h % 12 || 12;
+  return `${displayH}:${String(m || 0).padStart(2, '0')} ${period}`;
+};
+
 const GroupRequestForm = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -234,6 +243,38 @@ const GroupRequestForm = () => {
   const [loading, setLoading] = useState(false);
   const [hasUserEditedTitle, setHasUserEditedTitle] = useState(false);
   const [hasUserEditedDesc, setHasUserEditedDesc] = useState(false);
+
+  // Local calendar date helpers
+  const getLocalDateString = (d = new Date()) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const today = getLocalDateString(new Date());
+
+  const getTomorrowDateString = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return getLocalDateString(d);
+  };
+  const tomorrow = getTomorrowDateString();
+
+  const isLateNight = new Date().getHours() >= 23;
+  const minScheduledDate = isLateNight ? tomorrow : today;
+
+  const getMinTimeForToday = (bufferMinutes = 30) => {
+    const now = new Date();
+    const roundedNow = new Date(now.getTime() + bufferMinutes * 60000);
+    const rem = roundedNow.getMinutes() % 15;
+    if (rem !== 0) {
+      roundedNow.setMinutes(roundedNow.getMinutes() + (15 - rem));
+    }
+    const h = roundedNow.getHours();
+    const m = roundedNow.getMinutes();
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  };
 
   const [formData, setFormData] = useState({
     requiredWorkers: '',
@@ -315,6 +356,19 @@ const GroupRequestForm = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (formData.scheduledDate < today) {
+      toast.error('Scheduled date cannot be in the past.', { id: 'group-req-toast' });
+      return;
+    }
+
+    if (formData.scheduledDate === today && formData.startTime) {
+      const minTime = getMinTimeForToday(30);
+      if (formData.startTime < minTime) {
+        toast.error(`Start time cannot be in the past. Earliest start for today is ${formatTime12H(minTime)}.`, { id: 'group-req-toast' });
+        return;
+      }
+    }
+
     if (formData.rateUnit === 'hourly' && formData.startTime && formData.endTime) {
       const [sh, sm] = formData.startTime.split(':').map(Number);
       const [eh, em] = formData.endTime.split(':').map(Number);
@@ -488,7 +542,7 @@ const GroupRequestForm = () => {
                   className="relative cursor-pointer group"
                   onClick={(e) => {
                     const input = e.currentTarget.querySelector('input[type="date"]');
-                    try { input?.showPicker(); } catch (err) { input?.focus(); }
+                    try { input?.showPicker(); } catch { input?.focus(); }
                   }}
                 >
                   {/* Visible formatted DD/MM/YYYY display */}
@@ -504,16 +558,29 @@ const GroupRequestForm = () => {
                     type="date"
                     name="scheduledDate"
                     id="group-scheduled-date"
-                    min={new Date().toISOString().split('T')[0]}
+                    min={minScheduledDate}
                     value={formData.scheduledDate}
-                    onChange={handleChange}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFormData(prev => {
+                        const next = { ...prev, scheduledDate: val };
+                        if (val === today) {
+                          const minTime = getMinTimeForToday(30);
+                          if (prev.startTime && prev.startTime < minTime) {
+                            next.startTime = minTime;
+                            toast.success(`Start time adjusted to ${formatTime12H(minTime)} for today`, { id: 'group-time-adj' });
+                          }
+                        }
+                        return next;
+                      });
+                    }}
                     onClick={(e) => {
-                      try { e.target.showPicker(); } catch (err) {}
+                      try { e.target.showPicker(); } catch { /* ignore */ }
                     }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
-                        try { e.target.showPicker(); } catch (err) {}
+                        try { e.target.showPicker(); } catch { /* ignore */ }
                       }
                     }}
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
@@ -534,10 +601,26 @@ const GroupRequestForm = () => {
                     required
                     type="time"
                     name="startTime"
+                    min={formData.scheduledDate === today ? getMinTimeForToday(30) : undefined}
                     value={formData.startTime}
-                    onChange={handleChange}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (formData.scheduledDate === today && val) {
+                        const minTime = getMinTimeForToday(30);
+                        if (val < minTime) {
+                          toast.error(`Selected time (${formatTime12H(val)}) has already passed today. Earliest is ${formatTime12H(minTime)}.`, { id: 'group-time-adj' });
+                        }
+                      }
+                      handleChange(e);
+                    }}
                     className="w-full bg-slate-50/80 border border-slate-200 rounded-xl px-2.5 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
                   />
+                  {formData.scheduledDate === today && (
+                    <p className="text-[10px] text-amber-600 font-semibold mt-1 flex items-center gap-1">
+                      <span>⏱️</span>
+                      <span>Earliest start: {formatTime12H(getMinTimeForToday(30))}</span>
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="text-[11px] font-bold text-slate-600 mb-1 block">End Time *</label>

@@ -839,9 +839,16 @@ const WorkerBookingRequestAlertModal = ({ isOpen, requestData, onClose, onReques
                         {requestData.bookingType === 'DAILY' ? 'Daily Schedule' : 'Date & Time'}
                       </p>
                       <p className="text-xs font-bold text-slate-800 leading-snug mt-0.5">
-                        {requestData.bookingType === 'DAILY'
-                          ? `${requestData.numberOfDays || 1} Day(s) • Starts ${requestData.startDate ? new Date(requestData.startDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) : (requestData.scheduledDate ? new Date(requestData.scheduledDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) : 'Soon')}`
-                          : `${requestData.scheduledDate ? new Date(requestData.scheduledDate).toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Today'} • ${requestData.startTime || 'Flexible'}${requestData.endTime ? ` - ${requestData.endTime}` : ''}`}
+                        {requestData.bookingType === 'DAILY' ? (
+                          <>
+                            <span>{requestData.numberOfDays || 1} Day(s) • Starts {requestData.startDate ? new Date(requestData.startDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) : (requestData.scheduledDate ? new Date(requestData.scheduledDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) : 'Soon')}</span>
+                            <span className="block text-[10px] text-amber-800 font-black mt-0.5">
+                              ⏱️ 9-Hr Shift (8 hrs work + 1 hr lunch break) • Report by {requestData.reportingTime || '09:00 AM'}
+                            </span>
+                          </>
+                        ) : (
+                          `${requestData.scheduledDate ? new Date(requestData.scheduledDate).toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Today'} • ${requestData.startTime || 'Flexible'}${requestData.endTime ? ` - ${requestData.endTime}` : ''}`
+                        )}
                       </p>
                     </div>
                   </div>

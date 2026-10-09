@@ -46,6 +46,29 @@ const ActiveWorkStopwatch = ({ job }) => {
 
   const startDisplay = (job?.workStartedAt ? new Date(job.workStartedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : null) || (job?.startedAt ? new Date(job.startedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'Recently');
 
+  if (job?.breakStatus === 'ON_BREAK') {
+    return (
+      <div className="bg-gradient-to-r from-amber-600 via-amber-700 to-amber-800 text-white rounded-2xl p-4 mb-4 shadow-lg flex items-center justify-between border border-amber-400/40 animate-fadeIn">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center text-white backdrop-blur-sm">
+            <span className="text-xl">☕</span>
+          </div>
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-300 animate-ping" />
+              <p className="text-[11px] font-black uppercase tracking-wider text-amber-200">1-Hour Lunch Break Active</p>
+            </div>
+            <p className="text-sm font-bold text-white mt-0.5">Work timer paused • Auto-resumes in 60m</p>
+          </div>
+        </div>
+        <div className="text-right text-xs text-amber-100">
+          <p className="font-semibold text-[10px] uppercase tracking-wider">Productive Work</p>
+          <p className="font-mono font-bold text-white text-base">{elapsed}</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white rounded-2xl p-4 mb-4 shadow-lg flex items-center justify-between border border-amber-300/30 animate-fadeIn">
       <div className="flex items-center gap-3">
@@ -68,6 +91,39 @@ const ActiveWorkStopwatch = ({ job }) => {
   );
 };
 
+// Countdown for Worker Lunch Break
+const WorkerBreakCountdown = ({ breakStartedAt, breakMaxMinutes = 60, onComplete }) => {
+  const [remainingSecs, setRemainingSecs] = useState(0);
+
+  useEffect(() => {
+    if (!breakStartedAt) return;
+    const startMs = new Date(breakStartedAt).getTime();
+    const totalMs = (breakMaxMinutes || 60) * 60 * 1000;
+
+    const tick = () => {
+      const elapsedMs = Date.now() - startMs;
+      const leftMs = Math.max(0, totalMs - elapsedMs);
+      const secs = Math.floor(leftMs / 1000);
+      setRemainingSecs(secs);
+      if (secs <= 0 && onComplete) onComplete();
+    };
+
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [breakStartedAt, breakMaxMinutes, onComplete]);
+
+  const mins = String(Math.floor(remainingSecs / 60)).padStart(2, '0');
+  const secs = String(remainingSecs % 60).padStart(2, '0');
+
+  return (
+    <div className="font-mono font-black text-amber-100 text-base tracking-wider">
+      {mins}:{secs}
+      <span className="text-[10px] text-amber-200 font-sans block font-semibold">remaining</span>
+    </div>
+  );
+};
+
 // Events the assignment lifecycle broadcasts to `booking_req:<parentRequestId>`
 const ASSIGNMENT_LIFECYCLE_EVENTS = [
   'assignment_journey_started',
@@ -76,7 +132,9 @@ const ASSIGNMENT_LIFECYCLE_EVENTS = [
   'assignment_work_submitted',
   'assignment_completion_otp_verified',
   'assignment_day_completed',
-  'assignment_settled'
+  'assignment_settled',
+  'assignment_break_started',
+  'assignment_break_resumed'
 ];
 
 const LIFECYCLE_STEPS = [
@@ -376,6 +434,50 @@ const JobDetails = () => {
       }
     } catch (error) {
       toastManager.error(error.response?.data?.message || 'Failed to stop work');
+    } finally {
+      setActionLoading(false);
+      actionLoadingRef.current = false;
+    }
+  };
+
+  const handleStartBreak = async () => {
+    if (actionLoadingRef.current) return;
+    const targetId = job?.assignmentId || id;
+    if (!targetId) return;
+    actionLoadingRef.current = true;
+    try {
+      setActionLoading(true);
+      const response = await workerService.startBreak(targetId);
+      if (response?.success) {
+        toastManager.success('1-hour break started. Relax and recharge!');
+        fetchJobDetails();
+      } else {
+        toastManager.error(response?.message || 'Failed to start break');
+      }
+    } catch (error) {
+      toastManager.error(error.response?.data?.message || 'Failed to start break');
+    } finally {
+      setActionLoading(false);
+      actionLoadingRef.current = false;
+    }
+  };
+
+  const handleResumeBreak = async () => {
+    if (actionLoadingRef.current) return;
+    const targetId = job?.assignmentId || id;
+    if (!targetId) return;
+    actionLoadingRef.current = true;
+    try {
+      setActionLoading(true);
+      const response = await workerService.resumeBreak(targetId);
+      if (response?.success) {
+        toastManager.success('Work resumed successfully!');
+        fetchJobDetails();
+      } else {
+        toastManager.error(response?.message || 'Failed to resume work');
+      }
+    } catch (error) {
+      toastManager.error(error.response?.data?.message || 'Failed to resume work');
     } finally {
       setActionLoading(false);
       actionLoadingRef.current = false;
@@ -690,15 +792,48 @@ const JobDetails = () => {
     // (Fix 1 on backend guarantees assignmentId is always set for assignment jobs).
     // Also guard with raw workStatus as a belt-and-braces fallback.
     if (statusLower === 'in_progress' && (isAssignmentJob || job?.workStatus === 'IN_PROGRESS')) {
+      const isOnBreak = job?.breakStatus === 'ON_BREAK';
+
+      if (isOnBreak) {
+        return (
+          <div className={`space-y-2.5 ${isSticky ? '' : 'mb-4'}`}>
+            <button
+              onClick={handleResumeBreak}
+              disabled={actionLoading}
+              className="w-full py-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 shadow-xl active:scale-95 transition-all text-lg"
+              style={{ background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)' }}
+            >
+              {actionLoading ? 'Loading...' : <>RESUME WORK EARLY <FiCheck className="w-5 h-5" /></>}
+            </button>
+            <p className="text-center text-xs text-amber-700 font-bold bg-amber-50 py-2 px-3 rounded-xl border border-amber-200">
+              ☕ 1-Hour Break Active • Auto-resumes in 60 mins or tap above to resume now
+            </p>
+          </div>
+        );
+      }
+
       return (
-        <button
-          onClick={handleStopWork}
-          disabled={actionLoading}
-          className={`w-full py-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 shadow-xl active:scale-95 transition-all text-lg ${isSticky ? '' : 'mb-4'}`}
-          style={{ background: 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)' }}
-        >
-          {actionLoading ? 'Loading...' : (isDaily ? <>STOP TODAY'S WORK <FiXCircle className="w-5 h-5" /></> : <>STOP WORK <FiXCircle className="w-5 h-5" /></>)}
-        </button>
+        <div className={`space-y-2.5 ${isSticky ? '' : 'mb-4'}`}>
+          <div className="flex gap-2.5">
+            <button
+              type="button"
+              onClick={handleStartBreak}
+              disabled={actionLoading}
+              className="flex-1 py-3.5 rounded-xl font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-300 shadow-md active:scale-95 transition-all text-sm flex items-center justify-center gap-1.5"
+            >
+              <FiClock className="w-4 h-4 text-amber-600" />
+              <span>{actionLoading ? 'Loading...' : '☕ 1-HR BREAK'}</span>
+            </button>
+            <button
+              onClick={handleStopWork}
+              disabled={actionLoading}
+              className="flex-1 py-3.5 rounded-xl font-bold text-white shadow-xl active:scale-95 transition-all text-sm flex items-center justify-center gap-2"
+              style={{ background: 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)' }}
+            >
+              {actionLoading ? 'Loading...' : (isDaily ? <>STOP TODAY <FiXCircle className="w-4 h-4" /></> : <>STOP WORK <FiXCircle className="w-4 h-4" /></>)}
+            </button>
+          </div>
+        </div>
       );
     }
 
@@ -872,6 +1007,41 @@ const JobDetails = () => {
                   ₹{job.agreedRate || job.finalAmount}/day
                 </span>
               </div>
+
+              {/* Shift info badge */}
+              <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-3 border border-white/20 text-xs text-white mb-3 flex items-center justify-between">
+                <div>
+                  <span className="font-black text-amber-200 uppercase text-[10px] block tracking-wider">Shift Structure</span>
+                  <span className="font-bold text-sm">9-Hour Daily Shift</span>
+                  <span className="text-[11px] text-amber-100 block">8 hrs work + 1 hr lunch break</span>
+                </div>
+                <div className="text-right">
+                  <span className="font-black text-amber-200 uppercase text-[10px] block tracking-wider">Reporting</span>
+                  <span className="font-bold text-sm">{job.reportingTime || '09:00 AM'}</span>
+                </div>
+              </div>
+
+              {/* Live Break Indicator if ON_BREAK */}
+              {job?.breakStatus === 'ON_BREAK' && (
+                <div className="bg-amber-950/40 backdrop-blur-md rounded-2xl p-3 border border-amber-300/40 text-xs text-white mb-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">☕</span>
+                      <div>
+                        <span className="font-black text-amber-200 block text-xs uppercase tracking-wider">Lunch Break Active</span>
+                        <span className="text-[11px] text-amber-100">60-Min Rest Period</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <WorkerBreakCountdown
+                        breakStartedAt={job.breakStartedAt}
+                        breakMaxMinutes={job.breakMaxMinutes || 60}
+                        onComplete={handleResumeBreak}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {job.isDecreased && (
                 <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-3 border border-white/20 text-xs text-amber-100 mb-3">

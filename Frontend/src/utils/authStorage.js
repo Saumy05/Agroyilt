@@ -418,6 +418,15 @@ export const getUserData = (role) => {
 };
 
 /**
+ * Get user profile object for a role (alias for getUserData)
+ * @param {'user' | 'worker' | 'vendor' | 'admin'} [role] 
+ * @returns {object|null}
+ */
+export const getUser = (role) => {
+  return getUserData(role);
+};
+
+/**
  * Update user profile in session without overwriting tokens
  * @param {'user' | 'worker' | 'vendor' | 'admin'} role 
  * @param {object} updatedProfile 
@@ -486,6 +495,7 @@ export default {
   getAccessToken,
   getRefreshToken,
   getUserData,
+  getUser,
   updateUserData,
   isAuthenticated,
   isAnyAuthenticated
