@@ -4,10 +4,11 @@ import { Helmet } from 'react-helmet-async';
 import {
   FiArrowLeft, FiClock, FiCheck, FiX,
   FiRefreshCcw, FiUsers, FiUser, FiPlus,
-  FiAlertCircle, FiNavigation
+  FiAlertCircle, FiNavigation, FiCreditCard, FiDollarSign
 } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import workerBookingService from '../../../../services/workerBookingService';
+import authStorage from '../../../../utils/authStorage';
 
 // ── Status styles ───────────────────────────────────────────────────────────
 
@@ -20,6 +21,8 @@ const STATUS_COLORS = {
   leader_accepted:             'bg-blue-100 text-blue-700 border-blue-200',
   collecting_members:          'bg-purple-100 text-purple-700 border-purple-200',
   selection_pending:           'bg-indigo-100 text-indigo-700 border-indigo-200',
+  awaiting_payment:            'bg-emerald-100 text-emerald-800 border-emerald-300',
+  payment_pending:             'bg-amber-100 text-amber-800 border-amber-300',
   rejected:                    'bg-red-100 text-red-700 border-red-200',
   cancelled:                   'bg-slate-100 text-slate-700 border-slate-200',
   expired:                     'bg-slate-100 text-slate-700 border-slate-200',
@@ -34,6 +37,8 @@ const STATUS_LABELS = {
   leader_accepted:             'Leader Accepted',
   collecting_members:          'Gathering Team',
   selection_pending:           'Leader Selecting',
+  awaiting_payment:            'Ready for Payment',
+  payment_pending:             'Payment Pending',
   rejected:                    'No Workers Available',
   cancelled:                   'Cancelled',
   expired:                     'Expired',
@@ -54,6 +59,7 @@ const MyWorkerRequests = () => {
   // Legacy negotiation state
   const [counterRate, setCounterRate] = useState('');
   const [activeNegotiationId, setActiveNegotiationId] = useState(null);
+  const [processingPaymentId, setProcessingPaymentId] = useState(null);
 
   const fetchRequests = useCallback(async () => {
     try {
@@ -123,6 +129,104 @@ const MyWorkerRequests = () => {
       fetchRequests();
     } catch {
       toast.error('Cancel failed');
+    }
+  };
+
+  const loadRazorpay = () => {
+    return new Promise((resolve) => {
+      if (window.Razorpay) return resolve(true);
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
+
+  const handleConfirmGroupCash = async (id) => {
+    if (!window.confirm('Confirm booking with Cash on Completion?\n\nYou will pay cash directly to the Team Leader once work is finished.')) return;
+    try {
+      setProcessingPaymentId(id);
+      toast.loading('Confirming group booking with Cash...', { id: 'cash-toast' });
+      const res = await workerBookingService.confirmGroupBookingCash(id);
+      if (res && res.success) {
+        toast.success('Group Booking Confirmed! Pay cash to Team Leader upon completion.', { id: 'cash-toast' });
+        fetchRequests();
+      } else {
+        toast.error(res?.message || 'Failed to confirm booking.', { id: 'cash-toast' });
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Failed to confirm booking with cash.', { id: 'cash-toast' });
+    } finally {
+      setProcessingPaymentId(null);
+    }
+  };
+
+  const handlePayGroupOnline = async (req) => {
+    try {
+      setProcessingPaymentId(req._id);
+      const isLoaded = await loadRazorpay();
+      if (!isLoaded) {
+        toast.error('Razorpay SDK failed to load. Are you online?');
+        setProcessingPaymentId(null);
+        return;
+      }
+
+      toast.loading('Initializing payment...', { id: 'pay-toast' });
+      const orderRes = await workerBookingService.createGroupBookingPayment(req._id);
+      if (!orderRes.success || !orderRes.data) {
+        toast.error(orderRes.message || 'Failed to initialize payment.', { id: 'pay-toast' });
+        setProcessingPaymentId(null);
+        return;
+      }
+      toast.dismiss('pay-toast');
+
+      const { orderId, amount, currency } = orderRes.data;
+      const razorpayKey = orderRes.data.key || import.meta.env.VITE_RAZORPAY_KEY_ID;
+
+      const options = {
+        key: razorpayKey,
+        amount: amount.toString(),
+        currency: currency || 'INR',
+        name: 'Agroyilt Team Booking',
+        description: `Group Booking for ${req.workTitle}`,
+        order_id: orderId,
+        handler: async function (response) {
+          try {
+            toast.loading('Verifying payment...', { id: 'verify-toast' });
+            await workerBookingService.verifyGroupBookingPayment(req._id, {
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_signature: response.razorpay_signature,
+            });
+            toast.success('Payment successful! Group Booking Confirmed.', { id: 'verify-toast' });
+            fetchRequests();
+          } catch (verifyErr) {
+            toast.error(verifyErr?.response?.data?.message || 'Payment verification failed', { id: 'verify-toast' });
+          } finally {
+            setProcessingPaymentId(null);
+          }
+        },
+        prefill: {
+          name: authStorage.getUserData('user')?.name || 'Farmer',
+          contact: authStorage.getUserData('user')?.phone || '',
+        },
+        theme: {
+          color: '#059669',
+        },
+        modal: {
+          ondismiss: function () {
+            toast.error('Payment cancelled');
+            setProcessingPaymentId(null);
+          }
+        }
+      };
+
+      const razorpayInstance = new window.Razorpay(options);
+      razorpayInstance.open();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Failed to start payment.', { id: 'pay-toast' });
+      setProcessingPaymentId(null);
     }
   };
 
@@ -224,6 +328,9 @@ const MyWorkerRequests = () => {
     const worker   = isSingle ? req.workerId : req.teamLeaderId;
     const lastNeg  = req.negotiation?.[req.negotiation.length - 1];
     const isMyTurn = req.status === 'pending' && lastNeg && lastNeg.by !== 'farmer';
+    const isReadyForPayment = !isSingle && (req.status === 'awaiting_payment' || req.status === 'payment_pending');
+    const isGroupConfirmed = !isSingle && req.status === 'confirmed';
+    const snap = req.financialSnapshot || {};
 
     return (
       <div key={req._id} className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden mb-4">
@@ -266,6 +373,66 @@ const MyWorkerRequests = () => {
               </p>
             </div>
           </div>
+
+          {/* Group Booking Payment Section */}
+          {isReadyForPayment && (
+            <div className="mt-4 border-t border-slate-100 pt-4">
+              <div className="bg-emerald-50/80 border border-emerald-200/60 rounded-2xl p-3.5 mb-3">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-black text-emerald-900">
+                    Team Ready: {snap.selectedWorkerCount || req.selectedWorkers?.length || req.requiredWorkers} Worker(s) Selected
+                  </span>
+                  <span className="text-sm font-black text-emerald-800">
+                    Total: ₹{snap.totalPayable || ((snap.agreedRatePerWorker || req.farmerOfferedRatePerWorker) * (snap.selectedWorkerCount || req.requiredWorkers || 1))}
+                  </span>
+                </div>
+                <p className="text-[11px] text-emerald-700">
+                  Rate: ₹{snap.agreedRatePerWorker || req.agreedRatePerWorker || req.farmerOfferedRatePerWorker}/{req.rateUnit || 'day'} &bull; Platform fee included
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  disabled={processingPaymentId === req._id}
+                  onClick={() => handleConfirmGroupCash(req._id)}
+                  className="py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all disabled:opacity-50"
+                >
+                  <FiDollarSign size={14} />
+                  <span>Pay Cash on Completion</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={processingPaymentId === req._id}
+                  onClick={() => handlePayGroupOnline(req)}
+                  className="py-2.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all disabled:opacity-50"
+                >
+                  <FiCreditCard size={14} />
+                  <span>Pay Online (UPI / Card)</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Group Booking Confirmed Status */}
+          {isGroupConfirmed && (
+            <div className="mt-4 border-t border-slate-100 pt-3 flex items-center justify-between">
+              <div>
+                <span className="text-xs font-bold text-emerald-700 flex items-center gap-1">
+                  <FiCheck size={14} className="stroke-[3]" /> Team Confirmed & Dispatched
+                </span>
+                <p className="text-[10px] text-slate-500 font-medium mt-0.5">
+                  Payment: {req.paymentMethod === 'cash' ? '💵 Cash to Team Leader on Completion' : '💳 Paid Online'}
+                </p>
+              </div>
+              <button
+                onClick={() => navigate('/user/my-bookings')}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-xs active:scale-95 transition-all"
+              >
+                View in Bookings
+              </button>
+            </div>
+          )}
 
           {isMyTurn && (
             <div className="mt-4 border-t border-slate-100 pt-4">

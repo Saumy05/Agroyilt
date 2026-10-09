@@ -39,8 +39,9 @@ router.get('/public-profile/:workerId', authenticate, isWorker, teamController.g
 // 11. Upgrade to Team Leader
 router.post('/upgrade-to-leader', authenticate, isWorker, teamController.upgradeToLeader);
 
-// 12. Add Offline Member (A6)
+// 12. Add & Update Offline Member (A6)
 router.post('/offline-member', authenticate, isWorker, teamController.addOfflineMember);
+router.put('/offline-member/:memberId', authenticate, isWorker, teamController.updateOfflineMember);
 
 module.exports = router;
 

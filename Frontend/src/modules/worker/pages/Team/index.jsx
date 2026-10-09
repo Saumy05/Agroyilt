@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   FiArrowLeft, FiUsers, FiUserPlus, FiUserCheck, FiUserX, 
   FiCheck, FiX, FiLogOut, FiUser, FiStar, FiCalendar, FiArrowRight,
-  FiPhone, FiAward, FiActivity, FiLayers
+  FiPhone, FiAward, FiActivity, FiLayers, FiEdit2
 } from 'react-icons/fi';
 import { workerTheme as themeColors } from '../../../../theme';
 import api from '../../../../services/api';
@@ -29,9 +29,10 @@ const WorkerTeam = () => {
   // Current user's profile
   const [profile, setProfile] = useState(null);
 
-  // Offline member registration modal (A6)
+  // Offline member registration & edit modal (A6)
   const [isOfflineModalOpen, setIsOfflineModalOpen] = useState(false);
   const [submittingOffline, setSubmittingOffline] = useState(false);
+  const [editingMemberId, setEditingMemberId] = useState(null);
   const [offlineForm, setOfflineForm] = useState({
     name: '',
     phone: '',
@@ -46,10 +47,42 @@ const WorkerTeam = () => {
     'Sowing & Planting',
     'Plowing & Tillage',
     'Weeding',
+    'Fertilizing',
     'Pesticide Spraying',
+    'Irrigation',
+    'Land Preparation',
+    'Threshing',
+    'Loading & Unloading',
     'Tractor Operation',
-    'Irrigation'
+    'Pruning & Trimming',
+    'Fruit & Vegetable Picking',
+    'Cattle & Livestock Care',
+    'Polyhouse Work',
+    'Nursery Work'
   ];
+
+  const [customSkillInput, setCustomSkillInput] = useState('');
+
+  const openAddOfflineModal = () => {
+    setEditingMemberId(null);
+    setOfflineForm({ name: '', phone: '', skills: ['General Labor'], dailyRate: '', experienceYears: 1 });
+    setIsOfflineModalOpen(true);
+  };
+
+  const openEditOfflineModal = (member) => {
+    setEditingMemberId(member._id);
+    const skillsList = Array.isArray(member.skills) && member.skills.length > 0 
+      ? member.skills 
+      : (member.serviceCategory ? [member.serviceCategory] : ['General Labor']);
+    setOfflineForm({
+      name: member.name || '',
+      phone: member.phone || '',
+      skills: skillsList,
+      dailyRate: member.dailyRate || '',
+      experienceYears: member.experienceYears || 1
+    });
+    setIsOfflineModalOpen(true);
+  };
 
   const toggleSkill = (skill) => {
     setOfflineForm(prev => {
@@ -63,7 +96,17 @@ const WorkerTeam = () => {
     });
   };
 
-  const handleAddOfflineMember = async (e) => {
+  const handleAddCustomSkill = (e) => {
+    e.preventDefault();
+    const trimmed = customSkillInput.trim();
+    if (!trimmed) return;
+    if (!offlineForm.skills.includes(trimmed)) {
+      setOfflineForm(prev => ({ ...prev, skills: [...prev.skills, trimmed] }));
+    }
+    setCustomSkillInput('');
+  };
+
+  const handleSaveOfflineMember = async (e) => {
     e.preventDefault();
     if (!offlineForm.name.trim()) {
       toastManager.error('Please enter member name');
@@ -71,22 +114,31 @@ const WorkerTeam = () => {
     }
     try {
       setSubmittingOffline(true);
-      const res = await api.post('/workers/team/offline-member', {
+      const payload = {
         name: offlineForm.name.trim(),
         phone: offlineForm.phone.trim() || undefined,
         skills: offlineForm.skills,
         dailyRate: offlineForm.dailyRate ? Number(offlineForm.dailyRate) : undefined,
         experienceYears: offlineForm.experienceYears ? Number(offlineForm.experienceYears) : 1
-      });
+      };
+
+      let res;
+      if (editingMemberId) {
+        res = await api.put(`/workers/team/offline-member/${editingMemberId}`, payload);
+      } else {
+        res = await api.post('/workers/team/offline-member', payload);
+      }
+
       if (res.data.success) {
-        toastManager.success(res.data.message || 'Offline member added successfully!');
+        toastManager.success(res.data.message || (editingMemberId ? 'Offline member updated successfully!' : 'Offline member added successfully!'));
         setIsOfflineModalOpen(false);
+        setEditingMemberId(null);
         setOfflineForm({ name: '', phone: '', skills: ['General Labor'], dailyRate: '', experienceYears: 1 });
         setProfile(prev => ({ ...prev, workerType: 'TEAM_LEADER' }));
         fetchData();
       }
     } catch (err) {
-      toastManager.error(err.response?.data?.message || 'Failed to add offline member');
+      toastManager.error(err.response?.data?.message || 'Failed to save offline member');
     } finally {
       setSubmittingOffline(false);
     }
@@ -476,7 +528,7 @@ const WorkerTeam = () => {
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setIsOfflineModalOpen(true)}
+                  onClick={openAddOfflineModal}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-xl shadow-sm flex items-center gap-1.5 transition-colors"
                 >
                   <FiUserPlus size={13} /> + Offline Member
@@ -566,14 +618,25 @@ const WorkerTeam = () => {
                           ) : null}
                         </div>
 
-                        {/* Remove Action */}
-                        <button 
-                          onClick={() => removeMember(member._id)}
-                          className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition-colors shrink-0"
-                          title="Remove from Team"
-                        >
-                          <FiUserX size={18} />
-                        </button>
+                        {/* Actions */}
+                        <div className="flex items-center gap-1 shrink-0">
+                          {member.isOfflineMember && isTeamLeader && (
+                            <button 
+                              onClick={() => openEditOfflineModal(member)}
+                              className="text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 p-2 rounded-xl transition-colors"
+                              title="Edit Member Details & Skills"
+                            >
+                              <FiEdit2 size={16} />
+                            </button>
+                          )}
+                          <button 
+                            onClick={() => removeMember(member._id)}
+                            className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition-colors"
+                            title="Remove from Team"
+                          >
+                            <FiUserX size={18} />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -733,15 +796,19 @@ const WorkerTeam = () => {
       {/* Add Offline Member Modal (A6) */}
       {isOfflineModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100">
               <div className="flex items-center gap-2.5">
                 <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                  <FiUserPlus size={20} />
+                  {editingMemberId ? <FiEdit2 size={20} /> : <FiUserPlus size={20} />}
                 </div>
                 <div>
-                  <h3 className="font-black text-slate-800 text-base">Add Offline Member</h3>
-                  <p className="text-xs text-slate-400">No smartphone or app required</p>
+                  <h3 className="font-black text-slate-800 text-base">
+                    {editingMemberId ? 'Edit Offline Member' : 'Add Offline Member'}
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    {editingMemberId ? 'Update details, wages, or skills' : 'No smartphone or app required'}
+                  </p>
                 </div>
               </div>
               <button
@@ -752,7 +819,7 @@ const WorkerTeam = () => {
               </button>
             </div>
 
-            <form onSubmit={handleAddOfflineMember} className="space-y-4 mt-4">
+            <form onSubmit={handleSaveOfflineMember} className="space-y-4 mt-4">
               <div>
                 <label className="block text-xs font-black uppercase tracking-wider text-slate-600 mb-1.5">
                   Full Name <span className="text-red-500">*</span>
@@ -809,11 +876,16 @@ const WorkerTeam = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-black uppercase tracking-wider text-slate-600 mb-1.5">
-                  Skills & Specialties
-                </label>
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {PRESET_SKILLS.map(skill => {
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-black uppercase tracking-wider text-slate-600">
+                    Skills & Specialties
+                  </label>
+                  <span className="text-[10px] text-emerald-600 font-bold">
+                    {offlineForm.skills.length} selected
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 mb-2.5 max-h-48 overflow-y-auto p-1 bg-slate-50/50 rounded-xl border border-slate-100">
+                  {Array.from(new Set([...PRESET_SKILLS, ...offlineForm.skills])).map(skill => {
                     const selected = offlineForm.skills.includes(skill);
                     return (
                       <button
@@ -822,14 +894,32 @@ const WorkerTeam = () => {
                         onClick={() => toggleSkill(skill)}
                         className={`text-xs px-2.5 py-1 rounded-lg font-bold border transition-colors ${
                           selected
-                            ? 'bg-emerald-600 text-white border-emerald-600'
-                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
                         }`}
                       >
                         {selected ? '✓ ' : '+ '}{skill}
                       </button>
                     );
                   })}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Other skill (type & press add)..."
+                    value={customSkillInput}
+                    onChange={e => setCustomSkillInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleAddCustomSkill(e); }}
+                    className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddCustomSkill}
+                    disabled={!customSkillInput.trim()}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 transition-colors disabled:opacity-40"
+                  >
+                    + Add
+                  </button>
                 </div>
               </div>
 
@@ -846,7 +936,9 @@ const WorkerTeam = () => {
                   disabled={submittingOffline}
                   className="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-md hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
                 >
-                  {submittingOffline ? 'Adding...' : 'Add to Team'}
+                  {submittingOffline 
+                    ? (editingMemberId ? 'Saving...' : 'Adding...') 
+                    : (editingMemberId ? 'Save Changes' : 'Add to Team')}
                 </button>
               </div>
             </form>

@@ -795,3 +795,56 @@ exports.addOfflineMember = async (req, res) => {
     session.endSession();
   }
 };
+
+/**
+ * Update an existing offline member managed by this team leader
+ */
+exports.updateOfflineMember = async (req, res) => {
+  try {
+    const leaderId = req.userId;
+    const { memberId } = req.params;
+    const { name, phone, skills, dailyRate, hourlyRate, experienceYears, gender } = req.body;
+
+    const member = await Worker.findOne({
+      _id: memberId,
+      isOfflineMember: true,
+      managedByLeaderId: leaderId
+    });
+
+    if (!member) {
+      return res.status(404).json({ success: false, message: 'Offline member not found or not managed by you.' });
+    }
+
+    if (name && name.trim()) member.name = name.trim();
+    if (phone !== undefined) {
+      const cleanPhone = phone && phone.trim() ? phone.trim() : null;
+      if (cleanPhone && cleanPhone !== member.phone) {
+        const existing = await Worker.findOne({ phone: cleanPhone, _id: { $ne: memberId } });
+        if (existing) {
+          return res.status(400).json({ success: false, message: `Phone ${cleanPhone} is already in use by another worker.` });
+        }
+      }
+      member.phone = cleanPhone || undefined;
+    }
+
+    if (Array.isArray(skills) && skills.length > 0) {
+      member.skills = skills.filter(Boolean);
+    }
+    if (dailyRate !== undefined && !isNaN(Number(dailyRate))) member.dailyRate = Number(dailyRate);
+    if (hourlyRate !== undefined && !isNaN(Number(hourlyRate))) member.hourlyRate = Number(hourlyRate);
+    if (experienceYears !== undefined && !isNaN(Number(experienceYears))) member.experienceYears = Number(experienceYears);
+    if (gender) member.gender = gender;
+
+    await member.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Offline member "${member.name}" updated successfully`,
+      member
+    });
+  } catch (error) {
+    console.error('updateOfflineMember error:', error);
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+

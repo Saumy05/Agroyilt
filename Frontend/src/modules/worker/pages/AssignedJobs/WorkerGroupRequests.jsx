@@ -520,6 +520,22 @@ const WorkerGroupRequests = () => {
               <p className="text-xs font-black text-emerald-800 flex items-center justify-center gap-1.5">
                 <FiCheckCircle className="text-emerald-600" /> Booking Confirmed & Workers Assigned
               </p>
+
+              {req.paymentMethod === 'cash' ? (
+                <div className="mt-2.5 p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-center">
+                  <p className="text-xs font-black text-amber-900">
+                    💵 Cash Job — Collect ₹{(req.financialSnapshot?.totalPayable || (ratePerWorker * req.requiredWorkers)).toLocaleString()} from Farmer
+                  </p>
+                  <p className="text-[11px] text-amber-700 mt-0.5">
+                    Collect cash directly upon job completion. Platform fee & commission will be debited from your Team Leader wallet.
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-2 text-center">
+                  <span className="text-[11px] font-bold text-emerald-700">💳 Paid Online via Platform</span>
+                </div>
+              )}
+
               {req.selectedWorkers?.length > 0 && (
                 <div className="mt-2 pt-2 border-t border-emerald-200/60">
                   <p className="text-[10px] font-bold text-emerald-700 uppercase mb-1">Assigned Team Members:</p>

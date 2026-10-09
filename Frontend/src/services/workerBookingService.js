@@ -210,6 +210,30 @@ confirmFarmerRequest: async (id, accept) => {
     const response = await api.delete(`/users/group-request/${id}`);
     return response.data;
   },
+
+  /** Farmer creates a Razorpay payment order for a group request */
+  createGroupBookingPayment: async (id) => {
+    const response = await api.post(`/users/group-request/${id}/create-payment`);
+    return response.data;
+  },
+
+  /** Farmer verifies Razorpay payment for a group request */
+  verifyGroupBookingPayment: async (id, paymentData) => {
+    const response = await api.post(`/users/group-request/${id}/verify-payment`, paymentData);
+    return response.data;
+  },
+
+  /** Farmer confirms group booking with Cash to Team Leader upon completion */
+  confirmGroupBookingCash: async (id) => {
+    const response = await api.post(`/users/group-request/${id}/confirm-cash`);
+    return response.data;
+  },
+
+  /** Farmer generates completion OTP for group request */
+  generateGroupCompletionOtp: async (id) => {
+    const response = await api.post(`/users/group-request/${id}/generate-completion-otp`);
+    return response.data;
+  },
 };
 
 export default workerBookingService;

@@ -103,7 +103,19 @@ const settleAssignment = async (assignmentId, { useStoredAmounts = false } = {})
 
     let cashPlatformFee = null;
     if (isCash) {
-      // The farmer paid the platform fee to the worker in cash with the wages: give it back to the app, once.
+      // Determine if this worker is an offline worker or part of a team job managed by a Team Leader
+      let debtorId = a.workerId;
+      let workerDoc = null;
+      if (a.teamLeaderId) {
+        debtorId = a.teamLeaderId;
+      } else {
+        workerDoc = await Worker.findById(a.workerId).select('name isOfflineMember managedByLeaderId');
+        if (workerDoc?.isOfflineMember && workerDoc?.managedByLeaderId) {
+          debtorId = workerDoc.managedByLeaderId;
+        }
+      }
+
+      // The farmer paid the platform fee to the worker/leader in cash with the wages: give it back to the app, once.
       // (cashPlatformFee is pre-set to 0 by the legacy cash / QR paths, which record their own cash entry.)
       cashPlatformFee = a.cashPlatformFee;
       if (cashPlatformFee === null || cashPlatformFee === undefined) {
@@ -111,40 +123,70 @@ const settleAssignment = async (assignmentId, { useStoredAmounts = false } = {})
         const exts = await IndWorkerExtension.find({ parentRequestId: a.parentRequestId, status: 'CONFIRMED' });
         const cash = buildWorkerCashCollection(a, parent, exts, { grossOverride: gross });
         cashPlatformFee = cash.platformFee;
-        // cash in hand is not wallet money: recorded so the worker sees what they received
+        // cash in hand is not wallet money: recorded for the cash collector (Team Leader if team/offline job, else worker)
         await ledger.recordPassbookOnce(`${key}_cash`, {
-          workerId: a.workerId, type: 'cash_collected', amount: cash.totalToCollect, status: 'completed', paymentMethod: 'cash',
-          description: `Cash ₹${cash.totalToCollect} received from the farmer${forJob}`, referenceId: key,
-          metadata: { ...job, type: 'cash_received', workerAmount: gross, platformFee: cashPlatformFee }
+          workerId: debtorId, type: 'cash_collected', amount: cash.totalToCollect, status: 'completed', paymentMethod: 'cash',
+          description: debtorId.toString() !== a.workerId.toString()
+            ? `Cash ₹${cash.totalToCollect} received for team member${forJob}`
+            : `Cash ₹${cash.totalToCollect} received from the farmer${forJob}`,
+          referenceId: key,
+          metadata: { ...job, type: 'cash_received', workerAmount: gross, platformFee: cashPlatformFee, memberId: a.workerId }
         });
       }
 
-      await deductCashCommissionOnce({ workerId: a.workerId, amount: commission || 0, key: `${key}_commission`, referenceId: a._id });
+      // Deduct commission and platform fee from the debtor (Team Leader if team/offline job, else worker)
+      await deductCashCommissionOnce({ workerId: debtorId, amount: commission || 0, key: `${key}_commission`, referenceId: a._id });
       await ledger.recordPassbookOnce(`${key}_commission`, {
-        workerId: a.workerId, type: 'commission_deduction', amount: commission || 0, status: 'completed', paymentMethod: 'cash',
-        description: `App commission on your pay${forJob}`, referenceId: key,
-        metadata: { ...job, type: 'cash_collection_commission', grossAmount: gross, commissionAmount: commission, netEarning: net }
+        workerId: debtorId, type: 'commission_deduction', amount: commission || 0, status: 'completed', paymentMethod: 'cash',
+        description: debtorId.toString() !== a.workerId.toString()
+          ? `App commission for team member's job${forJob}`
+          : `App commission on your pay${forJob}`,
+        referenceId: key,
+        metadata: { ...job, type: 'cash_collection_commission', grossAmount: gross, commissionAmount: commission, netEarning: net, memberId: a.workerId }
       });
 
       if (cashPlatformFee > 0) {
-        await deductCashCommissionOnce({ workerId: a.workerId, amount: cashPlatformFee, key: `${key}_platform_fee`, referenceId: a._id });
+        await deductCashCommissionOnce({ workerId: debtorId, amount: cashPlatformFee, key: `${key}_platform_fee`, referenceId: a._id });
         await ledger.recordPassbookOnce(`${key}_platform_fee`, {
-          workerId: a.workerId, type: 'platform_fee', amount: cashPlatformFee, status: 'completed', paymentMethod: 'cash',
-          description: `Platform fee the farmer paid you in cash${forJob}`, referenceId: key,
-          metadata: { ...job, type: 'cash_collection_platform_fee', grossAmount: gross, platformFee: cashPlatformFee }
+          workerId: debtorId, type: 'platform_fee', amount: cashPlatformFee, status: 'completed', paymentMethod: 'cash',
+          description: debtorId.toString() !== a.workerId.toString()
+            ? `Platform fee collected from farmer for team member${forJob}`
+            : `Platform fee the farmer paid you in cash${forJob}`,
+          referenceId: key,
+          metadata: { ...job, type: 'cash_collection_platform_fee', grossAmount: gross, platformFee: cashPlatformFee, memberId: a.workerId }
         });
       }
+      await require('./workerDuesService').syncDuesRestriction(debtorId);
+
+      // Emit wallet update to the debtor (Team Leader)
+      if (debtorId.toString() !== a.workerId.toString()) {
+        emit(`worker_${debtorId}`, 'wallet_balance_updated', { assignmentId: String(a._id), reason: 'settlement', timestamp: new Date() });
+        emit(`worker:${debtorId}`, 'wallet_balance_updated', { assignmentId: String(a._id), reason: 'settlement', timestamp: new Date() });
+      }
     } else {
-      await ledger.applyOnce({ ownerId: a.workerId, ownerModel: 'Worker', amount: net, key: `${key}_credit`, reason: 'earnings_credit', referenceId: a._id });
+      // Online payment: if offline worker, credit earnings to the Team Leader so leader can disburse cash
+      let recipientId = a.workerId;
+      const targetWorker = await Worker.findById(a.workerId).select('name isOfflineMember managedByLeaderId');
+      if (targetWorker?.isOfflineMember && (a.teamLeaderId || targetWorker?.managedByLeaderId)) {
+        recipientId = a.teamLeaderId || targetWorker.managedByLeaderId;
+      }
+
+      await ledger.applyOnce({ ownerId: recipientId, ownerModel: 'Worker', amount: net, key: `${key}_credit`, reason: 'earnings_credit', referenceId: a._id });
       await ledger.recordPassbookOnce(`${key}_credit`, {
-        workerId: a.workerId, type: 'earnings_credit', amount: net, status: 'completed', paymentMethod: 'wallet',
-        description: `Earnings${forJob} (after ₹${commission} app commission)`, referenceId: key,
-        metadata: { ...job, grossAmount: gross, commissionAmount: commission, netEarning: net }
+        workerId: recipientId, type: 'earnings_credit', amount: net, status: 'completed', paymentMethod: 'wallet',
+        description: recipientId.toString() !== a.workerId.toString()
+          ? `Earnings for offline member ${targetWorker?.name || ''}${forJob} (after ₹${commission} commission)`
+          : `Earnings${forJob} (after ₹${commission} app commission)`,
+        referenceId: key,
+        metadata: { ...job, grossAmount: gross, commissionAmount: commission, netEarning: net, memberId: a.workerId }
       });
       // money just landed in the wallet: pay any outstanding dues from it first
-      await require('./workerDuesService').recoverDuesFromWallet({ workerId: a.workerId, key: `${key}_dues_recovery`, referenceId: a._id });
+      await require('./workerDuesService').recoverDuesFromWallet({ workerId: recipientId, key: `${key}_dues_recovery`, referenceId: a._id });
+      if (recipientId.toString() !== a.workerId.toString()) {
+        emit(`worker_${recipientId}`, 'wallet_balance_updated', { assignmentId: String(a._id), reason: 'settlement', timestamp: new Date() });
+        emit(`worker:${recipientId}`, 'wallet_balance_updated', { assignmentId: String(a._id), reason: 'settlement', timestamp: new Date() });
+      }
     }
-    if (isCash) await require('./workerDuesService').syncDuesRestriction(a.workerId);
 
     const done = await IndWorkerAssignment.findOneAndUpdate(
       { _id: a._id, settlementStatus: 'PROCESSING' },

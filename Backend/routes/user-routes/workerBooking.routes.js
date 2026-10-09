@@ -67,5 +67,9 @@ router.post('/group-request',                          authenticate, isUser, gb.
 router.get('/group-requests',                          authenticate, isUser, gb.getMyGroupRequests);
 router.patch('/group-request/:id/respond',             authenticate, isUser, gb.farmerRespondToGroupCounter);
 router.delete('/group-request/:id',                    authenticate, isUser, gb.cancelGroupRequest);
+router.post('/group-request/:id/create-payment',        authenticate, isUser, gb.createGroupBookingPayment);
+router.post('/group-request/:id/verify-payment',        authenticate, isUser, gb.verifyGroupBookingPayment);
+router.post('/group-request/:id/confirm-cash',          authenticate, isUser, gb.confirmGroupBookingCash);
+router.post('/group-request/:id/generate-completion-otp', authenticate, isUser, gb.generateGroupCompletionOtp);
 
 module.exports = router;

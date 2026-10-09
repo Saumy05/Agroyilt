@@ -1865,3 +1865,293 @@ exports.generateGroupCompletionOtp = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Failed to generate completion OTP.' });
   }
 };
+
+/**
+ * POST /user/group-request/:id/confirm-cash
+ * Farmer confirms group booking with Cash to Team Leader on Completion.
+ * Requires: groupRequest.status in ['awaiting_payment', 'payment_pending']
+ */
+exports.confirmGroupBookingCash = async (req, res) => {
+  try {
+    const farmerId = req.user._id;
+    const request = await WorkerGroupRequest.findOne({
+      _id: req.params.id,
+      farmerId,
+      status: { $in: ['awaiting_payment', 'payment_pending'] }
+    });
+
+    if (!request) {
+      return res.status(404).json({ success: false, message: 'Group request not found or not ready for confirmation.' });
+    }
+
+    const settings = await getWorkerFinancialSettings();
+    if (settings.workerCashPaymentEnabled === false) {
+      return res.status(403).json({ success: false, message: 'Cash payment is currently disabled.' });
+    }
+
+    // Check Team Leader dues before allowing new cash booking
+    const leader = await Worker.findById(request.teamLeaderId).select('name outstandingDues isRestricted restrictionReason');
+    const maxDues = Number(settings.maxWorkerDues) || 2000;
+    if ((leader?.outstandingDues || 0) > maxDues || leader?.isRestricted) {
+      return res.status(403).json({
+        success: false,
+        message: `The Team Leader (${leader?.name || 'Leader'}) has unpaid platform dues exceeding the limit and cannot accept cash bookings. Please pay online or contact the leader.`
+      });
+    }
+
+    // Idempotency guard — skip if already confirmed
+    if (request.status === 'confirmed' && request.workerBookingRequestId) {
+      return res.json({
+        success: true,
+        message: 'Booking already confirmed.',
+        data: {
+          groupRequestId: request._id,
+          workerBookingRequestId: request.workerBookingRequestId,
+          assignmentIds: request.assignmentIds
+        }
+      });
+    }
+
+    request.paymentStatus = 'cash_pending';
+    request.paymentMethod = 'cash';
+
+    const snap = request.financialSnapshot;
+    const agreedRate = snap.agreedRatePerWorker || request.agreedRatePerWorker || request.farmerOfferedRatePerWorker;
+    const commissionRate = snap.commissionRate || 10;
+    const isDaily = request.bookingType === 'DAILY';
+    const selectedWorkerIds = request.selectedWorkers.map(id => id.toString());
+    const otpExpiry = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours
+
+    // 1. Create parent WorkerBookingRequest
+    const parentRequest = await WorkerBookingRequest.create({
+      farmerId,
+      bookingMode: 'TEAM_LEADER',
+      requestType: 'team_leader',
+      bookingType: request.bookingType || 'HOURLY',
+      teamLeaderId: request.teamLeaderId,
+      workCategory: request.workCategory,
+      workTitle: request.workTitle,
+      workDescription: request.workDescription,
+      requiredSkills: request.requiredSkills,
+      additionalInstructions: request.additionalInstructions,
+      scheduledDate: request.scheduledDate,
+      startTime: request.startTime,
+      endTime: request.endTime,
+      durationMinutes: request.durationMinutes || 60,
+      rateUnit: request.rateUnit,
+      startDate: request.startDate || null,
+      endDate: request.endDate || null,
+      numberOfDays: request.numberOfDays || null,
+      minDailyRate: request.minDailyRate || null,
+      maxDailyRate: request.maxDailyRate || null,
+      location: request.location,
+      requiredWorkers: request.requiredWorkers,
+      minRate: agreedRate,
+      maxRate: agreedRate,
+      selectedWorkerIds: selectedWorkerIds,
+      finalWorkers: selectedWorkerIds,
+      acceptedWorkersCount: selectedWorkerIds.length,
+      status: 'confirmed',
+      paymentStatus: 'cash_pending',
+      paymentMethod: 'cash',
+      financialSnapshot: {
+        maximumBudget: agreedRate,
+        selectedWorkerCount: selectedWorkerIds.length,
+        maximumWorkerAmount: snap.maximumWorkerAmount,
+        platformChargeRate: snap.platformChargeRate,
+        platformChargeAmount: snap.platformChargeAmount,
+        totalPayable: snap.totalPayable,
+        commissionRate: commissionRate,
+        currency: snap.currency || 'INR',
+        createdAt: new Date()
+      },
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+    });
+
+    // 2. Create one IndWorkerAssignment per selected worker
+    const assignmentDocs = [];
+    const bookingDocs = [];
+
+    for (const [idx, wId] of selectedWorkerIds.entries()) {
+      let grossPaise = 0;
+      let bookedDays = null;
+      const rateUnit = isDaily ? 'daily' : (request.rateUnit || 'hourly');
+
+      if (isDaily) {
+        bookedDays = Number(request.numberOfDays) || 1;
+        grossPaise = toP(agreedRate) * bookedDays;
+      } else {
+        const durationHours = (Number(request.durationMinutes) || 60) / 60;
+        grossPaise = Math.round(toP(agreedRate) * durationHours);
+      }
+
+      const commissionPaise = Math.floor((grossPaise * commissionRate) / 100);
+      const netPaise = grossPaise - commissionPaise;
+      const grossAmount = toINR(grossPaise);
+      const commissionAmount = toINR(commissionPaise);
+      const netEarning = toINR(netPaise);
+
+      const isLeader = wId.toString() === request.teamLeaderId.toString();
+      const workerType = isLeader ? 'TEAM_LEADER' : 'TEAM_MEMBER';
+
+      const rawVisitOtp = Math.floor(1000 + Math.random() * 9000).toString();
+      const visitOtpHash = crypto.createHash('sha256').update(rawVisitOtp).digest('hex');
+
+      const assignmentDoc = {
+        parentRequestId: parentRequest._id,
+        bookingType: request.bookingType || 'HOURLY',
+        farmerId,
+        workerId: wId,
+        teamLeaderId: request.teamLeaderId,
+        workerType,
+        agreedRate,
+        rateUnit,
+        creationIdempotencyKey: `grp_assign_cash_${request._id}_${wId}_${Date.now()}`,
+        assignmentStatus: 'CONFIRMED',
+        paymentMethod: 'cash',
+        isCashBooking: true,
+        journeyStatus: 'NOT_STARTED',
+        visitOtpStatus: 'PENDING',
+        workStatus: 'NOT_STARTED',
+        completionStatus: 'PENDING',
+        settlementStatus: 'PENDING',
+        locationStatus: 'UNAVAILABLE',
+        visitOtpCode: rawVisitOtp,
+        visitOtpHash,
+        visitOtpExpiresAt: otpExpiry,
+        grossAmount,
+        commissionRate,
+        commissionAmount,
+        netEarning
+      };
+
+      if (isDaily) {
+        assignmentDoc.bookedDays = bookedDays;
+        assignmentDoc.workedDays = 0;
+        assignmentDoc.currentDayIndex = 1;
+        assignmentDoc.isDecreased = false;
+        assignmentDoc.dailyLogs = [{
+          dayNumber: 1,
+          date: request.startDate ? new Date(request.startDate) : new Date(),
+          journeyStatus: 'NOT_STARTED',
+          visitOtpCode: rawVisitOtp,
+          visitOtpHash,
+          visitOtpStatus: 'PENDING',
+          visitOtpExpiresAt: otpExpiry,
+          workStatus: 'NOT_STARTED'
+        }];
+      }
+
+      assignmentDocs.push(assignmentDoc);
+
+      bookingDocs.push({
+        bookingNumber: `GRP-${Date.now()}-${idx}`,
+        userId: farmerId,
+        workerId: wId,
+        providerType: 'WORKER',
+        workerRequestId: parentRequest._id,
+        scheduledDate: isDaily ? (request.startDate || request.scheduledDate) : request.scheduledDate,
+        scheduledTime: isDaily ? '09:00' : request.startTime,
+        timeSlot: isDaily ? { start: '09:00', end: '17:00' } : { start: request.startTime, end: request.endTime },
+        serviceName: request.workTitle,
+        serviceCategory: request.workCategory || 'Worker',
+        minRate: agreedRate,
+        maxRate: agreedRate,
+        agreedRate,
+        rateUnit,
+        workerGrossEarning: grossAmount,
+        commissionRate,
+        commissionAmount,
+        workerNetEarning: netEarning,
+        finalAmount: grossAmount,
+        totalAmount: grossAmount,
+        farmerPaidAmount: 0,
+        visitOtp: rawVisitOtp,
+        address: {
+          addressLine1: request.location?.addressLine1 || '',
+          city: request.location?.city || '',
+          state: request.location?.state || '',
+          pincode: request.location?.pincode || '',
+          lat: request.location?.lat || null,
+          lng: request.location?.lng || null
+        },
+        status: 'confirmed',
+        paymentStatus: 'cash_pending',
+        paymentMethod: 'cash',
+        notes: `${request.workTitle}: ${request.workDescription || ''}`.substring(0, 500)
+      });
+    }
+
+    const createdAssignments = await IndWorkerAssignment.insertMany(assignmentDocs);
+    const createdBookings = await Booking.insertMany(bookingDocs);
+
+    for (let i = 0; i < createdAssignments.length; i++) {
+      if (createdBookings[i]) {
+        createdAssignments[i].legacyBookingId = createdBookings[i]._id;
+        await createdAssignments[i].save();
+      }
+    }
+
+    const assignmentIds = createdAssignments.map(a => a._id);
+    const bookingIds = createdBookings.map(b => b._id);
+
+    parentRequest.assignmentIds = assignmentIds;
+    parentRequest.finalBookingIds = bookingIds;
+    await parentRequest.save();
+
+    request.status = 'confirmed';
+    request.workerBookingRequestId = parentRequest._id;
+    request.assignmentIds = assignmentIds;
+    await request.save();
+
+    // Notify workers and leader
+    for (const a of createdAssignments) {
+      await notify({
+        recipientType: 'worker', recipientId: a.workerId,
+        type: 'group_booking_confirmed',
+        title: '🎉 Group Booking Confirmed (Cash on Service)!',
+        message: `Your group booking for ${request.workTitle} has been confirmed. Cash will be collected from farmer on completion.`,
+        relatedId: parentRequest._id,
+        relatedType: 'WorkerBookingRequest',
+        data: { assignmentId: a._id, groupRequestId: request._id, paymentMethod: 'cash' }
+      });
+
+      emitSafe(`worker_${a.workerId}`, 'group_booking_confirmed', {
+        groupRequestId: request._id,
+        assignmentId: a._id,
+        paymentMethod: 'cash',
+        serverTimestamp: new Date()
+      });
+    }
+
+    await notify({
+      recipientType: 'user', recipientId: farmerId,
+      type: 'group_booking_confirmed',
+      title: '🎉 Group Booking Confirmed (Pay Cash on Completion)!',
+      message: `Team of ${createdAssignments.length} confirmed for ${request.workTitle}. Pay cash directly to the Team Leader after work.`,
+      relatedId: parentRequest._id,
+      relatedType: 'WorkerBookingRequest',
+      data: { groupRequestId: request._id, paymentMethod: 'cash' }
+    });
+
+    emitSafe(`user_${farmerId}`, 'group_booking_confirmed', {
+      groupRequestId: request._id,
+      paymentMethod: 'cash',
+      serverTimestamp: new Date()
+    });
+
+    return res.json({
+      success: true,
+      message: 'Group booking confirmed with Cash on Completion.',
+      data: {
+        groupRequestId: request._id,
+        workerBookingRequestId: parentRequest._id,
+        assignmentIds: assignmentIds
+      }
+    });
+
+  } catch (err) {
+    console.error('[confirmGroupBookingCash]', err);
+    return res.status(500).json({ success: false, message: 'Failed to confirm cash booking: ' + err.message });
+  }
+};
