@@ -156,6 +156,7 @@ export const ensureIds = (catalog) => {
         : [],
     },
     categories: (catalog.categories || []).map((c) => ({
+      ...c,
       id: c.id || `ucat-${Date.now()}-${Math.random().toString(16).slice(2)}`,
       title: c.title || "",
       slug: c.slug || slugify(c.title),
@@ -176,7 +177,17 @@ export const ensureIds = (catalog) => {
       // Machinery Classification
       trackingType: c.trackingType || "none",
       requiresDriver: Boolean(c.requiresDriver),
+      adminBaseCharge: Number(c.adminBaseCharge) || 0,
       sectionType: c.sectionType || "General",
+      bookingType: c.bookingType || "VENDOR",
+      fulfillmentMode: c.fulfillmentMode || "service",
+      scope: (!c.scope || c.scope === 'GLOBAL') ? 'GLOBAL_INDIA' : c.scope,
+      stateId: c.stateId || null,
+      state: c.state || null,
+      districtId: c.districtId || null,
+      district: c.district || null,
+      subDistrictId: c.subDistrictId || null,
+      subDistrict: c.subDistrict || null,
     })),
     services: (catalog.services || []).map((s) => ({
       id: s.id || `usvc-${Date.now()}-${Math.random().toString(16).slice(2)}`,

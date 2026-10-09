@@ -57,6 +57,7 @@ const ServicesPage = ({ catalog, setCatalog, selectedCity }) => {
 
         if (categoriesRes.success) {
           mappedCategories = categoriesRes.categories.map(cat => ({
+            ...cat,
             id: (cat.id || cat._id?.$oid || cat._id) ?.toString() || "",
             title: cat.title,
             slug: cat.slug,

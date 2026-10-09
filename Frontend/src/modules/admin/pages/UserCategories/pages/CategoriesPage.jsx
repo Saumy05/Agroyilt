@@ -25,6 +25,7 @@ const categorySchema = z.object({
   sectionType: z.string().default('General'),
   trackingType: z.string().default('none'),
   bookingType: z.enum(['VENDOR', 'WORKER']).default('VENDOR'),
+  fulfillmentMode: z.enum(['service', 'rental']).default('service'),
   scope: z.enum(['GLOBAL', 'GLOBAL_INDIA', 'STATE', 'DISTRICT', 'SUB_DISTRICT']).default('GLOBAL_INDIA'),
   stateId: z.string().nullable().optional(),
   districtId: z.string().nullable().optional(),
@@ -119,6 +120,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
     adminBaseCharge: 0,
     sectionType: "General",
     bookingType: "VENDOR",
+    fulfillmentMode: "service",
     scope: "GLOBAL_INDIA",
     stateId: "",
     districtId: "",
@@ -389,6 +391,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
           adminBaseCharge: cat.adminBaseCharge || 0,
           sectionType: cat.sectionType || 'General',
           bookingType: cat.bookingType || 'VENDOR',
+          fulfillmentMode: cat.fulfillmentMode || 'service',
           scope: (!cat.scope || cat.scope === 'GLOBAL') ? 'GLOBAL_INDIA' : cat.scope,
           stateId: cat.stateId || null,
           state: cat.state || null,
@@ -398,8 +401,11 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
           subDistrict: cat.subDistrict || null
         }));
 
-        setCatalog({ ...catalog, categories: mapped });
-        saveCatalog({ ...catalog, categories: mapped });
+        setCatalog(prev => {
+          const next = { ...prev, categories: mapped };
+          saveCatalog(next);
+          return next;
+        });
       }
     } catch (error) {
       console.error('Failed to fetch categories:', error);
@@ -438,7 +444,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
           parentCategories: [], isAlwaysMain: false,
           trackingType: "none", requiresDriver: false,
           adminBaseCharge: 0,
-          sectionType: "General", bookingType: "VENDOR",
+          sectionType: "General", bookingType: "VENDOR", fulfillmentMode: "service",
           scope: "GLOBAL_INDIA", stateId: "", districtId: "", subDistrictId: ""
         });
         setGeoSearchFilter("");
@@ -468,6 +474,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
         adminBaseCharge: editing.adminBaseCharge || 0,
         sectionType: editing.sectionType || "General",
         bookingType: editing.bookingType || "VENDOR",
+        fulfillmentMode: editing.fulfillmentMode || "service",
         scope: editScope,
         stateId: targetStateId,
         districtId: targetDistrictId,
@@ -496,7 +503,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
       parentCategories: [], isAlwaysMain: false,
       trackingType: "none", requiresDriver: false,
       adminBaseCharge: 0,
-      sectionType: "General", bookingType: "VENDOR",
+      sectionType: "General", bookingType: "VENDOR", fulfillmentMode: "service",
       scope: "GLOBAL_INDIA", stateId: "", districtId: "", subDistrictId: ""
     });
     setGeoSearchFilter("");
@@ -527,6 +534,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
     requiresDriver: cat.requiresDriver || false,
     sectionType: cat.sectionType || 'General',
     bookingType: cat.bookingType || 'VENDOR',
+    fulfillmentMode: cat.fulfillmentMode || 'service',
     scope: (!cat.scope || cat.scope === 'GLOBAL') ? 'GLOBAL_INDIA' : cat.scope,
     stateId: cat.stateId || null,
     state: cat.state || null,
@@ -587,16 +595,18 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
       if (response.success) {
         if (response.category) {
           const normalizedCategory = normalizeCategory(response.category);
-          const existingCategories = catalog.categories || [];
-          const updatedCategories = editing
-            ? existingCategories.map(category =>
-              category.id === normalizedCategory.id ? normalizedCategory : category
-            )
-            : [normalizedCategory, ...existingCategories];
+          setCatalog(prev => {
+            const existingCategories = prev.categories || [];
+            const updatedCategories = editing
+              ? existingCategories.map(category =>
+                category.id === normalizedCategory.id ? normalizedCategory : category
+              )
+              : [normalizedCategory, ...existingCategories];
 
-          const nextCatalog = { ...catalog, categories: updatedCategories };
-          setCatalog(nextCatalog);
-          saveCatalog(nextCatalog);
+            const nextCatalog = { ...prev, categories: updatedCategories };
+            saveCatalog(nextCatalog);
+            return nextCatalog;
+          });
         }
 
         toast.success(editing ? "Category updated successfully" : "Category created successfully");
@@ -895,9 +905,18 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
                       </div>
                     </td>
                     <td className="py-4 px-4">
-                      <span className="inline-block whitespace-nowrap px-2 py-1 bg-purple-50 text-purple-700 rounded text-[10px] font-black border border-purple-200">
-                        {c.sectionType || 'General'}
-                      </span>
+                      <div className="flex flex-col gap-1.5 items-start">
+                        <span className="inline-block whitespace-nowrap px-2 py-1 bg-purple-50 text-purple-700 rounded text-[10px] font-black border border-purple-200">
+                          {c.sectionType || 'General'}
+                        </span>
+                        <span className={`inline-block whitespace-nowrap px-2 py-1 rounded text-[10px] font-black border ${
+                          c.fulfillmentMode === 'rental'
+                            ? 'bg-amber-50 text-amber-700 border-amber-200'
+                            : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        }`}>
+                          {c.fulfillmentMode === 'rental' ? 'Rental' : 'Service'}
+                        </span>
+                      </div>
                     </td>
                     <td className="py-4 px-4 max-w-[280px]">
                       <div className="flex flex-col gap-1.5">
@@ -1333,6 +1352,28 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
               <label htmlFor="alwaysMain" className="text-base font-bold text-gray-900">Always show in Main List</label>
             </div>
             <p className="text-[11px] text-gray-400 leading-tight pl-7">Useful for tools like "Rotavator" that should be visible even when they are sub-categories.</p>
+          </div>
+
+          <div>
+            <label className="block text-base font-bold text-gray-900 mb-2">How is this offered?</label>
+            <div className="flex gap-3">
+              {[
+                { value: 'service', title: 'Service', desc: 'Normal booking: farmer books a job, platform matches a vendor' },
+                { value: 'rental', title: 'Rental', desc: 'Farmer rents a specific machine from the rental catalog' }
+              ].map(opt => (
+                <button
+                  type="button"
+                  key={opt.value}
+                  onClick={() => setForm({ ...form, fulfillmentMode: opt.value })}
+                  className={`flex-1 p-3 rounded-xl border-2 text-left transition-all ${form.fulfillmentMode === opt.value
+                    ? 'border-primary-600 bg-primary-50 text-primary-700 shadow-sm'
+                    : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'}`}
+                >
+                  <div className="font-bold text-sm">{opt.title}</div>
+                  <div className="text-[11px] text-gray-500 leading-tight mt-0.5">{opt.desc}</div>
+                </button>
+              ))}
+            </div>
           </div>
 
           <div>

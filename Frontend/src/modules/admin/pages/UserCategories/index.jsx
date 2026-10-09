@@ -18,6 +18,7 @@ const UserCategories = () => {
         const res = await categoryService.getAll({ status: 'active' });
         if (res.success && Array.isArray(res.categories)) {
           const mapped = res.categories.map(cat => ({
+            ...cat,
             id: (cat.id || cat._id?.$oid || cat._id)?.toString() || "",
             title: cat.title,
             slug: cat.slug,
@@ -27,9 +28,21 @@ const UserCategories = () => {
             showOnHome: cat.showOnHome !== false,
             homeOrder: cat.homeOrder || 0,
             bookingType: cat.bookingType || 'VENDOR',
+            fulfillmentMode: cat.fulfillmentMode || 'service',
+            sectionType: cat.sectionType || 'General',
+            trackingType: cat.trackingType || 'none',
+            requiresDriver: Boolean(cat.requiresDriver),
+            adminBaseCharge: cat.adminBaseCharge || 0,
             parentCategory: cat.parentCategory ? (cat.parentCategory._id || cat.parentCategory.id || cat.parentCategory).toString() : null,
             parentCategories: Array.isArray(cat.parentCategories) ? cat.parentCategories.map(p => (p._id || p.id || p).toString()) : [],
-            isAlwaysMain: Boolean(cat.isAlwaysMain)
+            isAlwaysMain: Boolean(cat.isAlwaysMain),
+            scope: (!cat.scope || cat.scope === 'GLOBAL') ? 'GLOBAL_INDIA' : cat.scope,
+            stateId: cat.stateId || null,
+            state: cat.state || null,
+            districtId: cat.districtId || null,
+            district: cat.district || null,
+            subDistrictId: cat.subDistrictId || null,
+            subDistrict: cat.subDistrict || null
           }));
           setCatalog(prev => {
             const next = { ...prev, categories: mapped };

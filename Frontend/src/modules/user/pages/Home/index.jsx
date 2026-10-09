@@ -253,7 +253,8 @@ const Home = () => {
             isAlwaysMain: cat.isAlwaysMain,
             parentCategory: cat.parentCategory,
             parentCategories: cat.parentCategories,
-            bookingType: cat.bookingType || (/labour|labor|worker|manpower|service|shramik|majdoor/i.test(cat.title || '') ? 'WORKER' : 'VENDOR')
+            bookingType: cat.bookingType || (/labour|labor|worker|manpower|service|shramik|majdoor/i.test(cat.title || '') ? 'WORKER' : 'VENDOR'),
+            fulfillmentMode: cat.fulfillmentMode || 'service'
           }));
           setCategories(mappedCategories);
           if (mappedCategories.length > 0) hasData = true;
@@ -313,6 +314,12 @@ const Home = () => {
     // SOP: Direct navigation for master categories
     if (category.bookingType === 'WORKER' || slug.includes('worker')) {
       navigate('/user/worker-explorer', { state: { category } });
+      return;
+    }
+
+    // Admin-marked rental categories go to the rental catalog, not the booking flow
+    if (category.fulfillmentMode === 'rental') {
+      navigate('/user/rentals', { state: { category } });
       return;
     }
 

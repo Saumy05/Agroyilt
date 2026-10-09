@@ -349,6 +349,7 @@ const HomePage = ({ catalog, setCatalog, selectedCity }) => {
         const res = await categoryService.getAll({ status: 'active' });
         if (res.success && Array.isArray(res.categories)) {
           const mapped = res.categories.map(cat => ({
+            ...cat,
             id: (cat.id || cat._id?.$oid || cat._id)?.toString() || "",
             title: cat.title,
             slug: cat.slug,
@@ -357,7 +358,8 @@ const HomePage = ({ catalog, setCatalog, selectedCity }) => {
             hasSaleBadge: cat.hasSaleBadge || false,
             showOnHome: cat.showOnHome !== false,
             homeOrder: cat.homeOrder || 0,
-            bookingType: cat.bookingType || 'VENDOR'
+            bookingType: cat.bookingType || 'VENDOR',
+            fulfillmentMode: cat.fulfillmentMode || 'service'
           }));
           setCatalog(prev => {
             const next = { ...prev, categories: mapped };
