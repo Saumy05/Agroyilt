@@ -192,6 +192,41 @@ const formatFriendlyDay = (isoDateStr) => {
   });
 };
 
+const getShiftSummary = (startTime, endTime, hourlyRate, workersCount, durationHours) => {
+  if (!startTime || !endTime) return null;
+  const [sh, sm] = startTime.split(':').map(Number);
+  const [eh, em] = endTime.split(':').map(Number);
+  if (isNaN(sh) || isNaN(sm) || isNaN(eh) || isNaN(em)) return null;
+
+  const startMins = sh * 60 + sm;
+  const endMins = eh * 60 + em;
+
+  if (startMins === endMins) {
+    return { isZero: true };
+  }
+
+  let isOvernight = false;
+  let diff = endMins - startMins;
+  if (diff < 0) {
+    diff += 24 * 60;
+    isOvernight = true;
+  }
+
+  const hours = Number(durationHours) || Math.max(1, Math.round(diff / 60));
+  const durationText = `${hours} hr${hours > 1 ? 's' : ''}`;
+  const rate = Number(hourlyRate) || 0;
+  const workers = parseInt(workersCount, 10) || 1;
+  const estimatedCost = rate > 0 ? Math.round(hours * rate * workers) : null;
+
+  return {
+    diff,
+    hours,
+    durationText,
+    isOvernight,
+    estimatedCost
+  };
+};
+
 const GroupRequestForm = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -283,8 +318,8 @@ const GroupRequestForm = () => {
     if (formData.rateUnit === 'hourly' && formData.startTime && formData.endTime) {
       const [sh, sm] = formData.startTime.split(':').map(Number);
       const [eh, em] = formData.endTime.split(':').map(Number);
-      if (eh * 60 + em <= sh * 60 + sm) {
-        toast.error('End time must be after start time.', { id: 'group-req-toast' });
+      if (eh * 60 + em === sh * 60 + sm) {
+        toast.error('End time cannot be the same as start time.', { id: 'group-req-toast' });
         return;
       }
     }
