@@ -25,6 +25,14 @@ const navItemColors = {
     bg: '#E3F2E1',
     shadow: 'rgba(46, 125, 50, 0.45)'
   },
+  bookings: {
+    defaultIcon: themeColors.brand.teal,
+    activeIcon: '#1B5E20',
+    primary: '#1B5E20',
+    gradient: themeColors.gradient,
+    bg: '#E3F2E1',
+    shadow: 'rgba(46, 125, 50, 0.45)'
+  },
   wallet: {
     defaultIcon: themeColors.brand.teal,
     activeIcon: '#1B5E20',
@@ -78,7 +86,7 @@ const BottomNav = memo(() => {
 
   const navItems = useMemo(() => [
     { id: 'home', label: 'Home', icon: FiHome, filledIcon: HiHome, path: '/worker/dashboard' },
-    { id: 'jobs', label: 'Jobs', icon: FiBriefcase, filledIcon: HiBriefcase, path: '/worker/jobs', badge: pendingJobsCount },
+    { id: 'bookings', label: 'Bookings', icon: FiBriefcase, filledIcon: HiBriefcase, path: '/worker/jobs', badge: pendingJobsCount },
     { id: 'wallet', label: 'Wallet', icon: HiOutlineWallet, filledIcon: HiWallet, path: '/worker/wallet' },
     { id: 'profile', label: 'Profile', icon: FiUser, filledIcon: HiUser, path: '/worker/profile' },
   ], [pendingJobsCount]);
@@ -86,7 +94,7 @@ const BottomNav = memo(() => {
   const getActiveTab = () => {
     const path = location.pathname;
     if (path === '/worker' || path === '/worker/' || path.startsWith('/worker/dashboard')) return 'home';
-    if (path.startsWith('/worker/jobs') || path.startsWith('/worker/job/') || path.startsWith('/worker/booking-requests') || path.startsWith('/worker/group-requests')) return 'jobs';
+    if (path.startsWith('/worker/jobs') || path.startsWith('/worker/job/') || path.startsWith('/worker/booking-requests') || path.startsWith('/worker/group-requests')) return 'bookings';
     if (path.startsWith('/worker/wallet')) return 'wallet';
     if (path.startsWith('/worker/profile') || path.startsWith('/worker/settings') || path.startsWith('/worker/team') || path.startsWith('/worker/referrals')) return 'profile';
     return 'home';
