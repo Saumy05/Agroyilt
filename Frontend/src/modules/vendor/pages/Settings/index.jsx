@@ -223,7 +223,10 @@ const Settings = () => {
 
         {/* Banking Details */}
         <div className="mb-6">
-          <BankDetailsSection />
+          <BankDetailsSection 
+            onEditClick={() => navigate('/vendor/bank-details/edit', { state: { from: '/vendor/settings' } })}
+            onAddClick={() => navigate('/vendor/bank-details/edit', { state: { from: '/vendor/settings' } })}
+          />
         </div>
 
         {/* Address Management */}

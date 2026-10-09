@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { FiCreditCard, FiEdit2, FiCheck, FiAlertCircle, FiLock, FiX, FiEye, FiEyeOff } from 'react-icons/fi';
 import withdrawalService from '../../services/withdrawalService';
 import { toastManager } from '../../utils/toastManager';
@@ -18,8 +19,12 @@ export const BankDetailsSection = ({
   onClose = () => {},
   onSuccess = () => {},
   initialData = null,
-  showTitle = true
+  showTitle = true,
+  onEditClick = null,
+  onAddClick = null
 }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [bankDetails, setBankDetails] = useState(initialData || null);
@@ -81,6 +86,26 @@ export const BankDetailsSection = ({
       upiId: data.upiId || ''
     });
     setFormErrors({});
+  };
+
+  const handleEditAction = () => {
+    if (onEditClick) {
+      onEditClick();
+    } else if (!isModalMode && location.pathname.startsWith('/vendor')) {
+      navigate('/vendor/bank-details/edit', { state: { from: location.pathname } });
+    } else {
+      handleStartEdit();
+    }
+  };
+
+  const handleAddAction = () => {
+    if (onAddClick) {
+      onAddClick();
+    } else if (!isModalMode && location.pathname.startsWith('/vendor')) {
+      navigate('/vendor/bank-details/edit', { state: { from: location.pathname } });
+    } else {
+      setIsEditing(true);
+    }
   };
 
   const handleStartEdit = () => {
@@ -411,11 +436,11 @@ export const BankDetailsSection = ({
 
           {!isEditing && bankDetails && bankDetails.accountNumberMasked && (
             <button
-              onClick={handleStartEdit}
-              className="px-3 py-1.5 text-xs font-bold text-green-700 bg-green-50 hover:bg-green-100 rounded-xl flex items-center gap-1.5 transition-colors"
+              onClick={handleEditAction}
+              className="px-3.5 py-1.5 text-xs font-bold text-green-700 bg-green-50 hover:bg-green-100 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0"
             >
               <FiEdit2 className="w-3.5 h-3.5" />
-              Edit Details
+              <span>Edit Details</span>
             </button>
           )}
         </div>
@@ -476,11 +501,11 @@ export const BankDetailsSection = ({
             You must add your bank account details before requesting a withdrawal.
           </p>
           <button
-            onClick={() => setIsEditing(true)}
-            className="px-4 py-2 bg-green-600 text-white rounded-xl text-xs font-bold shadow-sm hover:bg-green-700 transition-all inline-flex items-center gap-1.5"
+            onClick={handleAddAction}
+            className="px-4 py-2 bg-green-600 text-white rounded-xl text-xs font-bold shadow-sm hover:bg-green-700 transition-all inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
           >
             <FiCreditCard className="w-3.5 h-3.5" />
-            Add Banking Details
+            <span>Add Banking Details</span>
           </button>
         </div>
       )}

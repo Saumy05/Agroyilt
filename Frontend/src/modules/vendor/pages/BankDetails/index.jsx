@@ -1,11 +1,21 @@
 import React, { useLayoutEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { FiChevronLeft, FiShield, FiCheckCircle, FiClock, FiHelpCircle, FiZap, FiLock } from 'react-icons/fi';
 import { vendorTheme as themeColors } from '../../../../theme';
 import BankDetailsSection from '../../../../components/common/BankDetailsSection';
 
 const BankDetails = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const handleBack = () => {
+    // If arriving from a non-bank-details page (e.g. settings, wallet), return there; otherwise return to Profile
+    if (location.state?.from && !location.state.from.includes('/bank-details')) {
+      navigate(location.state.from);
+    } else {
+      navigate('/vendor/profile');
+    }
+  };
 
   // Consistent app theme background gradient
   useLayoutEffect(() => {
@@ -38,7 +48,7 @@ const BankDetails = () => {
         <div className="max-w-xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <button 
-              onClick={() => navigate(-1)}
+              onClick={handleBack}
               aria-label="Back"
               className="w-10 h-10 rounded-full bg-white hover:bg-emerald-50/60 border border-emerald-200/70 flex items-center justify-center text-emerald-900 active:scale-95 transition-all shadow-[0_2px_8px_rgba(46,125,50,0.06)] shrink-0 cursor-pointer"
             >
@@ -80,7 +90,11 @@ const BankDetails = () => {
         </div>
 
         {/* Bank Details Management Section */}
-        <BankDetailsSection showTitle={true} />
+        <BankDetailsSection 
+          showTitle={true} 
+          onEditClick={() => navigate('/vendor/bank-details/edit', { state: { from: '/vendor/bank-details' } })}
+          onAddClick={() => navigate('/vendor/bank-details/edit', { state: { from: '/vendor/bank-details' } })}
+        />
 
         {/* Payout & Settlement Info Cards */}
         <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-xs space-y-3">

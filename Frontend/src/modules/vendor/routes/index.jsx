@@ -50,6 +50,7 @@ const BusinessDetails = lazy(() => import('../pages/BusinessDetails'));
 const EquipmentInventory = lazy(() => import('../pages/Equipment/EquipmentInventory'));
 const AddEquipment = lazy(() => import('../pages/Equipment/AddEquipment'));
 const BankDetails = lazy(() => import('../pages/BankDetails'));
+const EditBankDetails = lazy(() => import('../pages/BankDetails/EditBankDetails'));
 const HelpSupport = lazy(() => import('../../user/pages/HelpSupport'));
 
 // Dashboard skeleton for initial page load instead of a spinner
@@ -99,7 +100,8 @@ const VendorRoutes = () => {
     location.pathname === '/vendor/forgot-mpin' ||
     location.pathname.endsWith('/map') ||
     location.pathname.includes('/booking-alert/') ||
-    location.pathname.includes('/billing');
+    location.pathname.includes('/billing') ||
+    location.pathname.includes('/bank-details/edit');
 
   const shouldShowBottomNav = !shouldHideBottomNav;
 
@@ -154,7 +156,9 @@ const VendorRoutes = () => {
                 <Route path="/equipment/add" element={<ProtectedRoute userType="vendor"><AddEquipment /></ProtectedRoute>} />
                 <Route path="/equipment/edit/:id" element={<ProtectedRoute userType="vendor"><AddEquipment /></ProtectedRoute>} />
                 <Route path="/bank-details" element={<ProtectedRoute userType="vendor"><BankDetails /></ProtectedRoute>} />
+                <Route path="/bank-details/edit" element={<ProtectedRoute userType="vendor"><EditBankDetails /></ProtectedRoute>} />
                 <Route path="/profile/bank-details" element={<ProtectedRoute userType="vendor"><BankDetails /></ProtectedRoute>} />
+                <Route path="/profile/bank-details/edit" element={<ProtectedRoute userType="vendor"><EditBankDetails /></ProtectedRoute>} />
                 <Route path="/help-support" element={<ProtectedRoute userType="vendor"><HelpSupport /></ProtectedRoute>} />
               </Routes>
             </PageTransition>
