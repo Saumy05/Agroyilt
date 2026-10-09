@@ -44,6 +44,12 @@ const workerBookingRequestSchema = new mongoose.Schema({
   durationMinutes: { type: Number, default: 60 },
   rateUnit:        { type: String, enum: ['hourly', 'daily'], default: 'daily' },
 
+  // Standard Shift & Break Definitions (Daily: 9h total = 8h work + 1h break)
+  shiftDurationHours: { type: Number, default: 9 },
+  breakDurationHours: { type: Number, default: 1 },
+  workDurationHours:  { type: Number, default: 8 },
+  excludeWorkerIds:   [{ type: mongoose.Schema.Types.ObjectId, ref: 'Worker' }],
+
   // ════════════════════════════════════════════════════════════════════════
   // BOOKING TYPE — authoritative, set by backend only.
   //   HOURLY: uses scheduledDate + startTime + endTime

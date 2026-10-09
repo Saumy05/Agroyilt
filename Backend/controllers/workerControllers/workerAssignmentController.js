@@ -947,9 +947,201 @@ exports.updateLocation = async (req, res) => {
   }
 };
 
+/**
+ * START BREAK (Pause Work for 1-hour Break)
+ * Can be triggered by Worker or Farmer.
+ * Sets breakStatus = 'ON_BREAK', records breakStartedAt, emits socket event, and notifies both parties.
+ */
+exports.startBreak = async (req, res) => {
+  try {
+    const assignmentId = req.params.assignmentId || req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(assignmentId)) {
+      return res.status(404).json({ success: false, message: 'Assignment not found.' });
+    }
+
+    const assignment = await IndWorkerAssignment.findById(assignmentId);
+    if (!assignment) {
+      return res.status(404).json({ success: false, message: 'Assignment not found.' });
+    }
+
+    const callerId = String(req.user._id);
+    const isWorkerUser = (req.userRole === 'WORKER' || req.user?.role === 'worker' || String(assignment.workerId) === callerId);
+    const isFarmerUser = (req.userRole === 'USER' || req.user?.role === 'user' || String(assignment.farmerId) === callerId);
+
+    if (!isWorkerUser && !isFarmerUser) {
+      return res.status(403).json({ success: false, message: 'Unauthorized to pause for break.' });
+    }
+    const actor = isWorkerUser ? 'worker' : 'farmer';
+
+    if (['CANCELLED', 'COMPLETED'].includes(assignment.assignmentStatus)) {
+      return res.status(400).json({ success: false, message: 'Cannot take break on a completed or cancelled assignment.' });
+    }
+
+    const isDaily = assignment.bookingType === 'DAILY';
+    const dayIdx = assignment.currentDayIndex || 1;
+    let currentLog = isDaily ? assignment.dailyLogs?.find(l => l.dayNumber === dayIdx) : null;
+
+    const currentWorkStatus = isDaily ? (currentLog?.workStatus || assignment.workStatus) : assignment.workStatus;
+    if (!['IN_PROGRESS', 'ARRIVED'].includes(currentWorkStatus) && assignment.visitOtpStatus !== 'VERIFIED') {
+      return res.status(400).json({ success: false, message: 'Break can only be started while work is in progress.' });
+    }
+
+    const alreadyOnBreak = isDaily ? (currentLog?.breakStatus === 'ON_BREAK') : (assignment.breakStatus === 'ON_BREAK');
+    if (alreadyOnBreak) {
+      return res.status(409).json({ success: false, message: 'Work is already on break.', data: assignment });
+    }
+
+    const now = new Date();
+    assignment.breakStatus = 'ON_BREAK';
+    assignment.breakStartedAt = now;
+    assignment.lastBreakStartedBy = actor;
+
+    if (isDaily && currentLog) {
+      currentLog.breakStatus = 'ON_BREAK';
+      currentLog.breakStartedAt = now;
+      currentLog.lastBreakStartedBy = actor;
+    }
+
+    assignment.auditLog.push(audit('break_started', actor, req.user._id, { dayNumber: dayIdx, startedBy: actor }));
+    await assignment.save();
+
+    // Socket Broadcast
+    const payload = {
+      requestId: assignment.parentRequestId,
+      assignmentId: assignment._id,
+      workerId: assignment.workerId,
+      dayNumber: dayIdx,
+      breakStatus: 'ON_BREAK',
+      breakStartedAt: now,
+      breakMaxMinutes: 60,
+      startedBy: actor,
+      serverTimestamp: now
+    };
+    emitSafe(`booking_req:${assignment.parentRequestId}`, 'assignment_break_started', payload);
+    emitSafe(`worker:${assignment.workerId}`, 'assignment_break_started', payload);
+    emitSafe(`user:${assignment.farmerId}`, 'assignment_break_started', payload);
+
+    // Notify the other party
+    const targetRecipient = isWorkerUser ? { type: 'user', id: assignment.farmerId } : { type: 'worker', id: assignment.workerId };
+    await notify({
+      recipientType: targetRecipient.type,
+      recipientId:   targetRecipient.id,
+      type:          'break_started',
+      title:         '☕ 1-Hour Break Started',
+      message:       `${isWorkerUser ? 'Worker' : 'Farmer'} started the 1-hour rest/lunch break. Work will auto-resume in 60 mins.`,
+      relatedId:     assignment.parentRequestId,
+      relatedType:   'WorkerBookingRequest',
+      data:          payload
+    });
+
+    return res.json({
+      success: true,
+      message: '1-hour break started successfully.',
+      data: assignment
+    });
+  } catch (err) {
+    console.error('[startBreak]', err);
+    return res.status(500).json({ success: false, message: 'Failed to start break: ' + err.message });
+  }
+};
+
+/**
+ * RESUME BREAK (Resume Work after Break)
+ * Can be triggered early by Worker or Farmer, or auto-resumed when 60 minutes elapse.
+ */
+exports.resumeBreak = async (req, res) => {
+  try {
+    const assignmentId = req.params.assignmentId || req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(assignmentId)) {
+      return res.status(404).json({ success: false, message: 'Assignment not found.' });
+    }
+
+    const assignment = await IndWorkerAssignment.findById(assignmentId);
+    if (!assignment) {
+      return res.status(404).json({ success: false, message: 'Assignment not found.' });
+    }
+
+    const callerId = String(req.user._id);
+    const isWorkerUser = (req.userRole === 'WORKER' || req.user?.role === 'worker' || String(assignment.workerId) === callerId);
+    const isFarmerUser = (req.userRole === 'USER' || req.user?.role === 'user' || String(assignment.farmerId) === callerId);
+
+    if (!isWorkerUser && !isFarmerUser) {
+      return res.status(403).json({ success: false, message: 'Unauthorized to resume work.' });
+    }
+    const actor = isWorkerUser ? 'worker' : 'farmer';
+
+    const isDaily = assignment.bookingType === 'DAILY';
+    const dayIdx = assignment.currentDayIndex || 1;
+    let currentLog = isDaily ? assignment.dailyLogs?.find(l => l.dayNumber === dayIdx) : null;
+
+    const isOnBreak = isDaily ? (currentLog?.breakStatus === 'ON_BREAK') : (assignment.breakStatus === 'ON_BREAK');
+    if (!isOnBreak) {
+      return res.status(409).json({ success: false, message: 'Work is not currently on break.', data: assignment });
+    }
+
+    const now = new Date();
+    const breakStart = (isDaily && currentLog?.breakStartedAt) || assignment.breakStartedAt || now;
+    const elapsedMinutes = Math.max(1, Math.round((now.getTime() - new Date(breakStart).getTime()) / 60000));
+
+    assignment.breakStatus = 'NOT_ON_BREAK';
+    assignment.breakStartedAt = null;
+    assignment.lastBreakResumedBy = actor;
+    assignment.breakDurationMinutes = (Number(assignment.breakDurationMinutes) || 0) + elapsedMinutes;
+
+    if (isDaily && currentLog) {
+      currentLog.breakStatus = 'NOT_ON_BREAK';
+      currentLog.breakStartedAt = null;
+      currentLog.lastBreakResumedBy = actor;
+      currentLog.breakDurationMinutes = (Number(currentLog.breakDurationMinutes) || 0) + elapsedMinutes;
+    }
+
+    assignment.auditLog.push(audit('break_resumed', actor, req.user._id, { dayNumber: dayIdx, elapsedMinutes, resumedBy: actor }));
+    await assignment.save();
+
+    // Socket Broadcast
+    const payload = {
+      requestId: assignment.parentRequestId,
+      assignmentId: assignment._id,
+      workerId: assignment.workerId,
+      dayNumber: dayIdx,
+      breakStatus: 'NOT_ON_BREAK',
+      resumedBy: actor,
+      breakDurationMinutes: elapsedMinutes,
+      totalBreakMinutes: assignment.breakDurationMinutes,
+      serverTimestamp: now
+    };
+    emitSafe(`booking_req:${assignment.parentRequestId}`, 'assignment_break_resumed', payload);
+    emitSafe(`worker:${assignment.workerId}`, 'assignment_break_resumed', payload);
+    emitSafe(`user:${assignment.farmerId}`, 'assignment_break_resumed', payload);
+
+    // Notify the other party
+    const targetRecipient = isWorkerUser ? { type: 'user', id: assignment.farmerId } : { type: 'worker', id: assignment.workerId };
+    await notify({
+      recipientType: targetRecipient.type,
+      recipientId:   targetRecipient.id,
+      type:          'break_resumed',
+      title:         '🔨 Work Resumed',
+      message:       `${isWorkerUser ? 'Worker' : 'Farmer'} resumed work after ${elapsedMinutes} mins break.`,
+      relatedId:     assignment.parentRequestId,
+      relatedType:   'WorkerBookingRequest',
+      data:          payload
+    });
+
+    return res.json({
+      success: true,
+      message: `Work resumed successfully after ${elapsedMinutes} minutes break.`,
+      data: assignment
+    });
+  } catch (err) {
+    console.error('[resumeBreak]', err);
+    return res.status(500).json({ success: false, message: 'Failed to resume work: ' + err.message });
+  }
+};
+
 // Dedicated DAILY lifecycle handlers
 exports.startDailyDay = exports.startJourney;
 exports.markDailyArrived = exports.markArrived;
 exports.verifyDailyVisitOtp = exports.verifyVisitOtp;
 exports.verifyDailyCompletionOtp = exports.verifyCompletionOtp;
+
 

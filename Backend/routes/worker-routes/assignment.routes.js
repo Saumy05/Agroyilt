@@ -13,6 +13,8 @@ router.get('/:id',                        authenticate, wac.getAssignmentDetails
 router.post('/:id/start-journey',         authenticate, isWorker, wac.startJourney);
 router.post('/:id/arrived',               authenticate, isWorker, wac.markArrived);
 router.post('/:id/verify-visit-otp',      authenticate, isWorker, wac.verifyVisitOtp);
+router.post('/:id/start-break',           authenticate, isWorker, wac.startBreak);
+router.post('/:id/resume-break',          authenticate, isWorker, wac.resumeBreak);
 router.post('/:id/cancel',                authenticate, isWorker, wac.workerWithdraw);
 router.post('/:id/submit-proof',          authenticate, isWorker, wac.submitProof);
 router.post('/:id/verify-completion-otp', authenticate, isWorker, wac.verifyCompletionOtp);

@@ -368,6 +368,44 @@ exports.getTrackingSnapshot = async (req, res) => {
         }
       }
 
+      // Shift & Break Tracking variables
+      const shiftDur = b.shiftDurationHours || parentRequest?.shiftDurationHours || 9;
+      const breakDur = b.breakDurationHours || parentRequest?.breakDurationHours || 1;
+      const workDur  = b.workDurationHours || parentRequest?.workDurationHours || 8;
+      const repTime  = parentRequest?.reportingTime || b.reportingTime || '09:00';
+      const breakMax = b.breakMaxMinutes || 60;
+
+      let activeBreakStatus = (currentDayLog?.breakStatus) || b.breakStatus || 'NOT_ON_BREAK';
+      let activeBreakStartedAt = (currentDayLog?.breakStartedAt) || b.breakStartedAt || null;
+      let totalBreakMins = (currentDayLog?.breakDurationMinutes !== undefined) ? currentDayLog.breakDurationMinutes : (b.breakDurationMinutes || 0);
+
+      if (activeBreakStatus === 'ON_BREAK' && activeBreakStartedAt) {
+        const elapsedBreakMs = Date.now() - new Date(activeBreakStartedAt).getTime();
+        if (elapsedBreakMs >= breakMax * 60 * 1000) {
+          activeBreakStatus = 'NOT_ON_BREAK';
+          activeBreakStartedAt = null;
+          totalBreakMins += breakMax;
+          IndWorkerAssignment.findById(b._id).then(asgn => {
+            if (asgn && asgn.breakStatus === 'ON_BREAK') {
+              asgn.breakStatus = 'NOT_ON_BREAK';
+              asgn.breakStartedAt = null;
+              asgn.lastBreakResumedBy = 'system';
+              asgn.breakDurationMinutes = (asgn.breakDurationMinutes || 0) + breakMax;
+              if (isDailyBooking && asgn.dailyLogs) {
+                const dLog = asgn.dailyLogs.find(l => l.dayNumber === (asgn.currentDayIndex || 1));
+                if (dLog) {
+                  dLog.breakStatus = 'NOT_ON_BREAK';
+                  dLog.breakStartedAt = null;
+                  dLog.lastBreakResumedBy = 'system';
+                  dLog.breakDurationMinutes = (dLog.breakDurationMinutes || 0) + breakMax;
+                }
+              }
+              asgn.save().catch(e => console.error('[autoResumeBreak]', e));
+            }
+          }).catch(() => {});
+        }
+      }
+
       return {
         assignmentId: b._id.toString(),
         bookingId: b.legacyBookingId ? b.legacyBookingId.toString() : b._id.toString(),
@@ -389,6 +427,17 @@ exports.getTrackingSnapshot = async (req, res) => {
         isDecreased: Boolean(b.isDecreased),
         decreasedAt: b.decreasedAt || null,
         decreaseReason: b.decreaseReason || null,
+        // Shift & Break Tracking
+        shiftDurationHours: shiftDur,
+        breakDurationHours: breakDur,
+        workDurationHours:  workDur,
+        reportingTime:      repTime,
+        breakStatus:        activeBreakStatus,
+        breakStartedAt:     activeBreakStartedAt,
+        breakDurationMinutes: totalBreakMins,
+        breakMaxMinutes:    breakMax,
+        lastBreakStartedBy: (currentDayLog?.lastBreakStartedBy) || b.lastBreakStartedBy || null,
+        lastBreakResumedBy: (currentDayLog?.lastBreakResumedBy) || b.lastBreakResumedBy || null,
         // OTP codes reach the farmer only through visitOtp / completionOtp below — never via raw day logs
         dailyLogs: (b.dailyLogs || []).map(withoutOtpSecrets),
         currentDayLog: currentDayLog ? withoutOtpSecrets(currentDayLog) : currentDayLog,
@@ -420,6 +469,7 @@ exports.getTrackingSnapshot = async (req, res) => {
       journeyStarted: workers.filter(w => w.journeyStatus === 'JOURNEY_STARTED').length,
       arrived: workers.filter(w => w.journeyStatus === 'ARRIVED').length,
       inProgress: workers.filter(w => ['IN_PROGRESS', 'WORK_SUBMITTED'].includes(w.journeyStatus)).length,
+      onBreak: workers.filter(w => w.breakStatus === 'ON_BREAK').length,
       completed: workers.filter(w => w.journeyStatus === 'COMPLETED').length,
       settled: workers.filter(w => w.settlementStatus === 'SETTLED').length,
       cancelled: workers.filter(w => w.journeyStatus === 'CANCELLED').length

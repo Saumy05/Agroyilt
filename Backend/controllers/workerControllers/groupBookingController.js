@@ -41,7 +41,8 @@ const { getWorkerFinancialSettings } = require('../../services/workerFinancialSe
 const { sendNotificationToWorker, sendNotificationToUser } = require('../../services/firebaseAdmin');
 const {
   getBookingScheduledExpiry,
-  isBookingExpired
+  isBookingExpired,
+  getIstDateString
 } = require('../../services/workerBookingExpiryService');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -272,8 +273,31 @@ exports.createGroupRequest = async (req, res) => {
       return res.status(400).json({ success: false, message: 'End time cannot be the same as start time.' });
     }
     const scheduledDateObj = new Date(scheduledDate);
-    if (isNaN(scheduledDateObj.getTime()) || scheduledDateObj < new Date(new Date().setHours(0,0,0,0))) {
-      return res.status(400).json({ success: false, message: 'Invalid or past scheduled date.' });
+    if (isNaN(scheduledDateObj.getTime())) {
+      return res.status(400).json({ success: false, message: 'Invalid scheduled date.' });
+    }
+    const todayIst = getIstDateString(new Date());
+    const scheduledIst = getIstDateString(scheduledDateObj);
+    if (scheduledIst < todayIst) {
+      return res.status(400).json({ success: false, message: 'Scheduled date cannot be in the past.' });
+    }
+    if (scheduledIst === todayIst && /^\d{2}:\d{2}$/.test(startTime)) {
+      const now = new Date();
+      const nowParts = new Intl.DateTimeFormat('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      }).formatToParts(now);
+      const currentIstHour = parseInt(nowParts.find(p => p.type === 'hour')?.value || '0', 10) % 24;
+      const currentIstMinute = parseInt(nowParts.find(p => p.type === 'minute')?.value || '0', 10);
+      const currentIstMins = currentIstHour * 60 + currentIstMinute;
+
+      const [sh, sm] = startTime.split(':').map(Number);
+      const startMins = sh * 60 + (sm || 0);
+      if (startMins <= currentIstMins) {
+        return res.status(400).json({ success: false, message: 'Start time has already passed for today. Please select an upcoming time.' });
+      }
     }
 
     // DAILY validation

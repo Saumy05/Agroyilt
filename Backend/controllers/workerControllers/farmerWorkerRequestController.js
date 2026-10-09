@@ -610,6 +610,9 @@ const hasDailyConflict = async (workerId, requestedStartDate, requestedEndDate, 
       ? ['confirmed', 'in_progress', 'partially_completed']
       : ['accepted', 'awaiting_farmer_confirmation', 'confirmed', 'in_progress', 'partially_completed', 'matching', 'pending'];
 
+    // Match both ObjectId and string representation to prevent BSON type mismatch
+    const workerIdVariants = [workerObjId, String(workerObjId)];
+
     // Check WorkerBookingRequest (DAILY) for date-range overlap
     const reqQuery = {
       bookingType:  'DAILY',
@@ -617,11 +620,11 @@ const hasDailyConflict = async (workerId, requestedStartDate, requestedEndDate, 
       startDate:    { $lte: rEnd },    // existingStart <= requestedEnd
       endDate:      { $gte: rStart },  // existingEnd   >= requestedStart
       $or: opts.committedOnly
-        ? [{ finalWorkers: workerObjId }]
+        ? [{ finalWorkers: { $in: workerIdVariants } }]
         : [
-            { selectedWorkerIds: workerObjId },
-            { finalWorkers:      workerObjId },
-            { 'dispatchedTo':    { $elemMatch: { workerId: workerObjId, status: 'accepted' } } }
+            { selectedWorkerIds: { $in: workerIdVariants } },
+            { finalWorkers:      { $in: workerIdVariants } },
+            { 'dispatchedTo':    { $elemMatch: { workerId: { $in: workerIdVariants }, status: 'accepted' } } }
           ]
     };
     if (excludeObjId) reqQuery._id = { $ne: excludeObjId };
@@ -646,15 +649,35 @@ const hasDailyConflict = async (workerId, requestedStartDate, requestedEndDate, 
     if (parentRequests.length > 0) {
       const parentIds = parentRequests.map(r => r._id);
       const conflictingAssignment = await IndWorkerAssignment.findOne({
-        workerId:         workerObjId,
+        workerId:         { $in: workerIdVariants },
         bookingType:      'DAILY',
-        assignmentStatus: 'CONFIRMED',
+        assignmentStatus: { $nin: ['CANCELLED', 'REPLACED'] },
         parentRequestId:  { $in: parentIds }
       }).select('_id').lean();
 
       if (conflictingAssignment) {
         console.log(`[DAILY CONFLICT] Worker ${workerId} has overlapping DAILY assignment ${conflictingAssignment._id}`);
         return true;
+      }
+    }
+
+    // Direct check on IndWorkerAssignment with populated parent request to catch any date window overlap
+    const directAssignments = await IndWorkerAssignment.find({
+      workerId: { $in: workerIdVariants },
+      bookingType: 'DAILY',
+      assignmentStatus: { $nin: ['CANCELLED', 'REPLACED'] },
+      ...(excludeObjId ? { parentRequestId: { $ne: excludeObjId } } : {})
+    }).populate('parentRequestId', 'startDate endDate status').select('parentRequestId').lean();
+
+    for (const da of directAssignments) {
+      const p = da.parentRequestId;
+      if (p && p.startDate && p.endDate) {
+        const pStart = new Date(p.startDate);
+        const pEnd = new Date(p.endDate);
+        if (pStart <= rEnd && pEnd >= rStart && ['confirmed', 'in_progress', 'partially_completed'].includes(p.status)) {
+          console.log(`[DAILY CONFLICT DIRECT] Worker ${workerId} has direct overlapping assignment ${da._id} via parent ${p._id}`);
+          return true;
+        }
       }
     }
 
@@ -724,9 +747,14 @@ const validateRequestPayload = (body) => {
     errors.push('Scheduled date is required.');
   else {
     const d = new Date(scheduledDate);
-    if (isNaN(d.getTime()))  errors.push('Invalid scheduled date.');
-    else if (d < new Date(new Date().setHours(0, 0, 0, 0)))
-      errors.push('Scheduled date cannot be in the past.');
+    if (isNaN(d.getTime())) errors.push('Invalid scheduled date.');
+    else {
+      const todayIst = getIstDateString(new Date());
+      const scheduledIst = getIstDateString(d);
+      if (scheduledIst < todayIst) {
+        errors.push('Scheduled date cannot be in the past.');
+      }
+    }
   }
 
   if (!startTime || !/^\d{2}:\d{2}$/.test(startTime))
@@ -735,6 +763,30 @@ const validateRequestPayload = (body) => {
     errors.push('End time must be in HH:mm format.');
   if (startTime && endTime && toMins(endTime) === toMins(startTime))
     errors.push('End time cannot be the same as start time.');
+
+  // Validate that start time is not in the past if scheduled for today (IST)
+  if (scheduledDate && startTime && /^\d{2}:\d{2}$/.test(startTime)) {
+    const todayIst = getIstDateString(new Date());
+    const scheduledIst = getIstDateString(scheduledDate);
+    if (scheduledIst === todayIst) {
+      const now = new Date();
+      const nowParts = new Intl.DateTimeFormat('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      }).formatToParts(now);
+      const currentIstHour = parseInt(nowParts.find(p => p.type === 'hour')?.value || '0', 10) % 24;
+      const currentIstMinute = parseInt(nowParts.find(p => p.type === 'minute')?.value || '0', 10);
+      const currentIstMins = currentIstHour * 60 + currentIstMinute;
+
+      const [sh, sm] = startTime.split(':').map(Number);
+      const startMins = sh * 60 + (sm || 0);
+      if (startMins <= currentIstMins) {
+        errors.push('Start time has already passed for today. Please select an upcoming time.');
+      }
+    }
+  }
 
   if (!location || (!location.city && !location.addressLine1))
     errors.push('Work location (city or address) is required.');
@@ -788,8 +840,13 @@ const validateDailyRequestPayload = (body) => {
   else {
     const d = new Date(startDate);
     if (isNaN(d.getTime()))   errors.push('Invalid start date.');
-    else if (d < new Date(new Date().setHours(0, 0, 0, 0)))
-      errors.push('Start date cannot be in the past.');
+    else {
+      const todayIst = getIstDateString(new Date());
+      const startIst = getIstDateString(d);
+      if (startIst < todayIst) {
+        errors.push('Start date cannot be in the past.');
+      }
+    }
   }
 
   // numberOfDays validation
@@ -803,9 +860,32 @@ const validateDailyRequestPayload = (body) => {
     errors.push('Work location (city or address) is required.');
 
   // daily reporting time (HH:mm) — optional for older clients, validated when sent
-  if (body.reportingTime !== undefined && body.reportingTime !== null && body.reportingTime !== '' &&
-      !/^([01]\d|2[0-3]):[0-5]\d$/.test(String(body.reportingTime)))
-    errors.push('Reporting time must be in HH:mm format.');
+  if (body.reportingTime !== undefined && body.reportingTime !== null && body.reportingTime !== '') {
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(body.reportingTime))) {
+      errors.push('Reporting time must be in HH:mm format.');
+    } else if (startDate) {
+      const todayIst = getIstDateString(new Date());
+      const startIst = getIstDateString(startDate);
+      if (startIst === todayIst) {
+        const now = new Date();
+        const nowParts = new Intl.DateTimeFormat('en-IN', {
+          timeZone: 'Asia/Kolkata',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false
+        }).formatToParts(now);
+        const currentIstHour = parseInt(nowParts.find(p => p.type === 'hour')?.value || '0', 10) % 24;
+        const currentIstMinute = parseInt(nowParts.find(p => p.type === 'minute')?.value || '0', 10);
+        const currentIstMins = currentIstHour * 60 + currentIstMinute;
+
+        const [rh, rm] = String(body.reportingTime).split(':').map(Number);
+        const repMins = rh * 60 + (rm || 0);
+        if (repMins <= currentIstMins) {
+          errors.push('Reporting time for today has already passed. Please select an upcoming time or tomorrow.');
+        }
+      }
+    }
+  }
 
   // Rate validation for DAILY
   const minD = Number(minDailyRate);
@@ -971,6 +1051,11 @@ exports.createFarmerRequest = async (req, res) => {
         maxIndependentWorkerRequest,
         workerSearchRadiusKm
       },
+      addOnOfRequestId: req.body.addOnOfRequestId || null,
+      excludeWorkerIds: Array.isArray(req.body.excludeWorkerIds) ? req.body.excludeWorkerIds : [],
+      shiftDurationHours: Number(req.body.shiftDurationHours) || 9,
+      breakDurationHours: Number(req.body.breakDurationHours) || 1,
+      workDurationHours:  Number(req.body.workDurationHours) || 8,
       status: 'matching',
       expiresAt: new Date(Date.now() + REQUEST_TTL_MS)
     };
@@ -995,7 +1080,7 @@ exports.createFarmerRequest = async (req, res) => {
         startDate:    sDate,
         endDate:      eDate,
         numberOfDays: numD,
-        reportingTime: req.body.reportingTime ? String(req.body.reportingTime) : null,
+        reportingTime: req.body.reportingTime ? String(req.body.reportingTime) : '09:00',
         minDailyRate: effMinDailyRate,
         maxDailyRate: effMaxDailyRate,
         minRate:      effMinDailyRate,
@@ -1062,7 +1147,8 @@ exports.createFarmerRequest = async (req, res) => {
           startDate: new Date(newRequest.startDate),
           endDate:   new Date(newRequest.endDate),
           workerLocation: location,
-          radiusKm: workerSearchRadiusKm
+          radiusKm: workerSearchRadiusKm,
+          excludeWorkerIds: newRequest.excludeWorkerIds
         });
       } else {
         await dispatchToIndependentWorkers({
@@ -1072,7 +1158,8 @@ exports.createFarmerRequest = async (req, res) => {
           startTime: newRequest.startTime,
           endTime:   newRequest.endTime,
           workerLocation: location,
-          radiusKm: workerSearchRadiusKm
+          radiusKm: workerSearchRadiusKm,
+          excludeWorkerIds: newRequest.excludeWorkerIds
         });
       }
     } else {
@@ -1383,7 +1470,7 @@ async function scheduleTeamLeaderFallback(request, normalSkills, radiusKm, delay
 // ─── A1+A2: Dispatch to Independent Workers (HOURLY) ──────────────────────────
 async function dispatchToIndependentWorkers({
   request, requiredSkills, scheduledDate, startTime, endTime,
-  workerLocation, radiusKm
+  workerLocation, radiusKm, excludeWorkerIds = []
 }) {
   try {
     if (isBookingExpired(request).isExpired) {
@@ -1402,6 +1489,12 @@ async function dispatchToIndependentWorkers({
         .select('_id name workerType skills primaryService serviceCategory serviceCategories location address status fcmTokens approvalStatus isActive teamId')
         .lean();
     }
+
+    const excludeSet = new Set([
+      ...(excludeWorkerIds || []).map(String),
+      ...(request.excludeWorkerIds || []).map(String)
+    ]);
+    candidates = candidates.filter(w => !excludeSet.has(String(w._id)));
 
     // Filter by HOURLY time conflict
     const available = [];
@@ -1462,7 +1555,7 @@ async function dispatchToIndependentWorkers({
 
 // ─── A1+A2: Dispatch to Independent Workers (DAILY) ───────────────────────────
 async function dispatchToIndependentWorkersForDaily({
-  request, requiredSkills, startDate, endDate, workerLocation, radiusKm
+  request, requiredSkills, startDate, endDate, workerLocation, radiusKm, excludeWorkerIds = []
 }) {
   try {
     if (isBookingExpired(request).isExpired) {
@@ -1481,6 +1574,12 @@ async function dispatchToIndependentWorkersForDaily({
         .select('_id name workerType skills primaryService serviceCategory serviceCategories location address status fcmTokens approvalStatus isActive teamId')
         .lean();
     }
+
+    const excludeSet = new Set([
+      ...(excludeWorkerIds || []).map(String),
+      ...(request.excludeWorkerIds || []).map(String)
+    ]);
+    candidates = candidates.filter(w => !excludeSet.has(String(w._id)));
 
     const available = [];
     for (const w of candidates) {
@@ -3832,10 +3931,28 @@ exports.addExtraWorkers = async (req, res) => {
       return res.status(409).json({ success: false, message: 'An add-on request for this booking is already in progress.', data: { requestId: open._id } });
     }
 
+    // Exclude all workers already assigned or confirmed on the parent booking
+    const existingAssignments = await IndWorkerAssignment.find({
+      parentRequestId: parent._id,
+      assignmentStatus: { $ne: 'CANCELLED' }
+    }).select('workerId').lean();
+
+    const parentExcluded = [
+      ...(parent.finalWorkers || []).map(String),
+      ...(parent.selectedWorkerIds || []).map(String),
+      ...existingAssignments.map(a => String(a.workerId))
+    ].filter(Boolean);
+    const uniqueExcludedWorkerIds = [...new Set(parentExcluded)];
+
     const body = {
       workCategory: parent.workCategory, workTitle: parent.workTitle, workDescription: parent.workDescription,
       requiredSkills: parent.requiredSkills, additionalInstructions: parent.additionalInstructions,
-      requiredWorkers: count, location: parent.location ? (parent.location.toObject ? parent.location.toObject() : parent.location) : undefined
+      requiredWorkers: count, location: parent.location ? (parent.location.toObject ? parent.location.toObject() : parent.location) : undefined,
+      excludeWorkerIds: uniqueExcludedWorkerIds,
+      addOnOfRequestId: parent._id,
+      shiftDurationHours: parent.shiftDurationHours || 9,
+      breakDurationHours: parent.breakDurationHours || 1,
+      workDurationHours: parent.workDurationHours || 8
     };
     if (isDaily) {
       const days = Number(b.numberOfDays ?? 1);
@@ -3844,7 +3961,14 @@ exports.addExtraWorkers = async (req, res) => {
       }
       const start = b.startDate ? new Date(b.startDate) : new Date();
       if (isNaN(start.getTime())) return res.status(400).json({ success: false, message: 'Invalid startDate.' });
-      Object.assign(body, { bookingType: 'DAILY', startDate: start.toISOString().slice(0, 10), numberOfDays: days, minDailyRate: rate, maxDailyRate: rate });
+      Object.assign(body, {
+        bookingType: 'DAILY',
+        startDate: start.toISOString().slice(0, 10),
+        numberOfDays: days,
+        reportingTime: parent.reportingTime || '09:00',
+        minDailyRate: rate,
+        maxDailyRate: rate
+      });
     } else {
       Object.assign(body, {
         bookingType: 'HOURLY', scheduledDate: parent.scheduledDate, startTime: parent.startTime, endTime: parent.endTime, minRate: rate, maxRate: rate

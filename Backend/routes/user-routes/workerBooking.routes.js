@@ -9,6 +9,7 @@ const fwr = require('../../controllers/workerControllers/farmerWorkerRequestCont
 const wsc = require('../../controllers/workerControllers/workerSettlementController');
 const tc  = require('../../controllers/bookingControllers/trackingController');
 const ext = require('../../controllers/workerControllers/extensionController');
+const wac = require('../../controllers/workerControllers/workerAssignmentController');
 
 // ── Public / User-auth routes ──────────────────────────────────────────────
 
@@ -36,6 +37,8 @@ router.post('/farmer-worker-request/:id/add-workers',                           
 router.post('/farmer-worker-request/:id/assignment/:assignmentId/daily-visit-otp',         authenticate, isUser, fwr.getOrCreateDailyVisitOtp);
 router.post('/farmer-worker-request/:id/assignment/:assignmentId/daily-completion-otp',    authenticate, isUser, fwr.generateDailyCompletionOtp);
 router.post('/farmer-worker-request/:id/assignment/:assignmentId/regenerate-visit-otp',    authenticate, isUser, fwr.regenerateVisitOtp);
+router.post('/farmer-worker-request/:id/assignment/:assignmentId/start-break',             authenticate, isUser, wac.startBreak);
+router.post('/farmer-worker-request/:id/assignment/:assignmentId/resume-break',            authenticate, isUser, wac.resumeBreak);
 
 // ── EXTENSION ROUTES (FARMER) ───────────────────────────────────────────────
 router.get('/farmer-worker-request/:id/extensions',                                        authenticate, isUser, ext.getExtensions);

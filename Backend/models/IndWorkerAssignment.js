@@ -147,6 +147,24 @@ const indWorkerAssignmentSchema = new mongoose.Schema(
       default: 'NOT_STARTED'
     },
 
+    // -------------------------------------------------------------------------
+    // SHIFT & BREAK TRACKING (Daily: 9h total = 8h work + 1h break)
+    // -------------------------------------------------------------------------
+    shiftDurationHours: { type: Number, default: 9 },
+    breakDurationHours: { type: Number, default: 1 },
+    workDurationHours:  { type: Number, default: 8 },
+
+    breakStatus: {
+      type: String,
+      enum: ['NOT_ON_BREAK', 'ON_BREAK'],
+      default: 'NOT_ON_BREAK'
+    },
+    breakStartedAt:       { type: Date,   default: null },
+    breakDurationMinutes: { type: Number, default: 0 },
+    breakMaxMinutes:      { type: Number, default: 60 },
+    lastBreakStartedBy:   { type: String, enum: ['worker', 'farmer', null], default: null },
+    lastBreakResumedBy:   { type: String, enum: ['worker', 'farmer', 'system', null], default: null },
+
     /**
      * Completion dimension:
      *   PENDING      - completion OTP not yet verified
@@ -363,6 +381,17 @@ const indWorkerAssignmentSchema = new mongoose.Schema(
         default: 'NOT_STARTED'
       },
       workStartedAt: { type: Date, default: null },
+
+      // Break tracking for this specific day
+      breakStatus: {
+        type: String,
+        enum: ['NOT_ON_BREAK', 'ON_BREAK'],
+        default: 'NOT_ON_BREAK'
+      },
+      breakStartedAt:       { type: Date,   default: null },
+      breakDurationMinutes: { type: Number, default: 0 },
+      lastBreakStartedBy:   { type: String, enum: ['worker', 'farmer', null], default: null },
+      lastBreakResumedBy:   { type: String, enum: ['worker', 'farmer', 'system', null], default: null },
 
       // Completion OTP for this day (farmer gives to worker to confirm day done)
       completionOtpCode:       { type: String, default: null },

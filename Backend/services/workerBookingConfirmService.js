@@ -126,6 +126,11 @@ const buildDocs = (request, { method, orderId, paymentId }) => {
       commissionRate,
       commissionAmount: toINR(commissionPaise),
       netEarning: toINR(netPaise),
+      shiftDurationHours: request.shiftDurationHours || 9,
+      breakDurationHours: request.breakDurationHours || 1,
+      workDurationHours:  request.workDurationHours || 8,
+      breakStatus: 'NOT_ON_BREAK',
+      breakDurationMinutes: 0,
       auditLog: [audit('assignment_created', 'system', null, { method, orderId: orderId || null, paymentId: paymentId || null })]
     };
     if (isDaily) {
@@ -141,12 +146,19 @@ const buildDocs = (request, { method, orderId, paymentId }) => {
         visitOtpHash: visit.hash,
         visitOtpStatus: 'PENDING',
         visitOtpExpiresAt: visit.expiresAt,
-        workStatus: 'NOT_STARTED'
+        workStatus: 'NOT_STARTED',
+        breakStatus: 'NOT_ON_BREAK',
+        breakDurationMinutes: 0
       }];
     }
     assignmentDocs.push(a);
 
     const addr = request.location || {};
+    const repTime = request.reportingTime || '09:00';
+    const [rSH, rSM] = repTime.split(':').map(Number);
+    const dailyEndH = ((isNaN(rSH) ? 9 : rSH) + 9) % 24;
+    const dailyEndStr = `${String(dailyEndH).padStart(2, '0')}:${String(isNaN(rSM) ? 0 : rSM).padStart(2, '0')}`;
+
     bookingDocs.push({
       bookingNumber: `WRK-${Date.now()}-${idx}-${crypto.randomInt(1000, 10000)}`,
       userId: request.farmerId,
@@ -154,8 +166,8 @@ const buildDocs = (request, { method, orderId, paymentId }) => {
       providerType: 'WORKER',
       workerRequestId: request._id,
       scheduledDate: isDaily ? (request.startDate || request.scheduledDate || new Date()) : (request.scheduledDate || new Date()),
-      scheduledTime: isDaily ? '09:00' : (request.startTime || '09:00'),
-      timeSlot: isDaily ? { start: '09:00', end: '17:00' } : { start: request.startTime || '09:00', end: request.endTime || '17:00' },
+      scheduledTime: isDaily ? repTime : (request.startTime || '09:00'),
+      timeSlot: isDaily ? { start: repTime, end: dailyEndStr } : { start: request.startTime || '09:00', end: request.endTime || '17:00' },
       serviceName: request.workTitle || 'Worker Service',
       serviceCategory: request.workCategory || 'Worker',
       basePrice: null,
