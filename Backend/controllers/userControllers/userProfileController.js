@@ -73,7 +73,7 @@ const updateProfile = async (req, res) => {
     }
 
     const userId = req.user.id;
-    const { name, email, addresses, farms, profilePhoto, settings } = req.body;
+    const { name, email, addresses, farms, profilePhoto, settings, gender } = req.body;
 
     console.log('[Profile Update] Request for user:', userId);
     console.log('[Profile Update] Data received:', { name, email, profilePhoto: profilePhoto ? 'provided' : 'not provided' });
@@ -93,6 +93,14 @@ const updateProfile = async (req, res) => {
     // Update fields
     if (name && name.trim()) {
       updateData.name = name.trim();
+    }
+
+    if (gender !== undefined) {
+      if (['male', 'female', 'other'].includes(String(gender).toLowerCase())) {
+        updateData.gender = String(gender).toLowerCase();
+      } else if (gender === null || gender === '') {
+        updateData.gender = null;
+      }
     }
 
     if (email !== undefined) {

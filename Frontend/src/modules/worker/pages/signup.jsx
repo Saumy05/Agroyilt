@@ -27,6 +27,7 @@ const WorkerSignup = () => {
     name: '',
     email: '',
     phoneNumber: '',
+    gender: 'male',
     aadhar: '',
     aadharDocument: null,
     aadharBackDocument: null,
@@ -291,6 +292,7 @@ const WorkerSignup = () => {
         name: formData.name,
         email: formData.email,
         phone: formData.phoneNumber,
+        gender: formData.gender || 'male',
         aadhar: formData.aadhar,
         aadharDocument: aadharDoc,
         aadharBackDocument: aadharBackDoc,
@@ -393,6 +395,26 @@ const WorkerSignup = () => {
                     {errors.email}
                   </p>
                 )}
+              </div>
+
+              <div className="animate-stagger-2 animate-fade-in">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Gender</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {['male', 'female', 'other'].map((g) => (
+                    <button
+                      type="button"
+                      key={g}
+                      onClick={() => setFormData(prev => ({ ...prev, gender: g }))}
+                      className={`py-2.5 px-3 rounded-xl text-xs font-bold capitalize transition-all border ${
+                        (formData.gender || 'male') === g
+                          ? 'bg-[#347989] text-white border-[#347989] shadow-sm'
+                          : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                      }`}
+                    >
+                      {g}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {!verificationToken && (

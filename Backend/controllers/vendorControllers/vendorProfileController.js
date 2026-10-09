@@ -40,6 +40,7 @@ const getProfile = async (req, res) => {
         businessName: vendor.businessName || null,
         email: vendor.email,
         phone: vendor.phone,
+        gender: vendor.gender || null,
         service: vendor.service,
         skills: vendor.skills || [],
         address: vendor.address || null,
@@ -81,7 +82,7 @@ const updateProfile = async (req, res) => {
     }
 
     const vendorId = req.user.id;
-    const { name, businessName, address, profilePhoto, serviceCategory, skills, aadharNumber, aadharDocument, panNumber, panDocument } = req.body;
+    const { name, businessName, address, profilePhoto, serviceCategory, skills, aadharNumber, aadharDocument, panNumber, panDocument, gender } = req.body;
 
     const vendor = await Vendor.findById(vendorId);
 
@@ -95,6 +96,13 @@ const updateProfile = async (req, res) => {
     // Update fields
     if (name) vendor.name = name.trim();
     if (businessName !== undefined) vendor.businessName = businessName ? businessName.trim() : null;
+    if (gender !== undefined) {
+      if (['male', 'female', 'other'].includes(String(gender).toLowerCase())) {
+        vendor.gender = String(gender).toLowerCase();
+      } else if (gender === null || gender === '') {
+        vendor.gender = null;
+      }
+    }
     if (address) {
       if (typeof address === 'string') {
         // If address is coming as string from simple form

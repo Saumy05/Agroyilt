@@ -38,6 +38,7 @@ const EditProfile = () => {
 
   const [formData, setFormData] = useState({
     name: '',
+    gender: '',
     businessName: '',
     phone: '',
     email: '',
@@ -121,6 +122,7 @@ const EditProfile = () => {
 
           setFormData({
             name: v.name || '',
+            gender: v.gender || '',
             businessName: v.businessName || '',
             phone: v.phone || '',
             email: v.email || '',
@@ -147,6 +149,7 @@ const EditProfile = () => {
 
             setFormData({
               name: storedData.name || '',
+              gender: storedData.gender || '',
               businessName: storedData.businessName || '',
               phone: storedData.phone || '',
               email: storedData.email || '',
@@ -330,6 +333,7 @@ const EditProfile = () => {
       // Prepare payload to match backend structure
       const payload = {
         name: formData.name,
+        gender: formData.gender || null,
         businessName: formData.businessName,
         address: formData.address,
         serviceCategory: formData.serviceCategories,
@@ -438,6 +442,38 @@ const EditProfile = () => {
               style={{ focusRingColor: themeColors.button }}
             />
             {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name}</p>}
+          </div>
+
+          {/* Gender */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+              <div
+                className="p-2 rounded-lg"
+                style={{
+                  background: `linear-gradient(135deg, ${themeColors.icon}25 0%, ${themeColors.icon}15 100%)`,
+                }}
+              >
+                <FiUser className="w-4 h-4" style={{ color: themeColors.icon }} />
+              </div>
+              <span>Owner Gender</span>
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {['male', 'female', 'other'].map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() => handleInputChange('gender', formData.gender === g ? '' : g)}
+                  className={`py-2.5 px-3 rounded-xl text-xs font-bold capitalize transition-all border ${
+                    formData.gender === g
+                      ? 'text-white shadow-xs'
+                      : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                  }`}
+                  style={formData.gender === g ? { backgroundColor: themeColors.button, borderColor: themeColors.button } : {}}
+                >
+                  {g}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Business Name */}

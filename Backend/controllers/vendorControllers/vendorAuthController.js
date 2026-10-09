@@ -173,7 +173,7 @@ const register = async (req, res) => {
     }
 
     // verificationToken handling
-    const { name, email, verificationToken, aadhar, pan, businessName, service, labDetails, shopDetails } = req.body;
+    const { name, email, verificationToken, aadhar, pan, businessName, service, labDetails, shopDetails, gender } = req.body;
     let phone = req.body.phone;
 
     if (verificationToken) {
@@ -248,6 +248,7 @@ const register = async (req, res) => {
 
     const vendorData = {
       name, phone,
+      gender: (gender && ['male', 'female', 'other'].includes(String(gender).toLowerCase())) ? String(gender).toLowerCase() : null,
       businessName,
       service: Array.isArray(service) ? service : (service ? [service] : []),
       aadhar: {

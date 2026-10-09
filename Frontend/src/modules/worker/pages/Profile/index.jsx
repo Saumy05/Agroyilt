@@ -60,6 +60,7 @@ const Profile = () => {
             name: workerData.name || 'Worker Name',
             phone: workerData.phone || '',
             email: workerData.email || '',
+            gender: workerData.gender || 'male',
             address: addressString,
             rating: workerData.rating || 0,
             totalJobs: workerData.totalJobs || 0,
@@ -82,6 +83,7 @@ const Profile = () => {
               name: localWorkerData.name || 'Worker Name',
               phone: localWorkerData.phone || '',
               email: localWorkerData.email || '',
+              gender: localWorkerData.gender || 'male',
               address: 'Not set',
               rating: localWorkerData.rating || 0,
               totalJobs: localWorkerData.totalJobs || 0,
@@ -429,6 +431,16 @@ const Profile = () => {
               <div className="min-w-0 flex-1">
                 <p className="text-[10.5px] font-medium text-slate-400">Email</p>
                 <p className="text-xs sm:text-sm font-bold text-slate-800 truncate">{profile.email || 'Not set'}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+                <FiUser className="w-4 h-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10.5px] font-medium text-slate-400">Gender</p>
+                <p className="text-xs sm:text-sm font-bold text-slate-800 capitalize">{profile.gender || 'Male'}</p>
               </div>
             </div>
 

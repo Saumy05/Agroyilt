@@ -21,6 +21,13 @@ const vendorSchema = new mongoose.Schema({
     unique: true,
     trim: true
   },
+  gender: {
+    type: String,
+    enum: ['male', 'female', 'other'],
+    default: null,
+    lowercase: true,
+    trim: true
+  },
   role: {
     type: String,
     enum: ['vendor'],

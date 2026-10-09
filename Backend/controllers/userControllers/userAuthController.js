@@ -135,7 +135,7 @@ const register = async (req, res) => {
       });
     }
 
-    const { name, email, verificationToken } = req.body;
+    const { name, email, verificationToken, gender } = req.body;
     let phone = req.body.phone;
 
     // Verify token if provided (New Flow)
@@ -181,6 +181,7 @@ const register = async (req, res) => {
       name,
       email: normalizedEmail,
       phone,
+      gender: (gender && ['male', 'female', 'other'].includes(String(gender).toLowerCase())) ? String(gender).toLowerCase() : null,
       isPhoneVerified: true,
       isEmailVerified: !!normalizedEmail ? false : true,
       isMpinSet: false,

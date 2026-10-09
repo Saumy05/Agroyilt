@@ -26,7 +26,8 @@ const Signup = () => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    phoneNumber: ''
+    phoneNumber: '',
+    gender: ''
   });
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [otpToken, setOtpToken] = useState('');
@@ -244,6 +245,7 @@ const Signup = () => {
         name: formData.name,
         email: formData.email || null,
         phone: formData.phoneNumber,
+        gender: formData.gender || undefined,
         otp: otpValue,
         token: otpToken,
         referralCode: referralCode || undefined
@@ -384,6 +386,28 @@ const Signup = () => {
                   {errors.email}
                 </p>
               )}
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-[#426B4F] uppercase tracking-wider mb-1.5 ml-1">
+                Gender (Optional)
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {['male', 'female', 'other'].map((g) => (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => setFormData(prev => ({ ...prev, gender: prev.gender === g ? '' : g }))}
+                    className={`py-3 px-3 rounded-xl text-xs font-bold capitalize transition-all border ${
+                      formData.gender === g
+                        ? 'bg-[#426B4F] text-white border-[#426B4F] shadow-sm'
+                        : 'bg-white text-[#426B4F] border-[#426B4F]/20 hover:bg-[#426B4F]/5'
+                    }`}
+                  >
+                    {g}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {!verificationToken && (

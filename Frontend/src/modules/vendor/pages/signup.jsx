@@ -42,6 +42,7 @@ const VendorSignup = () => {
       name: '',
       email: '',
       phoneNumber: '',
+      gender: '',
       businessName: '',
       service: [],
       aadhar: '',
@@ -348,6 +349,7 @@ const VendorSignup = () => {
           name: formData.name,
           email: formData.email,
           phone: formData.phoneNumber,
+          gender: formData.gender || undefined,
           businessName: formData.businessName,
           aadhar: formData.aadhar,
           pan: formData.pan,
@@ -561,6 +563,26 @@ const VendorSignup = () => {
                         style={{ '--tw-ring-color': brandColor }}
                         placeholder="Your Full Name"
                       />
+                    </div>
+                  </div>
+
+                  <div className="animate-fade-in" style={{ animationDelay: '0.12s' }}>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Gender (Owner)</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {['male', 'female', 'other'].map((g) => (
+                        <button
+                          key={g}
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, gender: prev.gender === g ? '' : g }))}
+                          className={`py-2 px-3 rounded-xl text-xs font-bold capitalize transition-all border ${
+                            formData.gender === g
+                              ? 'bg-[#347989] text-white border-[#347989] shadow-sm'
+                              : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                          }`}
+                        >
+                          {g}
+                        </button>
+                      ))}
                     </div>
                   </div>
 

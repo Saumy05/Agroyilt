@@ -65,7 +65,7 @@ const WorkerTeam = () => {
 
   const openAddOfflineModal = () => {
     setEditingMemberId(null);
-    setOfflineForm({ name: '', phone: '', skills: ['General Labor'], dailyRate: '', experienceYears: 1 });
+    setOfflineForm({ name: '', phone: '', gender: 'male', skills: ['General Labor'], dailyRate: '', experienceYears: 1 });
     setIsOfflineModalOpen(true);
   };
 
@@ -77,6 +77,7 @@ const WorkerTeam = () => {
     setOfflineForm({
       name: member.name || '',
       phone: member.phone || '',
+      gender: member.gender || 'male',
       skills: skillsList,
       dailyRate: member.dailyRate || '',
       experienceYears: member.experienceYears || 1
@@ -117,6 +118,7 @@ const WorkerTeam = () => {
       const payload = {
         name: offlineForm.name.trim(),
         phone: offlineForm.phone.trim() || undefined,
+        gender: offlineForm.gender || 'male',
         skills: offlineForm.skills,
         dailyRate: offlineForm.dailyRate ? Number(offlineForm.dailyRate) : undefined,
         experienceYears: offlineForm.experienceYears ? Number(offlineForm.experienceYears) : 1
@@ -133,7 +135,7 @@ const WorkerTeam = () => {
         toastManager.success(res.data.message || (editingMemberId ? 'Offline member updated successfully!' : 'Offline member added successfully!'));
         setIsOfflineModalOpen(false);
         setEditingMemberId(null);
-        setOfflineForm({ name: '', phone: '', skills: ['General Labor'], dailyRate: '', experienceYears: 1 });
+        setOfflineForm({ name: '', phone: '', gender: 'male', skills: ['General Labor'], dailyRate: '', experienceYears: 1 });
         setProfile(prev => ({ ...prev, workerType: 'TEAM_LEADER' }));
         fetchData();
       }
@@ -573,6 +575,9 @@ const WorkerTeam = () => {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <h4 className="font-black text-slate-800 text-sm truncate">{member.name}</h4>
+                            <span className="text-[10px] font-bold capitalize text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded-md">
+                              {member.gender || 'male'}
+                            </span>
                             {member.isOfflineMember && (
                               <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md flex items-center gap-1">
                                 📱 No Smartphone
@@ -845,6 +850,28 @@ const WorkerTeam = () => {
                   onChange={e => setOfflineForm(prev => ({ ...prev, phone: e.target.value }))}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white font-medium"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-black uppercase tracking-wider text-slate-600 mb-1.5">
+                  Gender
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {['male', 'female', 'other'].map(g => (
+                    <button
+                      type="button"
+                      key={g}
+                      onClick={() => setOfflineForm(prev => ({ ...prev, gender: g }))}
+                      className={`py-2 px-3 rounded-xl text-xs font-bold capitalize transition-all border ${
+                        (offlineForm.gender || 'male') === g
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {g}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">

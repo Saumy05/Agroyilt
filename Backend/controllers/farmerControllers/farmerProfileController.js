@@ -18,7 +18,7 @@ const farmerProfileController = {
   // Update Profile
   updateProfile: async (req, res) => {
     try {
-      const { name, email, addresses } = req.body;
+      const { name, email, addresses, gender } = req.body;
       const user = await User.findById(req.user.id);
 
       if (!user) {
@@ -27,6 +27,13 @@ const farmerProfileController = {
 
       if (name) user.name = name;
       if (email) user.email = email;
+      if (gender !== undefined) {
+        if (['male', 'female', 'other'].includes(String(gender).toLowerCase())) {
+          user.gender = String(gender).toLowerCase();
+        } else if (gender === null || gender === '') {
+          user.gender = null;
+        }
+      }
       
       // Update Address (Enforced only 1 address as per User model comments)
       if (addresses && Array.isArray(addresses) && addresses.length > 0) {

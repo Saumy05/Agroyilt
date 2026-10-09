@@ -22,6 +22,13 @@ const workerSchema = new mongoose.Schema({
     sparse: true,     // Allow multiple nulls (offline members may have no phone)
     trim: true
   },
+  gender: {
+    type: String,
+    enum: ['male', 'female', 'other'],
+    default: 'male',
+    lowercase: true,
+    trim: true
+  },
   role: {
     type: String,
     enum: ['worker'],

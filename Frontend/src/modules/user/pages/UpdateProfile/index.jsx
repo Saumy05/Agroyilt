@@ -21,6 +21,7 @@ const UpdateProfile = () => {
     name: '',
     email: '',
     phone: '',
+    gender: '',
     profilePhoto: '', // URL
     farms: [],
   });
@@ -48,6 +49,7 @@ const UpdateProfile = () => {
             name: userData.name || '',
             email: userData.email || '',
             phone: userData.phone || '',
+            gender: userData.gender || '',
             profilePhoto: userData.profilePhoto || '',
             farms: userData.farms || [],
           });
@@ -61,6 +63,7 @@ const UpdateProfile = () => {
             name: user.name || '',
             email: user.email || '',
             phone: user.phone || '',
+            gender: user.gender || '',
             profilePhoto: user.profilePhoto || '',
             farms: user.farms || [],
           });
@@ -76,6 +79,7 @@ const UpdateProfile = () => {
             name: userData.name || '',
             email: userData.email || '',
             phone: userData.phone || '',
+            gender: userData.gender || '',
             profilePhoto: userData.profilePhoto || '',
             farms: userData.farms || [],
           });
@@ -261,6 +265,7 @@ const UpdateProfile = () => {
       const response = await userAuthService.updateProfile({
         name: formData.name.trim(),
         email: formData.email.trim() || null,
+        gender: formData.gender || null,
         profilePhoto: photoUrl,
         farms: formData.farms
       });
@@ -442,6 +447,29 @@ const UpdateProfile = () => {
               <p className="text-xs text-gray-500 mt-1 ml-1">
                 Phone number cannot be changed for security reasons
               </p>
+            </div>
+          </div>
+
+          {/* Gender */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Gender
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {['male', 'female', 'other'].map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, gender: prev.gender === g ? '' : g }))}
+                  className={`py-3 px-3 rounded-xl text-xs font-bold capitalize transition-all border ${
+                    formData.gender === g
+                      ? 'bg-[#00A6A6] text-white border-[#00A6A6] shadow-sm'
+                      : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  {g}
+                </button>
+              ))}
             </div>
           </div>
 

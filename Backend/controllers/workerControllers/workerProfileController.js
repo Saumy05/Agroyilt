@@ -40,6 +40,7 @@ const getProfile = async (req, res) => {
         isOnline: Boolean(worker.isOnline),
         profilePhoto: worker.profilePhoto || null,
         workerType: worker.workerType || 'WORKER',
+        gender: worker.gender || 'male',
         hasBike: Boolean(worker.hasBike),
         drivingLicense: worker.drivingLicense || null,
         teamId: worker.teamId || null,
@@ -74,7 +75,7 @@ const updateProfile = async (req, res) => {
     }
 
     const workerId = req.user.id;
-    const { name, serviceCategories, serviceCategory, skills, hourlyRate, dailyRate, landRate, customRates, address, status, profilePhoto } = req.body;
+    const { name, serviceCategories, serviceCategory, skills, hourlyRate, dailyRate, landRate, customRates, address, status, profilePhoto, gender } = req.body;
 
     const worker = await Worker.findById(workerId);
 
@@ -87,6 +88,9 @@ const updateProfile = async (req, res) => {
 
     // Update fields
     if (name) worker.name = name.trim();
+    if (gender && ['male', 'female', 'other'].includes(String(gender).toLowerCase())) {
+      worker.gender = String(gender).toLowerCase();
+    }
 
     // Handle categories: prefer array, fallback to single legacy string
     if (serviceCategories && Array.isArray(serviceCategories)) {

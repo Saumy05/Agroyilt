@@ -20,6 +20,7 @@ const ProfileDetails = () => {
 
   const [profile, setProfile] = useState({
     name: '',
+    gender: '',
     businessName: '',
     phone: '',
     email: '',
@@ -66,6 +67,7 @@ const ProfileDetails = () => {
           setProfile(prev => ({
             ...prev,
             name: storedData.name || 'Vendor Name',
+            gender: storedData.gender || '',
             businessName: storedData.businessName || null,
             phone: storedData.phone || '',
             email: storedData.email || '',
@@ -92,6 +94,7 @@ const ProfileDetails = () => {
 
           const newProfile = {
             name: apiData.name,
+            gender: apiData.gender || '',
             businessName: apiData.businessName,
             phone: apiData.phone,
             email: apiData.email,
@@ -180,6 +183,18 @@ const ProfileDetails = () => {
                   <p className="text-gray-900 font-bold text-sm truncate">{profile.name}</p>
                 </div>
               </div>
+
+              {profile.gender && (
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: `${themeColors.icon}15` }}>
+                    <FiUser className="w-5 h-5" style={{ color: themeColors.icon }} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-gray-500 font-medium mb-0.5">Owner Gender</p>
+                    <p className="text-gray-900 font-bold text-sm capitalize">{profile.gender}</p>
+                  </div>
+                </div>
+              )}
 
               <div className="flex items-center gap-4">
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: `${themeColors.icon}15` }}>

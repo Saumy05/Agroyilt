@@ -770,7 +770,7 @@ exports.addOfflineMember = async (req, res) => {
       dailyRate: Number(dailyRate) || leader.dailyRate || 500,
       hourlyRate: Number(hourlyRate) || leader.hourlyRate || 70,
       experienceYears: Number(experienceYears) || 1,
-      gender: gender || 'male',
+      gender: (gender && ['male', 'female', 'other'].includes(String(gender).toLowerCase())) ? String(gender).toLowerCase() : 'male',
       location: leader.location || undefined,
       verified: true
     }], { session });
@@ -833,7 +833,9 @@ exports.updateOfflineMember = async (req, res) => {
     if (dailyRate !== undefined && !isNaN(Number(dailyRate))) member.dailyRate = Number(dailyRate);
     if (hourlyRate !== undefined && !isNaN(Number(hourlyRate))) member.hourlyRate = Number(hourlyRate);
     if (experienceYears !== undefined && !isNaN(Number(experienceYears))) member.experienceYears = Number(experienceYears);
-    if (gender) member.gender = gender;
+    if (gender && ['male', 'female', 'other'].includes(String(gender).toLowerCase())) {
+      member.gender = String(gender).toLowerCase();
+    }
 
     await member.save();
 

@@ -51,6 +51,7 @@ const EditProfile = () => {
     name: '',
     phone: '',
     email: '',
+    gender: 'male',
     address: {
       addressLine1: '',
       city: '',
@@ -103,6 +104,7 @@ const EditProfile = () => {
             name: w.name || '',
             phone: w.phone || '',
             email: w.email || '',
+            gender: w.gender || 'male',
             address: {
               addressLine1: w.address?.addressLine1 || '',
               city: w.address?.city || '',
@@ -349,6 +351,7 @@ const EditProfile = () => {
       const payload = {
         name: formData.name,
         email: formData.email,
+        gender: formData.gender || 'male',
         serviceCategories: formData.serviceCategories,
         serviceCategory: formData.serviceCategories[0], // Fallback
         skills: formData.skills,
@@ -549,6 +552,26 @@ const EditProfile = () => {
                 <div className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 bg-green-100 text-green-700 text-[10px] font-bold rounded">
                   VERIFIED
                 </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-gray-500 mb-1.5 block ml-1">Gender</label>
+              <div className="grid grid-cols-3 gap-2">
+                {['male', 'female', 'other'].map(g => (
+                  <button
+                    type="button"
+                    key={g}
+                    onClick={() => handleInputChange('gender', g)}
+                    className={`py-2.5 px-3 rounded-xl text-xs font-bold capitalize transition-all border ${
+                      (formData.gender || 'male') === g
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                        : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                    }`}
+                  >
+                    {g}
+                  </button>
+                ))}
               </div>
             </div>
           </div>

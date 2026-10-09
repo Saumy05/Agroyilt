@@ -130,7 +130,8 @@ const register = async (req, res) => {
       workerType,
       hasBike,
       drivingLicenseNumber,
-      drivingLicenseDocument
+      drivingLicenseDocument,
+      gender
     } = req.body;
     let phone = req.body.phone;
 
@@ -190,6 +191,7 @@ const register = async (req, res) => {
       name,
       email: normalizedEmail,
       phone,
+      gender: (gender && ['male', 'female', 'other'].includes(String(gender).toLowerCase())) ? String(gender).toLowerCase() : 'male',
       isPhoneVerified: true,
       aadhar: {
         number: req.body.aadhar || aadharNumber,
