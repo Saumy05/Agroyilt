@@ -634,8 +634,8 @@ const MachineryExplorer = () => {
       </div>
 
       {/* Main Body */}
-        /* PROGRESSIVE 4-STEP SPECIFICATIONS ACCORDION */
-        <div className="max-w-xl mx-auto px-3.5 py-3 space-y-3">
+      {/* PROGRESSIVE 4-STEP SPECIFICATIONS ACCORDION */}
+      <div className="max-w-xl mx-auto px-3.5 py-3 space-y-3">
           {loading ? (
             <div className="py-24 text-center">
               <LogoLoader />
@@ -695,7 +695,7 @@ const MachineryExplorer = () => {
                             }`}>
                               <FiTruck size={17} />
                             </div>
-                            <span className={`text-[11px] font-black truncate max-w-full ${
+                            <span className={`text-[11px] font-bold line-clamp-2 leading-tight text-center break-words max-w-full min-h-[26px] flex items-center justify-center ${
                               isSelected ? 'text-emerald-900' : 'text-slate-800'
                             }`}>
                               {cat.title}
