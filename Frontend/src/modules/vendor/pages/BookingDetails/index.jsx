@@ -32,6 +32,7 @@ import { useAppNotifications } from '../../../../hooks/useAppNotifications';
 import { useLocationTracking } from '../../../../hooks/useLocationTracking';
 import TripFlowModal from '../../components/common/TripFlowModal';
 import LiveServiceTimer from '../../../../components/common/LiveServiceTimer';
+import RentalTimer from '../../../../components/common/RentalTimer';
 import DisputeModal from '../../../../components/common/DisputeModal'; // NEW
 import disputeService from '../../../../services/disputeService'; // NEW
 import LogoLoader from '../../../../components/common/LogoLoader'; // NEW
@@ -624,6 +625,14 @@ export default function BookingDetails() {
     }
   };
 
+  // ──────── IS RENTAL DETECTION ────────
+  const isRental = Boolean(
+    booking?.fulfillmentMode === 'rental' ||
+    booking?.categoryId?.fulfillmentMode === 'rental' ||
+    booking?.equipmentId?.listingType === 'rental' ||
+    (booking?.rental_type && (booking?.requiresDriver === false || booking?.categoryId?.requiresDriver === false))
+  );
+
   // ──────── TRIP FLOW HANDLERS (New - agriculture feature) ────────
   const openTripModal = (mode) => {
     setTripMode(mode);
@@ -631,8 +640,8 @@ export default function BookingDetails() {
   };
 
   const handleTripSubmit = async (photoUrl, otp, workUnits, evidencePhoto) => {
-    // Detect if this is a machinery/equipment booking
-    const isMachinery = !!(booking?.rental_type ||
+    // Detect if this is a machinery/equipment service booking
+    const isMachinery = !isRental && !!(booking?.rental_type ||
       ['equipment', 'machinery', 'tractor', 'agriculture'].some(cat =>
         (booking?.serviceCategory || booking?.serviceType || '').toLowerCase().includes(cat)
       )
@@ -640,8 +649,12 @@ export default function BookingDetails() {
 
     try {
       if (tripMode === 'start') {
-        if (isMachinery) {
-          // Machinery: vendor enters farmer's Start OTP + KM photo
+        if (isRental) {
+          // Rental: vendor enters farmer's Pickup Handover OTP
+          await machineryStartWork(id, otp, photoUrl);
+          toastManager.success('📦 Equipment Handed Over! Rental period is now active.');
+        } else if (isMachinery) {
+          // Machinery service: vendor enters farmer's Start OTP + KM photo
           await machineryStartWork(id, otp, photoUrl);
           toastManager.success('🚜 Trip Started! OTP verified, work has begun.');
         } else {
@@ -649,8 +662,12 @@ export default function BookingDetails() {
           toastManager.success('🚜 Trip Started! KM Photo & OTP verified.');
         }
       } else {
-        if (isMachinery) {
-          // Machinery end: only KM photo needed — system auto-generates Payment OTP for farmer
+        if (isRental) {
+          // Rental end: return photo/inspection submitted -> bill generated & Payment OTP sent to farmer
+          await machineryCompleteWork(id, photoUrl, workUnits, evidencePhoto);
+          toastManager.success('✅ Equipment Returned! Bill Generated & Payment OTP sent to farmer.');
+        } else if (isMachinery) {
+          // Machinery service end: only KM photo needed — system auto-generates Payment OTP for farmer
           await machineryCompleteWork(id, photoUrl, workUnits, evidencePhoto);
           toastManager.success('🏁 Work Completed! Bill Generated & Payment OTP sent to the farmer.');
         } else {
@@ -760,7 +777,7 @@ export default function BookingDetails() {
     )
   );
 
-  const hasLiveTimer = !['requested', 'pending', 'searching', 'rejected', 'cancelled'].includes(booking?.status?.toLowerCase()) &&
+  const hasLiveTimer = !isRental && !['requested', 'pending', 'searching', 'rejected', 'cancelled'].includes(booking?.status?.toLowerCase()) &&
     !!(booking?.serviceTimer || booking?.equipmentId || booking?.rental_type || ['visited', 'in_progress', 'completed'].includes(booking?.status?.toLowerCase()));
 
   const gstPercentageRate = booking?.gstPercentage !== undefined && booking?.gstPercentage !== null
@@ -1653,9 +1670,33 @@ export default function BookingDetails() {
             <FiChevronRight className="w-4 h-4 text-slate-400" />
           </button>
         </div>
+                      {/* Action Button for Rentals */}
+        {isRental && !['cancelled', 'rejected'].includes(booking?.status?.toLowerCase()) && (
+          <div className="space-y-2 mb-3">
+            {['confirmed', 'accepted', 'assigned', 'visited'].includes(booking?.status?.toLowerCase()) && (
+              <button
+                onClick={() => openTripModal('start')}
+                className="w-full py-3.5 rounded-2xl font-black text-xs text-white flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md shadow-emerald-700/25 bg-emerald-600 hover:bg-emerald-700 cursor-pointer uppercase tracking-wider"
+              >
+                <FiPackage className="w-4 h-4" />
+                <span>Handover Equipment (Verify Pickup OTP)</span>
+              </button>
+            )}
+
+            {booking?.status?.toLowerCase() === 'in_progress' && (
+              <button
+                onClick={() => openTripModal('end')}
+                className="w-full py-3.5 rounded-2xl font-black text-xs text-white flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md shadow-teal-700/25 bg-teal-600 hover:bg-teal-700 cursor-pointer uppercase tracking-wider"
+              >
+                <FiCheckCircle className="w-4 h-4" />
+                <span>Verify Return & Settle Bill</span>
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Action Button for non-timer services */}
-        {!hasLiveTimer && !['cancelled', 'rejected'].includes(booking?.status?.toLowerCase()) && (
+        {!isRental && !hasLiveTimer && !['cancelled', 'rejected'].includes(booking?.status?.toLowerCase()) && (
           <div className="space-y-2 mb-3">
             {['confirmed', 'accepted', 'assigned', 'visited'].includes(booking?.status?.toLowerCase()) && (
               <button
@@ -1733,7 +1774,7 @@ export default function BookingDetails() {
           )}
 
         {/* ══════ LIVE AGRICULTURAL SERVICE TIMER (PLAY / PAUSE / BREAKDOWN) ══════ */}
-        {!['requested', 'pending', 'searching', 'rejected', 'cancelled'].includes(booking?.status?.toLowerCase()) &&
+        {!isRental && !['requested', 'pending', 'searching', 'rejected', 'cancelled'].includes(booking?.status?.toLowerCase()) &&
          (booking?.serviceTimer || booking?.equipmentId || booking?.rental_type || ['visited', 'in_progress', 'completed'].includes(booking?.status?.toLowerCase())) && (
           <div className="mb-4">
             <LiveServiceTimer
@@ -1742,6 +1783,13 @@ export default function BookingDetails() {
               onStatusChange={refreshBooking}
               onStartClick={() => openTripModal('start')}
             />
+          </div>
+        )}
+
+        {/* ══════ RENTAL DURATION / OVERDUE TIMER (FOR RENTALS ONLY) ══════ */}
+        {isRental && booking?.status?.toLowerCase() === 'in_progress' && (
+          <div className="mb-4">
+            <RentalTimer booking={booking} role="vendor" />
           </div>
         )}
 
@@ -1870,9 +1918,10 @@ export default function BookingDetails() {
         onClose={() => setIsTripModalOpen(false)}
         mode={tripMode}
         rentalType={booking.rental_type}
-        requiresDriver={booking.categoryId?.requiresDriver}
-        trackingType={booking.categoryId?.trackingType}
-        isMachinery={!!(booking?.rental_type || ['equipment', 'machinery', 'tractor', 'agriculture'].some(cat => (booking?.serviceCategory || booking?.serviceType || '').toLowerCase().includes(cat)))}
+        requiresDriver={isRental ? false : booking.categoryId?.requiresDriver}
+        trackingType={isRental ? 'none' : booking.categoryId?.trackingType}
+        isMachinery={!isRental && !!(booking?.rental_type || ['equipment', 'machinery', 'tractor', 'agriculture'].some(cat => (booking?.serviceCategory || booking?.serviceType || '').toLowerCase().includes(cat)))}
+        isRental={isRental}
         onSubmit={handleTripSubmit}
         booking={booking}
       />

@@ -21,7 +21,7 @@ import { flutterBridge } from '../../../../utils/flutterBridge';
  *   rentalType {string} 'hourly' | 'land_based' | 'monthly'
  *   isMachinery {boolean} True if this is an equipment rental
  */
-const TripFlowModal = ({ isOpen, onClose, mode = 'start', onSubmit, rentalType, isMachinery = false, requiresDriver = true, trackingType = 'odometer', booking }) => {
+const TripFlowModal = ({ isOpen, onClose, mode = 'start', onSubmit, rentalType, isMachinery = false, requiresDriver = true, trackingType = 'odometer', booking, isRental = false }) => {
     const [step, setStep] = useState(1); // 1 = Photo, 2 = OTP
     const [photoPreview, setPhotoPreview] = useState(null);
     const [photoFile, setPhotoFile] = useState(null);
@@ -62,17 +62,32 @@ const TripFlowModal = ({ isOpen, onClose, mode = 'start', onSubmit, rentalType, 
     };
 
     const isStart = mode === 'start';
+    const effectiveIsRental = Boolean(
+        isRental ||
+        booking?.fulfillmentMode === 'rental' ||
+        booking?.categoryId?.fulfillmentMode === 'rental' ||
+        booking?.equipmentId?.listingType === 'rental' ||
+        (booking?.rental_type && (booking?.requiresDriver === false || booking?.categoryId?.requiresDriver === false))
+    );
+
     // Machinery/Equipment start ALWAYS requires Farmer's Start OTP to start work & live timer.
     // Machinery complete auto-generates End/Payment OTP for the farmer, so vendor doesn't enter one on end trip.
-    const skipOtpStep = isStart ? false : (isMachinery ? true : !requiresDriver);
-    const isMeterBased = trackingType === 'odometer';
+    // Rental return skips OTP (vendor inspects return & submits, system notifies farmer with payment OTP).
+    const skipOtpStep = isStart ? false : (effectiveIsRental ? true : (isMachinery ? true : !requiresDriver));
+    const isMeterBased = !effectiveIsRental && trackingType === 'odometer';
 
-    const title = isStart 
-        ? (isMachinery ? '🚜 Start Field Service & Live Timer' : (requiresDriver ? '🚜 Start Trip' : '📦 Handover Equipment'))
-        : (isMachinery ? '🏁 Complete Field Service & Bill' : (requiresDriver ? '🏁 End Trip' : '✅ Collect Equipment'));
-    const photoLabel = isStart 
-        ? (isMachinery ? 'Field & Machinery Setup Photo (Optional)' : (isMeterBased ? 'Starting Kilometer Photo' : 'Equipment Condition Photo (Optional)'))
-        : (isMachinery ? 'Completed Field Work Photo (Optional)' : (isMeterBased ? 'Ending Kilometer Photo' : 'Rental Condition Photo (Optional)'));
+    const title = effectiveIsRental
+        ? (isStart ? '📦 Handover Equipment (Verify OTP)' : '✅ Verify Equipment Return & Settle Bill')
+        : (isStart 
+            ? (isMachinery ? '🚜 Start Field Service & Live Timer' : (requiresDriver ? '🚜 Start Trip' : '📦 Handover Equipment'))
+            : (isMachinery ? '🏁 Complete Field Service & Bill' : (requiresDriver ? '🏁 End Trip' : '✅ Collect Equipment')));
+
+    const photoLabel = effectiveIsRental
+        ? (isStart ? 'Handover Equipment Condition Photo (Optional)' : 'Return Condition Photo (Optional)')
+        : (isStart 
+            ? (isMachinery ? 'Field & Machinery Setup Photo (Optional)' : (isMeterBased ? 'Starting Kilometer Photo' : 'Equipment Condition Photo (Optional)'))
+            : (isMachinery ? 'Completed Field Work Photo (Optional)' : (isMeterBased ? 'Ending Kilometer Photo' : 'Rental Condition Photo (Optional)')));
+
     const themeColor = isStart ? '#16a34a' : '#dc2626'; // green for start, red for end
 
     // Reset state when modal closes / reopens or changes mode
@@ -336,10 +351,12 @@ const TripFlowModal = ({ isOpen, onClose, mode = 'start', onSubmit, rentalType, 
                             {step === 2 && !isStart && (
                                 <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
                                     <div>
-                                        <p className="text-sm font-semibold text-gray-700">Finished Work Evidence</p>
+                                        <p className="text-sm font-semibold text-gray-700">{effectiveIsRental ? 'Returned Equipment Condition Photo (Optional)' : 'Finished Work Evidence'}</p>
                                         {skipOtpStep && (
                                             <p className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl p-2 mt-1">
-                                                ℹ️ Submitting here completes service and generates the bill. Payment OTP is entered in the next step when collecting payment.
+                                                {effectiveIsRental
+                                                    ? 'ℹ️ Submitting here confirms equipment return and generates the bill. Payment OTP is entered in the next step when collecting payment.'
+                                                    : 'ℹ️ Submitting here completes service and generates the bill. Payment OTP is entered in the next step when collecting payment.'}
                                             </p>
                                         )}
                                     </div>
@@ -359,8 +376,12 @@ const TripFlowModal = ({ isOpen, onClose, mode = 'start', onSubmit, rentalType, 
                                             className="w-full h-52 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-3 transition-all active:scale-95"
                                             style={{ borderColor: themeColor, background: `${themeColor}08` }}>
                                             <FiCamera className="w-10 h-10" style={{ color: themeColor }} />
-                                            <p className="text-sm font-bold" style={{ color: themeColor }}>Take Proof of Work</p>
-                                            <p className="text-[10px] text-gray-400">Take a photo of the completed task side-by-side with the machine</p>
+                                            <p className="text-sm font-bold" style={{ color: themeColor }}>
+                                                {effectiveIsRental ? 'Take Equipment Photo' : 'Take Proof of Work'}
+                                            </p>
+                                            <p className="text-[10px] text-gray-400">
+                                                {effectiveIsRental ? 'Take a photo of the returned equipment condition' : 'Take a photo of the completed task side-by-side with the machine'}
+                                            </p>
                                         </button>
                                     )}
 
@@ -387,8 +408,8 @@ const TripFlowModal = ({ isOpen, onClose, mode = 'start', onSubmit, rentalType, 
                                             {uploading
                                                 ? <><FiLoader className="w-4 h-4 animate-spin" /> Uploading...</>
                                                 : !evidencePreview 
-                                                    ? <>{skipOtpStep ? (isMachinery ? 'Complete Service & Bill' : 'Confirm & End Trip') : 'Skip Photo & Continue'} <FiArrowRight className="w-4 h-4" /></>
-                                                    : <><FiCheck className="w-4 h-4" /> {skipOtpStep ? (isMachinery ? 'Complete Service & Bill' : 'Confirm & End Trip') : 'Verify & Continue'}</>}
+                                                    ? <>{skipOtpStep ? (effectiveIsRental ? 'Confirm Return & Settle Bill' : (isMachinery ? 'Complete Service & Bill' : 'Confirm & End Trip')) : 'Skip Photo & Continue'} <FiArrowRight className="w-4 h-4" /></>
+                                                    : <><FiCheck className="w-4 h-4" /> {skipOtpStep ? (effectiveIsRental ? 'Confirm Return & Settle Bill' : (isMachinery ? 'Complete Service & Bill' : 'Confirm & End Trip')) : 'Verify & Continue'}</>}
                                         </button>
                                     </div>
                                     <div className="h-20 sm:hidden" />
@@ -433,7 +454,7 @@ const TripFlowModal = ({ isOpen, onClose, mode = 'start', onSubmit, rentalType, 
                                     {/* OTP Input */}
                                     <div className="text-center space-y-2">
                                         <p className="text-sm font-bold text-gray-800">Enter Farmer's OTP</p>
-                                        <p className="text-[11px] text-gray-500">Ask the farmer for their {isStart ? '4-digit Start' : '4-digit End'} OTP</p>
+                                        <p className="text-[11px] text-gray-500">Ask the farmer for their {effectiveIsRental ? '4-digit Pickup Handover' : (isStart ? '4-digit Start' : '4-digit End')} OTP</p>
                                         <div className="flex justify-center gap-3 mt-4">
                                             {otp.map((digit, idx) => (
                                                 <input

@@ -175,14 +175,23 @@ const BookingTimeline = () => {
   const [isTripModalOpen, setIsTripModalOpen] = useState(false);
   const [tripModalMode, setTripModalMode] = useState('start');
 
+  const isRental = booking ? Boolean(
+    booking.fulfillmentMode === 'rental' ||
+    booking.categoryId?.fulfillmentMode === 'rental' ||
+    booking.equipmentId?.listingType === 'rental' ||
+    (booking.rental_type && (booking.requiresDriver === false || booking.categoryId?.requiresDriver === false))
+  ) : false;
+
   const isAgriBooking = booking ? (
-    !!booking.rental_type ||
-    booking.serviceCategory === 'Agriculture' ||
-    booking.serviceCategory === 'Machinery' ||
-    booking.serviceCategory === 'Equipment' ||
-    booking.providerType === 'MACHINERY' ||
-    !!booking.equipmentId ||
-    /agri|tractor|machin|equip|harvester|rotavator/i.test(booking.categoryId?.name || '')
+    !isRental && (
+      !!booking.rental_type ||
+      booking.serviceCategory === 'Agriculture' ||
+      booking.serviceCategory === 'Machinery' ||
+      booking.serviceCategory === 'Equipment' ||
+      booking.providerType === 'MACHINERY' ||
+      !!booking.equipmentId ||
+      /agri|tractor|machin|equip|harvester|rotavator/i.test(booking.categoryId?.name || '')
+    )
   ) : false;
 
   const isCancelled = booking ? ['cancelled', 'rejected'].includes((booking.status || '').toLowerCase()) : false;
@@ -255,33 +264,51 @@ const BookingTimeline = () => {
           return;
         }
 
-        const statusMap = {
-          'requested': 1,
-          'searching': 1,
-          'confirmed': 2,
-          'assigned': 3,
-          'journey_started': 4,
-          'visited': 6,
-          'in_progress': 6.5,
-          'work_done': 7,
-          'completed': 8,
-        };
+        const isBookingRental = Boolean(
+          apiData.fulfillmentMode === 'rental' ||
+          apiData.categoryId?.fulfillmentMode === 'rental' ||
+          apiData.equipmentId?.listingType === 'rental' ||
+          (apiData.rental_type && (apiData.requiresDriver === false || apiData.categoryId?.requiresDriver === false))
+        );
 
-        const isActuallyPaid = apiData.isWorkerPaid || apiData.workerPaymentStatus === 'PAID' || apiData.workerPaymentStatus === 'SUCCESS';
-        const isSettled = apiData.finalSettlementStatus === 'DONE';
+        let stage = 2;
+        if (isBookingRental) {
+          const rentalStatusMap = {
+            'requested': 1,
+            'searching': 1,
+            'confirmed': 3,
+            'accepted': 3,
+            'assigned': 3,
+            'visited': 3,
+            'in_progress': 4,
+            'work_done': 5,
+            'completed': (apiData.finalSettlementStatus === 'DONE') ? 10 : 9,
+          };
+          stage = rentalStatusMap[apiData.status] || 2;
+        } else {
+          const statusMap = {
+            'requested': 1,
+            'searching': 1,
+            'confirmed': 2,
+            'assigned': 3,
+            'journey_started': 4,
+            'visited': 6,
+            'in_progress': 6.5,
+            'work_done': 7,
+            'completed': 8,
+          };
+          const isSettled = apiData.finalSettlementStatus === 'DONE';
+          stage = statusMap[apiData.status] || 2;
+          
+          // Redirect logic for standalone: skip to stage 6 if status is confirmed/accepted
+          if (!requiresDriver && (apiData.status === 'confirmed' || apiData.status === 'accepted')) {
+            stage = 6;
+          }
 
-        // Custom logic for later stages
-        let stage = statusMap[apiData.status] || 2;
-        
-        // Redirect logic for standalone: skip to stage 6 if status is confirmed/accepted
-        if (!requiresDriver && (apiData.status === 'confirmed' || apiData.status === 'accepted')) {
-          stage = 6; // Directly jump to Handover stage
-        }
-
-
-        if (apiData.status === 'completed') {
-          if (isSettled) stage = 10; // Booking Complete
-          else stage = 9; // Final Settlement
+          if (apiData.status === 'completed') {
+            if (isSettled) stage = 10;
+            else stage = 9;
+          }
         }
 
         setCurrentStage(stage);
@@ -464,7 +491,10 @@ const BookingTimeline = () => {
 
       // 2. Call API with URLs
       if (tripModalMode === 'start') {
-        if (isAgriBooking) {
+        if (isRental) {
+          await machineryStartWork(id, otp, photoUrl);
+          toastManager.success('📦 Equipment Handed Over! Rental period is now active.');
+        } else if (isAgriBooking) {
           await machineryStartWork(id, otp, photoUrl);
           toastManager.success('🚜 Trip Started! OTP verified, work has begun.');
         } else {
@@ -472,7 +502,10 @@ const BookingTimeline = () => {
           toastManager.success(requiresDriver === false ? 'Equipment Handover Successful' : 'Engine started successfully');
         }
       } else {
-        if (isAgriBooking) {
+        if (isRental) {
+          await machineryCompleteWork(id, photoUrl, workUnits, evidenceUrl);
+          toastManager.success('✅ Equipment Returned! Bill Generated & Payment OTP sent to farmer.');
+        } else if (isAgriBooking) {
           await machineryCompleteWork(id, photoUrl, workUnits, evidenceUrl);
           toastManager.success('🏁 Work Completed! Bill Generated & Payment OTP sent to farmer.');
         } else {
@@ -492,7 +525,94 @@ const BookingTimeline = () => {
     }
   };
 
-  const timelineStages = isCancelled ? [
+  const rentalStages = [
+    {
+      id: 1,
+      title: 'Booking Requested',
+      icon: FiClock,
+      action: null,
+      description: 'Rental booking request received',
+      timestamp: booking?.createdAt,
+      isCompleted: true,
+    },
+    {
+      id: 2,
+      title: 'Booking Accepted',
+      icon: FiCheck,
+      action: null,
+      description: 'You accepted the rental request',
+      timestamp: booking?.acceptedAt,
+      isCompleted: currentStage >= 3,
+    },
+    {
+      id: 3,
+      title: 'Handover Equipment',
+      description: ['in_progress', 'work_done', 'completed'].includes((booking?.status || '').toLowerCase())
+        ? 'Equipment successfully handed over to farmer'
+        : 'Verify Farmer’s Pickup OTP & Handover Equipment',
+      icon: FiPackage,
+      isCompleted: ['in_progress', 'work_done', 'completed'].includes((booking?.status || '').toLowerCase()),
+      action: ['confirmed', 'accepted', 'assigned', 'visited'].includes((booking?.status || '').toLowerCase())
+        ? () => { setTripModalMode('start'); setIsTripModalOpen(true); }
+        : null,
+    },
+    {
+      id: 4,
+      title: 'Rental Active (In Use)',
+      icon: FiClock,
+      isCompleted: ['work_done', 'completed'].includes((booking?.status || '').toLowerCase()),
+      action: null,
+      description: (booking?.status || '').toLowerCase() === 'in_progress'
+        ? 'Equipment is currently in use by farmer'
+        : (['work_done', 'completed'].includes((booking?.status || '').toLowerCase()) ? 'Rental duration concluded' : 'Waiting for equipment handover'),
+    },
+    {
+      id: 5,
+      title: 'Verify Return & Settle',
+      icon: FiCheckCircle,
+      isCompleted: ['work_done', 'completed'].includes((booking?.status || '').toLowerCase()),
+      action: (booking?.status || '').toLowerCase() === 'in_progress'
+        ? () => { setTripModalMode('end'); setIsTripModalOpen(true); }
+        : null,
+      description: (booking?.status || '').toLowerCase() === 'in_progress'
+        ? 'Inspect returned equipment & generate bill'
+        : (['work_done', 'completed'].includes((booking?.status || '').toLowerCase()) ? 'Equipment returned and inspected' : 'Waiting for equipment return'),
+    },
+    {
+      id: 7,
+      title: 'Collect Payment',
+      icon: FiCheckCircle,
+      action: (() => {
+        if (booking?.status === 'completed' || booking?.status === 'COMPLETED' || booking?.paymentStatus === 'SUCCESS' || booking?.paymentStatus === 'paid' || booking?.paymentStatus === 'collected_by_vendor') return null;
+        if (booking?.vendorBillId && booking?.paymentMethod !== 'cash' && booking?.paymentMethod !== 'pay_at_home' && booking?.paymentMethod !== 'plan_benefit') {
+          return () => navigate(`/vendor/booking/${id}/billing`);
+        }
+        if (currentStage >= 5) {
+          return () => navigate(`/vendor/booking/${id}/billing`);
+        }
+        return null;
+      })(),
+      description: (booking?.vendorBillId && booking?.paymentMethod !== 'cash' && booking?.paymentMethod !== 'pay_at_home' && booking?.paymentMethod !== 'plan_benefit') ? 'Waiting for customer to pay online' : 'Collect cash with customer OTP or view bill',
+    },
+    {
+      id: 9,
+      title: 'Final Settlement',
+      icon: FiFileText,
+      action: (currentStage === 9) ? handleFinalSettlement : null,
+      description: booking?.finalSettlementStatus === 'DONE' ? 'Settlement Done' : 'Complete final settlement',
+      isCompleted: (booking?.status || '').toLowerCase() === 'completed',
+    },
+    {
+      id: 10,
+      title: 'Rental Complete',
+      icon: FiCheckCircle,
+      action: null,
+      description: 'Rental successfully finalized',
+      isCompleted: (booking?.status || '').toLowerCase() === 'completed' && booking?.finalSettlementStatus === 'DONE',
+    }
+  ];
+
+  const baseStages = isCancelled ? [
     {
       id: 1,
       title: 'Booking Requested',
@@ -523,7 +643,7 @@ const BookingTimeline = () => {
       isCompleted: true,
       isCancelledStep: true,
     }
-  ] : [
+  ] : (isRental ? rentalStages : [
     {
       id: 1,
       title: 'Booking Requested',
@@ -638,9 +758,11 @@ const BookingTimeline = () => {
       action: null,
       description: 'Booking successfully finalized',
     },
-  ].filter(stage => {
+  ]);
 
-    
+  const timelineStages = baseStages.filter(stage => {
+    if (isRental) return true;
+
     // Standalone: Hide Assigned (3), Journey (4), and Visited (5)
     if (!requiresDriver && [3, 4, 5].includes(stage.id)) return false;
     
@@ -734,21 +856,29 @@ const BookingTimeline = () => {
           </div>
         )}
 
-        {!isCancelled && (booking?.serviceTimer || booking?.equipmentId || booking?.rental_type || ['visited', 'in_progress', 'completed'].includes(booking?.status) || isAgriBooking) ? (
-          <div className="mb-6">
-            <LiveServiceTimer
-              booking={booking}
-              role="vendor"
-              onStatusChange={() => {
-                window.location.reload();
-              }}
-              onStartClick={() => {
-                setTripModalMode('start');
-                setIsTripModalOpen(true);
-              }}
-            />
-          </div>
-        ) : null}
+        {!isCancelled && (
+          isRental ? (
+            booking?.status === 'in_progress' ? (
+              <div className="mb-6">
+                <RentalTimer booking={booking} />
+              </div>
+            ) : null
+          ) : (booking?.serviceTimer || booking?.equipmentId || booking?.rental_type || ['visited', 'in_progress', 'completed'].includes(booking?.status) || isAgriBooking) ? (
+            <div className="mb-6">
+              <LiveServiceTimer
+                booking={booking}
+                role="vendor"
+                onStatusChange={() => {
+                  window.location.reload();
+                }}
+                onStartClick={() => {
+                  setTripModalMode('start');
+                  setIsTripModalOpen(true);
+                }}
+              />
+            </div>
+          ) : null
+        )}
         <div
           className="bg-white rounded-[2rem] p-8 shadow-lg border border-slate-100"
           style={{
@@ -912,8 +1042,9 @@ const BookingTimeline = () => {
         onSubmit={handleTripSubmit}
         rentalType={booking?.rental_type}
         isMachinery={isAgriBooking}
-        requiresDriver={requiresDriver}
-        trackingType={requiresDriver ? 'odometer' : 'condition'}
+        requiresDriver={isRental ? false : requiresDriver}
+        trackingType={isRental ? 'none' : (requiresDriver ? 'odometer' : 'condition')}
+        isRental={isRental}
         booking={booking}
       />
     </div>

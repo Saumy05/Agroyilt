@@ -536,8 +536,15 @@ const settleVendorCash = async (bookingId, { collectorRole, collectorId }) => {
  * Timer-based when a live timer exists, otherwise from the booked rental type.
  */
 const computeMachineryBase = ({ booking, service, equipment, workUnits, now }) => {
+  const isRental = Boolean(
+    booking.fulfillmentMode === 'rental' ||
+    booking.categoryId?.fulfillmentMode === 'rental' ||
+    booking.equipmentId?.listingType === 'rental' ||
+    (booking.rental_type && (booking.requiresDriver === false || booking.categoryId?.requiresDriver === false))
+  );
+
   const t = booking.serviceTimer;
-  const hasTimer = !!t && ((t.accumulatedActiveSeconds || 0) > 0 || ['RUNNING', 'PAUSED', 'COMPLETED'].includes(t.status));
+  const hasTimer = !isRental && !!t && ((t.accumulatedActiveSeconds || 0) > 0 || ['RUNNING', 'PAUSED', 'COMPLETED'].includes(t.status));
   if (hasTimer) {
     const active = t.accumulatedActiveSeconds || 0;
     const totalActiveMinutes = Math.max(active > 0 ? 1 : 0, Math.ceil(active / 60));

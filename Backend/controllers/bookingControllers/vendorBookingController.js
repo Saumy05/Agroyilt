@@ -1514,7 +1514,13 @@ const startTrip = async (req, res) => {
     if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
 
     // Status first, so a wrong-state call does not burn OTP attempts
-    const requiresDriver = booking.categoryId?.requiresDriver !== false;
+    const isRental = Boolean(
+      booking.fulfillmentMode === 'rental' ||
+      booking.categoryId?.fulfillmentMode === 'rental' ||
+      booking.equipmentId?.listingType === 'rental' ||
+      booking.categoryId?.requiresDriver === false
+    );
+    const requiresDriver = !isRental && booking.categoryId?.requiresDriver !== false;
     const validInitial = requiresDriver
       ? [BOOKING_STATUS.VISITED, BOOKING_STATUS.ASSIGNED]
       : [BOOKING_STATUS.CONFIRMED, BOOKING_STATUS.ACCEPTED, BOOKING_STATUS.ASSIGNED, BOOKING_STATUS.VISITED];
@@ -1549,13 +1555,14 @@ const startTrip = async (req, res) => {
 
     await markVendorBusy(vendorId);
 
-    const shouldStartTimer = requiresDriver || Boolean(
+    // Only start Live Service Timer for mechanized services with drivers, never for standalone rentals
+    const shouldStartTimer = !isRental && (requiresDriver || Boolean(
       claimed.serviceTimer ||
       claimed.rental_type === 'hourly' ||
       claimed.bookingType === 'hourly' ||
       claimed.ratePerMinute ||
       /tractor|rotavator|harvester|tiller|agriculture|machinery/i.test(`${claimed.serviceCategory || ''} ${claimed.serviceName || ''}`)
-    );
+    ));
 
     if (shouldStartTimer) {
       try {
