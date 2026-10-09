@@ -35,7 +35,7 @@ const Profile = () => {
   const [hasOutOfStockProducts, setHasOutOfStockProducts] = useState(false);
 
   const menuItems = React.useMemo(() => [
-    { id: 'bank_details', label: 'Bank Account & Payout Details', icon: FiCreditCard, onClick: () => setShowBankModal(true) },
+    { id: 'bank_details', label: 'Bank Account & Payout Details', icon: FiCreditCard, path: '/vendor/bank-details' },
     { id: 'equipment', label: 'Machinery & Equipment Fleet', icon: FaTractor, path: '/vendor/equipment' },
     { id: 12, label: 'My Agri-Store (Supplies)', icon: FiPackage, path: '/vendor/store' },
     { id: 'referrals', label: 'Refer & Earn', icon: FiGift, path: '/vendor/referrals' },
@@ -410,7 +410,7 @@ const Profile = () => {
             </button>
 
             <button
-              onClick={() => setShowBankModal(true)}
+              onClick={() => navigate('/vendor/bank-details')}
               className="w-full p-3.5 sm:p-4 flex items-center justify-between hover:bg-slate-50 transition-colors text-left group"
             >
               <div className="flex items-center gap-3.5 min-w-0 flex-1">

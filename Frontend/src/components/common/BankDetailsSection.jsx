@@ -429,36 +429,43 @@ export const BankDetailsSection = ({
       ) : isEditing ? (
         renderForm()
       ) : bankDetails && bankDetails.accountNumberMasked ? (
-        <div className="bg-gradient-to-br from-emerald-900 to-teal-950 text-white rounded-2xl p-5 shadow-md relative overflow-hidden">
-          {/* Card background styling */}
-          <div className="absolute right-0 top-0 w-36 h-36 bg-white/5 rounded-full -mr-10 -mt-10 blur-xl pointer-events-none" />
-
-          <div className="flex justify-between items-start mb-6">
+        <div className="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 sm:p-5 space-y-4">
+          <div className="flex items-start justify-between gap-3 pb-3.5 border-b border-slate-200/70">
             <div>
-              <p className="text-[10px] font-semibold text-emerald-300 uppercase tracking-wider">Bank Name</p>
-              <p className="text-sm font-bold text-white tracking-wide">{bankDetails.bankName || 'Verified Bank'}</p>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Bank Name</span>
+              <p className="text-sm sm:text-base font-bold text-slate-900 mt-0.5">{bankDetails.bankName || 'Verified Bank'}</p>
+              {bankDetails.branchName && (
+                <p className="text-[11px] text-slate-500 font-medium mt-0.5">{bankDetails.branchName}</p>
+              )}
             </div>
-            <div className="px-2.5 py-1 bg-white/10 backdrop-blur rounded-lg text-[10px] font-bold text-emerald-200">
-              {bankDetails.branchName ? bankDetails.branchName : 'Active'}
-            </div>
+            <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200/60 rounded-full text-[10px] font-bold flex items-center gap-1 shrink-0">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Active</span>
+            </span>
           </div>
 
-          <div className="mb-6">
-            <p className="text-[10px] text-emerald-300 uppercase tracking-wider mb-1">Account Number</p>
-            <p className="text-xl font-mono font-bold tracking-widest text-white">
-              {bankDetails.accountNumberMasked}
-            </p>
-          </div>
-
-          <div className="flex justify-between items-end text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs">
             <div>
-              <p className="text-[9px] text-emerald-300 uppercase">Account Holder</p>
-              <p className="font-semibold text-white uppercase">{bankDetails.accountHolderName}</p>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Account Number</span>
+              <p className="text-sm font-mono font-bold text-slate-800 mt-0.5">{bankDetails.accountNumberMasked}</p>
             </div>
-            <div className="text-right">
-              <p className="text-[9px] text-emerald-300 uppercase">IFSC Code</p>
-              <p className="font-mono font-semibold text-emerald-100">{bankDetails.ifsc || bankDetails.ifscCode}</p>
+
+            <div>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Account Holder</span>
+              <p className="text-xs sm:text-sm font-bold text-slate-800 uppercase mt-0.5">{bankDetails.accountHolderName}</p>
             </div>
+
+            <div>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">IFSC Code</span>
+              <p className="text-xs sm:text-sm font-mono font-bold text-slate-800 mt-0.5">{bankDetails.ifsc || bankDetails.ifscCode}</p>
+            </div>
+
+            {bankDetails.upiId && (
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">UPI ID / VPA</span>
+                <p className="text-xs sm:text-sm font-mono font-bold text-emerald-800 mt-0.5">{bankDetails.upiId}</p>
+              </div>
+            )}
           </div>
         </div>
       ) : (
