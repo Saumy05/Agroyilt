@@ -155,7 +155,16 @@ const MachineryExplorer = () => {
       if (currentCity?._id) geoParams.cityId = currentCity._id;
 
       const catId = selectedCat?._id || selectedCat?.id;
-      
+
+      // A category carried over from earlier navigation may since have been marked Rental by admin
+      if (catId) {
+        const rentalRes = await publicEquipmentService.getMachineryCategories({ ...geoParams, mode: 'rental' });
+        if (rentalRes?.success && rentalRes.data.some(c => String(c._id || c.id) === String(catId))) {
+          navigate('/user/rentals', { replace: true, state: { category: selectedCat } });
+          return;
+        }
+      }
+
       const promises = [
         publicEquipmentService.getMachineryCategories({ ...geoParams, mode: 'service' })
       ];
