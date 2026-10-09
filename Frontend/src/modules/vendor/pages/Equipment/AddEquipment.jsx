@@ -63,8 +63,8 @@ const AddEquipment = () => {
     workerId: null
   });
 
-  // Tracks the selected category's metadata (trackingType, requiresDriver)
-  const [categoryMeta, setCategoryMeta] = useState({ trackingType: 'none', requiresDriver: false });
+  // Tracks the selected category's metadata (trackingType, requiresDriver, fulfillmentMode)
+  const [categoryMeta, setCategoryMeta] = useState({ trackingType: 'none', requiresDriver: false, fulfillmentMode: 'service' });
 
   useEffect(() => {
     fetchInitialData();
@@ -197,10 +197,17 @@ const AddEquipment = () => {
         // Fetch category metadata to drive adaptive UI
         const selected = allTypes.find(t => (t.id?.toString() || t._id?.toString()) === activeCategoryId.toString());
         if (selected) {
+          const mode = selected.fulfillmentMode || (selected.trackingType === 'odometer' ? 'service' : 'rental');
           setCategoryMeta({ 
             trackingType: selected.trackingType || 'none', 
-            requiresDriver: selected.requiresDriver || false 
+            requiresDriver: selected.requiresDriver || false,
+            fulfillmentMode: mode
           });
+          setForm(prev => ({
+            ...prev,
+            listingType: mode,
+            includesDriver: mode === 'service' ? (selected.requiresDriver || false) : false
+          }));
         }
       }
     } catch (err) {
@@ -231,16 +238,20 @@ const AddEquipment = () => {
       const res = await vendorEquipmentService.getImplements(categoryId);
       if (res.success) setMachineImplements(res.data);
 
-      // Fetch category metadata to drive adaptive UI (trackingType, requiresDriver)
+      // Fetch category metadata to drive adaptive UI (trackingType, requiresDriver, fulfillmentMode)
       const allTypes = machineTypes;
-      const selected = allTypes.find(t => t.id === categoryId);
+      const selected = allTypes.find(t => (t.id?.toString() || t._id?.toString()) === categoryId.toString());
       if (selected) {
-        const isService = selected.trackingType === 'odometer';
-        setCategoryMeta({ trackingType: selected.trackingType || 'none', requiresDriver: selected.requiresDriver || false });
+        const mode = selected.fulfillmentMode || (selected.trackingType === 'odometer' ? 'service' : 'rental');
+        setCategoryMeta({
+          trackingType: selected.trackingType || 'none',
+          requiresDriver: selected.requiresDriver || false,
+          fulfillmentMode: mode
+        });
         setForm(prev => ({
           ...prev,
-          listingType: isEdit ? (prev.listingType || (isService ? 'service' : 'rental')) : (isService ? 'service' : 'rental'),
-          includesDriver: selected.requiresDriver || false
+          listingType: mode,
+          includesDriver: mode === 'service' ? (selected.requiresDriver || false) : false
         }));
       }
     } catch (err) {
@@ -489,39 +500,85 @@ const AddEquipment = () => {
                   )}
                 </div>
 
-                {/* Service Model Segmented Switch */}
+                {/* Service Model Indicator (Auto-Locked by Category) */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-700 block">Service Model</label>
-                  <div className="grid grid-cols-2 p-1 bg-slate-100 rounded-xl border border-slate-200/60">
-                    <button
-                      type="button"
-                      onClick={() => setForm(p => ({ ...p, listingType: 'service' }))}
-                      className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg font-semibold text-xs transition-all ${
-                        form.listingType === 'service'
-                          ? 'bg-white text-slate-900 shadow-xs'
-                          : 'text-slate-500 hover:text-slate-800'
-                      }`}
-                    >
-                      <FiTruck className={`w-4 h-4 ${form.listingType === 'service' ? 'text-blue-600' : 'text-slate-400'}`} />
-                      <span>Machine Service</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setForm(p => ({ ...p, listingType: 'rental', includesDriver: false }))}
-                      className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg font-semibold text-xs transition-all ${
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 block">Service Model</label>
+                    {!isRequestingCategory && form.categoryId && (
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                         form.listingType === 'rental'
-                          ? 'bg-white text-slate-900 shadow-xs'
-                          : 'text-slate-500 hover:text-slate-800'
-                      }`}
-                    >
-                      <FiTool className={`w-4 h-4 ${form.listingType === 'rental' ? 'text-amber-600' : 'text-slate-400'}`} />
-                      <span>Tool Rental</span>
-                    </button>
+                          ? 'text-amber-700 bg-amber-50 border-amber-200'
+                          : 'text-blue-700 bg-blue-50 border-blue-200'
+                      }`}>
+                        Set by Platform
+                      </span>
+                    )}
                   </div>
-                  <p className="text-[11px] text-slate-400 pl-0.5">
-                    {form.listingType === 'service' ? 'Includes operator & live GPS tracking' : 'Equipment only (operated by farmer)'}
-                  </p>
+
+                  {isRequestingCategory ? (
+                    <div className="space-y-1.5">
+                      <div className="grid grid-cols-2 p-1 bg-slate-100 rounded-xl border border-slate-200/60">
+                        <button
+                          type="button"
+                          onClick={() => setForm(p => ({ ...p, listingType: 'service' }))}
+                          className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg font-semibold text-xs transition-all ${
+                            form.listingType === 'service'
+                              ? 'bg-white text-slate-900 shadow-xs'
+                              : 'text-slate-500 hover:text-slate-800'
+                          }`}
+                        >
+                          <FiTruck className={`w-4 h-4 ${form.listingType === 'service' ? 'text-blue-600' : 'text-slate-400'}`} />
+                          <span>Machine Service</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setForm(p => ({ ...p, listingType: 'rental', includesDriver: false }))}
+                          className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg font-semibold text-xs transition-all ${
+                            form.listingType === 'rental'
+                              ? 'bg-white text-slate-900 shadow-xs'
+                              : 'text-slate-500 hover:text-slate-800'
+                          }`}
+                        >
+                          <FiTool className={`w-4 h-4 ${form.listingType === 'rental' ? 'text-amber-600' : 'text-slate-400'}`} />
+                          <span>Tool Rental</span>
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-slate-400 pl-0.5">
+                        {form.listingType === 'service' ? 'Includes operator & live GPS tracking' : 'Equipment only (operated by farmer)'}
+                      </p>
+                    </div>
+                  ) : form.categoryId ? (
+                    form.listingType === 'rental' ? (
+                      <div className="flex items-center gap-3 p-3 bg-amber-50/70 rounded-xl border border-amber-200/80">
+                        <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center text-amber-700 flex-shrink-0">
+                          <FiTool className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs font-bold text-amber-900">Tool Rental (Self-Operated)</div>
+                          <p className="text-[11px] text-amber-700/90 leading-tight mt-0.5">
+                            Direct equipment rental. Farmers rent this machine from the Rental Catalog and operate it themselves.
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-3 p-3 bg-blue-50/70 rounded-xl border border-blue-200/80">
+                        <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-700 flex-shrink-0">
+                          <FiTruck className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs font-bold text-blue-900">Machine Service</div>
+                          <p className="text-[11px] text-blue-700/90 leading-tight mt-0.5">
+                            Service booking with operator & live GPS tracking. Platform matches farmer bookings to your machine.
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  ) : (
+                    <div className="p-3 bg-slate-50 rounded-xl border border-dashed border-slate-200 text-[11px] text-slate-400 font-medium">
+                      Select a category above to automatically configure the service model (Service or Rental).
+                    </div>
+                  )}
                 </div>
 
                 {/* Available Attachments & Direct Pricing */}

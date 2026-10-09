@@ -175,13 +175,17 @@ exports.addEquipment = async (req, res) => {
         : [];
     }
 
-    // 4. Create equipment
+    // 4. Create equipment (enforce category's Admin fulfillmentMode if defined)
+    const finalListingType = (mainCategory && mainCategory.fulfillmentMode) 
+      ? mainCategory.fulfillmentMode 
+      : (listingType || 'service');
+
     const equipment = await VendorEquipment.create({
       vendorId,
       categoryId: categoryId || null,
       serviceId: serviceId || null,
       requestedCategoryName: requestedCategoryName || null,
-      listingType: listingType || 'service',
+      listingType: finalListingType,
       implements: implementsList || [],
       subCategoryIds: subCategoryIds || [],
       name,
@@ -257,8 +261,17 @@ exports.updateEquipment = async (req, res) => {
     }
     
     // If category changed, reset to pending
-    if (updateData.categoryId && updateData.categoryId !== equipment.categoryId.toString()) {
+    if (updateData.categoryId && updateData.categoryId !== equipment.categoryId?.toString()) {
       updateData.status = 'pending';
+    }
+
+    // Enforce Category's Admin fulfillmentMode if category is present
+    const targetCatId = updateData.categoryId || equipment.categoryId;
+    if (targetCatId) {
+      const catObj = await Category.findById(targetCatId).select('fulfillmentMode').lean();
+      if (catObj?.fulfillmentMode) {
+        updateData.listingType = catObj.fulfillmentMode;
+      }
     }
 
     equipment = await VendorEquipment.findByIdAndUpdate(id, updateData, {
