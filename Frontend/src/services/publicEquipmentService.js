@@ -7,7 +7,7 @@ import api from './api';
 export const publicEquipmentService = {
   // Get all approved machinery (with city / state / district filter)
   getAllEquipment: async (filters = {}) => {
-    const { cityId, stateId, districtId, subDistrictId, categoryId, implementId, search, isFeatured } = filters;
+    const { cityId, stateId, districtId, subDistrictId, categoryId, implementId, search, isFeatured, mode } = filters;
     const params = {};
     if (cityId) params.cityId = cityId;
     if (stateId) params.stateId = stateId;
@@ -17,6 +17,7 @@ export const publicEquipmentService = {
     if (implementId) params.implementId = implementId;
     if (search) params.search = search;
     if (isFeatured) params.isFeatured = true;
+    if (mode) params.mode = mode; // 'rental' -> only admin-marked rental machines
 
     const response = await api.get('/public/equipment', { params });
     return response.data;
@@ -44,6 +45,7 @@ export const publicEquipmentService = {
     if (geoParams.stateId) params.stateId = geoParams.stateId;
     if (geoParams.districtId) params.districtId = geoParams.districtId;
     if (geoParams.subDistrictId) params.subDistrictId = geoParams.subDistrictId;
+    if (geoParams.mode) params.mode = geoParams.mode; // 'rental' | 'service'
     
     const response = await api.get('/public/categories', { params });
     if (response.data.success && Array.isArray(response.data.categories)) {

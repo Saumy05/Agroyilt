@@ -16,7 +16,8 @@ const MachineryDiscoverySection = () => {
     const fetchEquipment = async () => {
       try {
         const res = await publicEquipmentService.getAllEquipment({
-          isFeatured: true
+          isFeatured: true,
+          mode: 'rental'
         });
         if (res.success) {
           setEquipment(res.data.slice(0, 5));
@@ -36,13 +37,13 @@ const MachineryDiscoverySection = () => {
     <section className="px-5 mb-8">
       <div className="flex items-center justify-between mb-5">
         <div>
-          <h2 className="text-xl font-black text-slate-800 tracking-tight">Rent Machinery</h2>
+          <h2 className="text-xl font-black text-slate-800 tracking-tight">Rental Services</h2>
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
             <FiCheckCircle className="text-emerald-500" /> Verified Owners & Drivers
           </p>
         </div>
         <button
-          onClick={() => navigate('/user/machinery-explorer')}
+          onClick={() => navigate('/user/rentals')}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-full text-xs font-black transition-all active:scale-95"
         >
           Explore All <FiArrowRight />
@@ -59,7 +60,7 @@ const MachineryDiscoverySection = () => {
             <motion.div
               key={item._id}
               whileHover={{ y: -5 }}
-              onClick={() => navigate(`/user/machinery-explorer`)}
+              onClick={() => navigate(`/user/machinery/${item._id}`)}
               className="min-w-[290px] bg-white rounded-[32px] border border-slate-100 overflow-hidden shadow-sm flex flex-col cursor-pointer relative group"
             >
               <div className="h-40 bg-slate-50 relative">
@@ -85,7 +86,7 @@ const MachineryDiscoverySection = () => {
 
                 <div className="absolute bottom-3 left-3 right-3 flex justify-between items-end">
                   <div className="bg-white/90 backdrop-blur-md rounded-2xl p-2 px-3 shadow-md border border-white/20">
-                    <p className="text-[8px] font-black text-slate-400 uppercase leading-none mb-1">Book at</p>
+                    <p className="text-[8px] font-black text-slate-400 uppercase leading-none mb-1">Rent at</p>
                     <p className="text-sm font-black text-emerald-600 leading-none">
                       ₹{item.pricing?.hourly?.price || item.pricing?.land_based?.price}/hr
                     </p>
@@ -116,7 +117,7 @@ const MachineryDiscoverySection = () => {
         {/* View More Card */}
         {!loading && equipment.length > 0 && (
           <motion.div
-            onClick={() => navigate('/user/machinery-explorer')}
+            onClick={() => navigate('/user/rentals')}
             className="min-w-[140px] bg-blue-600 rounded-[32px] flex flex-col items-center justify-center text-white cursor-pointer shadow-lg shadow-blue-500/20 active:scale-95 transition-all"
           >
             <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center mb-3">

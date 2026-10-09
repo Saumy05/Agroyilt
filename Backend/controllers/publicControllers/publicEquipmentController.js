@@ -11,7 +11,7 @@ const { parseTimeToMinutes, parseSlotInterval, isIntervalOverlapping } = require
 // GET /api/public/equipment
 exports.getPublicEquipment = async (req, res) => {
   try {
-    const { cityId, stateId, districtId, subDistrictId, categoryId, implementId, search, isFeatured, lat, lng, radius } = req.query;
+    const { cityId, stateId, districtId, subDistrictId, categoryId, implementId, search, isFeatured, lat, lng, radius, mode } = req.query;
 
     const query = { status: { $in: ['active', 'approved'] } }; // Only show active/approved equipment
 
@@ -99,6 +99,18 @@ exports.getPublicEquipment = async (req, res) => {
     }
     
     if (categoryId) query.categoryId = categoryId;
+
+    // mode=rental -> only machines whose category is marked 'rental' by admin
+    if (mode === 'rental') {
+      const Category = require('../../models/Category');
+      const rentalCats = await Category.find({ fulfillmentMode: 'rental' }).select('_id').lean();
+      const rentalIds = rentalCats.map(c => c._id.toString());
+      if (categoryId) {
+        if (!rentalIds.includes(String(categoryId))) return res.json({ success: true, count: 0, data: [] });
+      } else {
+        query.categoryId = { $in: rentalIds };
+      }
+    }
     if (isFeatured) query.isFeatured = true;
 
     if (implementId) {
@@ -319,6 +331,7 @@ exports.findQualifiedVendors = async (req, res) => {
     let multiplier = 1;
     if (rental_type === 'hourly') {
       let minutes = reqInterval.endMinutes - reqInterval.startMinutes;
+      if (minutes < 0) minutes += 1440;
       if (minutes <= 0) minutes = 60;
       if (durationMinutes) minutes = Number(durationMinutes);
       else if (durationHours) minutes = Number(durationHours) * 60;

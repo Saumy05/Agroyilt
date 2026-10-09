@@ -24,6 +24,14 @@ const categorySchema = new mongoose.Schema({
     enum: ['VENDOR', 'WORKER'],
     default: 'VENDOR'
   },
+  // How this category is offered: normal booking ('service') or direct machine rental ('rental').
+  // Set by admin. Existing categories without a value are treated as 'service'.
+  fulfillmentMode: {
+    type: String,
+    enum: ['service', 'rental'],
+    default: 'service',
+    index: true
+  },
   slug: {
     type: String,
     required: true,

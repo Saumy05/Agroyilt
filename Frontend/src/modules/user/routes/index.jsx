@@ -67,6 +67,7 @@ const CancellationPolicy = lazyLoad(() => import('../pages/CancellationPolicy'))
 const WeatherReport = lazyLoad(() => import('../pages/WeatherReport'));
 const Marketplace = lazyLoad(() => import('../pages/Marketplace'));
 const MachineryExplorer = lazyLoad(() => import('../pages/Machinery/MachineryExplorer'));
+const RentalCatalog = lazyLoad(() => import('../pages/Machinery/RentalCatalog'));
 const AllMachineryCategories = lazyLoad(() => import('../pages/Machinery/AllMachineryCategories'));
 const AllImplementsCategories = lazyLoad(() => import('../pages/Machinery/AllImplementsCategories'));
 const WorkerExplorer = lazyLoad(() => import('../pages/Worker/WorkerExplorer'));
@@ -164,6 +165,7 @@ const UserRoutes = () => {
               <Route path="/weather" element={<ProtectedRoute userType="user"><WeatherReport /></ProtectedRoute>} />
               <Route path="/marketplace" element={<ProtectedRoute userType="user"><Marketplace /></ProtectedRoute>} />
               <Route path="/machinery-explorer" element={<ProtectedRoute userType="user"><MachineryExplorer /></ProtectedRoute>} />
+              <Route path="/rentals" element={<ProtectedRoute userType="user"><RentalCatalog /></ProtectedRoute>} />
               <Route path="/machinery-categories" element={<ProtectedRoute userType="user"><AllMachineryCategories /></ProtectedRoute>} />
               <Route path="/machinery-implements" element={<ProtectedRoute userType="user"><AllImplementsCategories /></ProtectedRoute>} />
               <Route path="/worker-explorer" element={<ProtectedRoute userType="user"><WorkerExplorer /></ProtectedRoute>} />

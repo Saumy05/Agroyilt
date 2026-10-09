@@ -87,6 +87,13 @@ const bookingSchema = new mongoose.Schema({
     required: false,
     index: true
   },
+  // Snapshot of the category's admin-set mode at booking time (later admin edits don't change it)
+  fulfillmentMode: {
+    type: String,
+    enum: ['service', 'rental'],
+    default: 'service',
+    index: true
+  },
 
   serviceName: {
     type: String,

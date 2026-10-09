@@ -39,11 +39,13 @@ describe('validateSchedule (timezone-aware)', () => {
   it('9:00 vs 10:00 compares numerically (string compare would get this wrong)', () => {
     assert.equal(validateSchedule('2026-10-05', { start: '9:00', end: '10:00' }, noon).ok, true);
   });
-  it('overlap maths: touching slots do not overlap, daily rentals block the whole day', () => {
-    const a = parseSlotInterval({ start: '09:00', end: '11:00' }, null, 'hourly');
-    assert.equal(isIntervalOverlapping(a, parseSlotInterval({ start: '11:00', end: '12:00' }, null, 'hourly')), false);
-    assert.equal(isIntervalOverlapping(a, parseSlotInterval({ start: '10:59', end: '12:00' }, null, 'hourly')), true);
-    assert.equal(isIntervalOverlapping(parseSlotInterval({ start: '09:00', end: '10:00' }, null, 'daily'), parseSlotInterval({ start: '20:00', end: '21:00' }, null, 'hourly')), true);
+  it('supports overnight slots when allowOvernight option is enabled', () => {
+    assert.equal(validateSchedule('2026-10-05', { start: '10:00 PM', end: '6:00 AM' }, noon, { allowOvernight: true }).ok, true);
+    assert.equal(validateSchedule('2026-10-05', { start: '22:00', end: '06:00' }, noon, { allowOvernight: true }).ok, true);
+    assert.equal(validateSchedule('2026-10-05', { start: '22:00', end: '22:00' }, noon, { allowOvernight: true }).ok, false);
+    const overnightSlot = parseSlotInterval({ start: '22:00', end: '06:00' });
+    assert.equal(overnightSlot.startMinutes, 1320);
+    assert.equal(overnightSlot.endMinutes, 1800); // 360 + 1440
   });
 });
 

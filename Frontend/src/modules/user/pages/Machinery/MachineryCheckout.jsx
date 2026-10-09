@@ -65,10 +65,10 @@ const MachineryCheckout = () => {
                 <h2 className="text-lg font-black text-slate-800">No Booking Data Available</h2>
                 <p className="text-xs text-slate-400 mt-1 max-w-xs">Please configure your machinery requirements first.</p>
                 <button 
-                  onClick={() => navigate('/user/machinery-explorer')} 
+                  onClick={() => navigate('/user/rentals')} 
                   className="mt-5 px-6 py-3 bg-emerald-700 text-white rounded-2xl text-xs font-black shadow-md shadow-emerald-700/20 active:scale-95 transition-all"
                 >
-                  Return to Machinery Hub
+                  Browse Rentals
                 </button>
             </div>
         );

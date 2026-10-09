@@ -112,7 +112,11 @@ function parseSlotInterval(timeSlot, scheduledTime, rentalType) {
   let endMin = parseTimeToMinutes(endStr);
 
   if (startMin !== null && endMin !== null) {
-    if (endMin <= startMin) endMin = startMin + 60; // minimum 1 hour window
+    if (endMin < startMin) {
+      endMin = endMin + 1440; // overnight interval spanning past midnight
+    } else if (endMin === startMin) {
+      endMin = startMin + 60; // minimum 1 hour window
+    }
     return {
       startMinutes: startMin,
       endMinutes: endMin,
@@ -168,7 +172,7 @@ function appDateKey(input) {
  * Validates a requested date + slot against "now" in the app timezone.
  * @returns {{ok:true}|{ok:false,message:string}}
  */
-function validateSchedule(scheduledDate, timeSlot, now = new Date()) {
+function validateSchedule(scheduledDate, timeSlot, now = new Date(), options = {}) {
   const dateKey = appDateKey(scheduledDate);
   if (!dateKey) return { ok: false, message: 'Valid scheduled date is required' };
 
@@ -180,7 +184,16 @@ function validateSchedule(scheduledDate, timeSlot, now = new Date()) {
   const start = parseTimeToMinutes(timeSlot?.start);
   const end = parseTimeToMinutes(timeSlot?.end);
   if (start === null || end === null) return { ok: false, message: 'Valid time slot is required' };
-  if (!isInstant && end <= start) return { ok: false, message: 'End time must be later than start time' };
+  
+  if (options.allowOvernight) {
+    if (!isInstant && end === start) {
+      return { ok: false, message: 'End time cannot be the same as start time' };
+    }
+  } else {
+    if (!isInstant && end <= start) {
+      return { ok: false, message: 'End time must be later than start time' };
+    }
+  }
 
   const todayKey = appDateKey(now);
   if (dateKey < todayKey) return { ok: false, message: 'You cannot book a date in the past.' };

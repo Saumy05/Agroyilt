@@ -43,6 +43,11 @@ const AllMachineryCategories = () => {
   }, []);
 
   const handleCategoryClick = (category) => {
+    // Admin-marked rental categories go to the rental catalog, not the booking flow
+    if (category?.fulfillmentMode === 'rental') {
+      navigate('/user/rentals', { state: { category } });
+      return;
+    }
     navigate('/user/machinery-explorer', { state: { category } });
   };
 

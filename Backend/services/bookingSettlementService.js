@@ -840,7 +840,7 @@ const applyOnlinePayment = async (bookingId, { amount, method, paymentRef, io = 
     b.waveStartedAt = new Date();
     await b.save();
     const clash = await findVendorSlotConflict(
-      { scheduledDate: b.scheduledDate, timeSlot: b.timeSlot, scheduledTime: b.scheduledTime, rental_type: b.rental_type, equipmentId: b.equipmentId },
+      { scheduledDate: b.scheduledDate, timeSlot: b.timeSlot, scheduledTime: b.scheduledTime, rental_type: b.rental_type, equipmentId: b.equipmentId, fulfillmentMode: b.fulfillmentMode },
       b.vendorId,
       { excludeId: b._id }
     );
@@ -885,7 +885,7 @@ const CONFLICT_STATUSES = [
  * Finds another booking of the same vendor (and same machine, when known) whose
  * time interval overlaps the given booking. Returns the conflicting booking or null.
  *
- * @param {object} target     { scheduledDate, timeSlot, scheduledTime, rental_type, equipmentId }
+ * @param {object} target     { scheduledDate, timeSlot, scheduledTime, rental_type, equipmentId, fulfillmentMode }
  * @param {string} vendorId
  * @param {object} [opts]     { excludeId, statuses, beatenBy } — `beatenBy` = {at, id} makes the
  *                            check one-sided so two racing requests cannot both back off.
@@ -900,13 +900,24 @@ const findVendorSlotConflict = async (target, vendorId, { excludeId = null, stat
   if (excludeId) query._id = { $ne: excludeId };
 
   const others = await Booking.find(query)
-    .select('equipmentId scheduledDate scheduledTime timeSlot rental_type status bookingNumber acceptedAt createdAt');
+    .select('equipmentId scheduledDate scheduledTime timeSlot rental_type status bookingNumber acceptedAt createdAt fulfillmentMode');
   const mine = parseSlotInterval(target.timeSlot, target.scheduledTime, target.rental_type);
+  const targetIsRental = target.fulfillmentMode === 'rental';
 
   for (const other of others) {
-    const sameMachine = !target.equipmentId || !other.equipmentId ||
-      other.equipmentId.toString() === target.equipmentId.toString();
-    if (!sameMachine) continue;
+    const otherIsRental = other.fulfillmentMode === 'rental';
+    if (targetIsRental) {
+      // Machine-only rental: only a booking of the SAME machine can clash. The vendor being
+      // busy on a service (or with other machines) never blocks it.
+      if (!target.equipmentId || !other.equipmentId ||
+          other.equipmentId.toString() !== target.equipmentId.toString()) continue;
+    } else {
+      // Service: rentals don't use the vendor's time, so they never block it.
+      if (otherIsRental) continue;
+      const sameMachine = !target.equipmentId || !other.equipmentId ||
+        other.equipmentId.toString() === target.equipmentId.toString();
+      if (!sameMachine) continue;
+    }
     if (beatenBy) {
       const t = (beatenBy.field === 'createdAt' ? other.createdAt : other.acceptedAt) || other.createdAt;
       const earlier = t < beatenBy.at || (t.getTime() === beatenBy.at.getTime() && other._id.toString() < beatenBy.id.toString());

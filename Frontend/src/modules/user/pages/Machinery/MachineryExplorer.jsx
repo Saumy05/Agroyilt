@@ -31,11 +31,6 @@ const MachineryExplorer = () => {
   const [loading, setLoading] = useState(true);
   const [categories, setCategories] = useState([]);
   const [equipmentImplements, setEquipmentImplements] = useState([]);
-  const [equipment, setEquipment] = useState([]); // for Catalog view
-  
-  // View Mode: 'book' (Step 1 Requirements flow) vs 'catalog' (Browsing equipment)
-  const [viewMode, setViewMode] = useState(location.state?.viewMode || 'book');
-  const [search, setSearch] = useState('');
 
   // Step 1: Requirements State (Restored from navigation state if returning from Step 2)
   const todayStr = new Date().toISOString().split('T')[0];
@@ -144,7 +139,7 @@ const MachineryExplorer = () => {
     setSelectedImplement(null);
   }, [selectedCat]);
 
-  // Fetch categories, implements, and catalog equipment
+  // Fetch service categories and implements
   useEffect(() => {
     if (geoLoading) return;
     fetchData();
@@ -162,18 +157,14 @@ const MachineryExplorer = () => {
       const catId = selectedCat?._id || selectedCat?.id;
       
       const promises = [
-        publicEquipmentService.getMachineryCategories(geoParams),
-        publicEquipmentService.getAllEquipment({ 
-          ...geoParams,
-          categoryId: catId
-        })
+        publicEquipmentService.getMachineryCategories({ ...geoParams, mode: 'service' })
       ];
 
       if (catId) {
         promises.push(publicEquipmentService.getImplementsForCategory(catId, geoParams));
       }
 
-      const [catsRes, equipsRes, impsRes] = await Promise.all(promises);
+      const [catsRes, impsRes] = await Promise.all(promises);
 
       if (catsRes?.success && Array.isArray(catsRes.data)) {
         setCategories(catsRes.data);
@@ -183,10 +174,6 @@ const MachineryExplorer = () => {
         }
       }
       
-      if (equipsRes?.success && Array.isArray(equipsRes.data)) {
-        setEquipment(equipsRes.data);
-      }
-
       if (impsRes && impsRes.success && Array.isArray(impsRes.data)) {
         setEquipmentImplements(impsRes.data);
       } else {
@@ -523,8 +510,8 @@ const MachineryExplorer = () => {
       toastManager.error('Please select a time slot');
       return;
     }
-    if (startTime >= endTime) {
-      toastManager.error('End time must be after start time');
+    if (startTime === endTime && (rentalType !== 'hourly' || parseFloat(quantity) !== 24)) {
+      toastManager.error('End time cannot be the same as start time');
       return;
     }
 
@@ -558,16 +545,6 @@ const MachineryExplorer = () => {
   const locationDisplayName = selectedSubDistrict?.name 
     ? `${selectedSubDistrict.name}, ${selectedDistrict?.name || ''}`
     : (selectedDistrict?.name || selectedState?.name || currentCity?.name || 'All India Coverage');
-
-  const filteredEquipment = equipment.filter(e => {
-    if (!search) return true;
-    const searchLower = search.toLowerCase();
-    const nameMatch = (e.name || '').toLowerCase().includes(searchLower);
-    const catMatch = (e.categoryId?.title || '').toLowerCase().includes(searchLower);
-    const modelMatch = (e.modelNumber || '').toLowerCase().includes(searchLower);
-    const vendorMatch = (e.vendorId?.name || '').toLowerCase().includes(searchLower);
-    return nameMatch || catMatch || modelMatch || vendorMatch;
-  });
 
   const formatDateDisplay = (dateStr) => {
     if (!dateStr) return '';
@@ -610,37 +587,18 @@ const MachineryExplorer = () => {
               </div>
             </div>
 
-            {/* Right: Segmented Toggle (Book Work vs Browse Catalog) */}
-            <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200/80 shrink-0">
-              <button
-                type="button"
-                onClick={() => setViewMode('book')}
-                className={`px-2 py-1 rounded-lg text-[11px] font-black transition-all flex items-center gap-1 cursor-pointer ${
-                  viewMode === 'book'
-                    ? 'bg-emerald-700 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <FiZap size={11} className={viewMode === 'book' ? 'text-amber-300' : ''} />
-                <span>Book</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('catalog')}
-                className={`px-2 py-1 rounded-lg text-[11px] font-black transition-all flex items-center gap-1 cursor-pointer ${
-                  viewMode === 'catalog'
-                    ? 'bg-emerald-700 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <FiTruck size={11} />
-                <span>Catalog</span>
-              </button>
-            </div>
+            {/* Right: Link to the separate rental flow */}
+            <button
+              type="button"
+              onClick={() => navigate('/user/rentals')}
+              className="px-2.5 py-1.5 rounded-xl bg-slate-100 border border-slate-200/80 text-[11px] font-black text-slate-600 hover:text-emerald-700 transition-all flex items-center gap-1 shrink-0 cursor-pointer"
+            >
+              <FiTruck size={11} />
+              <span>Rent a machine</span>
+            </button>
           </div>
 
           {/* Polished 3-Step Flow Indicator */}
-          {viewMode === 'book' && (
             <div className="pt-0.5 pb-0">
               <div className="flex items-center justify-between">
                 {/* Step 1: Active */}
@@ -672,12 +630,10 @@ const MachineryExplorer = () => {
                 </div>
               </div>
             </div>
-          )}
         </div>
       </div>
 
       {/* Main Body */}
-      {viewMode === 'book' ? (
         /* PROGRESSIVE 4-STEP SPECIFICATIONS ACCORDION */
         <div className="max-w-xl mx-auto px-3.5 py-3 space-y-3">
           {loading ? (
@@ -1249,7 +1205,11 @@ const MachineryExplorer = () => {
                             </p>
                             <p className="text-xs font-black text-slate-900 truncate">
                               {rentalType === 'hourly' 
-                                ? `${formatTime12Hour(startTime)} – ${formatTime12Hour(endTime)} (${formatQtyDisplay(quantity)} ${parseFloat(quantity) === 1 ? 'Hour' : 'Hours'} • ${getDurationHumanReadable(quantity)})`
+                                ? `${formatTime12Hour(startTime)} – ${formatTime12Hour(endTime)}${(() => {
+                                    const [sh, sm] = (startTime || '').split(':').map(Number);
+                                    const [eh, em] = (endTime || '').split(':').map(Number);
+                                    return (eh * 60 + (em || 0) < sh * 60 + (sm || 0)) ? ' (Next Day)' : '';
+                                  })()} (${formatQtyDisplay(quantity)} ${parseFloat(quantity) === 1 ? 'Hour' : 'Hours'} • ${getDurationHumanReadable(quantity)})`
                                 : rentalType === 'land_based'
                                 ? `Starts at ${formatTime12Hour(startTime)} • ${formatQtyDisplay(quantity)} ${parseFloat(quantity) === 1 ? 'Acre' : 'Acres'} Workload`
                                 : `${formatQtyDisplay(quantity)} ${parseFloat(quantity) === 1 ? 'Day' : 'Days'} • Starts at ${formatTime12Hour(startTime)}`}
@@ -1289,92 +1249,8 @@ const MachineryExplorer = () => {
             </>
           )}
         </div>
-      ) : (
-        /* CATALOG VIEW: BROWSE ALL INVENTORY */
-        <div className="max-w-xl mx-auto px-3.5 py-3 space-y-3">
-          <div className="relative">
-            <FiSearch className="absolute left-3.5 top-3 text-slate-400" size={15} />
-            <input
-              type="text"
-              placeholder="Search tractors, rotavators, brands..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-white border border-slate-200/80 text-xs font-bold focus:outline-none focus:border-emerald-600 shadow-xs"
-            />
-          </div>
-
-          {loading ? (
-            <div className="py-20 text-center">
-              <LogoLoader />
-            </div>
-          ) : filteredEquipment.length === 0 ? (
-            <div className="bg-white rounded-2xl p-6 border border-slate-200/80 text-center space-y-2.5 shadow-xs">
-              <FiTruck size={30} className="text-slate-300 mx-auto" />
-              <p className="text-xs font-black text-slate-800">No machinery matched your search.</p>
-              <button
-                onClick={() => setSearch('')}
-                className="px-4 py-2 bg-emerald-700 text-white rounded-xl text-xs font-black shadow-xs cursor-pointer"
-              >
-                Clear Search
-              </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {filteredEquipment.map((item) => (
-                <div
-                  key={item._id}
-                  onClick={() => navigate(`/user/machinery/${item._id}`)}
-                  className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden hover:border-emerald-400 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between group"
-                >
-                  <div className="h-36 bg-slate-100 relative overflow-hidden flex items-center justify-center">
-                    {item.images?.[0] ? (
-                      <img 
-                        src={item.images[0]} 
-                        alt={item.name} 
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
-                      />
-                    ) : (
-                      <FiTruck size={30} className="text-slate-300" />
-                    )}
-                    <span className="absolute top-2 left-2 px-2 py-0.5 bg-white/95 backdrop-blur-md rounded-full text-[8.5px] font-black uppercase text-emerald-800 shadow-2xs">
-                      {item.categoryId?.title || 'Machinery'}
-                    </span>
-                    {item.horsepower && (
-                      <span className="absolute top-2 right-2 px-2 py-0.5 bg-slate-900/80 backdrop-blur-md rounded-full text-[8.5px] font-black text-white">
-                        {item.horsepower} HP
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="p-3 space-y-1.5">
-                    <div>
-                      <h3 className="text-xs font-black text-slate-900 truncate">{item.name}</h3>
-                      <p className="text-[9.5px] font-bold text-slate-400">{item.modelNumber || 'Verified Farm Equipment'}</p>
-                    </div>
-
-                    <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between">
-                      <div>
-                        <p className="text-[8.5px] font-bold text-slate-400 uppercase">Rate</p>
-                        <p className="text-xs font-black text-emerald-700">
-                          {item.pricing?.hourly?.price ? `₹${item.pricing.hourly.price}/Hr` :
-                           item.pricing?.land_based?.price ? `₹${item.pricing.land_based.price}/Acre` :
-                           item.pricing?.daily?.price ? `₹${item.pricing.daily.price}/Day` : 'Rate On Request'}
-                        </p>
-                      </div>
-                      <span className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-colors">
-                        <FiChevronRight size={14} />
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* FLOATING GLASS ISLAND BOTTOM BAR (Step 1 -> Step 2 CTA) */}
-      {viewMode === 'book' && (
         <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-xl border-t border-slate-200/80 px-3.5 py-2.5 shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
           <div className="max-w-xl mx-auto flex items-center justify-between gap-2.5">
             {(() => {
@@ -1408,7 +1284,6 @@ const MachineryExplorer = () => {
             })()}
           </div>
         </div>
-      )}
     </div>
   );
 };

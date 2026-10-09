@@ -14,7 +14,7 @@ const HomeContent = require('../../models/HomeContent');
  */
 const getPublicCategories = async (req, res) => {
   try {
-    const { cityId, stateId, districtId, subDistrictId, type, showOnHome, all } = req.query;
+    const { cityId, stateId, districtId, subDistrictId, type, showOnHome, all, mode } = req.query;
     const mongoose = require('mongoose');
 
     let query = { status: 'active' };
@@ -23,6 +23,9 @@ const getPublicCategories = async (req, res) => {
     } else if (all !== 'true') {
       query.showOnHome = true;
     }
+    // Optional filter: mode=rental -> rental categories only; mode=service -> everything not marked rental
+    if (mode === 'rental') query.fulfillmentMode = 'rental';
+    else if (mode === 'service') query.fulfillmentMode = { $ne: 'rental' };
     const globalScopes = ['GLOBAL', 'GLOBAL_INDIA'];
 
     const hasLocation = Boolean(stateId || districtId || subDistrictId || cityId);
@@ -60,7 +63,7 @@ const getPublicCategories = async (req, res) => {
     let homeCatsCount = await Category.countDocuments(query);
 
     let categories = await Category.find(query)
-      .select('title slug homeIconUrl homeBadge hasSaleBadge homeOrder showOnHome parentCategory parentCategories isAlwaysMain trackingType requiresDriver sectionType bookingType')
+      .select('title slug homeIconUrl homeBadge hasSaleBadge homeOrder showOnHome parentCategory parentCategories isAlwaysMain trackingType requiresDriver sectionType bookingType fulfillmentMode')
       .populate('parentCategories', 'title slug')
       .sort({ homeOrder: 1, createdAt: -1 })
       .lean();
@@ -86,6 +89,7 @@ const getPublicCategories = async (req, res) => {
       trackingType: cat.trackingType || 'none',
       requiresDriver: cat.requiresDriver || false,
       sectionType: cat.sectionType || 'General',
+      fulfillmentMode: cat.fulfillmentMode || 'service',
       bookingType: cat.bookingType || (/labour|labor|worker|manpower|service|shramik|majdoor/i.test(cat.title || '') ? 'WORKER' : 'VENDOR')
     }));
 

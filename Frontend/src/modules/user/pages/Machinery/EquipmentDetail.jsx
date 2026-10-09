@@ -43,6 +43,7 @@ const EquipmentDetail = () => {
       const [endHours, endMinutes] = endTime.split(':').map(Number);
       
       let diffMinutes = (endHours * 60 + endMinutes) - (startHours * 60 + startMinutes);
+      if (diffMinutes < 0) diffMinutes += 24 * 60;
       
       if (diffMinutes > 0) {
         // Calculate exact hours (30-min minimum), cleanly rounded to 1 decimal
@@ -479,8 +480,8 @@ const EquipmentDetail = () => {
                       }
 
                       let endError = null;
-                      if (endTime <= startTime) {
-                        endError = "End time must be later than start time.";
+                      if (endTime && startTime && endTime === startTime) {
+                        endError = "End time cannot be the same as start time.";
                       }
                   
                       if (startError) {
@@ -561,8 +562,8 @@ const EquipmentDetail = () => {
                     }
                   }
 
-                  if (endTime <= startTime) {
-                    toastManager.error('End time must be later than start time.');
+                  if (endTime === startTime) {
+                    toastManager.error('End time cannot be the same as start time.');
                     return;
                   }
 

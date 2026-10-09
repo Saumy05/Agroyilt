@@ -95,7 +95,8 @@ const createBooking = async (req, res) => {
     } = req.body;
 
     // --- TIME VALIDATION (timezone-aware: past dates, passed slots, >90 days ahead) ---
-    const schedule = validateSchedule(scheduledDate, timeSlot);
+    const allowOvernight = Boolean(equipmentId || selectedImplements || ['hourly', 'land_based', 'daily'].includes(rental_type) || req.body.allowOvernight);
+    const schedule = validateSchedule(scheduledDate, timeSlot, undefined, { allowOvernight });
     if (!schedule.ok) {
       return res.status(400).json({ success: false, message: schedule.message });
     }
@@ -223,9 +224,10 @@ const createBooking = async (req, res) => {
           const [startHours, startMinutes] = timeSlot.start.split(':').map(Number);
           const [endHours, endMinutes] = timeSlot.end.split(':').map(Number);
           calculatedDurationMinutes = (endHours * 60 + endMinutes) - (startHours * 60 + startMinutes);
+          if (calculatedDurationMinutes < 0) calculatedDurationMinutes += 24 * 60;
           
           if (calculatedDurationMinutes <= 0) {
-            return res.status(400).json({ success: false, message: 'End time must be after start time' });
+            return res.status(400).json({ success: false, message: 'End time cannot be the same as start time' });
           }
           if (calculatedDurationMinutes < 30) {
             return res.status(400).json({ success: false, message: 'Hourly booking must be at least 30 minutes.' });
@@ -667,9 +669,17 @@ const createBooking = async (req, res) => {
       brandIcon = formattedBookedItems[0].brandIcon || null;
     }
 
+    // Snapshot the admin-set mode (machine's category first, else the service's category)
+    let bookingFulfillmentMode = category?.fulfillmentMode || 'service';
+    if (equipmentObj?.categoryId) {
+      const equipCategory = await Category.findById(equipmentObj.categoryId).select('fulfillmentMode').lean();
+      if (equipCategory?.fulfillmentMode) bookingFulfillmentMode = equipCategory.fulfillmentMode;
+    }
+
     const booking = await Booking.create({
       bookingNumber,
       userId,
+      fulfillmentMode: bookingFulfillmentMode,
       vendorId: (vendorId || (equipmentObj ? equipmentObj.vendorId : null)) || null,
       equipmentId: equipmentId || (equipmentObj ? equipmentObj._id : null),
       workerId: requestedWorker ? requestedWorker._id : null, // Set workerId if directly requested
@@ -754,7 +764,7 @@ const createBooking = async (req, res) => {
         // Conflict check: vendor must not have an overlapping booking for this slot
         const resolvedEquipId = equipmentId || (equipmentObj ? equipmentObj._id : null);
         const conflictBooking = await findVendorSlotConflict(
-          { scheduledDate, timeSlot, scheduledTime, rental_type, equipmentId: resolvedEquipId },
+          { scheduledDate, timeSlot, scheduledTime, rental_type, equipmentId: resolvedEquipId, fulfillmentMode: bookingFulfillmentMode },
           targetVendorId,
           { excludeId: booking._id, statuses: [BOOKING_STATUS.REQUESTED, ...CONFLICT_STATUSES] }
         );
@@ -794,7 +804,7 @@ const createBooking = async (req, res) => {
 
         // Two farmers racing for the same slot: the later request backs off
         const racer = await findVendorSlotConflict(
-          { scheduledDate, timeSlot, scheduledTime, rental_type, equipmentId: resolvedEquipId },
+          { scheduledDate, timeSlot, scheduledTime, rental_type, equipmentId: resolvedEquipId, fulfillmentMode: bookingFulfillmentMode },
           targetVendorId,
           { excludeId: booking._id, statuses: [BOOKING_STATUS.REQUESTED, ...CONFLICT_STATUSES], beatenBy: { field: 'createdAt', at: booking.createdAt, id: booking._id } }
         );
@@ -1695,16 +1705,22 @@ const rescheduleBooking = async (req, res) => {
       return res.status(400).json({ success: false, message: `A booking that is ${booking.status} can no longer be rescheduled` });
     }
 
-    const schedule = validateSchedule(scheduledDate, timeSlot);
+    const allowOvernight = Boolean(booking.equipmentId || ['hourly', 'land_based', 'daily'].includes(booking.rental_type));
+    const schedule = validateSchedule(scheduledDate, timeSlot, undefined, { allowOvernight });
     if (!schedule.ok) {
       return res.status(400).json({ success: false, message: schedule.message });
     }
 
     // Hourly machinery is priced by slot length: a different length needs a new booking
     if (booking.rental_type === 'hourly') {
-      const oldLen = booking.durationMinutes ||
-        (parseTimeToMinutes(booking.timeSlot?.end) - parseTimeToMinutes(booking.timeSlot?.start));
-      const newLen = parseTimeToMinutes(timeSlot.end) - parseTimeToMinutes(timeSlot.start);
+      let oldLen = booking.durationMinutes;
+      if (!oldLen) {
+        let diff = parseTimeToMinutes(booking.timeSlot?.end) - parseTimeToMinutes(booking.timeSlot?.start);
+        if (diff < 0) diff += 1440;
+        oldLen = diff;
+      }
+      let newLen = parseTimeToMinutes(timeSlot.end) - parseTimeToMinutes(timeSlot.start);
+      if (newLen < 0) newLen += 1440;
       if (oldLen > 0 && newLen !== oldLen) {
         return res.status(400).json({ success: false, message: 'The new slot must be the same length as the booked one. Cancel and rebook to change the duration.' });
       }
@@ -1713,7 +1729,7 @@ const rescheduleBooking = async (req, res) => {
     // The vendor must be free at the new time
     if (booking.vendorId) {
       const conflict = await findVendorSlotConflict(
-        { scheduledDate, timeSlot, scheduledTime, rental_type: booking.rental_type, equipmentId: booking.equipmentId },
+        { scheduledDate, timeSlot, scheduledTime, rental_type: booking.rental_type, equipmentId: booking.equipmentId, fulfillmentMode: booking.fulfillmentMode },
         booking.vendorId,
         { excludeId: booking._id, statuses: [BOOKING_STATUS.REQUESTED, ...CONFLICT_STATUSES] }
       );
@@ -2274,7 +2290,7 @@ const reselectVendor = async (req, res) => {
 
     // Check real-time slot availability for the newly selected vendor
     const conflictBooking = await findVendorSlotConflict(
-      { scheduledDate: booking.scheduledDate, timeSlot: booking.timeSlot, scheduledTime: booking.scheduledTime, rental_type: booking.rental_type, equipmentId: equipmentId || booking.equipmentId },
+      { scheduledDate: booking.scheduledDate, timeSlot: booking.timeSlot, scheduledTime: booking.scheduledTime, rental_type: booking.rental_type, equipmentId: equipmentId || booking.equipmentId, fulfillmentMode: booking.fulfillmentMode },
       vendorId,
       { excludeId: booking._id, statuses: [BOOKING_STATUS.REQUESTED, ...CONFLICT_STATUSES] }
     );

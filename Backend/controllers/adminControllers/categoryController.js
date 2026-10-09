@@ -54,6 +54,7 @@ const formatCategory = (cat) => ({
   adminBaseCharge: cat.adminBaseCharge || 0,
   sectionType: cat.sectionType || 'General',
   bookingType: cat.bookingType || 'VENDOR',
+  fulfillmentMode: cat.fulfillmentMode || 'service',
   metaTitle: cat.metaTitle,
   metaDescription: cat.metaDescription,
   createdAt: cat.createdAt,
@@ -399,7 +400,8 @@ const createCategory = async (req, res) => {
       requiresDriver,
       adminBaseCharge,
       sectionType,
-      bookingType
+      bookingType,
+      fulfillmentMode
     } = req.body;
 
     // Validate geographic scoping hierarchy
@@ -467,6 +469,7 @@ const createCategory = async (req, res) => {
       adminBaseCharge: Number(adminBaseCharge) || 0,
       sectionType: sectionType || 'General',
       bookingType: bookingType || 'VENDOR',
+      fulfillmentMode: fulfillmentMode === 'rental' ? 'rental' : 'service',
       createdBy: req.user?._id || req.userId || null
     });
 
@@ -557,7 +560,8 @@ const updateCategory = async (req, res) => {
       requiresDriver,
       adminBaseCharge,
       sectionType,
-      bookingType
+      bookingType,
+      fulfillmentMode
     } = req.body;
 
     // Check RBAC permission for existing category
@@ -691,6 +695,7 @@ const updateCategory = async (req, res) => {
     if (adminBaseCharge !== undefined) category.adminBaseCharge = Number(adminBaseCharge) || 0;
     if (sectionType !== undefined) category.sectionType = sectionType;
     if (bookingType !== undefined) category.bookingType = bookingType;
+    if (fulfillmentMode !== undefined) category.fulfillmentMode = fulfillmentMode === 'rental' ? 'rental' : 'service';
 
     // Apply validated geographic scope
     category.scope = geoConfig.scope;
