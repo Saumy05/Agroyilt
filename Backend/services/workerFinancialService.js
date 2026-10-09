@@ -698,7 +698,7 @@ exports.applyWorkerPenalty = async (workerId, bookingId, penaltyEventId, penalty
  * @returns {{ grossAmount, commissionAmount, netEarning, workedDays }}
  */
 exports.calculateDailyWorkerSettlement = (assignment, commissionRateOverride = null) => {
-  const workedDays     = assignment.workedDays || 0;
+  const workedDays     = assignment.workedDays || (['OTP_VERIFIED', 'COMPLETED'].includes(assignment.completionStatus) ? (assignment.bookedDays || 1) : 0);
   const agreedDailyRate = Number(assignment.agreedRate || 0);
   const commissionRate  = commissionRateOverride ?? assignment.commissionRate ?? 10;
 

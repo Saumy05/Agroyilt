@@ -1163,7 +1163,7 @@ exports.leaderSelectWorkers = async (req, res) => {
     let request = await WorkerGroupRequest.findOne({
       _id: req.params.id,
       teamLeaderId: leaderId,
-      status: { $in: ['selection_pending', 'collecting_members'] }
+      status: { $in: ['selection_pending', 'collecting_members', 'leader_accepted'] }
     });
     if (!request) {
       // Fallback: Check WorkerBookingRequest (unified flow)
@@ -1196,14 +1196,26 @@ exports.leaderSelectWorkers = async (req, res) => {
       });
     }
 
-    // SECURITY: All selected workers must have accepted THIS request (leader is always allowed)
-    const acceptedIds = request.memberRequests
-      .filter(m => m.status === 'accepted')
+    // Offline members managed by the leader are directly eligible
+    const offlineTeamWorkers = await Worker.find({
+      _id: { $in: workerIds },
+      isOfflineMember: true,
+      $or: [
+        { managedByLeaderId: leaderId },
+        { teamId: request.teamId }
+      ]
+    }).select('_id');
+    const offlineAllowedIds = new Set(offlineTeamWorkers.map(w => w._id.toString()));
+
+    // Online members must have accepted this request (leader is always allowed)
+    const acceptedIds = (request.memberRequests || [])
+      .filter(m => m.status === 'accepted' || m.status === 'member_accepted')
       .map(m => m.workerId.toString());
     const leaderIdStr = leaderId.toString();
 
     for (const wid of workerIds) {
-      if (wid.toString() !== leaderIdStr && !acceptedIds.includes(wid.toString())) {
+      const widStr = wid.toString();
+      if (widStr !== leaderIdStr && !acceptedIds.includes(widStr) && !offlineAllowedIds.has(widStr)) {
         return res.status(400).json({
           success: false,
           message: `Worker ${wid} did not accept this request or does not belong to this team.`
@@ -2076,7 +2088,7 @@ exports.confirmGroupBookingCash = async (req, res) => {
           lng: request.location?.lng || null
         },
         status: 'confirmed',
-        paymentStatus: 'cash_pending',
+        paymentStatus: 'pending',
         paymentMethod: 'cash',
         notes: `${request.workTitle}: ${request.workDescription || ''}`.substring(0, 500)
       });

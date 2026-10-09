@@ -80,7 +80,7 @@ const boot = async ({ replSet = false } = {}) => {
   // register every model the controllers touch
   for (const m of ['User', 'Vendor', 'Worker', 'Service', 'Category', 'VendorEquipment', 'Booking', 'BookingRequest',
     'VendorBill', 'Transaction', 'Settings', 'Notification', 'Review', 'Cart', 'Plan', 'PlatformEarning', 'IndWorkerAssignment',
-    'WorkerBookingRequest', 'Brand', 'District', 'SubDistrict', 'State', 'City']) {
+    'WorkerBookingRequest', 'WorkerTeam', 'WorkerGroupRequest', 'Brand', 'District', 'SubDistrict', 'State', 'City']) {
     try { require(path.join(root, 'models', m)); } catch (e) { /* optional */ }
   }
 
@@ -99,6 +99,7 @@ const boot = async ({ replSet = false } = {}) => {
   app.use('/api/workers', require(path.join(root, 'routes/worker-routes/workerRequests.routes')));
   app.use('/api/workers', require(path.join(root, 'routes/worker-routes/job.routes')));
   app.use('/api/workers/assignments', require(path.join(root, 'routes/worker-routes/assignment.routes')));
+  app.use('/api/workers/team', require(path.join(root, 'routes/worker-routes/team.routes')));
   app.use('/api/webhooks', require(path.join(root, 'routes/common-routes/webhook.routes')));
   // the real user booking router (create/cancel/reschedule/review/reselect)
   app.use('/api/user/bookings', require(path.join(root, 'routes/user-routes/booking.routes')));

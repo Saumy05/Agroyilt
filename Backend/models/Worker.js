@@ -151,6 +151,10 @@ const workerSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  experienceYears: {
+    type: Number,
+    default: 1
+  },
   landRate: {
     type: Number,
     default: 0
