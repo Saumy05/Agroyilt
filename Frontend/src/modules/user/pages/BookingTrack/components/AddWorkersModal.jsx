@@ -44,10 +44,14 @@ const AddWorkersModal = ({
       if (startTiming === 'tomorrow') {
         targetStartDate.setDate(targetStartDate.getDate() + 1);
       }
+      const yyyy = targetStartDate.getFullYear();
+      const mm = String(targetStartDate.getMonth() + 1).padStart(2, '0');
+      const dd = String(targetStartDate.getDate()).padStart(2, '0');
+      const localStartDate = `${yyyy}-${mm}-${dd}`;
 
       const payload = {
         additionalWorkersCount: workersCount,
-        startDate: targetStartDate.toISOString().split('T')[0],
+        startDate: localStartDate,
         numberOfDays: isDaily ? daysCount : 1,
         paymentMethod,
         offeredRate: rate,
@@ -177,6 +181,21 @@ const AddWorkersModal = ({
               </div>
             </div>
           )}
+
+          {/* Shift & Working Hours Info Card */}
+          <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-3.5 text-xs text-amber-900 flex items-start gap-2.5">
+            <FiClock className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-black text-amber-950">
+                {isDaily ? 'Standard 9-Hour Daily Shift' : 'Hourly Shift'}
+              </p>
+              <p className="text-[11px] text-amber-800 leading-snug mt-0.5">
+                {isDaily
+                  ? 'Includes 8 hours of productive farm work + 1 hour lunch/rest break. Workers already assigned on this booking will not be re-invited.'
+                  : 'Billed strictly for active work hours (unpaid breaks excluded).'}
+              </p>
+            </div>
+          </div>
 
           {/* Payment Method Selector */}
           <div>

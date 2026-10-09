@@ -123,6 +123,7 @@ const BookingTrack = () => {
   const [decreaseTargetWorker, setDecreaseTargetWorker] = useState(null);
   const [payingExtensionId, setPayingExtensionId] = useState(null);
   const [regeneratingVisitOtpId, setRegeneratingVisitOtpId] = useState(null);
+  const [breakActionLoadingId, setBreakActionLoadingId] = useState(null);
   const [isMapExpanded, setIsMapExpanded] = useState(false);
   // leafletLoaded state removed — L is now imported directly from npm
 
@@ -278,6 +279,40 @@ const BookingTrack = () => {
       toastManager.error(err.response?.data?.message || 'Failed to regenerate Visit OTP');
     } finally {
       setRegeneratingVisitOtpId(null);
+    }
+  };
+
+  const handleStartBreak = async (assignmentId) => {
+    try {
+      setBreakActionLoadingId(assignmentId);
+      const res = await workerBookingService.startBreak(id, assignmentId);
+      if (res?.success) {
+        toastManager.success('1-hour break started. Timer is active.');
+        fetchSnapshot(false);
+      } else {
+        toastManager.error(res?.message || 'Failed to start break');
+      }
+    } catch (err) {
+      toastManager.error(err.response?.data?.message || 'Failed to start break');
+    } finally {
+      setBreakActionLoadingId(null);
+    }
+  };
+
+  const handleResumeBreak = async (assignmentId) => {
+    try {
+      setBreakActionLoadingId(assignmentId);
+      const res = await workerBookingService.resumeBreak(id, assignmentId);
+      if (res?.success) {
+        toastManager.success('Work resumed successfully.');
+        fetchSnapshot(false);
+      } else {
+        toastManager.error(res?.message || 'Failed to resume work');
+      }
+    } catch (err) {
+      toastManager.error(err.response?.data?.message || 'Failed to resume work');
+    } finally {
+      setBreakActionLoadingId(null);
     }
   };
 
@@ -473,6 +508,14 @@ const BookingTrack = () => {
     socket.on('daily_day_started', () => fetchSnapshot(false));
     socket.on('daily_visit_otp_verified', () => fetchSnapshot(false));
     socket.on('daily_completion_otp_verified', () => fetchSnapshot(false));
+    socket.on('assignment_break_started', () => {
+      fetchSnapshot(false);
+      toastManager.info('1-hour lunch break started.');
+    });
+    socket.on('assignment_break_resumed', () => {
+      fetchSnapshot(false);
+      toastManager.success('Break finished — work resumed!');
+    });
 
     return () => {
       socket.off('connect', onConnect);
@@ -502,6 +545,8 @@ const BookingTrack = () => {
       socket.off('daily_day_started');
       socket.off('daily_visit_otp_verified');
       socket.off('daily_completion_otp_verified');
+      socket.off('assignment_break_started');
+      socket.off('assignment_break_resumed');
       socket.emit('leave_tracking', id);
     };
   }, [socket, id, fetchSnapshot]);
@@ -1127,6 +1172,9 @@ const BookingTrack = () => {
             onAddWorkersClick={() => setIsAddWorkersModalOpen(true)}
             onGenerateCompletionOtp={handleGenerateCompletionOtp}
             onRegenerateVisitOtp={handleRegenerateVisitOtp}
+            onStartBreak={handleStartBreak}
+            onResumeBreak={handleResumeBreak}
+            breakLoadingId={breakActionLoadingId}
           />
         )}
 
@@ -1412,15 +1460,54 @@ const BookingTrack = () => {
                     </div>
                   )}
 
-                  {/* ── Working: End OTP is issued only after the worker taps Stop ── */}
-                  {/* Show this hint when worker is actively in progress and no End OTP yet */}
+                  {/* ── Working / Break Status for Farmer ── */}
                   {(worker.journeyStatus === 'IN_PROGRESS' || worker.workStatus === 'IN_PROGRESS') &&
                     !worker.completionOtp &&
                     worker.workStatus !== 'SUBMITTED' &&
                     !isAllCompleted && (
-                    <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-2 text-xs text-slate-500 font-medium">
-                      <FiClock className="w-4 h-4 text-amber-500 shrink-0" />
-                      <span>{worker.workerName?.split(' ')[0]} is working. The End OTP will appear here when they tap <strong>Stop Work</strong>.</span>
+                    <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs">
+                      {worker.breakStatus === 'ON_BREAK' ? (
+                        <>
+                          <div className="flex items-center gap-2 text-amber-800 font-bold">
+                            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping" />
+                            <span>☕ 1-Hour Lunch Break Active (Auto-resumes in 60 mins)</span>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={breakActionLoadingId === workerKey}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleResumeBreak(workerKey);
+                            }}
+                            className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all active:scale-95"
+                          >
+                            {breakActionLoadingId === workerKey ? 'Resuming...' : 'Resume Early'}
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-2 text-slate-500 font-medium">
+                            <FiClock className="w-4 h-4 text-amber-500 shrink-0" />
+                            <span>{worker.workerName?.split(' ')[0]} is working. End OTP appears on <strong>Stop Work</strong>.</span>
+                            {worker.breakDurationMinutes > 0 && (
+                              <span className="text-amber-700 font-bold ml-1 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                                ☕ Break: {worker.breakDurationMinutes}m
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            disabled={breakActionLoadingId === workerKey}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStartBreak(workerKey);
+                            }}
+                            className="px-3 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-xs rounded-xl border border-amber-200 transition-all active:scale-95 flex items-center gap-1 shadow-xs"
+                          >
+                            <span>{breakActionLoadingId === workerKey ? 'Pausing...' : '☕ 1-Hr Break'}</span>
+                          </button>
+                        </>
+                      )}
                     </div>
                   )}
 

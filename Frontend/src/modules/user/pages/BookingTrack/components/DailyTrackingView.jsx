@@ -1,15 +1,47 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   FiCalendar, FiClock, FiCheck, FiUsers, FiUserX,
-  FiPlus, FiKey, FiAlertCircle, FiArrowRight, FiShield, FiCopy
+  FiPlus, FiKey, FiAlertCircle, FiArrowRight, FiShield, FiCopy,
+  FiCoffee, FiPlay, FiPause
 } from 'react-icons/fi';
+
+const BreakCountdown = ({ breakStartedAt, breakMaxMinutes = 60, onComplete }) => {
+  const [remainingSecs, setRemainingSecs] = useState(0);
+
+  useEffect(() => {
+    if (!breakStartedAt) return;
+    const startMs = new Date(breakStartedAt).getTime();
+    const totalMs = (breakMaxMinutes || 60) * 60 * 1000;
+
+    const tick = () => {
+      const elapsedMs = Date.now() - startMs;
+      const leftMs = Math.max(0, totalMs - elapsedMs);
+      const secs = Math.floor(leftMs / 1000);
+      setRemainingSecs(secs);
+      if (secs <= 0 && onComplete) onComplete();
+    };
+
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [breakStartedAt, breakMaxMinutes, onComplete]);
+
+  const mins = String(Math.floor(remainingSecs / 60)).padStart(2, '0');
+  const secs = String(remainingSecs % 60).padStart(2, '0');
+
+  return (
+    <span className="font-mono font-black text-amber-900 text-sm tracking-wider">
+      {mins}:{secs}
+    </span>
+  );
+};
 
 /**
  * DailyTrackingView
  *
  * Dedicated component for Farmer tracking screen when bookingType === 'DAILY'.
- * Displays multi-day progress, per-day Reach/Visit OTPs, Completion OTPs,
- * worker decrease actions, and extension controls.
+ * Displays multi-day progress, 9-hour daily shift info, break controls & timer,
+ * per-day Reach/Visit OTPs, Completion OTPs, worker decrease actions, and extension controls.
  */
 const DailyTrackingView = ({
   trackingData,
@@ -18,7 +50,10 @@ const DailyTrackingView = ({
   onRequestExtensionClick,
   onAddWorkersClick,
   onGenerateCompletionOtp,
-  onRegenerateVisitOtp
+  onRegenerateVisitOtp,
+  onStartBreak,
+  onResumeBreak,
+  breakLoadingId
 }) => {
   const totalDays = Number(trackingData?.numberOfDays) || 1;
   const currentDay = Math.max(1, Math.max(...workers.map(w => w.currentDayIndex || 1)));
@@ -34,7 +69,9 @@ const DailyTrackingView = ({
             </span>
             <div>
               <h3 className="font-black text-slate-800 text-sm">Daily Schedule Progress</h3>
-              <p className="text-[11px] text-slate-500">Day {currentDay} of {totalDays} total days</p>
+              <p className="text-[11px] text-slate-500">
+                Day {currentDay} of {totalDays} total days • 9-Hr Shift (8 hrs work + 1 hr lunch break)
+              </p>
             </div>
           </div>
 
@@ -216,11 +253,71 @@ const DailyTrackingView = ({
                     </div>
                   )}
 
-                  {/* Working: today's End OTP is issued only after the worker taps Stop */}
-                  {isInProgress && !isStopped && (
-                    <p className="mt-2 text-[11px] text-slate-500 font-medium">
-                      Working now. Today’s End OTP will appear here when {w.workerName?.split(' ')[0] || 'the worker'} taps Stop Work.
-                    </p>
+                  {/* Break Status / Active Break Card */}
+                  {isInProgress && !isStopped && w.breakStatus === 'ON_BREAK' && (
+                    <div className="mt-2.5 p-3 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 animate-fadeIn">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                          <FiCoffee size={16} />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-black text-amber-900">☕ 1-Hour Lunch Break Active</span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 bg-amber-200/70 text-amber-900 rounded-full">
+                              Started by {w.lastBreakStartedBy === 'worker' ? 'Worker' : 'You'}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-amber-700 flex items-center gap-1.5 mt-0.5">
+                            <span>Remaining:</span>
+                            <BreakCountdown
+                              breakStartedAt={w.breakStartedAt}
+                              breakMaxMinutes={w.breakMaxMinutes || 60}
+                              onComplete={() => onResumeBreak && onResumeBreak(w.assignmentId || w.bookingId)}
+                            />
+                            <span className="text-amber-600 text-[10px]">• Auto-resumes after 60 mins</span>
+                          </p>
+                        </div>
+                      </div>
+
+                      {onResumeBreak && (
+                        <button
+                          type="button"
+                          disabled={breakLoadingId === (w.assignmentId || w.bookingId)}
+                          onClick={() => onResumeBreak(w.assignmentId || w.bookingId)}
+                          className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all active:scale-95 flex items-center gap-1.5 shrink-0 justify-center"
+                        >
+                          <FiPlay size={13} />
+                          <span>{breakLoadingId === (w.assignmentId || w.bookingId) ? 'Resuming...' : 'Resume Work Early'}</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Working now hint & Start Break button */}
+                  {isInProgress && !isStopped && w.breakStatus !== 'ON_BREAK' && (
+                    <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                      <div className="text-[11px] text-slate-500 font-medium">
+                        <span>Working actively. Today’s End OTP appears when {w.workerName?.split(' ')[0] || 'worker'} taps Stop Work.</span>
+                        {w.breakDurationMinutes > 0 && (
+                          <span className="text-amber-700 font-bold ml-1.5 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                            ☕ Break taken: {w.breakDurationMinutes}m
+                          </span>
+                        )}
+                      </div>
+
+                      {onStartBreak && (
+                        <button
+                          type="button"
+                          disabled={breakLoadingId === (w.assignmentId || w.bookingId)}
+                          onClick={() => onStartBreak(w.assignmentId || w.bookingId)}
+                          className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-xs rounded-xl border border-amber-200 transition-all active:scale-95 flex items-center gap-1.5 shadow-xs"
+                          title="Pause for 1-hour lunch / rest break"
+                        >
+                          <FiCoffee size={13} className="text-amber-700" />
+                          <span>{breakLoadingId === (w.assignmentId || w.bookingId) ? 'Pausing...' : '☕ 1-Hr Lunch Break'}</span>
+                        </button>
+                      )}
+                    </div>
                   )}
 
                   {/* End OTP Box */}

@@ -32,7 +32,7 @@ const AdminDisputes = () => {
     const [submitting, setSubmitting] = useState(false);
 
     // Role Separation: Support Agent (investigate/view) vs Support Supervisor (financial resolve)
-    const currentUser = authStorage.getUser();
+    const currentUser = authStorage.getUserData('admin') || {};
     const canManage = useMemo(() => {
         if (!currentUser) return false;
         if (currentUser.role === 'super_admin' || currentUser.role === 'SUPER_ADMIN') return true;
