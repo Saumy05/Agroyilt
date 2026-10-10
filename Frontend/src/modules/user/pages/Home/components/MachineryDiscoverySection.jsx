@@ -59,11 +59,11 @@ const MachineryDiscoverySection = ({
   }
 
   return (
-    <section className={`px-5 ${isSpotlight ? 'mb-4 mt-1' : 'mb-8'}`}>
+    <section className={`px-4 sm:px-5 ${isSpotlight ? 'mb-4 mt-1' : 'mb-8'}`}>
       <div className="flex items-center justify-between gap-2.5 sm:gap-3 mb-3.5">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 sm:gap-2">
-            <h2 className="text-[15.5px] sm:text-lg font-black text-slate-800 tracking-tight leading-snug">
+            <h2 className="text-[15px] sm:text-lg font-black text-slate-800 tracking-tight leading-tight">
               {title}
             </h2>
             {isSpotlight && (
