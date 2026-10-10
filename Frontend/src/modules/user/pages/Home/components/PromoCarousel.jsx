@@ -4,7 +4,8 @@ import PromoCard from '../../../components/common/PromoCard';
 import { themeColors } from '../../../../../theme';
 
 const PromoCarousel = memo(({ promos, onPromoClick }) => {
-  const originals = promos || [];
+  // Only consider valid cards with an image
+  const originals = (promos || []).filter(p => Boolean(p && p.image));
   // Double the array → [A, B, C, A*, B*, C*] for seamless loop
   const looped = originals.length > 1 ? [...originals, ...originals] : originals;
 
@@ -18,11 +19,17 @@ const PromoCarousel = memo(({ promos, onPromoClick }) => {
   // ─── Core scroll-to helper ─────────────────────────────────────────────────
   const scrollToIndex = (index, behavior = 'smooth') => {
     if (!scrollContainerRef.current) return;
-    const cardWidth = scrollContainerRef.current.offsetWidth;
-    scrollContainerRef.current.scrollTo({ left: index * cardWidth, behavior });
+    const container = scrollContainerRef.current;
+    const children = container.children;
+    if (children && children[index]) {
+      container.scrollTo({ left: children[index].offsetLeft, behavior });
+    } else {
+      const cardWidth = container.offsetWidth;
+      container.scrollTo({ left: index * cardWidth, behavior });
+    }
   };
 
-  // ─── Auto-advance (stable interval — never depends on currentIndex) ────────
+  // ─── Auto-advance (stable interval) ────────────────────────────────────────
   useEffect(() => {
     if (originals.length <= 1) return;
 
@@ -52,16 +59,29 @@ const PromoCarousel = memo(({ promos, onPromoClick }) => {
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [originals.length]); // ← stable: never re-creates on index change
+  }, [originals.length]);
 
   // ─── Manual swipe → sync dot + ref ───────────────────────────────────────
   const handleScroll = () => {
     if (!scrollContainerRef.current || isSilentReset.current) return;
     const container = scrollContainerRef.current;
-    const index = Math.round(container.scrollLeft / container.offsetWidth);
-    if (index !== currentIndexRef.current && index >= 0 && index < looped.length) {
-      currentIndexRef.current = index;
-      setActiveDot(index % originals.length);
+    const children = container.children;
+    if (!children || children.length === 0) return;
+
+    const scrollLeft = container.scrollLeft;
+    let closestIndex = 0;
+    let minDiff = Infinity;
+    for (let i = 0; i < children.length; i++) {
+      const diff = Math.abs(children[i].offsetLeft - scrollLeft);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closestIndex = i;
+      }
+    }
+
+    if (closestIndex !== currentIndexRef.current && closestIndex >= 0 && closestIndex < looped.length) {
+      currentIndexRef.current = closestIndex;
+      setActiveDot(closestIndex % originals.length);
     }
   };
 
@@ -86,6 +106,7 @@ const PromoCarousel = memo(({ promos, onPromoClick }) => {
   return (
     <div
       ref={carouselRef}
+      className="relative px-4"
       style={{ opacity: 1 }}
       onMouseEnter={() => { isHoveredRef.current = true; }}
       onMouseLeave={() => { isHoveredRef.current = false; }}
@@ -93,14 +114,14 @@ const PromoCarousel = memo(({ promos, onPromoClick }) => {
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="flex gap-2 overflow-x-auto px-4 pb-2 scrollbar-hide snap-x snap-mandatory"
+        className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide snap-x snap-mandatory"
         style={{ scrollBehavior: 'smooth' }}
       >
         {looped.map((promo, idx) => (
           <div
             key={`${promo.id}-${idx}`}
             data-promo-card
-            className="flex-shrink-0 snap-center"
+            className="flex-shrink-0 snap-center w-full min-w-full"
           >
             <PromoCard
               title={promo.title}
@@ -114,23 +135,39 @@ const PromoCarousel = memo(({ promos, onPromoClick }) => {
         ))}
       </div>
 
-      {/* Dots — always originals.length, activeDot via modulo */}
-      <div className="flex justify-center gap-1.5 mt-2 mb-2">
-        {originals.map((_, index) => (
-          <div
-            key={index}
-            className={`rounded-full transition-all duration-300 ${index === activeDot ? 'w-6 h-1.5' : 'w-1.5 h-1.5'}`}
-            style={{
-              backgroundColor: index === activeDot
-                ? themeColors.brand.yellow
-                : `${themeColors.brand.yellow}66`,
-              boxShadow: index === activeDot
-                ? `0 2px 6px ${themeColors.brand.yellow}80`
-                : '0 1px 2px rgba(0, 0, 0, 0.2)'
-            }}
-          />
-        ))}
-      </div>
+      {/* Floating Indicator Capsule matching user reference — only shown when multiple cards present & fully clickable */}
+      {originals.length > 1 && (
+        <div 
+          className="absolute bottom-3 right-6 z-20 flex items-center gap-1.5 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/15 shadow-md pointer-events-auto"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {originals.map((_, index) => {
+            const isActive = index === activeDot;
+            return (
+              <button
+                key={index}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  currentIndexRef.current = index;
+                  setActiveDot(index);
+                  scrollToIndex(index, 'smooth');
+                }}
+                aria-label={`Go to slide ${index + 1}`}
+                className="group p-1 focus:outline-none cursor-pointer flex items-center justify-center transition-transform active:scale-90"
+              >
+                <span
+                  className={`block rounded-full transition-all duration-300 ${
+                    isActive
+                      ? 'w-4 sm:w-5 h-1.5 bg-white shadow-xs'
+                      : 'w-1.5 h-1.5 bg-white/45 group-hover:bg-white/80'
+                  }`}
+                />
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 });

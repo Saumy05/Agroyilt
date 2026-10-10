@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import CategoryCard from '../../../components/common/CategoryCard';
 import TranslatedText from '../../../../../components/TranslatedText';
 import { FiChevronRight } from 'react-icons/fi';
@@ -12,14 +12,6 @@ const toAssetUrl = (url) => {
   return `${base}${clean.startsWith('/') ? '' : '/'}${clean}`;
 };
 
-const filterTabs = [
-  { id: 'all', label: 'सभी (All)' },
-  { id: 'tractor', label: 'ट्रैक्टर' },
-  { id: 'harvester', label: 'हार्वेस्टर' },
-  { id: 'tillage', label: 'जुताई / बुवाई' },
-  { id: 'spray', label: 'स्प्रेयर' },
-];
-
 const ServiceCategories = React.memo(({
   categories,
   onCategoryClick,
@@ -28,33 +20,21 @@ const ServiceCategories = React.memo(({
   subtitle = "EXPLORE EQUIPMENT & SERVICES",
   showViewAll = true
 }) => {
-  const [activeTab, setActiveTab] = useState('all');
-
   if (!Array.isArray(categories) || categories.length === 0) {
     return null;
   }
 
-  // Filter categories by selected chip tab (excluding rental categories)
+  // Filter categories (excluding rental categories)
   const filteredCategories = useMemo(() => {
-    const serviceOnly = (categories || []).filter(c => {
+    return (categories || []).filter(c => {
       const mode = (c.fulfillmentMode || c.mode || '').toLowerCase();
       if (mode === 'rental' || c.isRental === true) return false;
       if ((c.slug || '').toLowerCase().includes('rental')) return false;
       return true;
     });
+  }, [categories]);
 
-    if (activeTab === 'all') return serviceOnly;
-    return serviceOnly.filter(c => {
-      const text = `${c.title || ''} ${c.slug || ''} ${c.description || ''}`.toLowerCase();
-      if (activeTab === 'tractor') return text.includes('tractor') || text.includes('ट्रैक्टर');
-      if (activeTab === 'harvester') return text.includes('harvest') || text.includes('हार्वेस्टर') || text.includes('cutter');
-      if (activeTab === 'tillage') return text.includes('tillage') || text.includes('seed') || text.includes('plough') || text.includes('cultivator') || text.includes('rotavator') || text.includes('बुवाई') || text.includes('जुताई');
-      if (activeTab === 'spray') return text.includes('spray') || text.includes('dron') || text.includes('स्प्रे');
-      return true;
-    });
-  }, [categories, activeTab]);
-
-  const displayLimit = activeTab === 'all' ? 7 : 8;
+  const displayLimit = 7;
   const showMore = filteredCategories.length > displayLimit;
   const displayedCategories = showMore ? filteredCategories.slice(0, displayLimit) : filteredCategories;
 
@@ -66,7 +46,7 @@ const ServiceCategories = React.memo(({
   return (
     <div className="px-5 py-2">
       {/* Section Header */}
-      <div className="flex items-center justify-between mb-2.5">
+      <div className="flex items-center justify-between mb-3">
         <div className="flex flex-col">
           <h2 className="text-[17px] sm:text-[19px] font-black text-slate-900 tracking-tight flex items-center gap-2">
             <TranslatedText>{title}</TranslatedText>
@@ -86,23 +66,6 @@ const ServiceCategories = React.memo(({
             <FiChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
           </button>
         )}
-      </div>
-
-      {/* Filter Tabs Chips */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-2.5 scrollbar-none mb-1">
-        {filterTabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`px-3 py-1 rounded-full text-[11px] font-bold whitespace-nowrap transition-all shrink-0 ${
-              activeTab === tab.id
-                ? 'bg-emerald-700 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
       </div>
 
       {/* Grid Layout: 4 columns mobile, 6 sm, 8 md */}
@@ -140,7 +103,7 @@ const ServiceCategories = React.memo(({
         })}
 
         {/* View All / More Button */}
-        {showViewAll && (showMore || activeTab !== 'all') && (
+        {showViewAll && showMore && (
           <div className="flex justify-center h-full">
             <CategoryCard
               title="सभी देखें"

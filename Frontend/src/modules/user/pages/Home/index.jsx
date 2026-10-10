@@ -576,7 +576,7 @@ const Home = () => {
                       order: promo.order || 0,
                       route: null
                     }))
-                  ].sort((a, b) => (a.order || 0) - (b.order || 0))}
+                  ].filter(item => Boolean(item.image)).sort((a, b) => (a.order || 0) - (b.order || 0))}
                   onPromoClick={handlePromoClick}
                 />
               </motion.section>
