@@ -137,7 +137,11 @@ const userSchema = new mongoose.Schema({
       type: String,
       trim: true,
       default: null
-    }
+    },
+    polygonCoordinates: [{
+      lat: Number,
+      lng: Number
+    }]
   }],
   plans: {
     isActive: {

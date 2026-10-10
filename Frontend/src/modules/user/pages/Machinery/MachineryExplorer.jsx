@@ -14,6 +14,7 @@ import { useGeo } from '../../../../context/GeoContext';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import { toastManager } from '../../../../utils/toastManager';
 import { themeColors } from '../../../../theme';
+import FieldAreaMeasurementModal from '../../components/FieldAreaMeasurementModal';
 
 const MachineryExplorer = () => {
   const navigate = useNavigate();
@@ -92,6 +93,15 @@ const MachineryExplorer = () => {
     }
     return 1;
   });
+  const [isAreaModalOpen, setIsAreaModalOpen] = useState(false);
+  const [measuredField, setMeasuredField] = useState(location.state?.measuredField || null);
+
+  const handleApplyMeasuredField = (fieldData) => {
+    setMeasuredField(fieldData);
+    if (fieldData?.acres) {
+      setQuantity(fieldData.acres);
+    }
+  };
   const [bookingDate, setBookingDate] = useState(() => {
     if (location.state?.bookingDate) return location.state.bookingDate;
     return isTodayClosed ? tomorrowStr : todayStr;
@@ -546,7 +556,8 @@ const MachineryExplorer = () => {
         startTime,
         endTime,
         lat: currentCity?.lat || selectedDistrict?.lat,
-        lng: currentCity?.lng || selectedDistrict?.lng
+        lng: currentCity?.lng || selectedDistrict?.lng,
+        measuredField
       }
     });
   };
@@ -980,13 +991,58 @@ const MachineryExplorer = () => {
                       )}
 
                       {rentalType === 'land_based' && (
-                        <div className="flex items-center justify-between bg-amber-50/80 border border-amber-200/80 rounded-xl px-3 py-1.5 shadow-2xs">
-                          <span className="text-[11px] font-bold text-amber-900/80 flex items-center gap-1.5">
-                            🌾 Equivalent Size:
-                          </span>
-                          <span className="font-black text-amber-800 text-xs">
-                            {getLandAreaEquivalent(quantity)}
-                          </span>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between bg-amber-50/80 border border-amber-200/80 rounded-xl px-3 py-1.5 shadow-2xs">
+                            <span className="text-[11px] font-bold text-amber-900/80 flex items-center gap-1.5">
+                              🌾 Equivalent Size:
+                            </span>
+                            <span className="font-black text-amber-800 text-xs">
+                              {getLandAreaEquivalent(quantity)}
+                            </span>
+                          </div>
+
+                          {/* Map-based Field Measurement Tool CTA */}
+                          {measuredField ? (
+                            <div className="bg-emerald-50/90 border border-emerald-300 rounded-xl p-2.5 flex items-center justify-between shadow-2xs">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                                  <FiMapPin size={14} />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-[10px] font-black text-emerald-900 uppercase tracking-wider">
+                                    Field Measured on Satellite Map
+                                  </p>
+                                  <p className="text-xs font-black text-slate-900 truncate">
+                                    {measuredField.acres} Acres (≈ {measuredField.bigha} Bigha • {measuredField.guntha} Guntha)
+                                  </p>
+                                  {measuredField.points?.length > 0 && (
+                                    <p className="text-[9.5px] font-semibold text-emerald-700">
+                                      {measuredField.points.length} boundary pins marked
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setIsAreaModalOpen(true)}
+                                className="px-2.5 py-1.5 bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-black shrink-0 transition-all cursor-pointer shadow-2xs"
+                              >
+                                Edit Border
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setIsAreaModalOpen(true)}
+                              className="w-full py-2 px-3 bg-gradient-to-r from-emerald-600 to-green-700 hover:from-emerald-700 hover:to-green-800 active:scale-[0.99] text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 shadow-sm shadow-emerald-700/20 transition-all cursor-pointer border border-emerald-500/30"
+                            >
+                              <FiMapPin size={14} className="text-emerald-200" />
+                              <span>📐 Measure Field on Map (नक्शे पर खेत नापें)</span>
+                              <span className="text-[9.5px] bg-white/20 px-1.5 py-0.5 rounded font-bold">
+                                Auto-Calculate
+                              </span>
+                            </button>
+                          )}
                         </div>
                       )}
 
@@ -1293,6 +1349,22 @@ const MachineryExplorer = () => {
             })()}
           </div>
         </div>
+
+        {/* FIELD AREA MEASUREMENT MODAL */}
+        <FieldAreaMeasurementModal
+          isOpen={isAreaModalOpen}
+          onClose={() => setIsAreaModalOpen(false)}
+          onApplyArea={handleApplyMeasuredField}
+          initialAcres={parseFloat(quantity) || 1}
+          initialCenter={
+            currentCity?.lat && currentCity?.lng
+              ? { lat: currentCity.lat, lng: currentCity.lng }
+              : selectedDistrict?.lat && selectedDistrict?.lng
+              ? { lat: selectedDistrict.lat, lng: selectedDistrict.lng }
+              : null
+          }
+          initialPoints={measuredField?.points || []}
+        />
     </div>
   );
 };

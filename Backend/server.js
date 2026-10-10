@@ -338,6 +338,7 @@ app.use('/api/public', require('./routes/public-routes/plan.routes'));
 app.use('/api/public', require('./routes/public-routes/config.routes'));
 app.use('/api/products', require('./routes/public-routes/product.routes'));
 app.use('/api/weather', require('./routes/common-routes/weather.routes'));
+app.use('/api/field-area', require('./routes/common-routes/fieldArea.routes'));
 app.use('/api/availabilities', require('./routes/common-routes/availability.routes'));
 app.use('/api/public/equipment', require('./routes/public-routes/equipment.routes'));
 app.use('/api/v1/translate', require('./routes/common-routes/translation.routes'));
