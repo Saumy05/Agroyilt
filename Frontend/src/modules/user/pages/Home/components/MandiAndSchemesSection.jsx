@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiTrendingUp, FiTrendingDown, FiShield, FiFileText, FiPhone, FiExternalLink, FiX, FiCheckCircle } from 'react-icons/fi';
+import { FiTrendingUp, FiTrendingDown, FiShield, FiFileText, FiPhone, FiExternalLink, FiX, FiCheckCircle, FiChevronRight } from 'react-icons/fi';
 import { LuWheat } from 'react-icons/lu';
+import api from '../../../../../services/api';
 
-const mandiPrices = [
+const defaultMandiPrices = [
   { id: 'wheat', name: 'गेहूं (Wheat)', market: 'करनाल APMC', modalPrice: 2275, change: '+₹25', isUp: true, quality: 'मिल क्वालिटी' },
   { id: 'mustard', name: 'सरसों (Mustard)', market: 'हिसार APMC', modalPrice: 5450, change: '+₹60', isUp: true, quality: '42% तेल' },
   { id: 'paddy', name: 'धान 1121 (Basmati)', market: 'कैथल APMC', modalPrice: 3650, change: '+₹40', isUp: true, quality: 'सुपर' },
@@ -12,7 +14,7 @@ const mandiPrices = [
   { id: 'maize', name: 'मक्का (Maize)', market: 'दाहोद APMC', modalPrice: 2090, change: '+₹20', isUp: true, quality: 'हाइब्रिड' }
 ];
 
-const govtSchemes = [
+const defaultGovtSchemes = [
   {
     id: 'smam',
     title: 'SMAM कृषि यंत्रीकरण योजना',
@@ -60,44 +62,96 @@ const govtSchemes = [
 ];
 
 const MandiAndSchemesSection = () => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('mandi'); // 'mandi' | 'schemes'
   const [selectedScheme, setSelectedScheme] = useState(null);
+  const [mandiPrices, setMandiPrices] = useState(defaultMandiPrices);
+  const [govtSchemes, setGovtSchemes] = useState(defaultGovtSchemes);
+
+  useEffect(() => {
+    const loadDynamicData = async () => {
+      try {
+        const res = await api.get('/public/kisan-suvidha');
+        if (res?.data?.success && res.data.data) {
+          if (Array.isArray(res.data.data.mandiPrices) && res.data.data.mandiPrices.length > 0) {
+            setMandiPrices(res.data.data.mandiPrices.slice(0, 6).map(m => ({
+              id: m._id || m.id,
+              name: m.commodity,
+              market: m.market,
+              modalPrice: m.modalPrice,
+              change: m.change,
+              isUp: m.isUp,
+              quality: m.quality
+            })));
+          }
+          if (Array.isArray(res.data.data.schemes) && res.data.data.schemes.length > 0) {
+            setGovtSchemes(res.data.data.schemes.slice(0, 4).map(s => ({
+              id: s._id || s.id,
+              title: s.title,
+              tag: s.tag,
+              category: s.category,
+              summary: s.summary,
+              eligibility: s.eligibility,
+              docs: s.docs,
+              portalUrl: s.portalUrl,
+              portalName: s.portalName
+            })));
+          }
+        }
+      } catch (_) {
+        // Fallback to default in-memory data
+      }
+    };
+    loadDynamicData();
+  }, []);
 
   return (
     <section id="mandi-schemes-section" className="px-5 py-4 my-2">
-      {/* Header with Pill Switcher */}
+      {/* Header with Pill Switcher and See All */}
       <div className="flex items-center justify-between mb-3.5 flex-wrap gap-2">
         <div>
-          <h2 className="text-[17px] sm:text-[19px] font-black text-slate-900 tracking-tight flex items-center gap-2">
-            <span>किसान सुविधा व भाव</span>
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          </h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-[17px] sm:text-[19px] font-black text-slate-900 tracking-tight flex items-center gap-2">
+              <span>किसान सुविधा व भाव</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            </h2>
+          </div>
           <p className="text-[11px] font-semibold text-slate-400">
             दैनिक APMC मंडी दरें एवं सरकारी कृषि योजनाएं
           </p>
         </div>
 
-        {/* Tab Toggle Buttons */}
-        <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200/80">
+        <div className="flex items-center gap-2">
+          {/* Tab Toggle Buttons */}
+          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200/80">
+            <button
+              onClick={() => setActiveTab('mandi')}
+              className={`px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                activeTab === 'mandi'
+                  ? 'bg-white text-emerald-800 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              📈 मंडी भाव
+            </button>
+            <button
+              onClick={() => setActiveTab('schemes')}
+              className={`px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                activeTab === 'schemes'
+                  ? 'bg-white text-emerald-800 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              🏛️ योजनाएं
+            </button>
+          </div>
+
           <button
-            onClick={() => setActiveTab('mandi')}
-            className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-              activeTab === 'mandi'
-                ? 'bg-white text-emerald-800 shadow-xs'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
+            onClick={() => navigate('/user/mandi-bhav')}
+            className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-0.5 group shrink-0 ml-1 cursor-pointer"
           >
-            📈 मंडी भाव
-          </button>
-          <button
-            onClick={() => setActiveTab('schemes')}
-            className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-              activeTab === 'schemes'
-                ? 'bg-white text-emerald-800 shadow-xs'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            🏛️ सरकारी योजनाएं
+            <span>सभी देखें</span>
+            <FiChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
           </button>
         </div>
       </div>
