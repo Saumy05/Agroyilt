@@ -90,6 +90,7 @@ const AgriOrderPayment = lazyLoad(() => import('../pages/AgriMarket/OrderPayment
 const AgriCart = lazyLoad(() => import('../pages/AgriMarket/AgriCart'));
 const FieldAreaCalculator = lazyLoad(() => import('../pages/FieldAreaCalculator'));
 const MandiBhav = lazyLoad(() => import('../pages/MandiBhav'));
+const LandLease = lazyLoad(() => import('../pages/LandLease'));
 
 // Lightweight loading fallback - no logo to avoid iOS rejection
 const LoadingFallback = () => (
@@ -170,6 +171,8 @@ const UserRoutes = () => {
               <Route path="/field-area-calculator" element={<ProtectedRoute userType="user"><FieldAreaCalculator /></ProtectedRoute>} />
               <Route path="/mandi-bhav" element={<ProtectedRoute userType="user"><MandiBhav /></ProtectedRoute>} />
               <Route path="/kisan-suvidha" element={<ProtectedRoute userType="user"><MandiBhav /></ProtectedRoute>} />
+              <Route path="/land-lease" element={<ProtectedRoute userType="user"><LandLease /></ProtectedRoute>} />
+              <Route path="/theka" element={<Navigate to="/user/land-lease" replace />} />
               <Route path="/rentals" element={<ProtectedRoute userType="user"><RentalCatalog /></ProtectedRoute>} />
               <Route path="/machinery-categories" element={<ProtectedRoute userType="user"><AllMachineryCategories /></ProtectedRoute>} />
               <Route path="/machinery-implements" element={<ProtectedRoute userType="user"><AllImplementsCategories /></ProtectedRoute>} />

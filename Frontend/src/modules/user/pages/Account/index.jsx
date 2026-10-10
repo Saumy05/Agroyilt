@@ -25,7 +25,8 @@ import {
   FiZap,
   FiCheckCircle,
   FiTrash2,
-  FiX
+  FiX,
+  FiLayers
 } from 'react-icons/fi';
 import { MdAccountBalanceWallet } from 'react-icons/md';
 import NotificationBell from '../../components/common/NotificationBell';
@@ -408,6 +409,13 @@ const Account = () => {
                 label="My Ratings"
                 subtitle="Reviews given to operators & equipment"
                 onClick={() => navigate('/user/my-rating')}
+              />
+              <MenuItem
+                icon={FiLayers}
+                iconBg="bg-teal-50 text-teal-700"
+                label="Land Lease & Theka (भूमि पट्टा)"
+                subtitle="Farmland rental listings, offers & records"
+                onClick={() => navigate('/user/land-lease')}
               />
             </div>
           </motion.div>

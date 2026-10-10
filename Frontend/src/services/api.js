@@ -34,6 +34,7 @@ export const getRoleForRequest = (url, config = null) => {
     if (url.includes('/vendors/') || url.startsWith('/vendors') || url.includes('/vendor/')) return 'vendor';
     if (url.includes('/workers/') || url.startsWith('/workers') || url.includes('/worker/')) return 'worker';
     if (url.includes('/users/') || url.startsWith('/users') || url.includes('/user/')) return 'user';
+    if (url.includes('/farmer/') || url.startsWith('/farmer')) return 'user';
   }
 
   // 3. Otherwise prioritize current portal/session role in this browser tab

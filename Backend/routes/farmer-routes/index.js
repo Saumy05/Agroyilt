@@ -62,8 +62,12 @@ router.post('/rentals/:id/damage-report', rentalController.reportDamage);
 // 8. Land Leases
 router.post('/land-leases', landLeaseController.listLand);
 router.get('/land-leases', landLeaseController.browseLandLeases);
+router.get('/land-leases/my-leases', landLeaseController.getMyLandLeases);
+router.get('/land-leases/:id', landLeaseController.getLandLeaseById);
 router.post('/land-leases/:id/negotiate', landLeaseController.negotiateLease);
+router.post('/land-leases/:id/accept-offer', landLeaseController.acceptOffer);
 router.post('/land-leases/:id/accept', landLeaseController.acceptLeaseTerms);
+router.delete('/land-leases/:id', landLeaseController.deleteLand);
 
 // 9. Agreements
 router.get('/agreements', agreementController.getAgreements);

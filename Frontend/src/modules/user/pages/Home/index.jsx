@@ -32,6 +32,7 @@ import AgriMarketplaceSection from './components/AgriMarketplaceSection';
 import MachineryDiscoverySection from './components/MachineryDiscoverySection';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import AddressSelectionModal from '../Checkout/components/AddressSelectionModal';
+import { FiChevronRight } from 'react-icons/fi';
 
 
 
@@ -588,6 +589,41 @@ const Home = () => {
                 const el = document.getElementById('mandi-schemes-section');
                 if (el) el.scrollIntoView({ behavior: 'smooth' });
               }} />
+            </motion.section>
+
+            {/* Land Lease & Theka Marketplace Banner (SOW #20) */}
+            <motion.section variants={itemVariants} className="px-3.5 sm:px-5 py-1.5">
+              <div
+                onClick={() => navigate('/user/land-lease')}
+                className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-800 via-teal-900 to-[#1b4332] p-3.5 sm:p-4 text-white shadow-xs border border-emerald-700/30 cursor-pointer group hover:shadow-md transition-all"
+              >
+                <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-emerald-400/10 rounded-full blur-xl pointer-events-none" />
+                <div className="flex items-center justify-between relative z-10 gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center text-2xl shrink-0 border border-white/20 group-hover:scale-105 transition-transform">
+                      🌾
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] uppercase font-black tracking-wider text-emerald-300 bg-black/25 px-2 py-0.5 rounded-full border border-emerald-400/20">
+                          भूमि पट्टा / ठेका
+                        </span>
+                        <span className="text-[10px] font-extrabold text-amber-300 bg-amber-500/20 px-1.5 py-0.5 rounded">नया</span>
+                      </div>
+                      <h3 className="text-xs sm:text-sm font-black text-white mt-1 truncate">
+                        Land Lease & Theka Marketplace
+                      </h3>
+                      <p className="text-[10.5px] sm:text-xs text-emerald-100/90 font-medium truncate mt-0.5">
+                        निश्चित किराया (Fixed Rent) या बटाई (Crop Share) पर खेत लें या दें
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="shrink-0 w-8 h-8 rounded-full bg-white/15 flex items-center justify-center group-hover:bg-white group-hover:text-emerald-900 transition-all text-white">
+                    <FiChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                  </div>
+                </div>
+              </div>
             </motion.section>
 
 

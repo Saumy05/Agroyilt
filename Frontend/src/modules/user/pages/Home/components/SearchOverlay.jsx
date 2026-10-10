@@ -150,6 +150,10 @@ const SearchOverlay = ({ isOpen, onClose, categories = [], onCategoryClick }) =>
       navigate('/user/soil-testing');
       return;
     }
+    if (titleLower.includes('lease') || titleLower.includes('theka') || titleLower.includes('batai') || titleLower.includes('patta') || titleLower.includes('land') || slugLower.includes('lease')) {
+      navigate('/user/land-lease');
+      return;
+    }
 
     // 1. Handle Category Click
     if (item.isCategory) {
