@@ -207,6 +207,16 @@
   },
   {
     "category": "REPORTS & CONTENT",
+    "title": "Kisan Suvidha & Mandi",
+    "route": "/admin/kisan-suvidha",
+    "allowedRoles": [
+      "super_admin",
+      "admin"
+    ],
+    "children": []
+  },
+  {
+    "category": "REPORTS & CONTENT",
     "title": "Referrals",
     "route": "/admin/referrals",
     "allowedRoles": [

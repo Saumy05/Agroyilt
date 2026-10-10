@@ -31,6 +31,7 @@ import {
   FiKey,
   FiShoppingCart,
   FiPieChart,
+  FiTrendingUp,
 } from "react-icons/fi";
 import adminMenu from "../../config/adminMenu.json";
 import dashboardService from "../../services/dashboardService";
@@ -57,6 +58,7 @@ const iconMap = {
   "Equipment Catalog": FiGrid,
   "Machinery Management": FiPackage,
   "Manage Website": FiGlobe,
+  "Kisan Suvidha & Mandi": FiTrendingUp,
   "Machinery Approvals": FiTruck,
   Referrals: FiGift,
   "Admin Management": FiShield,
@@ -204,6 +206,7 @@ const AdminSidebar = ({ isOpen, onClose }) => {
     'Disputes': 'disputes.view',
     'Help & Support': 'support.view',
     'Manage Website': 'website.view',
+    'Kisan Suvidha & Mandi': 'website.view',
     'Referrals': 'referrals.view',
     'Admin Management': null, // strictly super_admin only
     'Roles': null, // strictly super_admin only
