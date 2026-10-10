@@ -2,18 +2,51 @@ const LandLease = require('../../models/LandLease');
 const User = require('../../models/User');
 const mongoose = require('mongoose');
 
-// Seed realistic agricultural lands if empty
+// Helper to ensure a dedicated verified demo landowner account exists
+const getOrCreateDemoLandowner = async () => {
+  try {
+    let demoOwner = await User.findOne({
+      $or: [
+        { phone: '9800000001' },
+        { email: 'demo.landowner@agroyilt.com' }
+      ]
+    });
+
+    if (!demoOwner) {
+      demoOwner = await User.create({
+        name: 'रामकरण गुर्जर (सत्यापित भूस्वामी)',
+        phone: '9800000001',
+        email: 'demo.landowner@agroyilt.com',
+        role: 'user',
+        isPhoneVerified: true
+      });
+    }
+    return demoOwner._id;
+  } catch (err) {
+    console.error('Error ensuring demo landowner:', err.message);
+    const fallbackUser = await User.findOne({ role: 'user' });
+    return fallbackUser ? fallbackUser._id : null;
+  }
+};
+
+// Seed realistic agricultural lands if empty, and detach sample lands from personal accounts
 const seedInitialLandsIfNeeded = async (userId) => {
   try {
+    const sampleKhasras = ['142/18', '89/3', '210/4-5', '55/1'];
+    const demoOwnerId = await getOrCreateDemoLandowner();
+
+    // Re-assign sample lands away from current user if they were seeded under their account
+    if (demoOwnerId && userId) {
+      await LandLease.updateMany(
+        { khasraNumber: { $in: sampleKhasras }, ownerId: userId },
+        { $set: { ownerId: demoOwnerId } }
+      );
+    }
+
     const count = await LandLease.countDocuments();
     if (count > 0) return;
 
-    // Use current user or find any user to associate
-    let ownerId = userId;
-    if (!ownerId) {
-      const anyUser = await User.findOne({ role: 'USER' });
-      if (anyUser) ownerId = anyUser._id;
-    }
+    const ownerId = demoOwnerId || userId;
     if (!ownerId) return;
 
     const sampleLands = [
@@ -276,6 +309,7 @@ const farmerLandLeaseController = {
         maxPrice,
         soilType,
         irrigationSource,
+        excludeOwn,
         page = 1,
         limit = 30
       } = req.query;
@@ -283,6 +317,11 @@ const farmerLandLeaseController = {
       let filter = {
         status: { $in: ['active', 'leased'] }
       };
+
+      // Filter out user's own listings if excludeOwn is requested
+      if (excludeOwn === 'true' && req.user?.id) {
+        filter.ownerId = { $ne: req.user.id };
+      }
 
       if (type && type !== 'all') {
         filter.leaseType = type;
@@ -333,14 +372,18 @@ const farmerLandLeaseController = {
         LandLease.countDocuments(filter)
       ]);
 
-      const formatted = leases.map(item => ({
-        ...item,
-        owner: {
-          name: item.ownerId?.name || 'Verified Landowner',
-          phone: item.ownerId?.phone || '',
-          profilePhoto: item.ownerId?.profilePhoto || ''
-        }
-      }));
+      const formatted = leases.map(item => {
+        const isOwner = String(item.ownerId?._id || item.ownerId) === String(req.user?.id);
+        return {
+          ...item,
+          isOwner,
+          owner: {
+            name: item.ownerId?.name || 'Verified Landowner',
+            phone: isOwner ? item.ownerId?.phone : '',
+            profilePhoto: item.ownerId?.profilePhoto || ''
+          }
+        };
+      });
 
       res.status(200).json({
         success: true,
@@ -370,7 +413,7 @@ const farmerLandLeaseController = {
         return res.status(404).json({ success: false, message: 'भूमि विवरण उपलब्ध नहीं है (Land not found)' });
       }
 
-      const isOwner = String(lease.ownerId?._id) === String(req.user.id);
+      const isOwner = String(lease.ownerId?._id || lease.ownerId) === String(req.user?.id);
 
       // Only show full offers to the owner
       if (!isOwner) {
@@ -381,6 +424,7 @@ const farmerLandLeaseController = {
         success: true,
         data: {
           ...lease,
+          isOwner,
           owner: {
             name: lease.ownerId?.name || 'Verified Landowner',
             phone: isOwner ? lease.ownerId?.phone : '',

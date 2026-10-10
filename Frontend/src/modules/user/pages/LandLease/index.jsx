@@ -44,6 +44,7 @@ const LandLeasePage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [leaseTypeFilter, setLeaseTypeFilter] = useState('all'); // 'all' | 'fixed-rent' | 'crop-share'
   const [sizeFilter, setSizeFilter] = useState('all'); // 'all' | 'small' | 'medium' | 'large'
+  const [hideOwnListings, setHideOwnListings] = useState(false);
 
   // My Land Leases
   const [myListings, setMyListings] = useState([]);
@@ -146,6 +147,13 @@ const LandLeasePage = () => {
       if (sizeFilter === 'medium' && (land.sizeInAcres <= 5 || land.sizeInAcres > 15)) return false;
       if (sizeFilter === 'large' && land.sizeInAcres <= 15) return false;
 
+      // Hide Own Listings filter if enabled
+      const isMine = Boolean(
+        land.isOwner ||
+        (currentUser && String(land.ownerId?._id || land.ownerId) === String(currentUser._id || currentUser.id))
+      );
+      if (hideOwnListings && isMine) return false;
+
       // Search Query filter
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -159,7 +167,7 @@ const LandLeasePage = () => {
 
       return true;
     });
-  }, [leases, leaseTypeFilter, sizeFilter, searchQuery]);
+  }, [leases, leaseTypeFilter, sizeFilter, searchQuery, hideOwnListings, currentUser]);
 
   // Open Offer Modal
   const handleOpenOfferModal = (land) => {
@@ -302,112 +310,99 @@ const LandLeasePage = () => {
 
   return (
     <div className="min-h-screen bg-[#F8FAF7] text-gray-900 pb-20">
-      {/* 1. Header & Hero Bar */}
-      <div className="bg-gradient-to-br from-emerald-800 via-teal-900 to-[#1b4332] text-white px-4 pt-4 pb-6 shadow-md relative overflow-hidden">
-        {/* Subtle Decorative Elements */}
-        <div className="absolute -top-12 -right-12 w-48 h-48 bg-emerald-400/10 rounded-full blur-2xl pointer-events-none" />
-        <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-teal-500/15 rounded-full blur-xl pointer-events-none" />
-
-        <div className="max-w-5xl mx-auto relative z-10">
-          <div className="flex items-center justify-between mb-4">
+      {/* 1. Ultra-Compact Sticky Header */}
+      <div className="sticky top-0 z-30 bg-gradient-to-r from-emerald-800 via-teal-900 to-[#1b4332] text-white px-3 py-2 shadow-sm">
+        <div className="max-w-5xl mx-auto flex items-center justify-between gap-2">
+          {/* Back & Title */}
+          <div className="flex items-center gap-2 min-w-0">
             <button
               onClick={() => navigate(-1)}
-              className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur-md flex items-center justify-center text-white transition-all active:scale-95 border border-white/15"
+              className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 backdrop-blur-md flex items-center justify-center text-white shrink-0 active:scale-95 border border-white/10"
               aria-label="Go Back"
             >
-              <FiArrowLeft className="w-5 h-5" />
+              <FiArrowLeft className="w-4 h-4" />
             </button>
-            <div className="text-center">
-              <span className="text-xs uppercase tracking-wider font-semibold text-emerald-200">
-                SOW #20 • Market Ecosystem
-              </span>
-              <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">
-                भूमि पट्टा व ठेका (Land Lease & Theka)
+            <div className="min-w-0">
+              <h1 className="text-xs sm:text-sm font-black text-white truncate leading-tight">
+                भूमि पट्टा व ठेका (Land Lease)
               </h1>
+              <p className="text-[10px] text-emerald-200/90 font-medium truncate">
+                निश्चित किराया व बटाई मार्केटप्लेस
+              </p>
             </div>
-            <div className="w-10" />
           </div>
 
-          <p className="text-xs sm:text-sm text-emerald-100 text-center max-w-lg mx-auto font-medium">
-            निश्चित नकद किराया (Fixed Rent) या फसल साझा (Crop-Share / बटाई) व्यवस्था के तहत कृषि भूमि खोजें या अपनी जमीन पट्टे पर दें।
-          </p>
-
-          {/* Tab Navigation Pill Bar */}
-          <div className="mt-5 flex items-center justify-center gap-1.5 p-1 bg-black/25 backdrop-blur-lg rounded-2xl max-w-md mx-auto border border-white/15">
+          {/* Compact Tab Pills */}
+          <div className="flex items-center gap-0.5 p-0.5 bg-black/35 backdrop-blur-md rounded-xl shrink-0 border border-white/15 text-[11px] sm:text-xs">
             <button
               onClick={() => setActiveTab('explore')}
-              className={`flex-1 py-2 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-1.5 ${
+              className={`py-1 px-2.5 rounded-lg font-bold transition-all ${
                 activeTab === 'explore'
-                  ? 'bg-white text-emerald-900 shadow-md scale-[1.02]'
+                  ? 'bg-white text-emerald-950 shadow-xs'
                   : 'text-emerald-100/90 hover:text-white'
               }`}
             >
-              <span>🌾 भूमि खोजें</span>
+              🌾 खोजें
             </button>
-
             <button
               onClick={() => setActiveTab('list')}
-              className={`flex-1 py-2 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-1.5 ${
+              className={`py-1 px-2.5 rounded-lg font-bold transition-all flex items-center gap-1 ${
                 activeTab === 'list'
-                  ? 'bg-white text-emerald-900 shadow-md scale-[1.02]'
+                  ? 'bg-white text-emerald-950 shadow-xs'
                   : 'text-emerald-100/90 hover:text-white'
               }`}
             >
-              <FiPlus className="w-4 h-4 text-emerald-700" />
-              <span>पट्टा दें (List)</span>
+              <FiPlus className="w-3 h-3 text-emerald-700" />
+              <span>पट्टा दें</span>
             </button>
-
             <button
               onClick={() => setActiveTab('my-leases')}
-              className={`flex-1 py-2 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-1.5 ${
+              className={`py-1 px-2.5 rounded-lg font-bold transition-all ${
                 activeTab === 'my-leases'
-                  ? 'bg-white text-emerald-900 shadow-md scale-[1.02]'
+                  ? 'bg-white text-emerald-950 shadow-xs'
                   : 'text-emerald-100/90 hover:text-white'
               }`}
             >
-              <span>📑 मेरे रिकॉर्ड</span>
+              📑 रिकॉर्ड
             </button>
           </div>
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-4 mt-4">
+      <div className="max-w-5xl mx-auto px-3 mt-2 sm:mt-3">
         {/* ========================================================
             TAB 1: EXPLORE / BROWSE FARMLAND
         ======================================================== */}
         {activeTab === 'explore' && (
           <div>
-            {/* Search & Filter Bar */}
-            <div className="bg-white rounded-2xl p-3.5 shadow-sm border border-emerald-900/10 mb-4 space-y-3">
+            {/* Compact Search & Horizontal Filter Strip */}
+            <div className="bg-white rounded-xl p-2 sm:p-2.5 shadow-2xs border border-gray-200/80 mb-2 space-y-1.5">
               <div className="relative">
-                <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <FiSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 w-3.5 h-3.5" />
                 <input
                   type="text"
                   placeholder="खेत का नाम, जिला, तहसील, खसरा नंबर खोजें..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-gray-50 rounded-xl text-xs sm:text-sm border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:bg-white transition-all text-gray-800"
+                  className="w-full pl-8 pr-7 py-1.5 bg-gray-50 rounded-lg text-xs border border-gray-200 focus:outline-none focus:ring-1 focus:ring-emerald-600 focus:bg-white text-gray-800"
                 />
                 {searchQuery && (
                   <button
                     onClick={() => setSearchQuery('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                   >
-                    <FiX className="w-4 h-4" />
+                    <FiX className="w-3.5 h-3.5" />
                   </button>
                 )}
               </div>
 
-              {/* Lease Type Filters */}
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none text-xs">
-                <span className="text-gray-500 font-semibold shrink-0 flex items-center gap-1">
-                  <FiFilter className="w-3.5 h-3.5" /> मॉडल:
-                </span>
+              {/* Single Line Scrollable Filters */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none text-[11px]">
                 <button
                   onClick={() => setLeaseTypeFilter('all')}
-                  className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all ${
+                  className={`px-2.5 py-1 rounded-lg font-bold whitespace-nowrap transition-all ${
                     leaseTypeFilter === 'all'
-                      ? 'bg-emerald-800 text-white shadow-xs'
+                      ? 'bg-emerald-800 text-white shadow-2xs'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
@@ -415,39 +410,37 @@ const LandLeasePage = () => {
                 </button>
                 <button
                   onClick={() => setLeaseTypeFilter('fixed-rent')}
-                  className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all flex items-center gap-1 ${
+                  className={`px-2.5 py-1 rounded-lg font-bold whitespace-nowrap transition-all flex items-center gap-1 ${
                     leaseTypeFilter === 'fixed-rent'
-                      ? 'bg-emerald-700 text-white shadow-xs'
+                      ? 'bg-emerald-700 text-white shadow-2xs'
                       : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
                   }`}
                 >
-                  <FiDollarSign className="w-3.5 h-3.5" /> नकद किराया (Fixed Rent)
+                  <FiDollarSign className="w-3 h-3" /> नकद किराया (Fixed Rent)
                 </button>
                 <button
                   onClick={() => setLeaseTypeFilter('crop-share')}
-                  className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all flex items-center gap-1 ${
+                  className={`px-2.5 py-1 rounded-lg font-bold whitespace-nowrap transition-all flex items-center gap-1 ${
                     leaseTypeFilter === 'crop-share'
-                      ? 'bg-amber-600 text-white shadow-xs'
+                      ? 'bg-amber-600 text-white shadow-2xs'
                       : 'bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100'
                   }`}
                 >
-                  <FiPercent className="w-3.5 h-3.5" /> बटाई / फसल-साझा (Crop Share)
+                  <FiPercent className="w-3 h-3" /> बटाई (Crop Share)
                 </button>
-              </div>
 
-              {/* Size Filters */}
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none text-xs border-t border-gray-100 pt-2">
-                <span className="text-gray-500 font-semibold shrink-0">रकबा (Size):</span>
+                <div className="h-4 w-[1px] bg-gray-200 shrink-0" />
+
                 {[
                   { id: 'all', label: 'सभी आकार' },
-                  { id: 'small', label: '1 - 5 एकड़' },
-                  { id: 'medium', label: '5 - 15 एकड़' },
+                  { id: 'small', label: '1-5 एकड़' },
+                  { id: 'medium', label: '5-15 एकड़' },
                   { id: 'large', label: '15+ एकड़' }
                 ].map((s) => (
                   <button
                     key={s.id}
                     onClick={() => setSizeFilter(s.id)}
-                    className={`px-2.5 py-1 rounded-lg font-medium whitespace-nowrap transition-all ${
+                    className={`px-2 py-1 rounded-lg font-medium whitespace-nowrap transition-all ${
                       sizeFilter === s.id
                         ? 'bg-gray-800 text-white'
                         : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -456,41 +449,54 @@ const LandLeasePage = () => {
                     {s.label}
                   </button>
                 ))}
+
+                <div className="h-4 w-[1px] bg-gray-200 shrink-0" />
+
+                <button
+                  onClick={() => setHideOwnListings(!hideOwnListings)}
+                  className={`px-2.5 py-1 rounded-lg font-bold whitespace-nowrap transition-all flex items-center gap-1 ${
+                    hideOwnListings
+                      ? 'bg-emerald-800 text-white shadow-2xs'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {hideOwnListings ? '✓ अपनी सूची छिपी है' : 'मेरी जमीनें छुपाएं'}
+                </button>
               </div>
             </div>
 
-            {/* Listings Count Banner */}
-            <div className="flex items-center justify-between px-1 mb-3">
-              <span className="text-xs font-bold text-gray-600">
-                उपलब्ध कृषि भूमि ({filteredLeases.length} सूचियां)
+            {/* Results Count & Refresh */}
+            <div className="flex items-center justify-between px-1 mb-2">
+              <span className="text-[11px] font-bold text-gray-500">
+                उपलब्ध कृषि भूमि: <b className="text-gray-800">{filteredLeases.length} सूचियां</b>
               </span>
               <button
                 onClick={fetchLeases}
-                className="text-xs font-bold text-emerald-700 hover:text-emerald-800"
+                className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800"
               >
-                रिफ्रेश करें ↻
+                रिफ्रेश ↻
               </button>
             </div>
 
-            {/* Farmland Grid */}
+            {/* Farmland Grid (Compact Cards) */}
             {loading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                 {[1, 2, 3, 4].map((n) => (
-                  <div key={n} className="bg-white rounded-2xl p-4 shadow-sm animate-pulse border border-gray-100">
-                    <div className="h-44 bg-gray-200 rounded-xl mb-3" />
-                    <div className="h-4 bg-gray-200 rounded w-3/4 mb-2" />
-                    <div className="h-3 bg-gray-200 rounded w-1/2" />
+                  <div key={n} className="bg-white rounded-xl p-3 shadow-2xs animate-pulse border border-gray-100">
+                    <div className="h-32 bg-gray-200 rounded-lg mb-2" />
+                    <div className="h-3 bg-gray-200 rounded w-3/4 mb-1.5" />
+                    <div className="h-2.5 bg-gray-200 rounded w-1/2" />
                   </div>
                 ))}
               </div>
             ) : filteredLeases.length === 0 ? (
-              <div className="bg-white rounded-2xl p-8 text-center border border-gray-200/80 shadow-xs">
-                <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 mx-auto flex items-center justify-center text-2xl mb-3">
+              <div className="bg-white rounded-xl p-6 text-center border border-gray-200/80 shadow-2xs">
+                <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 mx-auto flex items-center justify-center text-xl mb-2">
                   🌾
                 </div>
-                <h3 className="text-base font-bold text-gray-800">कोई भूमि सूची नहीं मिली</h3>
-                <p className="text-xs text-gray-500 mt-1 max-w-sm mx-auto">
-                  वर्तमान फिल्टर के अनुसार कोई कृषि भूमि उपलब्ध नहीं है। कृपया फिल्टर बदलकर प्रयास करें या अपनी भूमि सूचीबद्ध करें।
+                <h3 className="text-sm font-bold text-gray-800">कोई भूमि सूची नहीं मिली</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  फिल्टर बदलकर प्रयास करें या अपनी भूमि जोड़ें।
                 </p>
                 <button
                   onClick={() => {
@@ -498,133 +504,159 @@ const LandLeasePage = () => {
                     setSizeFilter('all');
                     setSearchQuery('');
                   }}
-                  className="mt-4 px-4 py-2 bg-emerald-800 text-white rounded-xl text-xs font-bold shadow-xs hover:bg-emerald-900"
+                  className="mt-3 px-3.5 py-1.5 bg-emerald-800 text-white rounded-lg text-xs font-bold shadow-2xs hover:bg-emerald-900"
                 >
                   सभी फिल्टर हटाएं
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {filteredLeases.map((land) => (
-                  <motion.div
-                    key={land._id}
-                    whileHover={{ y: -2 }}
-                    className="bg-white rounded-2xl overflow-hidden shadow-sm border border-emerald-900/10 hover:shadow-md transition-all flex flex-col justify-between"
-                  >
-                    <div>
-                      {/* Image Banner & Lease Tag */}
-                      <div className="relative h-48 w-full bg-gray-100 overflow-hidden">
-                        <img
-                          src={land.images?.[0] || 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1000&q=80'}
-                          alt={land.title}
-                          className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
-                          loading="lazy"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                {filteredLeases.map((land) => {
+                  const isOwnLand = Boolean(
+                    land.isOwner ||
+                    (currentUser && String(land.ownerId?._id || land.ownerId) === String(currentUser._id || currentUser.id))
+                  );
 
-                        {/* Top Left Badge: Lease Type */}
-                        <div className="absolute top-3 left-3">
-                          {land.leaseType === 'fixed-rent' ? (
-                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-black bg-emerald-600 text-white shadow-md border border-emerald-400">
-                              <FiDollarSign className="w-3.5 h-3.5" />
-                              ₹{Number(land.pricePerAcre || 0).toLocaleString('en-IN')} / एकड़ / वर्ष
+                  return (
+                    <motion.div
+                      key={land._id}
+                      whileHover={{ y: -1 }}
+                      className="bg-white rounded-xl overflow-hidden shadow-2xs border border-gray-200/90 hover:shadow-xs transition-all flex flex-col justify-between"
+                    >
+                      <div>
+                        {/* Compact Image Banner */}
+                        <div className="relative h-32 sm:h-36 w-full bg-gray-100 overflow-hidden">
+                          <img
+                            src={land.images?.[0] || 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=800&q=80'}
+                            alt={land.title}
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
+
+                          {/* Top Left Badge: Lease Type */}
+                          <div className="absolute top-2 left-2">
+                            {land.leaseType === 'fixed-rent' ? (
+                              <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-600 text-white shadow-xs">
+                                <FiDollarSign className="w-3 h-3" />
+                                ₹{Number(land.pricePerAcre || 0).toLocaleString('en-IN')}/एकड़/वर्ष
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-500 text-white shadow-xs">
+                                <FiPercent className="w-3 h-3" />
+                                {land.sharePercentage}% बटाई
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Top Right Badges: Status & Own Land indicator */}
+                          <div className="absolute top-2 right-2 flex items-center gap-1">
+                            {isOwnLand && (
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-black shadow-xs bg-blue-600 text-white">
+                                आपकी सूची
+                              </span>
+                            )}
+                            <span
+                              className={`px-2 py-0.5 rounded-md text-[10px] font-bold shadow-xs ${
+                                land.status === 'leased'
+                                  ? 'bg-rose-500 text-white'
+                                  : 'bg-black/50 backdrop-blur-md text-emerald-200'
+                              }`}
+                            >
+                              {land.status === 'leased' ? 'Leased' : 'उपलब्ध (Available)'}
                             </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-black bg-amber-500 text-white shadow-md border border-amber-300">
-                              <FiPercent className="w-3.5 h-3.5" />
-                              {land.sharePercentage}% बटाई (फसल साझा)
+                          </div>
+
+                          {/* Bottom Overlay Info */}
+                          <div className="absolute bottom-2 left-2 right-2 text-white flex items-center justify-between">
+                            <div className="flex items-center gap-1 text-[11px] font-bold drop-shadow-sm truncate">
+                              <FiMapPin className="w-3 h-3 text-emerald-400 shrink-0" />
+                              <span className="truncate">
+                                {land.location?.city || land.location?.district || 'Rajasthan'}, {land.location?.state || 'India'}
+                              </span>
+                            </div>
+                            <span className="bg-black/50 backdrop-blur-md px-1.5 py-0.5 rounded text-[10.5px] font-black text-emerald-200 shrink-0 ml-1">
+                              {land.sizeInAcres} एकड़
                             </span>
-                          )}
+                          </div>
                         </div>
 
-                        {/* Top Right Badge: Status */}
-                        <div className="absolute top-3 right-3">
-                          <span
-                            className={`px-2.5 py-1 rounded-full text-[11px] font-bold shadow-md ${
+                        {/* Content Card Body */}
+                        <div className="p-2.5 space-y-1.5">
+                          <div>
+                            <h3 className="font-extrabold text-xs sm:text-sm text-gray-900 line-clamp-1 leading-snug">
+                              {land.title}
+                            </h3>
+                            <p className="text-[11px] text-gray-500 line-clamp-1 mt-0.5">
+                              {land.description}
+                            </p>
+                          </div>
+
+                          {/* Compact Agricultural Features Strip */}
+                          <div className="flex flex-wrap items-center gap-1 text-[10.5px] text-gray-600">
+                            <span className="bg-gray-100 px-1.5 py-0.5 rounded font-medium">
+                              🌱 {land.soilType?.split(' ')[0] || 'दोमट'}
+                            </span>
+                            <span className="bg-gray-100 px-1.5 py-0.5 rounded font-medium">
+                              💧 {land.irrigationSource?.split('/')[0] || 'ट्यूबवेल'}
+                            </span>
+                            <span className="bg-gray-100 px-1.5 py-0.5 rounded font-medium">
+                              खसरा: {land.khasraNumber}
+                            </span>
+                          </div>
+
+                          {/* Owner Info & Verified Tag */}
+                          <div className="flex items-center justify-between text-[10.5px] text-gray-500 pt-1 border-t border-gray-100">
+                            <span className="inline-flex items-center gap-1 text-emerald-800 font-bold truncate">
+                              <FiShield className="w-3 h-3 text-emerald-600 shrink-0" />
+                              <span className="truncate">{isOwnLand ? 'आपकी अपनी भूमि' : (land.owner?.name || 'Verified Owner')}</span>
+                            </span>
+                            <span className="text-gray-400 font-medium shrink-0">
+                              {land.roadAccess?.split('/')[0] || 'पक्की सड़क'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="p-2.5 pt-0 grid grid-cols-2 gap-1.5">
+                        <button
+                          onClick={() => setSelectedLandDetail(land)}
+                          className="py-1.5 px-2 rounded-lg border border-emerald-900/20 text-emerald-900 hover:bg-emerald-50 text-xs font-bold transition-all flex items-center justify-center gap-1"
+                        >
+                          <FiMaximize2 className="w-3 h-3" />
+                          <span>विवरण</span>
+                        </button>
+
+                        {isOwnLand ? (
+                          <button
+                            onClick={() => {
+                              setActiveTab('my-leases');
+                              setMyLeasesSubTab('listings');
+                            }}
+                            className="py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 shadow-2xs bg-blue-700 hover:bg-blue-800 text-white active:scale-95"
+                          >
+                            <FiCheckCircle className="w-3 h-3" />
+                            <span>प्रबंधित करें</span>
+                          </button>
+                        ) : (
+                          <button
+                            disabled={land.status === 'leased'}
+                            onClick={() => handleOpenOfferModal(land)}
+                            className={`py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 shadow-2xs ${
                               land.status === 'leased'
-                                ? 'bg-rose-500 text-white'
-                                : 'bg-emerald-900/80 backdrop-blur-md text-emerald-100 border border-emerald-400/30'
+                                ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                                : 'bg-emerald-800 hover:bg-emerald-900 text-white active:scale-95'
                             }`}
                           >
-                            {land.status === 'leased' ? 'पट्टे पर दिया गया (Leased)' : 'उपलब्ध (Available)'}
-                          </span>
-                        </div>
-
-                        {/* Bottom Overlay Info */}
-                        <div className="absolute bottom-3 left-3 right-3 text-white flex items-center justify-between">
-                          <div className="flex items-center gap-1.5 text-xs font-bold drop-shadow-md">
-                            <FiMapPin className="w-3.5 h-3.5 text-emerald-400" />
-                            <span>
-                              {land.location?.city || land.location?.district || 'Rajasthan'}, {land.location?.state || 'India'}
-                            </span>
-                          </div>
-                          <span className="bg-black/40 backdrop-blur-md px-2 py-0.5 rounded-lg text-xs font-black text-emerald-200">
-                            {land.sizeInAcres} एकड़ (Acres)
-                          </span>
-                        </div>
+                            <FiSend className="w-3 h-3" />
+                            <span>प्रस्ताव दें</span>
+                          </button>
+                        )}
                       </div>
-
-                      {/* Content Card Body */}
-                      <div className="p-4 space-y-3">
-                        <div>
-                          <h3 className="font-extrabold text-base text-gray-900 line-clamp-1 leading-snug">
-                            {land.title}
-                          </h3>
-                          <p className="text-xs text-gray-500 line-clamp-2 mt-1">
-                            {land.description}
-                          </p>
-                        </div>
-
-                        {/* Key Agricultural Features Pills */}
-                        <div className="grid grid-cols-2 gap-2 text-xs pt-1">
-                          <div className="flex items-center gap-1.5 text-gray-700 bg-gray-50 p-2 rounded-xl border border-gray-100">
-                            <FiLayers className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-                            <span className="truncate font-medium">{land.soilType || 'दोमट मिट्टी'}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-gray-700 bg-gray-50 p-2 rounded-xl border border-gray-100">
-                            <FiDroplet className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                            <span className="truncate font-medium">{land.irrigationSource || 'ट्यूबवेल / बोरवेल'}</span>
-                          </div>
-                        </div>
-
-                        {/* Additional specs row */}
-                        <div className="flex items-center justify-between text-[11px] text-gray-500 border-t border-gray-100 pt-2.5">
-                          <span className="font-medium">
-                            खसरा नं: <b className="text-gray-800">{land.khasraNumber}</b>
-                          </span>
-                          <span className="inline-flex items-center gap-1 text-emerald-800 font-bold">
-                            <FiShield className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>{land.owner?.name || 'Verified Owner'}</span>
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="p-4 pt-0 grid grid-cols-2 gap-2">
-                      <button
-                        onClick={() => setSelectedLandDetail(land)}
-                        className="py-2.5 px-3 rounded-xl border border-emerald-900/20 text-emerald-900 hover:bg-emerald-50 text-xs font-bold transition-all flex items-center justify-center gap-1"
-                      >
-                        <FiMaximize2 className="w-3.5 h-3.5" />
-                        <span>विवरण (Details)</span>
-                      </button>
-
-                      <button
-                        disabled={land.status === 'leased'}
-                        onClick={() => handleOpenOfferModal(land)}
-                        className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 shadow-sm ${
-                          land.status === 'leased'
-                            ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                            : 'bg-emerald-800 hover:bg-emerald-900 text-white active:scale-95'
-                        }`}
-                      >
-                        <FiSend className="w-3.5 h-3.5" />
-                        <span>प्रस्ताव दें (Offer)</span>
-                      </button>
-                    </div>
-                  </motion.div>
-                ))}
+                    </motion.div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1397,23 +1429,40 @@ const LandLeasePage = () => {
                   </div>
                   <div>
                     <span className="text-xs font-extrabold text-gray-900 block">
-                      {selectedLandDetail.owner?.name || 'Verified Landowner'}
+                      {Boolean(selectedLandDetail.isOwner || (currentUser && String(selectedLandDetail.ownerId?._id || selectedLandDetail.ownerId) === String(currentUser._id || currentUser.id)))
+                        ? 'आपकी अपनी सूची (Your Listing)'
+                        : (selectedLandDetail.owner?.name || 'Verified Landowner')}
                     </span>
                     <span className="text-[10px] text-emerald-700 font-semibold">प्रमाणित भूमि मालिक</span>
                   </div>
                 </div>
 
-                <button
-                  onClick={() => {
-                    const l = selectedLandDetail;
-                    setSelectedLandDetail(null);
-                    handleOpenOfferModal(l);
-                  }}
-                  className="py-2.5 px-4 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5"
-                >
-                  <FiSend className="w-3.5 h-3.5" />
-                  <span>प्रस्ताव दें (Make Offer)</span>
-                </button>
+                {Boolean(selectedLandDetail.isOwner || (currentUser && String(selectedLandDetail.ownerId?._id || selectedLandDetail.ownerId) === String(currentUser._id || currentUser.id))) ? (
+                  <button
+                    onClick={() => {
+                      setSelectedLandDetail(null);
+                      setActiveTab('my-leases');
+                      setMyLeasesSubTab('listings');
+                    }}
+                    className="py-2.5 px-4 bg-blue-700 hover:bg-blue-800 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5"
+                  >
+                    <FiCheckCircle className="w-3.5 h-3.5" />
+                    <span>अपनी सूची में देखें (Manage)</span>
+                  </button>
+                ) : (
+                  <button
+                    disabled={selectedLandDetail.status === 'leased'}
+                    onClick={() => {
+                      const l = selectedLandDetail;
+                      setSelectedLandDetail(null);
+                      handleOpenOfferModal(l);
+                    }}
+                    className="py-2.5 px-4 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5"
+                  >
+                    <FiSend className="w-3.5 h-3.5" />
+                    <span>प्रस्ताव दें (Make Offer)</span>
+                  </button>
+                )}
               </div>
             </motion.div>
           </div>
