@@ -9,7 +9,7 @@ import { publicEquipmentService } from '../../../../../services/publicEquipmentS
 
 const MachineryDiscoverySection = ({
   title = "Featured Rental Equipment",
-  subtitle = "Verified Owners • Self-Operate Machines",
+  subtitle = "Verified Owners • Self-Operated",
   isSpotlight = false
 }) => {
   const navigate = useNavigate();
@@ -38,7 +38,7 @@ const MachineryDiscoverySection = ({
     return (
       <section className={`px-5 ${isSpotlight ? 'mb-4 mt-2' : 'mb-8'}`}>
         <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm text-center">
-          <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-2.5">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-2.5">
             <FiTruck size={22} />
           </div>
           <h3 className="text-sm font-black text-slate-800 mb-1">
@@ -49,7 +49,7 @@ const MachineryDiscoverySection = ({
           </p>
           <button
             onClick={() => navigate('/user/rentals')}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl transition-all active:scale-95 cursor-pointer shadow-md shadow-blue-600/20"
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl transition-all active:scale-95 cursor-pointer shadow-md shadow-emerald-600/20"
           >
             Explore All Rental Equipment →
           </button>
@@ -60,25 +60,29 @@ const MachineryDiscoverySection = ({
 
   return (
     <section className={`px-5 ${isSpotlight ? 'mb-4 mt-1' : 'mb-8'}`}>
-      <div className="flex items-center justify-between mb-3.5">
-        <div>
-          <h2 className="text-[17px] sm:text-lg font-black text-slate-800 tracking-tight flex items-center gap-1.5">
-            {title}
+      <div className="flex items-center justify-between gap-3 mb-3.5">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h2 className="text-[17px] sm:text-lg font-black text-slate-800 tracking-tight truncate">
+              {title}
+            </h2>
             {isSpotlight && (
-              <span className="text-[9px] font-black uppercase tracking-wider bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200">
+              <span className="text-[9px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200/80 shrink-0">
                 Spotlight
               </span>
             )}
-          </h2>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5 mt-0.5">
-            <FiCheckCircle className="text-emerald-500" /> {subtitle}
+          </div>
+          <p className="text-xs font-medium text-slate-500 flex items-center gap-1.5 mt-0.5 truncate">
+            <FiCheckCircle className="text-emerald-500 shrink-0 text-xs" />
+            <span className="truncate">{subtitle}</span>
           </p>
         </div>
         <button
           onClick={() => navigate('/user/rentals')}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-full text-xs font-black transition-all active:scale-95 cursor-pointer shadow-2xs"
+          className="group flex items-center gap-1.5 px-3.5 py-1.5 bg-white/95 hover:bg-white text-emerald-700 hover:text-emerald-800 border border-emerald-200/80 hover:border-emerald-300 rounded-full text-xs font-bold transition-all active:scale-95 cursor-pointer shadow-2xs shrink-0 whitespace-nowrap"
         >
-          Explore All <FiArrowRight />
+          <span>Explore All</span>
+          <FiArrowRight className="text-xs transition-transform group-hover:translate-x-0.5 text-emerald-600" />
         </button>
       </div>
 
