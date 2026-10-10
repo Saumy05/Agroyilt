@@ -939,6 +939,7 @@ const createBooking = async (req, res) => {
           message: `New job request for ${service.title} from ${user.name}`,
           relatedId: booking._id,
           relatedType: 'booking',
+          priority: 'high',
           data: {
             bookingId: booking._id,
             serviceName: service.title,
@@ -953,6 +954,7 @@ const createBooking = async (req, res) => {
           pushData: {
             type: 'new_job',
             dataOnly: false,
+            priority: 'high',
             link: `/worker/jobs/${booking._id}`
           }
         })
@@ -2408,14 +2410,24 @@ const reselectVendor = async (req, res) => {
     }
 
     // Push notification to vendor
+    let reselectPushSent = false;
     try {
       if (targetVendor.fcmTokens && targetVendor.fcmTokens.length > 0) {
         await sendNewBookingNotification(
-          targetVendor.fcmTokens,
-          booking._id,
-          booking.serviceName || 'Machinery Booking',
-          `${booking.address?.city || ''}, ${booking.address?.state || ''}`.trim()
+          targetVendor,
+          {
+            bookingId: booking._id,
+            bookingNumber: booking.bookingNumber,
+            serviceName: booking.serviceName || 'Machinery Booking',
+            location: `${booking.address?.city || ''}, ${booking.address?.state || ''}`.trim(),
+            customerName: req.user.name,
+            scheduledDate: booking.scheduledDate,
+            scheduledTime: booking.scheduledTime,
+            price: booking.finalAmount,
+            distance: vendorDist
+          }
         );
+        reselectPushSent = true;
       }
     } catch (err) {
       console.error('[FCM] Push notification failed for reselected vendor', vendorId, err);
@@ -2429,6 +2441,8 @@ const reselectVendor = async (req, res) => {
       message: `New booking request for ${booking.serviceName || 'Machinery'} from ${req.user.name}`,
       relatedId: booking._id,
       relatedType: 'booking',
+      priority: 'high',
+      skipPush: reselectPushSent,
       data: {
         bookingId: booking._id,
         serviceName: booking.serviceName || 'Machinery Booking',

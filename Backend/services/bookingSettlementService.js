@@ -769,10 +769,24 @@ const dispatchVendorRequest = async (booking, { io = null, distance = null, chos
     io.to(room).emit('booking_updated', { bookingId: booking._id, status: 'requested' });
   }
 
+  let pushSent = false;
   try {
     const vendorDoc = chosenVendor?.fcmTokens ? chosenVendor : await Vendor.findById(vendorId);
     if (vendorDoc?.fcmTokens?.length > 0) {
-      await sendNewBookingNotification(vendorDoc.fcmTokens, booking._id, serviceTitle, `${booking.address?.city || ''}, ${booking.address?.state || ''}`.trim());
+      await sendNewBookingNotification(vendorDoc, {
+        bookingId: booking._id,
+        bookingNumber: booking.bookingNumber,
+        serviceName: serviceTitle,
+        serviceCategory: booking.serviceCategory || 'Category',
+        customerName,
+        customerPhone: user?.phone,
+        scheduledDate: booking.scheduledDate,
+        scheduledTime: booking.scheduledTime,
+        price: booking.finalAmount,
+        distance,
+        location: `${booking.address?.city || ''}, ${booking.address?.state || ''}`.trim()
+      });
+      pushSent = true;
     }
   } catch (err) {
     console.error('[FCM] Push notification failed for vendor', vendorId, err);
@@ -785,12 +799,14 @@ const dispatchVendorRequest = async (booking, { io = null, distance = null, chos
     message: `New booking request for ${serviceTitle} from ${customerName}`,
     relatedId: booking._id,
     relatedType: 'booking',
+    priority: 'high',
+    skipPush: pushSent,
     data: {
       bookingId: booking._id, serviceName: serviceTitle, customerName, customerPhone: user?.phone,
       scheduledDate: booking.scheduledDate, scheduledTime: booking.scheduledTime,
       location: booking.address, price: booking.finalAmount, distance
     },
-    pushData: { type: 'new_booking', dataOnly: false, link: `/vendor/booking/${booking._id}` }
+    pushData: { type: 'new_booking', dataOnly: false, priority: 'high', link: `/vendor/booking/${booking._id}` }
   }).catch(err => console.error('[Notification] Background save error (vendor):', err));
 };
 

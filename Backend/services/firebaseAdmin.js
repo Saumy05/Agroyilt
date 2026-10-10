@@ -77,10 +77,15 @@ async function sendPushNotification(tokens, payload) {
     }
 
     // Ensure data values are strings (FCM requirement)
+    const channelId = payload.channelId || payload.data?.channelId || 'booking_alerts';
+
     const stringData = {
       // Always include title and body in data for data-only notifications and Service Worker access
       title: payload.title || (payload.body ? 'New Update' : 'App Notification'),
-      body: payload.body || ''
+      body: payload.body || '',
+      channelId: channelId,
+      channel_id: channelId,
+      click_action: 'FLUTTER_NOTIFICATION_CLICK'
     };
     if (payload.data) {
       Object.keys(payload.data).forEach(key => {
@@ -94,7 +99,7 @@ async function sendPushNotification(tokens, payload) {
       // Android specific configuration for high priority
       android: {
         priority: 'high', // HIGH priority for immediate delivery
-        // notification block removed to ensure Data-Only message
+        ttl: 86400 * 1000
       },
       // iOS/APNs specific configuration
       apns: {
@@ -104,6 +109,10 @@ async function sendPushNotification(tokens, payload) {
         },
         payload: {
           aps: {
+            alert: {
+              title: payload.title || 'App Notification',
+              body: payload.body || 'New Update'
+            },
             sound: 'default',
             badge: 1,
             'content-available': 1, // Wake up app in background
@@ -120,7 +129,6 @@ async function sendPushNotification(tokens, payload) {
         fcmOptions: {
           link: payload.data?.link || '/'
         }
-        // notification block removed to ensure Data-Only message
       },
       priority: payload.highPriority !== false ? 'high' : 'normal'
     };
@@ -136,6 +144,12 @@ async function sendPushNotification(tokens, payload) {
         body: payload.body || 'New Update',
         icon: 'ic_launcher',
         color: '#14B8A6',
+        channelId: channelId,
+        priority: 'max',
+        visibility: 'public',
+        sound: 'default',
+        defaultSound: true,
+        defaultVibrateTimings: true,
         clickAction: 'FLUTTER_NOTIFICATION_CLICK',
       };
       
@@ -255,8 +269,8 @@ async function sendNotificationToUser(userId, payload, includeMobile = true) {
     const finalPayload = {
       ...payload,
       highPriority: payload.priority === 'high' ||
-        ['booking_accepted', 'worker_started', 'journey_started', 'work_done', 'work_completed', 'booking_completed', 'vendor_reached', 'visit_verified', 'payment_success', 'payment_received', 'work_started', 'in_progress', 'worker_accepted'].includes(payload.data?.type),
-      dataOnly: false // Explicitly disable dataOnly to force system tray notification
+        ['booking_requested', 'new_booking', 'booking_accepted', 'worker_started', 'journey_started', 'work_done', 'work_completed', 'booking_completed', 'vendor_reached', 'visit_verified', 'payment_success', 'payment_received', 'work_started', 'in_progress', 'worker_accepted'].includes(payload.data?.type) || true,
+      dataOnly: payload.dataOnly === true ? true : false
     };
 
     await sendPushNotification(tokens, finalPayload);
@@ -295,7 +309,9 @@ async function sendNotificationToVendor(vendorId, payload, includeMobile = true)
 
     const finalPayload = {
       ...payload,
-      title: `🏢 [Partner] ${payload.title}` // Add identification
+      title: `🏢 [Partner] ${payload.title}`, // Add identification
+      highPriority: true,
+      dataOnly: payload.dataOnly === true ? true : false
     };
 
     await sendPushNotification(tokens, finalPayload);
@@ -334,7 +350,9 @@ async function sendNotificationToWorker(workerId, payload, includeMobile = true)
 
     const finalPayload = {
       ...payload,
-      title: `👷 [Pro] ${payload.title}` // Add identification
+      title: `👷 [Pro] ${payload.title}`, // Add identification
+      highPriority: true,
+      dataOnly: payload.dataOnly === true ? true : false
     };
 
     await sendPushNotification(tokens, finalPayload);
