@@ -201,6 +201,7 @@ app.use('/api/public/cities', require('./routes/public-routes/city.routes.js'));
 // New geographic hierarchy routes (State → District → SubDistrict)
 app.use('/api/public', require('./routes/public-routes/geo.routes.js'));
 app.use('/api/public/stats', require('./routes/public-routes/stats.routes.js'));
+app.use('/api/public/kisan-suvidha', require('./routes/public-routes/kisanSuvidha.routes.js'));
 app.use('/api/fees', require('./routes/shared/registrationFeeRoutes.js'));
 
 
@@ -279,6 +280,7 @@ app.use('/api/admin', require('./routes/admin-routes/reportManagement.routes'));
 app.use('/api/admin/disputes', require('./routes/admin-routes/disputeManagement.routes'));
 app.use('/api/admin/settlements', require('./routes/admin-routes/settlementManagement.routes'));
 app.use('/api/admin/website', require('./routes/admin-routes/websiteManagement.routes'));
+app.use('/api/admin/kisan-suvidha', require('./routes/admin-routes/kisanSuvidhaManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/adminPayout.routes'));
 app.use('/api/admin/admins', require('./routes/admin-routes/adminManagement.routes'));
 app.use('/api/admin/roles', require('./routes/admin-routes/adminRole.routes'));
