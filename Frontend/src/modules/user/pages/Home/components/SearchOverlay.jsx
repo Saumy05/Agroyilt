@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -38,7 +38,7 @@ const SearchOverlay = ({ isOpen, onClose, categories = [], onCategoryClick }) =>
           imageUrl: cat.icon
         }))
       : [
-          { id: 'trend-1', title: 'Soil Testing', isCategory: true },
+          { id: 'trend-1', title: 'Tractor Rental', isCategory: true },
           { id: 'trend-2', title: 'Farming Equipment', isCategory: true },
           { id: 'trend-3', title: 'Heavy Machinery', isCategory: true },
           { id: 'trend-4', title: 'Drone Spraying', isCategory: true },

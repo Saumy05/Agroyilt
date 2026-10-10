@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useState, useRef } from 'react';
+import React, { useMemo, useState, useRef } from 'react';
 import { motion, useInView, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import { HiOutlineSearch, HiOutlineShieldCheck, HiOutlineCurrencyDollar, HiOutlineClock, HiArrowRight } from 'react-icons/hi';
 import { usePageTranslation } from '../../../hooks/usePageTranslation';
@@ -132,12 +132,12 @@ const ProblemSolution = () => {
     "Problem is not lack of machinery, Problem is lack of access.",
     "Our Solution: AgroYilt",
     ...solutions.flatMap(s => [s.title, s.desc]),
-    "Drones", "Soil Testing", "Marketplace"
+    "Drones", "Farm Workforce", "Marketplace"
   ], []);
 
   const { getTranslatedText } = usePageTranslation(allTexts);
 
-  const tags = ["Drones", "Soil Testing", "Marketplace"];
+  const tags = ["Drones", "Farm Workforce", "Marketplace"];
 
   return (
     <section ref={sectionRef} id="problem" className="py-8 md:py-14 bg-gray-50 overflow-hidden">

@@ -302,22 +302,6 @@ const BusinessDetails = () => {
             </p>
 
             <div className="space-y-3 pt-2">
-                {/* Toggle Soil Lab */}
-                <div className="flex items-center justify-between p-4 rounded-xl border transition-all duration-300"
-                    style={{ borderColor: isSoilLab ? themeColors.button : '#f1f5f9', backgroundColor: isSoilLab ? `${themeColors.button}05` : '#f8fafc' }}>
-                  <div>
-                    <h3 className="text-sm font-bold text-gray-800">Operate as Soil Testing Lab</h3>
-                    <p className="text-[11px] text-gray-500 mt-0.5">Accept soil samples for testing</p>
-                  </div>
-                  <button 
-                    onClick={() => setIsSoilLab(!isSoilLab)}
-                    className="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
-                    style={{ backgroundColor: isSoilLab ? themeColors.button : '#cbd5e1' }}
-                  >
-                    <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isSoilLab ? 'translate-x-5' : 'translate-x-0'}`} />
-                  </button>
-                </div>
-
                 {/* Toggle Agri Store */}
                 <div className="flex items-center justify-between p-4 rounded-xl border transition-all duration-300"
                     style={{ borderColor: isAgriStore ? themeColors.button : '#f1f5f9', backgroundColor: isAgriStore ? `${themeColors.button}05` : '#f8fafc' }}>
@@ -336,97 +320,7 @@ const BusinessDetails = () => {
             </div>
           </FormSection>
 
-          {/* Soil Lab Details Form */}
-          {isSoilLab && (
-            <FormSection subtitle="Soil testing" title="Lab Details" icon={FiCheckCircle}>
-              <div>
-                <label className={`block text-xs font-semibold mb-1.5 ml-1 ${errors.labName ? 'text-red-500' : 'text-gray-700'}`}>Lab Name *</label>
-                <input 
-                  type="text" 
-                  value={labName}
-                  onChange={(e) => {
-                    let val = e.target.value.replace(/[^A-Za-z0-9\s&*.,-]/g, '');
-                    setLabName(val);
-                    if (errors.labName && val.length >= 3) setErrors({ ...errors, labName: null });
-                  }}
-                  placeholder="Enter Registered Lab Name"
-                  className={`w-full px-4 py-3 rounded-xl border-2 transition-all text-sm focus:outline-none text-gray-800 ${
-                    errors.labName ? 'border-red-300 bg-red-50 focus:border-red-400' : 'bg-gray-50 border-transparent focus:border-teal-100 focus:bg-white'
-                  }`}
-                />
-                {errors.labName && <p className="text-[10px] text-red-500 mt-1 ml-1 font-semibold">{errors.labName}</p>}
-              </div>
 
-              <div>
-                <label className={`block text-xs font-semibold mb-1.5 ml-1 ${errors.labLicenseNumber ? 'text-red-500' : 'text-gray-700'}`}>License/Registration Number *</label>
-                <input 
-                  type="text" 
-                  value={labLicenseNumber}
-                  onChange={(e) => {
-                    let val = e.target.value.replace(/[^A-Za-z0-9-\s]/g, '').toUpperCase();
-                    setLabLicenseNumber(val);
-                    if (errors.labLicenseNumber && val.length >= 4) setErrors({ ...errors, labLicenseNumber: null });
-                  }}
-                  placeholder="e.g. LAB-2023-XXXX"
-                  className={`w-full px-4 py-3 rounded-xl border-2 transition-all text-sm focus:outline-none text-gray-800 ${
-                    errors.labLicenseNumber ? 'border-red-300 bg-red-50 focus:border-red-400' : 'bg-gray-50 border-transparent focus:border-teal-100 focus:bg-white'
-                  }`}
-                />
-                {errors.labLicenseNumber && <p className="text-[10px] text-red-500 mt-1 ml-1 font-semibold">{errors.labLicenseNumber}</p>}
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1.5 ml-1">Certification Document (Image/PDF)</label>
-                <div className="relative">
-                  <input
-                    type="file"
-                    id="certUpload"
-                    className="hidden"
-                    onChange={handleLabFileChange}
-                    accept="image/*,application/pdf"
-                  />
-                  
-                  {certPreview ? (
-                    <div className="relative w-full rounded-xl overflow-hidden border border-gray-100 animate-fade-in" style={{ height: '140px' }}>
-                      {certPreview.includes('application/pdf') ? (
-                         <div className="w-full h-full flex items-center justify-center bg-gray-50 flex-col gap-2">
-                           <FiUploadCloud className="w-8 h-8 text-gray-400" />
-                           <span className="text-xs text-gray-500">PDF Uploaded</span>
-                         </div>
-                      ) : (
-                        <img src={certPreview} alt="Certification" className="w-full h-full object-cover" />
-                      )}
-                      <label 
-                        htmlFor="certUpload" 
-                        className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity cursor-pointer"
-                      >
-                        <span className="text-white text-xs font-bold px-3 py-1.5 rounded-lg bg-black/50 backdrop-blur-sm">Change File</span>
-                      </label>
-                    </div>
-                  ) : (
-                    <label 
-                      htmlFor="certUpload"
-                      className="w-full flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-xl cursor-pointer hover:bg-gray-50 transition-colors"
-                    >
-                      <div className="space-y-1 text-center">
-                        <FiUploadCloud className="mx-auto h-8 w-8 text-gray-400" />
-                        <div className="text-xs text-gray-600">
-                          <span className="font-semibold text-teal-600">Upload a file</span> or drag and drop
-                        </div>
-                        <p className="text-[10px] text-gray-500">PNG, JPG, PDF up to 15MB</p>
-                      </div>
-                    </label>
-                  )}
-                </div>
-              </div>
-              
-              <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-100 mt-2">
-                <p className="text-[11px] text-blue-700 leading-relaxed">
-                  <span className="font-bold">Note:</span> Enabling Soil Testing mode requires admin verification.
-                </p>
-              </div>
-            </FormSection>
-          )}
 
           {/* Shop Registration Form */}
           {isAgriStore && (

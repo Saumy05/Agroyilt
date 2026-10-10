@@ -94,21 +94,6 @@
   },
   {
     "category": "OPERATIONS",
-    "title": "Agri Marketplace",
-    "route": "/admin/marketplace",
-    "allowedRoles": [
-      "super_admin",
-      "admin"
-    ],
-    "children": [
-      "Marketplace Manager",
-      "Global Orders",
-      "Store Approvals",
-      "Registered Shops"
-    ]
-  },
-  {
-    "category": "OPERATIONS",
     "title": "Machinery Management",
     "route": "/admin/products",
     "allowedRoles": [
@@ -118,16 +103,6 @@
     "children": [
       "Equipment Approval"
     ]
-  },
-  {
-    "category": "OPERATIONS",
-    "title": "Soil Testing",
-    "route": "/admin/soil-tests",
-    "allowedRoles": [
-      "super_admin",
-      "admin"
-    ],
-    "children": []
   },
   {
     "category": "FINANCE & PAYOUTS",

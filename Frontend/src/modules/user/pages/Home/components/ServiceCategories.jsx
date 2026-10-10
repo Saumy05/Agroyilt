@@ -9,7 +9,15 @@ const toAssetUrl = (url) => {
   return `${base}${clean.startsWith('/') ? '' : '/'}${clean}`;
 };
 
-const ServiceCategories = React.memo(({ categories, onCategoryClick, onSeeAllClick, title = "Agriculture Seva Shreniyan", subtitle = "PREMIUM AGRICULTURE SERVICES" }) => {
+const ServiceCategories = React.memo(({
+  categories,
+  onCategoryClick,
+  onSeeAllClick,
+  title = "Agriculture Seva Shreniyan",
+  subtitle = "PREMIUM AGRICULTURE SERVICES",
+  showWorker = true,
+  showViewAll = true
+}) => {
 
 
   if (!Array.isArray(categories) || categories.length === 0) {
@@ -75,26 +83,28 @@ const ServiceCategories = React.memo(({ categories, onCategoryClick, onSeeAllCli
           );
         })}
 
-        {/* Static Worker Section Card */}
-        <div className="flex justify-center h-full">
-          <CategoryCard
-            title="Worker"
-            icon={
-              <img
-                src="https://images.unsplash.com/photo-1605000797499-95a51c5269ae?q=80&w=600&auto=format&fit=crop"
-                alt="Worker"
-                className="w-full h-full object-cover transition-transform duration-500"
-                loading="lazy"
-                decoding="async"
-              />
-            }
-            onClick={() => onCategoryClick?.({ slug: 'worker', title: 'Worker', bookingType: 'WORKER' })}
-            index={serviceCategories.length}
-          />
-        </div>
+        {/* Static Worker Section Card (Only shown for Farm Services) */}
+        {showWorker && (
+          <div className="flex justify-center h-full">
+            <CategoryCard
+              title="Worker"
+              icon={
+                <img
+                  src="https://images.unsplash.com/photo-1605000797499-95a51c5269ae?q=80&w=600&auto=format&fit=crop"
+                  alt="Worker"
+                  className="w-full h-full object-cover transition-transform duration-500"
+                  loading="lazy"
+                  decoding="async"
+                />
+              }
+              onClick={() => onCategoryClick?.({ slug: 'worker', title: 'Worker', bookingType: 'WORKER' })}
+              index={serviceCategories.length}
+            />
+          </div>
+        )}
 
         {/* View All / More Button */}
-        {showMore && (
+        {showViewAll && (showMore || !showWorker) && (
           <div className="flex justify-center h-full">
             <CategoryCard
               title="View All"
@@ -105,7 +115,7 @@ const ServiceCategories = React.memo(({ categories, onCategoryClick, onSeeAllCli
                 </div>
               }
               onClick={onSeeAllClick}
-              index={serviceCategories.length + 1}
+              index={serviceCategories.length + (showWorker ? 1 : 0)}
             />
           </div>
         )}

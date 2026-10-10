@@ -496,10 +496,19 @@ const getPublicHomeContent = async (req, res) => {
         targetCategoryId: item.targetCategoryId?.toString() || null,
         targetServiceId: item.targetServiceId?.toString() || null,
       })),
-      premiumOfferings: (contentObj.premiumOfferings || []).map(item => ({
-        ...item,
-        id: item._id ? item._id.toString() : item.id,
-      })),
+      premiumOfferings: (contentObj.premiumOfferings || [])
+        .filter(item => {
+          const t = (item.title || '').toLowerCase();
+          const sub = (item.subtitle || '').toLowerCase();
+          const r = (item.route || '').toLowerCase();
+          const isSoil = t.includes('soil') || sub.includes('soil') || r.includes('soil');
+          const isMarket = t.includes('market') || sub.includes('market') || sub.includes('store') || r.includes('agri-store') || r.includes('agri-marketplace');
+          return !isSoil && !isMarket;
+        })
+        .map(item => ({
+          ...item,
+          id: item._id ? item._id.toString() : item.id,
+        })),
       categorySections: (contentObj.categorySections || []).map(section => ({
         ...section,
         id: section._id ? section._id.toString() : section.id,

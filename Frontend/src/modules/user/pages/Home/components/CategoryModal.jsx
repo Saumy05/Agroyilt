@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { FiX, FiLayers, FiArrowLeft, FiPlus, FiCheck } from 'react-icons/fi';
@@ -53,7 +53,7 @@ const CategoryModal = React.memo(({ isOpen, onClose, category, location, cartCou
       const title = (category.title || '').toLowerCase();
       if (slug.includes('soil') || title.includes('soil')) {
         onClose();
-        navigate('/user/soil-testing');
+        toastManager.info("Soil testing service is currently unavailable.");
         return;
       }
       if (category.id || category._id) {

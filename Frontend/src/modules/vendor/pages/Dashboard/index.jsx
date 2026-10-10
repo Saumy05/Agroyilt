@@ -87,14 +87,6 @@ const Dashboard = memo(() => {
       subtitle: stats.machinesInMaintenance > 0 ? `${stats.machinesInMaintenance} in care` : 'Maintenance',
     },
     {
-      title: 'Soil Testing',
-      icon: FiActivity,
-      color: '#0891B2', // Cyan
-      bgLight: '#CFFAFE',
-      path: '/vendor/soil-tests',
-      subtitle: 'Manage tests',
-    },
-    {
       title: 'Agri Market',
       icon: FiShoppingBag,
       color: '#E11D48', // Rose

@@ -189,28 +189,6 @@ const AdminDashboard = () => {
       link: '/admin/reports/revenue'
     },
     {
-      title: 'Soil Test Revenue',
-      value: formatCurrency(stats.soilTestRevenue || 0),
-      change: 0,
-      icon: FiDollarSign,
-      color: 'text-white',
-      bgColor: 'bg-gradient-to-br from-emerald-500 to-teal-600',
-      cardBg: 'bg-gradient-to-br from-emerald-50 to-teal-50',
-      iconBg: 'bg-white/20',
-      link: '/admin/reports/revenue'
-    },
-    {
-      title: 'E-commerce Revenue',
-      value: formatCurrency(stats.ecommerceRevenue || 0),
-      change: 0,
-      icon: FiDollarSign,
-      color: 'text-white',
-      bgColor: 'bg-gradient-to-br from-rose-500 to-pink-600',
-      cardBg: 'bg-gradient-to-br from-rose-50 to-pink-50',
-      iconBg: 'bg-white/20',
-      link: '/admin/products/orders'
-    },
-    {
       title: 'Active Operations',
       value: (stats.activeBookings || 0).toLocaleString(),
       change: 0,

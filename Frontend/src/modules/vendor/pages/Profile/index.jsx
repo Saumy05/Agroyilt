@@ -45,7 +45,6 @@ const Profile = () => {
     { id: 8, label: 'Settings', icon: FiSettings, path: '/vendor/settings' },
     { id: 10, label: 'Maintenance Calendar', icon: FiClock, path: '/vendor/maintenance' },
     { id: 11, label: 'Legal Compliance', icon: FiCheckCircle, path: '/vendor/compliance' },
-    { id: 13, label: 'Soil Test Requests', icon: FiActivity, path: '/vendor/soil-tests' },
     { id: 'help_support', label: 'Help & Support', icon: FiHelpCircle, path: '/vendor/help-support' },
     { id: 9, label: 'About Agroyilt', icon: null, customIcon: 'G', path: '/vendor/about-groo' },
   ], [profile, hasOutOfStockProducts]);
@@ -371,21 +370,6 @@ const Profile = () => {
               <FiChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
             </button>
 
-            <button
-              onClick={() => navigate('/vendor/soil-tests')}
-              className="w-full p-3.5 sm:p-4 flex items-center justify-between hover:bg-slate-50 transition-colors text-left group"
-            >
-              <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                  <FiActivity className="w-4.5 h-4.5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <span className="font-bold text-xs sm:text-sm text-slate-800 block truncate">Soil Test Requests</span>
-                  <span className="text-[11px] text-slate-400 font-medium block truncate">Farmer soil sampling & health reports</span>
-                </div>
-              </div>
-              <FiChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
-            </button>
           </div>
         </div>
 

@@ -78,17 +78,6 @@ const INITIAL_DEMO_NOTIFICATIONS = [
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 18).toISOString()
   },
   {
-    _id: 'demo-5',
-    title: 'Soil Test Sample Assigned',
-    message: 'Soil sample #ST-409 collected from Kheda lab awaiting test report upload.',
-    type: 'soil_test_request',
-    relatedType: 'soil',
-    targetRole: 'Agronomist / Support Admin',
-    modulePermission: 'soiltest.view',
-    isRead: true,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 36).toISOString()
-  },
-  {
     _id: 'demo-6',
     title: 'Worker Registration Verification',
     message: 'New worker Hraiya submitted Aadhaar for team leader verification.',
@@ -632,7 +621,6 @@ const Notifications = () => {
               <option value="worker">Worker Alerts</option>
               <option value="announcement">Broadcast Announcements</option>
               <option value="cash_limit">Cash Limit Alerts</option>
-              <option value="soil">Soil Testing</option>
             </select>
 
             {/* Time Period Filter */}

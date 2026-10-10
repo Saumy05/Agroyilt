@@ -7,7 +7,11 @@ import {
 import { motion } from 'framer-motion';
 import { publicEquipmentService } from '../../../../../services/publicEquipmentService';
 
-const MachineryDiscoverySection = () => {
+const MachineryDiscoverySection = ({
+  title = "Featured Rental Equipment",
+  subtitle = "Verified Owners • Self-Operate Machines",
+  isSpotlight = false
+}) => {
   const navigate = useNavigate();
   const [equipment, setEquipment] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -16,11 +20,10 @@ const MachineryDiscoverySection = () => {
     const fetchEquipment = async () => {
       try {
         const res = await publicEquipmentService.getAllEquipment({
-          isFeatured: true,
           mode: 'rental'
         });
-        if (res.success) {
-          setEquipment(res.data.slice(0, 5));
+        if (res.success && Array.isArray(res.data)) {
+          setEquipment(res.data.slice(0, 8));
         }
       } catch (err) {
         console.error("Machinery fetch error:", err);
@@ -31,20 +34,49 @@ const MachineryDiscoverySection = () => {
     fetchEquipment();
   }, []);
 
-  if (!loading && equipment.length === 0) return null;
+  if (!loading && equipment.length === 0) {
+    return (
+      <section className={`px-5 ${isSpotlight ? 'mb-4 mt-2' : 'mb-8'}`}>
+        <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm text-center">
+          <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-2.5">
+            <FiTruck size={22} />
+          </div>
+          <h3 className="text-sm font-black text-slate-800 mb-1">
+            Looking to Rent Machines & Tools?
+          </h3>
+          <p className="text-xs text-slate-500 mb-3 max-w-xs mx-auto">
+            Browse our full rental catalog for spray pumps, tillers, tractors, and harvesters.
+          </p>
+          <button
+            onClick={() => navigate('/user/rentals')}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl transition-all active:scale-95 cursor-pointer shadow-md shadow-blue-600/20"
+          >
+            Explore All Rental Equipment →
+          </button>
+        </div>
+      </section>
+    );
+  }
 
   return (
-    <section className="px-5 mb-8">
-      <div className="flex items-center justify-between mb-5">
+    <section className={`px-5 ${isSpotlight ? 'mb-4 mt-1' : 'mb-8'}`}>
+      <div className="flex items-center justify-between mb-3.5">
         <div>
-          <h2 className="text-xl font-black text-slate-800 tracking-tight">Rental Services</h2>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-            <FiCheckCircle className="text-emerald-500" /> Verified Owners & Drivers
+          <h2 className="text-[17px] sm:text-lg font-black text-slate-800 tracking-tight flex items-center gap-1.5">
+            {title}
+            {isSpotlight && (
+              <span className="text-[9px] font-black uppercase tracking-wider bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200">
+                Spotlight
+              </span>
+            )}
+          </h2>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5 mt-0.5">
+            <FiCheckCircle className="text-emerald-500" /> {subtitle}
           </p>
         </div>
         <button
           onClick={() => navigate('/user/rentals')}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-full text-xs font-black transition-all active:scale-95"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-full text-xs font-black transition-all active:scale-95 cursor-pointer shadow-2xs"
         >
           Explore All <FiArrowRight />
         </button>

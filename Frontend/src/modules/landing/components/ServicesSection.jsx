@@ -1,4 +1,4 @@
-﻿import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion';
 import { LuTractor } from 'react-icons/lu';
 import { GiScythe, GiDustCloud, GiDrippingTube, GiWheat } from 'react-icons/gi';
@@ -10,7 +10,7 @@ import { usePageTranslation } from '../../../hooks/usePageTranslation';
 import tractorImg from '../landing_images/tracter1.jpg';
 import harvesterImg from '../landing_images/harvester2.jpg';
 import droneImg from '../landing_images/dron_spraying.jpg';
-import soilImg from '../landing_images/soil_testing2.jpg';
+import labourImg from '../landing_images/labour1.jpg';
 import seedsImg from '../landing_images/fertilizer_seeds3.jpg';
 import advisoryImg from '../landing_images/crop_advasory.jpg';
 
@@ -20,7 +20,7 @@ const services = [
   { id: 1, title: "Tractor Rental", desc: "Top HP tractors for plowing, tilling and transport.", image: tractorImg, details: "Our fleet includes top brands like Mahindra, John Deere, and Swaraj.", icon: <LuTractor />, color: { badge: 'text-green-600 bg-green-50 border-green-100', btn: 'bg-green-700 hover:bg-green-800', dot: 'bg-green-500' }, specs: ["30HP - 90HP Range", "Verified Operators", "Attachments available"] },
   { id: 2, title: "Harvester Booking", desc: "Modern harvesters for minimal grain loss during harvest.", image: harvesterImg, details: "High-performance combine harvesters that minimize grain loss.", icon: <GiScythe />, color: { badge: 'text-yellow-700 bg-yellow-50 border-yellow-100', btn: 'bg-yellow-600 hover:bg-yellow-700', dot: 'bg-yellow-500' }, specs: ["Minimal Grain Loss", "GPS-linked Billing", "24/7 Season Support"] },
   { id: 3, title: "Drone Spraying", desc: "Precision pesticide & fertilizer spraying using drones.", image: droneImg, details: "Drones cover 1 acre in just 10-15 minutes, 90% water saving.", icon: <RiGamepadLine />, color: { badge: 'text-blue-700 bg-blue-50 border-blue-100', btn: 'bg-blue-700 hover:bg-blue-800', dot: 'bg-blue-500' }, specs: ["10 min per Acre", "90% Water Saving", "Precision Targeting"] },
-  { id: 4, title: "Soil Testing", desc: "Soil health analysis to maximize crop yield & quality.", image: soilImg, details: "Comprehensive soil health card covering NPK, pH, organic carbon.", icon: <GiDrippingTube />, color: { badge: 'text-purple-700 bg-purple-50 border-purple-100', btn: 'bg-purple-700 hover:bg-purple-800', dot: 'bg-purple-500' }, specs: ["NPK & pH Analysis", "48hr Lab Results", "Custom Fertilizer Plan"] },
+  { id: 4, title: "Farm Workforce", desc: "Verified skilled and general farm labor on-demand.", image: labourImg, details: "Verified farm laborers and crews for sowing, weeding, harvesting, and field prep.", icon: <HiOutlineUsers />, color: { badge: 'text-purple-700 bg-purple-50 border-purple-100', btn: 'bg-purple-700 hover:bg-purple-800', dot: 'bg-purple-500' }, specs: ["Verified Workers", "Daily & Acre Wage", "Direct Booking"] },
   { id: 5, title: "Seeds & Fertilizer", desc: "Certified high-yield seeds & organic fertilizers.", image: seedsImg, details: "Certified, high-germination seeds and premium fertilizers.", icon: <GiDustCloud />, color: { badge: 'text-orange-700 bg-orange-50 border-orange-100', btn: 'bg-orange-600 hover:bg-orange-700', dot: 'bg-orange-500' }, specs: ["Certified Seeds", "Quality Checked", "Doorstep Delivery"] },
   { id: 6, title: "Crop Advisory", desc: "Expert advice on crop selection based on weather forecasts.", image: advisoryImg, details: "AI-driven and expert-verified advice based on soil & weather data.", icon: <GiWheat />, color: { badge: 'text-emerald-700 bg-emerald-50 border-emerald-100', btn: 'bg-emerald-700 hover:bg-emerald-800', dot: 'bg-emerald-500' }, specs: ["Weather Alerts", "Expert Consultations", "Pest Risk Alerts"] },
 ];

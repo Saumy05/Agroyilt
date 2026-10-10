@@ -786,45 +786,6 @@ const AllOwners = () => {
                   {selectedOwner.isActive ? 'Active' : 'Inactive'}
                 </div>
               </div>
-              
-              {/* Soil Lab Verification */}
-              <div className="col-span-2 mt-4 p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="text-sm font-bold text-gray-800">Soil Testing Lab Verification</h4>
-                    <p className="text-xs text-gray-500">Allow this vendor to receive soil testing requests</p>
-                  </div>
-                  <button 
-                    onClick={() => handleToggleSoilLab(selectedOwner.id, selectedOwner.service)}
-                    className="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
-                    style={{ backgroundColor: (Array.isArray(selectedOwner.service) && selectedOwner.service.includes('soil_testing')) ? '#10B981' : '#d1d5db' }}
-                  >
-                    <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${(Array.isArray(selectedOwner.service) && selectedOwner.service.includes('soil_testing')) ? 'translate-x-5' : 'translate-x-0'}`} />
-                  </button>
-                </div>
-                
-                {selectedOwner.labDetails && (selectedOwner.labDetails.labName || selectedOwner.labDetails.licenseNumber) && (
-                  <div className="grid grid-cols-2 gap-4 mt-3 pt-3 border-t border-gray-200">
-                    <div>
-                      <span className="block text-xs text-gray-500">Registered Lab Name</span>
-                      <span className="text-sm font-semibold text-gray-800">{selectedOwner.labDetails.labName || 'N/A'}</span>
-                    </div>
-                    <div>
-                      <span className="block text-xs text-gray-500">License Number</span>
-                      <span className="text-sm font-semibold text-gray-800">{selectedOwner.labDetails.licenseNumber || 'N/A'}</span>
-                    </div>
-                    {selectedOwner.labDetails.certificationDocument && (
-                      <div className="col-span-2">
-                         <span className="block text-xs text-gray-500 mb-1">Certification Document</span>
-                         <a href={selectedOwner.labDetails.certificationDocument} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline flex items-center gap-1">
-                           <FiEye className="w-3 h-3" /> View Document
-                         </a>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-              
               {/* Add / View Shop Details */}
               <div className="col-span-2 mt-4 p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-4">
                 <div className="flex items-center justify-between">

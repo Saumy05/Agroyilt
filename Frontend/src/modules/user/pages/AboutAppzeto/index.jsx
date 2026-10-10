@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FiArrowLeft, FiCheckCircle, FiUsers, FiShield, FiClock, FiAward, FiHeart } from 'react-icons/fi';
 import { themeColors } from '../../../../theme';
@@ -33,7 +33,7 @@ const AboutAppzeto = () => {
     'Tractor & Heavy Machinery Rental',
     'Drone Spraying Services',
     'Harvesting Solutions',
-    'Soil Testing & Analytics',
+    'Agricultural Workforce & Labor',
     'Organic Fertilizers & Seeds',
     'Agri-Marketplace Services',
     'Weather-based Agri Advisory',

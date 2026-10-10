@@ -131,12 +131,6 @@ const getChildRoute = (parentRoute, childName) => {
     "/admin/products": {
       "Equipment Approval": "/admin/products",
     },
-    "/admin/marketplace": {
-      "Marketplace Manager": "/admin/marketplace",
-      "Global Orders": "/admin/products/orders",
-      "Store Approvals": "/admin/marketplace/store-approvals",
-      "Registered Shops": "/admin/marketplace/registered-shops",
-    },
     "/admin/manage-website": {
       "Blogs": "/admin/manage-website/blogs",
       "Articles": "/admin/manage-website/articles",

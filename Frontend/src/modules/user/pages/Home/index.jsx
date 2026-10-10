@@ -238,7 +238,13 @@ const Home = () => {
         let hasData = false;
 
         if (categoriesRes.success) {
-          const mappedCategories = categoriesRes.categories.map(cat => ({
+          const mappedCategories = (categoriesRes.categories || [])
+            .filter(cat => {
+              const s = (cat.slug || '').toLowerCase();
+              const t = (cat.title || '').toLowerCase();
+              return !s.includes('soil') && !t.includes('soil');
+            })
+            .map(cat => ({
             id: cat.id,
             _id: cat.id,
             title: cat.title,
@@ -307,7 +313,7 @@ const Home = () => {
     const title = (category.title || '').toLowerCase();
 
     if (slug.includes('soil') || title.includes('soil')) {
-      navigate('/user/soil-testing');
+      toastManager.info("Soil testing service is currently unavailable.");
       return;
     }
 
@@ -345,7 +351,7 @@ const Home = () => {
     if (promo.slug) {
       // Don't navigate to undefined routes, only handle known ones
       if (promo.slug.includes('soil')) {
-        navigate(`/user/soil-testing`);
+        toastManager.info("Soil testing service is currently unavailable.");
       } else {
         toastManager.error("Service category not found or unavailable.");
       }
@@ -579,9 +585,17 @@ const Home = () => {
                     <h2 className="text-[17px] sm:text-[19px] font-black text-slate-900 tracking-tight">Explore Services</h2>
                   </div>
                 </div>
-
                 <div className="grid grid-cols-4 gap-2 sm:gap-4">
-                  {(homeContent?.premiumOfferings || []).sort((a, b) => (a.order || 0) - (b.order || 0)).map((item, idx) => (
+                  {(homeContent?.premiumOfferings || [])
+                    .filter(item => {
+                      const t = (item.title || '').toLowerCase();
+                      const sub = (item.subtitle || '').toLowerCase();
+                      const r = (item.route || '').toLowerCase();
+                      const isSoil = t.includes('soil') || sub.includes('soil') || r.includes('soil');
+                      const isMarket = t.includes('market') || sub.includes('market') || sub.includes('store') || r.includes('agri-store') || r.includes('agri-marketplace');
+                      return !isSoil && !isMarket;
+                    })
+                    .sort((a, b) => (a.order || 0) - (b.order || 0)).map((item, idx) => (
                     <motion.div
                       key={item.id || item._id || idx}
                       initial={{ opacity: 0, y: 10 }}
@@ -750,16 +764,17 @@ const Home = () => {
               </motion.div>
             )}
 
-
             {/* Machinery Discovery Section */}
             <motion.div variants={itemVariants}>
               <MachineryDiscoverySection />
             </motion.div>
 
-            {/* Agriculture Marketplace */}
+            {/* Agriculture Marketplace (Disabled - E-commerce seed/fertilizer store is outside the SOW) */}
+            {/* 
             <motion.div variants={itemVariants}>
               <AgriMarketplaceSection />
             </motion.div>
+            */}
 
             {/* Dynamic Sections */}
             {homeContent?.isCategorySectionsVisible !== false && (homeContent?.categorySections || []).sort((a, b) => (a.order || 0) - (b.order || 0)).map((section, sIdx) => (
@@ -798,7 +813,7 @@ const Home = () => {
               </motion.div>
             ))}
 
-            {/* Refer & Earn Section */}
+            {/* Refer & Earn Section (Always shown at bottom) */}
             <motion.div variants={itemVariants}>
               <Suspense fallback={<div className="h-32 bg-gray-50 animate-pulse rounded-xl mx-4" />}>
                 <ReferEarnSection onReferClick={handleReferClick} />
