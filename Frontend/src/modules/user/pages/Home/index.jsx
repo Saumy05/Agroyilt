@@ -25,7 +25,9 @@ const Banner = lazy(() => import('./components/Banner'));
 const ReferEarnSection = lazy(() => import('./components/ReferEarnSection'));
 import CategoryModal from './components/CategoryModal';
 import SearchOverlay from './components/SearchOverlay';
-import WeatherWidget from './components/WeatherWidget';
+import CoreServicesHub from './components/CoreServicesHub';
+import ActiveBookingCard from './components/ActiveBookingCard';
+import MandiAndSchemesSection from './components/MandiAndSchemesSection';
 import AgriMarketplaceSection from './components/AgriMarketplaceSection';
 import MachineryDiscoverySection from './components/MachineryDiscoverySection';
 import LogoLoader from '../../../../components/common/LogoLoader';
@@ -504,7 +506,10 @@ const Home = () => {
           </div>
         </motion.div>
 
-        <main className="pt-3 space-y-4 pb-6 max-w-screen-xl mx-auto w-full">
+        <main className="pt-2 space-y-3 pb-6 max-w-screen-xl mx-auto w-full">
+          {/* Active Operation Status Card (Context-Aware) */}
+          <ActiveBookingCard />
+
           {/* Location availability notice — shows only if state list is loaded but location is unresolved */}
           {!isLocationResolved && !geoLoading && states.length > 0 && (
             <div
@@ -577,97 +582,24 @@ const Home = () => {
               </motion.section>
             )}
 
-            {/* Quick Agri Actions (Modern Premium Grid) */}
-            {homeContent?.isPremiumOfferingsVisible !== false && (
-              <motion.section variants={itemVariants} className="px-5 py-2">
-                <div className="flex items-center justify-between mb-2.5">
-                  <div className="flex flex-col">
-                    <h2 className="text-[17px] sm:text-[19px] font-black text-slate-900 tracking-tight">Explore Services</h2>
-                  </div>
-                </div>
-                <div className="grid grid-cols-4 gap-2 sm:gap-4">
-                  {(homeContent?.premiumOfferings || [])
-                    .filter(item => {
-                      const t = (item.title || '').toLowerCase();
-                      const sub = (item.subtitle || '').toLowerCase();
-                      const r = (item.route || '').toLowerCase();
-                      const isSoil = t.includes('soil') || sub.includes('soil') || r.includes('soil');
-                      const isMarket = t.includes('market') || sub.includes('market') || sub.includes('store') || r.includes('agri-store') || r.includes('agri-marketplace');
-                      return !isSoil && !isMarket;
-                    })
-                    .sort((a, b) => (a.order || 0) - (b.order || 0)).map((item, idx) => (
-                    <motion.div
-                      key={item.id || item._id || idx}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: idx * 0.05 }}
-                      onClick={() => {
-                        if (item.actionType === 'navigate' && item.route && item.route.trim() !== '') {
-                          const route = item.route.trim();
-                          // Check if this route is meant to open a category modal instead of navigating
-                          // Only intercept routes that don't have dedicated pages
-                          if (route === '/user/drone-spraying') {
-                            const searchName = 'drone';
-                            const matchedCategory = categories.find(c =>
-                              (c.title && c.title.toLowerCase().includes(searchName)) ||
-                              (c.slug && c.slug.toLowerCase().includes(searchName))
-                            );
-                            if (matchedCategory) {
-                              handleCategoryClick(matchedCategory);
-                              return;
-                            } else {
-                              toastManager.error("Category not found.");
-                              return;
-                            }
-                          }
-                          navigate(route);
-                        } else {
-                          // setActiveSectionTab: use title as primary (admin sets category sectionType = tab title)
-                          // Fall back to actionPayload if title is missing
-                          const tabKey = (item.title || item.actionPayload || '').trim();
-                          if (tabKey) setActiveSectionTab(tabKey);
-                        }
-                      }}
-                      className="flex flex-col items-center cursor-pointer group active:scale-95 transition-transform"
-                    >
-                      <div className="relative w-[54px] h-[54px] sm:w-[60px] sm:h-[60px] rounded-[18px] bg-white border border-slate-100 shadow-[0_4px_14px_rgba(0,0,0,0.04)] group-hover:shadow-[0_6px_20px_rgba(0,0,0,0.08)] flex items-center justify-center p-2 transition-all duration-300 overflow-hidden">
-                        <div
-                          className="absolute inset-0 opacity-15 group-hover:opacity-25 transition-opacity"
-                          style={{ backgroundColor: item.colorCode || '#2E7D32' }}
-                        />
-                        {item.imageUrl ? (
-                          <img
-                            src={toAssetUrl(item.imageUrl)}
-                            alt={item.title}
-                            className="w-full h-full object-cover rounded-[12px] group-hover:scale-110 transition-transform duration-500"
-                          />
-                        ) : (
-                          <span className="text-xl font-bold" style={{ color: item.colorCode || '#2E7D32' }}>
-                            {item.title?.charAt(0)}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[12px] font-bold text-slate-800 text-center leading-snug mt-1.5 line-clamp-1">
-                        {item.title === 'Rent Machinery' ? 'Machinery' : item.title}
-                      </p>
-                      {item.subtitle && (
-                        <p className="text-[9.5px] font-semibold text-slate-400 text-center leading-tight truncate max-w-full">
-                          {item.subtitle}
-                        </p>
-                      )}
-                    </motion.div>
-                  ))}
-                  {/* Weather Button */}
-                  <WeatherWidget />
-                </div>
-              </motion.section>
-            )}
+            {/* Core SOW Services Hub (4 Key Pillars) */}
+            <motion.section variants={itemVariants}>
+              <CoreServicesHub onScrollToMandi={() => {
+                const el = document.getElementById('mandi-schemes-section');
+                if (el) el.scrollIntoView({ behavior: 'smooth' });
+              }} />
+            </motion.section>
 
 
             {/* Categories Sections */}
             {homeContent?.isCategoriesVisible !== false && categories.length > 0 && (() => {
               const activeCategories = categories.filter(c => {
                 if (c.showOnHome === false) return false;
+                // Exclude rental categories from services section
+                const mode = (c.fulfillmentMode || c.mode || '').toLowerCase();
+                if (mode === 'rental' || c.isRental === true) return false;
+                if ((c.slug || '').toLowerCase().includes('rental')) return false;
+
                 // If it has a parent category, it should ONLY show if isAlwaysMain is true
                 const hasParent = c.parentCategory || (c.parentCategories && c.parentCategories.length > 0);
 
@@ -701,6 +633,7 @@ const Home = () => {
                 </>
               );
             })()}
+
 
             {/* Curated Services */}
             {homeContent?.isCuratedVisible !== false && (
@@ -813,6 +746,11 @@ const Home = () => {
               </motion.div>
             ))}
 
+            {/* Daily Utility & Retention Hub: Mandi Bhav & Govt Schemes (Placed at bottom) */}
+            <motion.section variants={itemVariants}>
+              <MandiAndSchemesSection />
+            </motion.section>
+
             {/* Refer & Earn Section (Always shown at bottom) */}
             <motion.div variants={itemVariants}>
               <Suspense fallback={<div className="h-32 bg-gray-50 animate-pulse rounded-xl mx-4" />}>
@@ -864,11 +802,19 @@ const Home = () => {
                 </button>
               </div>
 
-              {categories.filter(c => (c.sectionType || '').trim().toLowerCase() === (activeSectionTab || '').trim().toLowerCase()).length > 0 ? (
+              {categories.filter(c => {
+                const mode = (c.fulfillmentMode || c.mode || '').toLowerCase();
+                if (mode === 'rental' || c.isRental === true) return false;
+                return (c.sectionType || '').trim().toLowerCase() === (activeSectionTab || '').trim().toLowerCase();
+              }).length > 0 ? (
                 <ServiceCategories
                   title={activeSectionTab}
                   subtitle={`EXPLORE ALL ${activeSectionTab.toUpperCase()}`}
-                  categories={categories.filter(c => (c.sectionType || '').trim().toLowerCase() === (activeSectionTab || '').trim().toLowerCase())}
+                  categories={categories.filter(c => {
+                    const mode = (c.fulfillmentMode || c.mode || '').toLowerCase();
+                    if (mode === 'rental' || c.isRental === true) return false;
+                    return (c.sectionType || '').trim().toLowerCase() === (activeSectionTab || '').trim().toLowerCase();
+                  })}
                   onCategoryClick={(cat) => {
                     setActiveSectionTab(null);
                     handleCategoryClick(cat);

@@ -34,15 +34,29 @@ const CategoryCard = memo(({ icon, title, onClick, hasSaleBadge = false, index =
     }
   }, [index]);
 
+  // Clean format title so long descriptions or parentheticals do not awkwardly truncate
+  const formatDisplayTitle = (rawTitle) => {
+    if (!rawTitle) return '';
+    if (rawTitle.includes('लाइट से चलने')) {
+      return 'थ्रेशर (Electric)';
+    }
+    if (rawTitle.toLowerCase().includes('petrol') && rawTitle.toLowerCase().includes('spry')) {
+      return 'स्प्रे पंप (Petrol)';
+    }
+    return rawTitle;
+  };
+
+  const displayTitle = formatDisplayTitle(title);
+
   return (
     <div
       ref={cardRef}
-      className="flex flex-col items-center cursor-pointer group transition-all duration-300 ease-out hover:-translate-y-1 active:scale-95 w-full max-w-[84px]"
+      className="flex flex-col items-center cursor-pointer group transition-all duration-300 ease-out hover:-translate-y-1 active:scale-95 w-full min-w-0"
       onClick={onClick}
       style={{ opacity: 0 }}
     >
       {/* Top Image Container - Squircle Card */}
-      <div className="w-[68px] h-[68px] sm:w-[76px] sm:h-[76px] rounded-2xl overflow-hidden bg-white border border-slate-100 shadow-[0_2px_8px_rgba(0,0,0,0.05)] group-hover:shadow-[0_8px_18px_rgba(0,0,0,0.09)] group-hover:border-emerald-300/60 transition-all duration-300 relative flex items-center justify-center">
+      <div className="w-[64px] h-[64px] sm:w-[74px] sm:h-[74px] rounded-2xl overflow-hidden bg-slate-100 shadow-[0_2px_8px_rgba(0,0,0,0.06)] group-hover:shadow-[0_8px_18px_rgba(0,0,0,0.12)] transition-all duration-300 relative flex items-center justify-center">
         {icon ? (
           <div className="w-full h-full flex items-center justify-center overflow-hidden">
             {React.isValidElement(icon) && icon.type === 'img' ? (
@@ -50,7 +64,7 @@ const CategoryCard = memo(({ icon, title, onClick, hasSaleBadge = false, index =
                 className: `w-full h-full object-cover transition-transform duration-500 group-hover:scale-108 ${icon.props.className || ''}` 
               })
             ) : (
-              <div className="w-full h-full flex items-center justify-center p-2 transform transition-transform duration-300 group-hover:scale-108">
+              <div className="w-full h-full flex items-center justify-center transform transition-transform duration-300 group-hover:scale-108">
                 {icon}
               </div>
             )}
@@ -58,7 +72,7 @@ const CategoryCard = memo(({ icon, title, onClick, hasSaleBadge = false, index =
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-slate-50">
             <svg
-              className="w-8 h-8 text-slate-300"
+              className="w-7 h-7 text-slate-300"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -85,12 +99,12 @@ const CategoryCard = memo(({ icon, title, onClick, hasSaleBadge = false, index =
         )}
       </div>
 
-      {/* Bottom Separated Title Container */}
+      {/* Bottom Title Container: 2-line clean wrapped rendering */}
       <span
-        className="mt-2 text-[11px] sm:text-xs leading-[1.25] text-center font-bold tracking-tight text-slate-700 group-hover:text-emerald-700 line-clamp-2 max-w-[78px] transition-colors"
+        className="mt-1.5 text-[11px] sm:text-xs leading-[1.22] text-center font-bold tracking-tight text-slate-800 group-hover:text-emerald-700 line-clamp-2 w-full px-0.5 break-words transition-colors"
         title={title}
       >
-        {title}
+        {displayTitle}
       </span>
     </div>
   );

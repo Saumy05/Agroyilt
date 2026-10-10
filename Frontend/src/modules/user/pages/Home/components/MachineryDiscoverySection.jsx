@@ -82,64 +82,69 @@ const MachineryDiscoverySection = ({
         </button>
       </div>
 
-      <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
+      <div className="flex gap-3 overflow-x-auto pb-3 no-scrollbar">
         {loading ? (
-          [1, 2].map(i => (
-            <div key={i} className="min-w-[280px] h-[180px] bg-white rounded-3xl animate-pulse border border-slate-100" />
+          [1, 2, 3].map(i => (
+            <div key={i} className="min-w-[215px] sm:min-w-[235px] h-[185px] bg-white rounded-2xl animate-pulse border border-slate-100" />
           ))
         ) : (
           equipment.map((item) => (
             <motion.div
               key={item._id}
-              whileHover={{ y: -5 }}
+              whileHover={{ y: -3 }}
               onClick={() => navigate(`/user/machinery/${item._id}`)}
-              className="min-w-[290px] bg-white rounded-[32px] border border-slate-100 overflow-hidden shadow-sm flex flex-col cursor-pointer relative group"
+              className="min-w-[215px] max-w-[225px] sm:min-w-[235px] sm:max-w-[245px] bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-xs hover:shadow-md transition-all flex flex-col cursor-pointer relative group shrink-0"
             >
-              <div className="h-40 bg-slate-50 relative">
+              <div className="h-32 bg-slate-50 relative overflow-hidden">
                 {item.images?.[0] ? (
                   <img
                     src={item.images[0]}
                     alt={item.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    loading="lazy"
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center bg-slate-100 text-slate-300">
-                    <FiTruck size={40} />
+                    <FiTruck size={32} />
                   </div>
                 )}
 
-                {/* Overlay Badges */}
-                <div className="absolute top-3 left-3 flex flex-col gap-1.5">
-                  <div className="bg-white/90 backdrop-blur-md px-2.5 py-1 rounded-full flex items-center gap-1 shadow-sm">
+                {/* Overlay Badge - Certified */}
+                <div className="absolute top-2 left-2">
+                  <div className="bg-white/95 backdrop-blur-md px-2 py-0.5 rounded-full flex items-center gap-1 shadow-xs border border-slate-100/80">
                     <FiShield className="text-blue-500 w-2.5 h-2.5" />
-                    <span className="text-[8px] font-black uppercase text-slate-600 tracking-tighter">Certified</span>
+                    <span className="text-[7.5px] font-black uppercase text-slate-700 tracking-wider">Certified</span>
                   </div>
                 </div>
 
-                <div className="absolute bottom-3 left-3 right-3 flex justify-between items-end">
-                  <div className="bg-white/90 backdrop-blur-md rounded-2xl p-2 px-3 shadow-md border border-white/20">
-                    <p className="text-[8px] font-black text-slate-400 uppercase leading-none mb-1">Rent at</p>
-                    <p className="text-sm font-black text-emerald-600 leading-none">
+                {/* Compact Price Pill */}
+                <div className="absolute bottom-2 left-2">
+                  <div className="bg-white/95 backdrop-blur-md rounded-lg py-1 px-2 shadow-xs border border-slate-100/90 flex items-center gap-1">
+                    <span className="text-[8px] font-bold text-slate-400 uppercase leading-none">Rent</span>
+                    <span className="text-xs font-black text-emerald-700 leading-none">
                       ₹{item.pricing?.hourly?.price || item.pricing?.land_based?.price}/hr
-                    </p>
+                    </span>
                   </div>
                 </div>
               </div>
 
-              <div className="p-4 bg-white">
-                <div className="flex justify-between items-center mb-1">
-                  <h3 className="text-sm font-black text-slate-800 truncate pr-2">
-                    {item.name}
-                  </h3>
-                  <div className="flex items-center gap-1 text-[10px] font-black text-amber-500">
-                    <span>★</span>
-                    <span>{item.vendorId?.rating || 'New'}</span>
+              {/* Card Bottom Body */}
+              <div className="p-3 bg-white flex flex-col justify-between flex-1">
+                <div>
+                  <div className="flex justify-between items-start gap-1 mb-1">
+                    <h3 className="text-[13px] font-black text-slate-900 leading-snug line-clamp-1" title={item.name}>
+                      {item.name}
+                    </h3>
+                    <div className="flex items-center gap-0.5 text-[10px] font-black text-amber-500 shrink-0">
+                      <span>★</span>
+                      <span>{item.vendorId?.rating || 'New'}</span>
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-3 text-[9px] font-bold text-slate-400 uppercase tracking-tighter">
-                  <span className="flex items-center gap-1"><FiClock className="text-blue-400" /> Instant Confirm</span>
-                  <span className="w-1 h-1 bg-slate-200 rounded-full" />
-                  <span>{item.categoryId?.title}</span>
+                  <div className="flex items-center gap-2 text-[9px] font-semibold text-slate-400 uppercase tracking-tight">
+                    <span className="flex items-center gap-0.5 text-slate-500"><FiClock className="text-blue-500" /> Instant</span>
+                    <span className="w-1 h-1 bg-slate-200 rounded-full" />
+                    <span className="truncate">{item.categoryId?.title}</span>
+                  </div>
                 </div>
               </div>
             </motion.div>
@@ -150,12 +155,13 @@ const MachineryDiscoverySection = ({
         {!loading && equipment.length > 0 && (
           <motion.div
             onClick={() => navigate('/user/rentals')}
-            className="min-w-[140px] bg-blue-600 rounded-[32px] flex flex-col items-center justify-center text-white cursor-pointer shadow-lg shadow-blue-500/20 active:scale-95 transition-all"
+            className="min-w-[105px] bg-slate-900 hover:bg-emerald-800 rounded-2xl flex flex-col items-center justify-center text-white cursor-pointer shadow-xs hover:shadow-md active:scale-95 transition-all p-3 shrink-0"
           >
-            <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center mb-3">
-              <FiArrowRight size={24} />
+            <div className="w-9 h-9 bg-white/15 rounded-full flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+              <FiArrowRight size={18} />
             </div>
-            <p className="text-[10px] font-black uppercase tracking-widest">View All</p>
+            <p className="text-[10px] font-black uppercase tracking-wider text-center">सभी देखें</p>
+            <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider text-center mt-0.5">View All</p>
           </motion.div>
         )}
       </div>

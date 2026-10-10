@@ -24,6 +24,7 @@ import { userAuthService } from '../../../../services/authService';
 import authStorage from '../../../../utils/authStorage';
 import { LogoutModal } from '../../../../components/common';
 import { useCart } from '../../../../context/CartContext';
+import SidebarWeatherPill from './SidebarWeatherPill';
 
 const Sidebar = ({ isOpen, onClose }) => {
   const [user, setUser] = useState(null);
@@ -201,6 +202,8 @@ const Sidebar = ({ isOpen, onClose }) => {
 
             {/* Compact Menu Items List */}
             <div className="flex-1 overflow-y-auto py-1.5 px-2 custom-scrollbar bg-white">
+              {/* Agro-Weather Advisory */}
+              <SidebarWeatherPill onClose={onClose} />
               
               {/* Primary Navigation */}
               <div className="space-y-0.5">
