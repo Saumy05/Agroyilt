@@ -60,10 +60,10 @@ const MachineryDiscoverySection = ({
 
   return (
     <section className={`px-5 ${isSpotlight ? 'mb-4 mt-1' : 'mb-8'}`}>
-      <div className="flex items-center justify-between gap-3 mb-3.5">
+      <div className="flex items-center justify-between gap-2.5 sm:gap-3 mb-3.5">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h2 className="text-[17px] sm:text-lg font-black text-slate-800 tracking-tight truncate">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <h2 className="text-[15.5px] sm:text-lg font-black text-slate-800 tracking-tight leading-snug">
               {title}
             </h2>
             {isSpotlight && (
@@ -72,14 +72,14 @@ const MachineryDiscoverySection = ({
               </span>
             )}
           </div>
-          <p className="text-xs font-medium text-slate-500 flex items-center gap-1.5 mt-0.5 truncate">
+          <p className="text-[11px] sm:text-xs font-medium text-slate-500 flex items-center gap-1.5 mt-0.5">
             <FiCheckCircle className="text-emerald-500 shrink-0 text-xs" />
-            <span className="truncate">{subtitle}</span>
+            <span>{subtitle}</span>
           </p>
         </div>
         <button
           onClick={() => navigate('/user/rentals')}
-          className="group flex items-center gap-1.5 px-3.5 py-1.5 bg-white/95 hover:bg-white text-emerald-700 hover:text-emerald-800 border border-emerald-200/80 hover:border-emerald-300 rounded-full text-xs font-bold transition-all active:scale-95 cursor-pointer shadow-2xs shrink-0 whitespace-nowrap"
+          className="group flex items-center gap-1 sm:gap-1.5 px-3 py-1 sm:px-3.5 sm:py-1.5 bg-white/95 hover:bg-white text-emerald-700 hover:text-emerald-800 border border-emerald-200/80 hover:border-emerald-300 rounded-full text-[11px] sm:text-xs font-bold transition-all active:scale-95 cursor-pointer shadow-2xs shrink-0 whitespace-nowrap"
         >
           <span>Explore All</span>
           <FiArrowRight className="text-xs transition-transform group-hover:translate-x-0.5 text-emerald-600" />
