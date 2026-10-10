@@ -27,6 +27,13 @@ const RentalHandoverCard = ({
 
   if (!booking) return null;
 
+  // Return handover only applies once rental is active (in_progress) or return/dispute has started
+  const returnEligibleStatuses = ['in_progress', 'work_done', 'completed', 'returned', 'disputed'];
+  const currentStatus = (booking.status || '').toLowerCase();
+  if (!returnEligibleStatuses.includes(currentStatus)) {
+    return null;
+  }
+
   // Extract handover & damage data from either Booking or RentalTransaction schema
   const handover = booking.rentalHandover || {};
   const damage = booking.damageReport || {};

@@ -1321,8 +1321,37 @@ const BookingDetails = () => {
             </div>
           )}
 
-          {/* Equipment Rental Return Handover & Damage Claims */}
-          {isRental && !['cancelled', 'rejected'].includes(booking.status?.toLowerCase()) && (
+          {/* Equipment Rental Pickup Handover Guide (When Owner Confirms) */}
+          {isRental && ['confirmed', 'accepted'].includes(booking.status?.toLowerCase()) && (
+            <div className="bg-emerald-50/60 rounded-2xl p-4 border border-emerald-200/80 space-y-2.5 mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-xl bg-emerald-700 text-white flex items-center justify-center font-bold text-xs">
+                  <FiPackage size={14} />
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-emerald-950 uppercase tracking-wide">Pickup & Handover Instructions</h4>
+                  <p className="text-[10px] text-emerald-700 font-semibold">Step 2: Collect equipment from owner</p>
+                </div>
+              </div>
+              <div className="space-y-1.5 text-xs text-slate-700 pl-1">
+                <div className="flex items-start gap-2">
+                  <span className="w-4 h-4 rounded-full bg-emerald-200 text-emerald-800 flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5">1</span>
+                  <p className="text-[11px] leading-relaxed">Visit the owner's pickup location shown above at the scheduled time.</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="w-4 h-4 rounded-full bg-emerald-200 text-emerald-800 flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5">2</span>
+                  <p className="text-[11px] leading-relaxed">Inspect the machine condition and tools together with the owner.</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="w-4 h-4 rounded-full bg-emerald-200 text-emerald-800 flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5">3</span>
+                  <p className="text-[11px] leading-relaxed">Share your <strong>4-digit Pickup Handover OTP</strong> to confirm handover and start your rental.</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Equipment Rental Return Handover & Damage Claims (Only when In Use or Return phase) */}
+          {isRental && ['in_progress', 'work_done', 'completed', 'returned', 'disputed'].includes(booking.status?.toLowerCase()) && (
             <RentalHandoverCard
               booking={booking}
               role="farmer"

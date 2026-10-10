@@ -15,6 +15,7 @@
     "seed:vendors": "node scripts/seedVendors.js",
     "seed:vendor-bookings": "node scripts/seedVendorBookings.js",
     "seed:vendor-data": "npm run seed:vendors && npm run seed:vendor-bookings",
+    "seed:rentals": "node scripts/seedRentalEquipment.js",
     "upload:category-icons": "node scripts/uploadCategoryImages.js",
     "upload:home-content-images": "node scripts/uploadHomeContentImages.js",
     "update:home-content-images": "node scripts/updateHomeContentImages.js",

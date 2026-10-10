@@ -1698,7 +1698,7 @@ export default function BookingDetails() {
         )}
 
         {/* Rental Return Handover & Damage Claims Card */}
-        {isRental && !['cancelled', 'rejected'].includes(booking?.status?.toLowerCase()) && (
+        {isRental && ['in_progress', 'work_done', 'completed', 'returned', 'disputed'].includes(booking?.status?.toLowerCase()) && (
           <div className="mb-4">
             <RentalHandoverCard
               booking={booking}
