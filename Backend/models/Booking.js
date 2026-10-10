@@ -633,6 +633,37 @@ const bookingSchema = new mongoose.Schema({
     notes: { type: String, default: null },
     reportedAt: { type: Date, default: null },
     disputeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Dispute', default: null }
+  },
+
+  // Rental Return Handover & Damage Reporting
+  rentalHandover: {
+    farmerConfirmedReturn: { type: Boolean, default: false },
+    farmerConfirmedAt: { type: Date, default: null },
+    vendorConfirmedReturn: { type: Boolean, default: false },
+    vendorConfirmedAt: { type: Date, default: null },
+    returnNotes: { type: String, default: null },
+    returnStatus: {
+      type: String,
+      enum: ['pending_return', 'farmer_returned', 'vendor_received', 'returned', 'disputed'],
+      default: 'pending_return'
+    },
+    depositRefundStatus: {
+      type: String,
+      enum: ['pending', 'released', 'forfeited', 'partial'],
+      default: 'pending'
+    }
+  },
+
+  damageReport: {
+    reported: { type: Boolean, default: false },
+    reportedBy: { type: mongoose.Schema.Types.ObjectId, refPath: 'damageReport.reporterRole', default: null },
+    reporterRole: { type: String, enum: ['User', 'Vendor', 'Farmer'], default: null },
+    description: { type: String, default: null },
+    photos: [{ type: String }],
+    estimatedCost: { type: Number, default: 0 },
+    severity: { type: String, enum: ['minor', 'moderate', 'severe'], default: 'minor' },
+    reportedAt: { type: Date, default: null },
+    status: { type: String, enum: ['reported', 'under_review', 'resolved', 'rejected'], default: 'reported' }
   }
 
 }, {

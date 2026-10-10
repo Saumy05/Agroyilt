@@ -3,6 +3,8 @@ const Category = require('../../models/Category');
 const Vendor = require('../../models/Vendor');
 const Worker = require('../../models/Worker');
 const Service = require('../../models/Service');
+const RentalTransaction = require('../../models/RentalTransaction');
+const Booking = require('../../models/Booking');
 const { validationResult } = require('express-validator');
 
 // Helper for pricing validation
@@ -334,5 +336,204 @@ exports.startMachineryWork = (req, res) => {
 exports.completeMachineryWork = (req, res) => {
   req.params.id = req.params.bookingId;
   return require('../bookingControllers/vendorBookingController').machineryComplete(req, res);
+};
+
+/**
+ * Equipment Return Handover & Damage Claims (Vendor Side)
+ */
+
+// Vendor confirms equipment return received and inspected
+exports.confirmRentalReturn = async (req, res) => {
+  try {
+    const bookingId = req.params.bookingId || req.params.id;
+    const vendorId = req.user.id;
+    const { notes } = req.body;
+
+    // 1. Try finding RentalTransaction
+    let rental = await RentalTransaction.findOne({ _id: bookingId, vendorId });
+    if (rental) {
+      rental.vendorConfirmedReturn = true;
+      if (notes) rental.handoverNotes = notes;
+
+      if (rental.farmerConfirmedReturn) {
+        rental.status = 'returned';
+        if (!rental.damageReport?.reportedBy) {
+          rental.depositRefundStatus = 'released'; // Auto-release deposit
+        }
+      }
+
+      await rental.save();
+      return res.status(200).json({
+        success: true,
+        message: 'Equipment return confirmed and received by vendor',
+        data: rental
+      });
+    }
+
+    // 2. Try finding Booking
+    const booking = await Booking.findOne({ _id: bookingId, vendorId });
+    if (!booking) {
+      return res.status(404).json({ success: false, message: 'Rental booking not found' });
+    }
+
+    if (!booking.rentalHandover) {
+      booking.rentalHandover = {};
+    }
+
+    booking.rentalHandover.vendorConfirmedReturn = true;
+    booking.rentalHandover.vendorConfirmedAt = new Date();
+    if (notes) booking.rentalHandover.returnNotes = notes;
+
+    if (booking.rentalHandover.farmerConfirmedReturn) {
+      booking.rentalHandover.returnStatus = 'returned';
+      if (!booking.damageReport?.reported) {
+        booking.rentalHandover.depositRefundStatus = 'released';
+      }
+    } else {
+      booking.rentalHandover.returnStatus = 'vendor_received';
+    }
+
+    await booking.save();
+    return res.status(200).json({
+      success: true,
+      message: 'Equipment return confirmed and received by vendor',
+      data: {
+        _id: booking._id,
+        rentalHandover: booking.rentalHandover,
+        damageReport: booking.damageReport
+      }
+    });
+  } catch (error) {
+    console.error('Vendor confirm return error:', error);
+    res.status(500).json({ success: false, message: 'Server Error' });
+  }
+};
+
+// Vendor reports damage and files claim on security deposit
+exports.reportRentalDamage = async (req, res) => {
+  try {
+    const bookingId = req.params.bookingId || req.params.id;
+    const vendorId = req.user.id;
+    const { description, photos, estimatedCost, severity } = req.body;
+
+    if (!description?.trim()) {
+      return res.status(400).json({ success: false, message: 'Description of damage is required' });
+    }
+
+    // 1. Try finding RentalTransaction
+    let rental = await RentalTransaction.findOne({ _id: bookingId, vendorId });
+    if (rental) {
+      if (rental.damageReport?.reportedBy) {
+        return res.status(400).json({ success: false, message: 'A damage report already exists for this rental' });
+      }
+
+      rental.status = 'disputed';
+      rental.depositRefundStatus = 'pending'; // Freezes deposit in escrow
+      rental.damageReport = {
+        reportedBy: vendorId,
+        reporterRole: 'Vendor',
+        description,
+        photos: photos || [],
+        estimatedCost: Number(estimatedCost) || 0,
+        severity: severity || 'minor',
+        reportedAt: new Date()
+      };
+
+      await rental.save();
+      return res.status(200).json({
+        success: true,
+        message: 'Damage reported successfully. AgroYilt admin will review the claim.',
+        data: rental
+      });
+    }
+
+    // 2. Try finding Booking
+    const booking = await Booking.findOne({ _id: bookingId, vendorId });
+    if (!booking) {
+      return res.status(404).json({ success: false, message: 'Rental booking not found' });
+    }
+
+    if (booking.damageReport?.reported) {
+      return res.status(400).json({ success: false, message: 'A damage report already exists for this booking' });
+    }
+
+    if (!booking.rentalHandover) {
+      booking.rentalHandover = {};
+    }
+
+    booking.rentalHandover.returnStatus = 'disputed';
+    booking.rentalHandover.depositRefundStatus = 'pending'; // Freezes deposit in escrow
+    booking.damageReport = {
+      reported: true,
+      reportedBy: vendorId,
+      reporterRole: 'Vendor',
+      description,
+      photos: photos || [],
+      estimatedCost: Number(estimatedCost) || 0,
+      severity: severity || 'minor',
+      reportedAt: new Date(),
+      status: 'reported'
+    };
+
+    await booking.save();
+    return res.status(200).json({
+      success: true,
+      message: 'Damage reported successfully. AgroYilt admin will review the claim.',
+      data: {
+        _id: booking._id,
+        rentalHandover: booking.rentalHandover,
+        damageReport: booking.damageReport
+      }
+    });
+  } catch (error) {
+    console.error('Vendor report damage error:', error);
+    res.status(500).json({ success: false, message: 'Server Error' });
+  }
+};
+
+// Vendor gets current rental handover and damage status
+exports.getRentalHandoverStatus = async (req, res) => {
+  try {
+    const bookingId = req.params.bookingId || req.params.id;
+    const vendorId = req.user.id;
+
+    let rental = await RentalTransaction.findOne({ _id: bookingId, vendorId })
+      .populate('equipmentId')
+      .populate('farmerId', 'name phone profileImage addresses');
+
+    if (rental) {
+      return res.status(200).json({ success: true, data: rental, type: 'RentalTransaction' });
+    }
+
+    const booking = await Booking.findOne({ _id: bookingId, vendorId })
+      .populate('equipmentId')
+      .populate('userId', 'name phone profileImage addresses');
+
+    if (!booking) {
+      return res.status(404).json({ success: false, message: 'Rental record not found' });
+    }
+
+    return res.status(200).json({
+      success: true,
+      type: 'Booking',
+      data: {
+        _id: booking._id,
+        bookingNumber: booking.bookingNumber,
+        equipmentId: booking.equipmentId,
+        farmer: booking.userId,
+        status: booking.status,
+        rentalAmount: booking.finalAmount || booking.amount,
+        securityDeposit: booking.equipmentId?.pricing?.security_deposit || 0,
+        rentalHandover: booking.rentalHandover || {},
+        damageReport: booking.damageReport || {},
+        farmerConfirmedReturn: booking.rentalHandover?.farmerConfirmedReturn || false,
+        vendorConfirmedReturn: booking.rentalHandover?.vendorConfirmedReturn || false,
+        depositRefundStatus: booking.rentalHandover?.depositRefundStatus || 'pending'
+      }
+    });
+  } catch (error) {
+    console.error('Vendor get rental status error:', error);
+    res.status(500).json({ success: false, message: 'Server Error' });
+  }
 };
 

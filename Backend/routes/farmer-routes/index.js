@@ -55,6 +55,7 @@ router.post('/requirements/:id/bids/:bidId/accept', biddingController.acceptBid)
 
 // 7. Rentals
 router.post('/rentals', rentalController.rentEquipment);
+router.get('/rentals/:id', rentalController.getRentalDetails);
 router.post('/rentals/:id/confirm-return', rentalController.confirmReturn);
 router.post('/rentals/:id/damage-report', rentalController.reportDamage);
 

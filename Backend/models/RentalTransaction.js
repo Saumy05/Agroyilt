@@ -63,6 +63,10 @@ const rentalTransactionSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  handoverNotes: {
+    type: String,
+    default: null
+  },
   damageReport: {
     reportedBy: {
       type: mongoose.Schema.Types.ObjectId,
@@ -81,6 +85,15 @@ const rentalTransactionSchema = new mongoose.Schema({
     photos: [{
       type: String
     }],
+    estimatedCost: {
+      type: Number,
+      default: 0
+    },
+    severity: {
+      type: String,
+      enum: ['minor', 'moderate', 'severe'],
+      default: 'minor'
+    },
     reportedAt: {
       type: Date,
       default: null

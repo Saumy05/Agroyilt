@@ -1,5 +1,6 @@
 const RentalTransaction = require('../../models/RentalTransaction');
 const VendorEquipment = require('../../models/VendorEquipment');
+const Booking = require('../../models/Booking');
 
 const farmerRentalController = {
   // Rent Equipment
@@ -39,58 +40,197 @@ const farmerRentalController = {
     }
   },
 
-  // Confirm Return
+  // Get Rental Details (Supports RentalTransaction or Booking)
+  getRentalDetails: async (req, res) => {
+    try {
+      const { id } = req.params;
+      const farmerId = req.user.id;
+
+      let rental = await RentalTransaction.findOne({ _id: id, farmerId })
+        .populate('equipmentId')
+        .populate('vendorId', 'name businessName phone profileImage');
+
+      if (rental) {
+        return res.status(200).json({ success: true, data: rental, type: 'RentalTransaction' });
+      }
+
+      // Check Booking model
+      const booking = await Booking.findOne({ _id: id, userId: farmerId })
+        .populate('equipmentId')
+        .populate('vendorId', 'name businessName phone profileImage');
+
+      if (!booking) {
+        return res.status(404).json({ success: false, message: 'Rental record not found' });
+      }
+
+      return res.status(200).json({
+        success: true,
+        type: 'Booking',
+        data: {
+          _id: booking._id,
+          bookingNumber: booking.bookingNumber,
+          equipmentId: booking.equipmentId,
+          vendorId: booking.vendorId,
+          farmerId: booking.userId,
+          status: booking.status,
+          rentalAmount: booking.finalAmount || booking.amount,
+          securityDeposit: booking.equipmentId?.pricing?.security_deposit || 0,
+          rentalHandover: booking.rentalHandover || {},
+          damageReport: booking.damageReport || {},
+          farmerConfirmedReturn: booking.rentalHandover?.farmerConfirmedReturn || false,
+          vendorConfirmedReturn: booking.rentalHandover?.vendorConfirmedReturn || false,
+          depositRefundStatus: booking.rentalHandover?.depositRefundStatus || 'pending'
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching rental details:', error);
+      res.status(500).json({ success: false, message: 'Server Error' });
+    }
+  },
+
+  // Confirm Return (Farmer side)
   confirmReturn: async (req, res) => {
     try {
       const { id } = req.params;
-      
-      const rental = await RentalTransaction.findOne({ _id: id, farmerId: req.user.id });
-      if (!rental) return res.status(404).json({ success: false, message: 'Rental not found' });
+      const { notes } = req.body;
+      const farmerId = req.user.id;
 
-      if (rental.status !== 'picked_up') {
-        return res.status(400).json({ success: false, message: 'Equipment is not currently picked up' });
+      // 1. Try finding RentalTransaction
+      let rental = await RentalTransaction.findOne({ _id: id, farmerId });
+      if (rental) {
+        rental.farmerConfirmedReturn = true;
+        if (notes) rental.handoverNotes = notes;
+
+        if (rental.vendorConfirmedReturn) {
+          rental.status = 'returned';
+          if (!rental.damageReport?.reportedBy) {
+            rental.depositRefundStatus = 'released'; // Auto-release deposit
+          }
+        }
+
+        await rental.save();
+        return res.status(200).json({
+          success: true,
+          message: 'Equipment return confirmed by farmer',
+          data: rental
+        });
       }
 
-      rental.farmerConfirmedReturn = true;
-
-      if (rental.vendorConfirmedReturn) {
-        rental.status = 'returned';
-        rental.depositRefundStatus = 'released'; // Auto-release if both confirm without dispute
+      // 2. Try finding Booking
+      const booking = await Booking.findOne({ _id: id, userId: farmerId });
+      if (!booking) {
+        return res.status(404).json({ success: false, message: 'Rental booking not found' });
       }
 
-      await rental.save();
-      res.status(200).json({ success: true, message: 'Return confirmed', data: rental });
+      if (!booking.rentalHandover) {
+        booking.rentalHandover = {};
+      }
+
+      booking.rentalHandover.farmerConfirmedReturn = true;
+      booking.rentalHandover.farmerConfirmedAt = new Date();
+      if (notes) booking.rentalHandover.returnNotes = notes;
+
+      if (booking.rentalHandover.vendorConfirmedReturn) {
+        booking.rentalHandover.returnStatus = 'returned';
+        if (!booking.damageReport?.reported) {
+          booking.rentalHandover.depositRefundStatus = 'released';
+        }
+      } else {
+        booking.rentalHandover.returnStatus = 'farmer_returned';
+      }
+
+      await booking.save();
+      return res.status(200).json({
+        success: true,
+        message: 'Equipment return confirmed by farmer',
+        data: {
+          _id: booking._id,
+          rentalHandover: booking.rentalHandover,
+          damageReport: booking.damageReport
+        }
+      });
     } catch (error) {
       console.error('Error confirming return:', error);
       res.status(500).json({ success: false, message: 'Server Error' });
     }
   },
 
-  // Report Damage
+  // Report Damage (Farmer side)
   reportDamage: async (req, res) => {
     try {
       const { id } = req.params;
-      const { description, photos } = req.body;
+      const { description, photos, estimatedCost, severity } = req.body;
+      const farmerId = req.user.id;
 
-      const rental = await RentalTransaction.findOne({ _id: id, farmerId: req.user.id });
-      if (!rental) return res.status(404).json({ success: false, message: 'Rental not found' });
-
-      if (rental.damageReport?.reportedBy) {
-        return res.status(400).json({ success: false, message: 'A damage report already exists' });
+      if (!description?.trim()) {
+        return res.status(400).json({ success: false, message: 'Description of damage is required' });
       }
 
-      rental.status = 'disputed';
-      rental.depositRefundStatus = 'pending'; // Freezes the deposit
-      rental.damageReport = {
-        reportedBy: req.user.id,
+      // 1. Try finding RentalTransaction
+      let rental = await RentalTransaction.findOne({ _id: id, farmerId });
+      if (rental) {
+        if (rental.damageReport?.reportedBy) {
+          return res.status(400).json({ success: false, message: 'A damage report already exists for this rental' });
+        }
+
+        rental.status = 'disputed';
+        rental.depositRefundStatus = 'pending'; // Hold deposit
+        rental.damageReport = {
+          reportedBy: farmerId,
+          reporterRole: 'User',
+          description,
+          photos: photos || [],
+          estimatedCost: Number(estimatedCost) || 0,
+          severity: severity || 'minor',
+          reportedAt: new Date()
+        };
+
+        await rental.save();
+        return res.status(200).json({
+          success: true,
+          message: 'Damage reported successfully. AgroYilt admin will review the claim.',
+          data: rental
+        });
+      }
+
+      // 2. Try finding Booking
+      const booking = await Booking.findOne({ _id: id, userId: farmerId });
+      if (!booking) {
+        return res.status(404).json({ success: false, message: 'Rental booking not found' });
+      }
+
+      if (booking.damageReport?.reported) {
+        return res.status(400).json({ success: false, message: 'A damage report already exists for this booking' });
+      }
+
+      if (!booking.rentalHandover) {
+        booking.rentalHandover = {};
+      }
+
+      booking.rentalHandover.returnStatus = 'disputed';
+      booking.rentalHandover.depositRefundStatus = 'pending'; // Freezes deposit in escrow
+      booking.damageReport = {
+        reported: true,
+        reportedBy: farmerId,
         reporterRole: 'User',
         description,
         photos: photos || [],
-        reportedAt: new Date()
+        estimatedCost: Number(estimatedCost) || 0,
+        severity: severity || 'minor',
+        reportedAt: new Date(),
+        status: 'reported'
       };
 
-      await rental.save();
-      res.status(200).json({ success: true, message: 'Damage reported successfully. Admin will review.', data: rental });
+      await booking.save();
+      return res.status(200).json({
+        success: true,
+        message: 'Damage reported successfully. AgroYilt admin will review the claim.',
+        data: {
+          _id: booking._id,
+          rentalHandover: booking.rentalHandover,
+          damageReport: booking.damageReport
+        }
+      });
     } catch (error) {
       console.error('Error reporting damage:', error);
       res.status(500).json({ success: false, message: 'Server Error' });

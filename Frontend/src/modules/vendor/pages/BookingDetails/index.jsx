@@ -33,6 +33,8 @@ import { useLocationTracking } from '../../../../hooks/useLocationTracking';
 import TripFlowModal from '../../components/common/TripFlowModal';
 import LiveServiceTimer from '../../../../components/common/LiveServiceTimer';
 import RentalTimer from '../../../../components/common/RentalTimer';
+import RentalHandoverCard from '../../../../components/rental/RentalHandoverCard';
+import rentalService from '../../../../services/rentalService';
 import DisputeModal from '../../../../components/common/DisputeModal'; // NEW
 import disputeService from '../../../../services/disputeService'; // NEW
 import LogoLoader from '../../../../components/common/LogoLoader'; // NEW
@@ -1692,6 +1694,25 @@ export default function BookingDetails() {
                 <span>Verify Return & Settle Bill</span>
               </button>
             )}
+          </div>
+        )}
+
+        {/* Rental Return Handover & Damage Claims Card */}
+        {isRental && !['cancelled', 'rejected'].includes(booking?.status?.toLowerCase()) && (
+          <div className="mb-4">
+            <RentalHandoverCard
+              booking={booking}
+              role="vendor"
+              onRefresh={refreshBooking}
+              onConfirmReturn={async (data) => {
+                await rentalService.confirmReturn(booking._id, data, 'vendor');
+                await refreshBooking();
+              }}
+              onReportDamage={async (data) => {
+                await rentalService.reportDamage(booking._id, data, 'vendor');
+                await refreshBooking();
+              }}
+            />
           </div>
         )}
 

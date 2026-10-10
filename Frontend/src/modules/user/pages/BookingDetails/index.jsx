@@ -47,6 +47,8 @@ import NotificationBell from '../../components/common/NotificationBell';
 import ReselectVendorModal from '../../components/booking/ReselectVendorModal';
 import api from '../../../../services/api';
 import LiveServiceTimer from '../../../../components/common/LiveServiceTimer';
+import RentalHandoverCard from '../../../../components/rental/RentalHandoverCard';
+import rentalService from '../../../../services/rentalService';
 
 const toAssetUrl = (url) => {
   if (!url) return '';
@@ -1317,6 +1319,23 @@ const BookingDetails = () => {
                 </div>
               </div>
             </div>
+          )}
+
+          {/* Equipment Rental Return Handover & Damage Claims */}
+          {isRental && !['cancelled', 'rejected'].includes(booking.status?.toLowerCase()) && (
+            <RentalHandoverCard
+              booking={booking}
+              role="farmer"
+              onRefresh={loadBooking}
+              onConfirmReturn={async (data) => {
+                await rentalService.confirmReturn(booking._id, data, 'farmer');
+                await loadBooking();
+              }}
+              onReportDamage={async (data) => {
+                await rentalService.reportDamage(booking._id, data, 'farmer');
+                await loadBooking();
+              }}
+            />
           )}
 
           {/* Service Partner Card (Only for non-rental bookings) */}

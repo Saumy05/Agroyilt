@@ -11,7 +11,10 @@ const {
   deleteEquipment,
   respondToRentalBooking,
   startMachineryWork,
-  completeMachineryWork
+  completeMachineryWork,
+  confirmRentalReturn,
+  reportRentalDamage,
+  getRentalHandoverStatus
 } = require('../../controllers/vendorControllers/vendorEquipmentController');
 
 // Validation rules
@@ -45,6 +48,11 @@ router.put('/:id', updateEquipment);
 router.put('/bookings/:bookingId/respond', respondToRentalBooking);
 router.post('/bookings/:bookingId/start', startMachineryWork);
 router.post('/bookings/:bookingId/complete', completeMachineryWork);
+
+// Rental Equipment Return Handover & Damage Claims
+router.get('/bookings/:bookingId/rental-status', getRentalHandoverStatus);
+router.post('/bookings/:bookingId/confirm-return', confirmRentalReturn);
+router.post('/bookings/:bookingId/damage-report', reportRentalDamage);
 
 // DELETE /api/vendor/equipment/:id - Remove machinery
 router.delete('/:id', deleteEquipment);
