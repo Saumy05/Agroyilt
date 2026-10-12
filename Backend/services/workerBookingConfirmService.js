@@ -30,6 +30,10 @@ const toINR = (p) => p / 100;
 
 const audit = (event, actor, actorId, meta) => ({ at: new Date(), actor, actorId: actorId || null, event, meta: meta || null });
 
+/** Wallet payments reuse the online confirmation path with a synthetic payment id (no gateway involved). */
+const WALLET_PREFIX = 'WALLET_';
+const isWalletPaymentId = (id) => String(id || '').startsWith(WALLET_PREFIX);
+
 const assignmentKey = (requestId, workerId) => `assign_${requestId}_${workerId}`;
 
 // ── Refund of a captured payment that cannot be applied to a booking ─────────────────────────────
@@ -347,9 +351,10 @@ const confirmRequest = async ({ requestId, farmerId = null, method, orderId = nu
     if (!finalized) throw new Error('confirmation claim was lost');
 
     if (!isCash) {
+      const viaWallet = isWalletPaymentId(paymentId);
       await ledger.recordPassbookOnce(`worker_booking_payment_${paymentId}`, {
-        userId: claimed.farmerId, amount: order.amountPaise / 100, type: 'booking_payment', paymentMethod: 'razorpay', status: 'completed',
-        description: `Online payment for worker booking "${claimed.workTitle}"`, referenceId: paymentId,
+        userId: claimed.farmerId, amount: order.amountPaise / 100, type: 'booking_payment', paymentMethod: viaWallet ? 'wallet' : 'razorpay', status: 'completed',
+        description: `${viaWallet ? 'Wallet payment' : 'Online payment'} for worker booking "${claimed.workTitle}"`, referenceId: paymentId,
         metadata: { workerRequestId: claimed._id, razorpayOrderId: orderId, razorpayPaymentId: paymentId }
       });
     }
@@ -403,4 +408,54 @@ const rollbackConfirmed = async (request, { method, order, paymentId, reason }) 
   if (method !== 'cash' && order) await refundCapturedPayment({ request, paymentId, amountPaise: order.amountPaise, reason });
 };
 
-module.exports = { confirmRequest, refundCapturedPayment, validateSelectedWorkers, SELECTABLE, assignmentKey, audit, toP, toINR };
+/**
+ * Pay a selected-workers booking entirely from the farmer's wallet (no part payment).
+ * Debit → the same single-shot confirmation as an online payment. Whatever fails after the debit gives the
+ * money back to the wallet (once per payment id), so a refused confirmation never keeps the farmer's money.
+ */
+const payFromWallet = async ({ requestId, farmerId }) => {
+  const request = await WorkerBookingRequest.findOne({
+    _id: requestId, farmerId, status: { $in: SELECTABLE }, paymentStatus: { $in: ['pending', 'not_started', 'failed'] }
+  });
+  if (!request) return { ok: false, code: 404, reason: 'Request not found, not payable, or workers not selected yet.' };
+  if (request.expiresAt < new Date()) return { ok: false, code: 410, reason: 'This request has expired.' };
+  const total = Number(request.financialSnapshot?.totalPayable) || 0;
+  if (!Array.isArray(request.selectedWorkerIds) || request.selectedWorkerIds.length === 0 || !(total > 0)) {
+    return { ok: false, code: 400, reason: 'Financial snapshot is missing. Please select workers again.' };
+  }
+  const amountPaise = toP(total);
+
+  // one order entry per request+price (the confirmation checks the paid amount against it)
+  const orderId = `${WALLET_PREFIX}ORDER_${request._id}_${amountPaise}`;
+  await WorkerBookingRequest.updateOne(
+    { _id: request._id, 'paymentOrders.orderId': { $ne: orderId } },
+    { $push: { paymentOrders: { orderId, amountPaise, createdAt: new Date() } } }
+  );
+  await WorkerBookingRequest.updateOne({ _id: request._id, paymentStatus: { $in: ['not_started', 'failed'] } }, { $set: { paymentStatus: 'pending' } });
+
+  const paymentId = `${WALLET_PREFIX}${request._id}_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
+  const debit = await ledger.debitIfEnough({
+    ownerId: farmerId, ownerModel: 'User', amount: toINR(amountPaise), key: `wallet_pay_${paymentId}`, reason: 'booking_payment', referenceId: request._id
+  });
+  if (debit.insufficient) {
+    const bal = Number(debit.balance) || 0;
+    return { ok: false, code: 402, insufficient: true, balance: bal, required: toINR(amountPaise), reason: `Wallet balance is low. You need ₹${toINR(amountPaise)}, you have ₹${bal}.` };
+  }
+  if (!debit.applied) return { ok: false, code: 409, reason: 'This wallet payment is already being processed.' };
+
+  let result;
+  try {
+    result = await confirmRequest({ requestId: request._id, farmerId, method: 'online', orderId, paymentId });
+  } catch (err) {
+    console.error('[payFromWallet] confirmation threw after the debit:', err);
+    result = { ok: false, code: 500, reason: 'Booking confirmation failed.' };
+  }
+  if (!result.ok && !result.refunded) {
+    // refused before/without its own refund (e.g. another confirmation is running): the wallet gets the money back
+    const r = await refundCapturedPayment({ request, paymentId, amountPaise, reason: result.reason || 'booking could not be confirmed' });
+    result = { ...result, refunded: r.refunded, reason: `${result.reason} Your money is back in your wallet.` };
+  }
+  return result;
+};
+
+module.exports = { confirmRequest, payFromWallet, refundCapturedPayment, validateSelectedWorkers, SELECTABLE, assignmentKey, audit, toP, toINR };

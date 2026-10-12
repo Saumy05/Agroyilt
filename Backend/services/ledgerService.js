@@ -66,6 +66,45 @@ const applyOnce = async ({ ownerId, ownerModel, amount, key, reason, referenceId
   return { applied: true, duplicate: false, balance: updated.balance };
 };
 
+/**
+ * Debit a wallet exactly once for `key`, but only if the balance covers the WHOLE amount (nothing moves otherwise).
+ * The Wallet collection is the source of truth for the balance; a legacy balance that only exists on the account
+ * document seeds a missing wallet, as the wallet screen does.
+ * @returns {{applied: boolean, duplicate: boolean, insufficient?: boolean, balance?: number}}
+ */
+const debitIfEnough = async ({ ownerId, ownerModel, amount, key, reason, referenceId }) => {
+  if (!key) throw new Error('ledger key required');
+  if (!(Number.isFinite(amount) && amount > 0)) return { applied: false, duplicate: false };
+
+  const Model = EMBEDDED[ownerModel];
+  const legacy = Model ? Number((await Model.findById(ownerId).select('wallet.balance').lean())?.wallet?.balance) || 0 : 0;
+  await Wallet.updateOne(
+    { userId: ownerId, userModel: ownerModel },
+    { $setOnInsert: { userId: ownerId, userModel: ownerModel, balance: legacy } },
+    { upsert: true }
+  ).catch((err) => { if (!err || err.code !== DUPLICATE) throw err; });
+  const wallet = await Wallet.findOne({ userId: ownerId, userModel: ownerModel }).sort({ _id: 1 });
+
+  try {
+    await WalletTransaction.create({
+      walletId: wallet._id, type: 'debit', amount, reason, referenceId: String(referenceId), idempotencyKey: key, status: 'pending'
+    });
+  } catch (err) {
+    if (err && err.code === DUPLICATE) return { applied: false, duplicate: true };
+    throw err;
+  }
+
+  const updated = await Wallet.findOneAndUpdate({ _id: wallet._id, balance: { $gte: amount } }, { $inc: { balance: -amount } }, { new: true });
+  if (!updated) {
+    await WalletTransaction.updateOne({ idempotencyKey: key }, { $set: { status: 'failed' } });
+    const fresh = await Wallet.findById(wallet._id).select('balance').lean();
+    return { applied: false, duplicate: false, insufficient: true, balance: fresh ? fresh.balance : wallet.balance };
+  }
+  if (Model) await Model.updateOne({ _id: ownerId }, { $set: { 'wallet.balance': updated.balance } });
+  await WalletTransaction.updateOne({ idempotencyKey: key }, { $set: { status: 'completed' } });
+  return { applied: true, duplicate: false, balance: updated.balance };
+};
+
 /** Unified passbook row, written at most once per key (best effort, never blocks money movement). */
 const recordPassbookOnce = async (key, doc) => {
   try {
@@ -79,4 +118,4 @@ const recordPassbookOnce = async (key, doc) => {
 const reconcilePendingLedger = async (olderThanMs = 10 * 60 * 1000) =>
   WalletTransaction.find({ status: 'pending', createdAt: { $lt: new Date(Date.now() - olderThanMs) } }).lean();
 
-module.exports = { applyOnce, recordPassbookOnce, reconcilePendingLedger, ensureWallet };
+module.exports = { applyOnce, debitIfEnough, recordPassbookOnce, reconcilePendingLedger, ensureWallet };

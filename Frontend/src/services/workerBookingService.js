@@ -57,6 +57,11 @@ export const workerBookingService = {
     return response.data;
   },
 
+  payWorkerBookingFromWallet: async (requestId) => {
+    const response = await api.post(`/users/farmer-worker-request/${requestId}/pay-wallet`);
+    return response.data;
+  },
+
   confirmWorkerBookingCash: async (requestId) => {
     const response = await api.post(`/users/farmer-worker-request/${requestId}/confirm-cash`);
     return response.data;

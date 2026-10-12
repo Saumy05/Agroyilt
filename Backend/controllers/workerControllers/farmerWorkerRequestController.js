@@ -3590,6 +3590,28 @@ exports.verifyWorkerBookingPayment = async (req, res) => {
 };
 
 /**
+ * Pay the whole booking from the farmer's wallet (no part payment)
+ * POST /api/user/farmer-worker-request/:id/pay-wallet
+ */
+exports.payWorkerBookingFromWallet = async (req, res) => {
+  try {
+    const farmerId = req.user._id;
+    const result = await confirmSvc.payFromWallet({ requestId: req.params.id, farmerId });
+    if (result.ok && !result.already) {
+      await announceConfirmation({ request: result.request, assignments: result.assignments, bookings: result.bookings, method: 'online' });
+    }
+    if (!result.ok && result.insufficient) {
+      return res.status(402).json({ success: false, message: result.reason, balance: result.balance, required: result.required });
+    }
+    const out = sendConfirmResult(res, result, 'online');
+    return out;
+  } catch (err) {
+    console.error('[payWorkerBookingFromWallet]', err);
+    return res.status(500).json({ success: false, message: 'Wallet payment failed: ' + err.message });
+  }
+};
+
+/**
  * Confirm Worker Booking with Cash on Service (Pay on Completion)
  * POST /api/user/farmer-worker-request/:id/confirm-cash
  */

@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { FiArrowLeft, FiShield, FiLock, FiCheckCircle, FiAlertCircle, FiCreditCard, FiDollarSign } from 'react-icons/fi';
+import { FaWallet } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import workerBookingService from '../../../../services/workerBookingService';
+import { walletService } from '../../../../services/walletService';
 import authStorage from '../../../../utils/authStorage';
 
 const WorkerSelectionPayment = () => {
@@ -12,7 +14,28 @@ const WorkerSelectionPayment = () => {
   const [request, setRequest] = useState(null);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState('online'); // 'online' | 'cash'
+  const [paymentMethod, setPaymentMethod] = useState('online'); // 'wallet' | 'online' | 'cash'
+  const [walletBalance, setWalletBalance] = useState(null);
+
+  const handleWalletPay = async () => {
+    try {
+      setProcessing(true);
+      toast.loading('Paying from wallet...', { id: 'wallet-toast' });
+      const res = await workerBookingService.payWorkerBookingFromWallet(id);
+      if (res && res.success) {
+        toast.success('Paid from wallet. Booking confirmed!', { id: 'wallet-toast' });
+        navigate(`/user/farmer-worker-request/${id}`);
+      } else {
+        toast.error(res?.message || 'Wallet payment failed.', { id: 'wallet-toast' });
+      }
+    } catch (err) {
+      const data = err?.response?.data;
+      if (err?.response?.status === 402 && data?.balance !== undefined) setWalletBalance(Number(data.balance));
+      toast.error(data?.message || 'Wallet payment failed.', { id: 'wallet-toast' });
+    } finally {
+      setProcessing(false);
+    }
+  };
 
   const handleCashConfirm = async () => {
     try {
@@ -49,6 +72,9 @@ const WorkerSelectionPayment = () => {
       }
     };
     fetchDetails();
+    walletService.getBalance()
+      .then(r => setWalletBalance(Number(r?.data?.balance) || 0))
+      .catch(() => setWalletBalance(null));
   }, [id, navigate]);
 
   const loadRazorpay = () => {
@@ -162,6 +188,8 @@ const WorkerSelectionPayment = () => {
     );
   }
 
+  const canPayWallet = walletBalance !== null && walletBalance >= Number(financials.totalPayable);
+
   return (
     <div className="min-h-screen bg-slate-50 pb-20">
       <Helmet><title>Complete Payment | AgroYilt</title></Helmet>
@@ -261,6 +289,31 @@ const WorkerSelectionPayment = () => {
         {/* Payment Method Selector */}
         <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5 space-y-3">
           <h3 className="font-black text-sm text-slate-800">Choose Payment Method</h3>
+          <button
+            type="button"
+            onClick={() => canPayWallet && setPaymentMethod('wallet')}
+            disabled={!canPayWallet}
+            className={`w-full p-4 rounded-2xl border text-left transition-all flex items-center justify-between gap-3 ${
+              paymentMethod === 'wallet'
+                ? 'border-emerald-500 bg-emerald-50/60 ring-2 ring-emerald-500/20'
+                : canPayWallet ? 'border-slate-200 bg-slate-50 hover:bg-slate-100' : 'border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <FaWallet className={paymentMethod === 'wallet' ? 'text-emerald-600' : 'text-slate-400'} size={20} />
+              <div>
+                <p className="font-bold text-xs text-slate-900">Pay from Wallet</p>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  {walletBalance === null
+                    ? 'Wallet balance unavailable'
+                    : canPayWallet
+                      ? `Balance ₹${walletBalance.toLocaleString('en-IN')}`
+                      : `Balance ₹${walletBalance.toLocaleString('en-IN')} · ₹${(Number(financials.totalPayable) - walletBalance).toLocaleString('en-IN')} more needed`}
+                </p>
+              </div>
+            </div>
+            {paymentMethod === 'wallet' && <FiCheckCircle className="text-emerald-600" size={16} />}
+          </button>
           <div className="grid grid-cols-2 gap-3">
             <button
               type="button"
@@ -299,7 +352,14 @@ const WorkerSelectionPayment = () => {
         </div>
 
         {/* Info Card */}
-        {paymentMethod === 'online' ? (
+        {paymentMethod === 'wallet' ? (
+          <div className="bg-emerald-50 border border-emerald-100 rounded-3xl p-5 flex gap-3">
+            <FiShield className="text-emerald-600 shrink-0 mt-0.5" size={20} />
+            <p className="text-xs text-emerald-800 font-medium leading-relaxed">
+              <strong className="font-bold">Wallet Escrow:</strong> The full amount is taken from your wallet now. Any unused amount after work verification, or the whole amount if the booking is cancelled, comes back to your wallet.
+            </p>
+          </div>
+        ) : paymentMethod === 'online' ? (
           <div className="bg-blue-50 border border-blue-100 rounded-3xl p-5 flex gap-3">
             <FiCheckCircle className="text-blue-500 shrink-0 mt-0.5" size={20} />
             <p className="text-xs text-blue-800 font-medium leading-relaxed">
@@ -315,7 +375,21 @@ const WorkerSelectionPayment = () => {
           </div>
         )}
 
-        {paymentMethod === 'online' ? (
+        {paymentMethod === 'wallet' ? (
+          <button
+            onClick={handleWalletPay}
+            disabled={processing || !canPayWallet}
+            className="w-full mt-6 py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-[0_4px_12px_rgba(15,23,42,0.25)] disabled:opacity-75"
+          >
+            {processing ? (
+              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <>
+                <FiLock /> Pay ₹{financials.totalPayable} from Wallet
+              </>
+            )}
+          </button>
+        ) : paymentMethod === 'online' ? (
           <button
             onClick={handlePayment}
             disabled={processing}
