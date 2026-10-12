@@ -22,6 +22,7 @@ import DecreaseWorkerModal from './components/DecreaseWorkerModal';
 import ExtensionModal from './components/ExtensionModal';
 import AddWorkersModal from './components/AddWorkersModal';
 import workerBookingService from '../../../../services/workerBookingService';
+import { walletService } from '../../../../services/walletService';
 
 // Fix Leaflet default marker icon path broken by Vite/webpack bundling
 delete L.Icon.Default.prototype._getIconUrl;
@@ -550,6 +551,37 @@ const BookingTrack = () => {
       socket.emit('leave_tracking', id);
     };
   }, [socket, id, fetchSnapshot]);
+
+  // wallet balance, only fetched while an extension is waiting for payment
+  const [walletBalance, setWalletBalance] = useState(null);
+  const pendingPayExtId = trackingData?.extensions?.find(e => e.status === 'PAYMENT_PENDING')?._id || null;
+  useEffect(() => {
+    if (!pendingPayExtId) return;
+    walletService.getBalance()
+      .then(r => setWalletBalance(Number(r?.data?.balance) || 0))
+      .catch(() => setWalletBalance(null));
+  }, [pendingPayExtId]);
+
+  const handleExtensionWalletPayment = async (ext) => {
+    try {
+      setPayingExtensionId(ext._id);
+      const res = await api.post(`/users/farmer-worker-request/${trackingData?.requestId || id}/extension/${ext._id}/pay-wallet`);
+      if (res.data?.success) {
+        toastManager.success('Paid from wallet. Schedule updated.');
+        fetchSnapshot(false);
+        walletService.getBalance().then(r => setWalletBalance(Number(r?.data?.balance) || 0)).catch(() => {});
+      } else {
+        toastManager.error(res.data?.message || 'Wallet payment failed');
+      }
+    } catch (err) {
+      const data = err.response?.data;
+      if (err.response?.status === 402 && data?.balance !== undefined) setWalletBalance(Number(data.balance));
+      toastManager.error(data?.message || 'Wallet payment failed');
+      fetchSnapshot(false);
+    } finally {
+      setPayingExtensionId(null);
+    }
+  };
 
   const handleExtensionPayment = async (ext) => {
     try {
@@ -1143,16 +1175,33 @@ const BookingTrack = () => {
               </div>
 
               {isPendingPay ? (
-                <button
-                  type="button"
-                  id="pay-extension-now-btn"
-                  disabled={payingExtensionId === activeExt._id}
-                  onClick={() => handleExtensionPayment(activeExt)}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-md active:scale-95 transition-all flex items-center gap-1.5"
-                >
-                  <FaRupeeSign size={11} />
-                  <span>{payingExtensionId === activeExt._id ? 'Processing...' : `Pay ₹${payableAmt}`}</span>
-                </button>
+                <div className="flex flex-col items-stretch gap-1.5">
+                  <button
+                    type="button"
+                    id="pay-extension-wallet-btn"
+                    disabled={payingExtensionId === activeExt._id || walletBalance === null || walletBalance < Number(payableAmt)}
+                    onClick={() => handleExtensionWalletPayment(activeExt)}
+                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-black text-xs rounded-xl shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  >
+                    <FaRupeeSign size={11} />
+                    <span>{payingExtensionId === activeExt._id ? 'Processing...' : `Pay ₹${payableAmt} from Wallet`}</span>
+                  </button>
+                  {walletBalance !== null && (
+                    <span className={`text-[10px] font-bold text-center ${walletBalance >= Number(payableAmt) ? 'text-slate-500' : 'text-red-600'}`}>
+                      Wallet ₹{walletBalance.toLocaleString('en-IN')}{walletBalance < Number(payableAmt) ? ` · ₹${(Number(payableAmt) - walletBalance).toLocaleString('en-IN')} more needed` : ''}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    id="pay-extension-now-btn"
+                    disabled={payingExtensionId === activeExt._id}
+                    onClick={() => handleExtensionPayment(activeExt)}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  >
+                    <FaRupeeSign size={11} />
+                    <span>{payingExtensionId === activeExt._id ? 'Processing...' : `Pay ₹${payableAmt} Online`}</span>
+                  </button>
+                </div>
               ) : (
                 <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-amber-200/60 text-amber-800">
                   Workers Evaluating

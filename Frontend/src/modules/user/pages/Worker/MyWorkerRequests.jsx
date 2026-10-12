@@ -8,6 +8,7 @@ import {
 } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import workerBookingService from '../../../../services/workerBookingService';
+import { walletService } from '../../../../services/walletService';
 import authStorage from '../../../../utils/authStorage';
 
 // ── Status styles ───────────────────────────────────────────────────────────
@@ -157,6 +158,35 @@ const MyWorkerRequests = () => {
       }
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Failed to confirm booking with cash.', { id: 'cash-toast' });
+    } finally {
+      setProcessingPaymentId(null);
+    }
+  };
+
+  const [walletBalance, setWalletBalance] = useState(null);
+  useEffect(() => {
+    walletService.getBalance()
+      .then(r => setWalletBalance(Number(r?.data?.balance) || 0))
+      .catch(() => setWalletBalance(null));
+  }, []);
+
+  const handlePayGroupFromWallet = async (req) => {
+    try {
+      setProcessingPaymentId(req._id);
+      toast.loading('Paying from wallet...', { id: 'wallet-toast' });
+      const res = await workerBookingService.payGroupBookingFromWallet(req._id);
+      if (res && res.success) {
+        toast.success('Paid from wallet. Group Booking Confirmed!', { id: 'wallet-toast' });
+        walletService.getBalance().then(r => setWalletBalance(Number(r?.data?.balance) || 0)).catch(() => {});
+        fetchRequests();
+      } else {
+        toast.error(res?.message || 'Wallet payment failed.', { id: 'wallet-toast' });
+      }
+    } catch (err) {
+      const data = err?.response?.data;
+      if (err?.response?.status === 402 && data?.balance !== undefined) setWalletBalance(Number(data.balance));
+      toast.error(data?.message || 'Wallet payment failed.', { id: 'wallet-toast' });
+      fetchRequests();
     } finally {
       setProcessingPaymentId(null);
     }
@@ -392,6 +422,23 @@ const MyWorkerRequests = () => {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {(() => {
+                  const need = Number(snap.totalPayable) || 0;
+                  const enough = walletBalance !== null && need > 0 && walletBalance >= need;
+                  return (
+                    <button
+                      type="button"
+                      disabled={processingPaymentId === req._id || !enough}
+                      onClick={() => handlePayGroupFromWallet(req)}
+                      className="sm:col-span-2 py-2.5 px-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black flex flex-col items-center justify-center shadow-sm active:scale-95 transition-all disabled:opacity-50"
+                    >
+                      <span>Pay from Wallet</span>
+                      <span className="text-[10px] font-bold text-slate-300">
+                        {walletBalance === null ? 'Balance unavailable' : enough ? `Balance ₹${walletBalance.toLocaleString('en-IN')}` : `Balance ₹${walletBalance.toLocaleString('en-IN')} · ₹${(need - walletBalance).toLocaleString('en-IN')} more needed`}
+                      </span>
+                    </button>
+                  );
+                })()}
                 <button
                   type="button"
                   disabled={processingPaymentId === req._id}

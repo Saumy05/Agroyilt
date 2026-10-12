@@ -21,6 +21,8 @@ const OPEN = ['REQUESTED', 'WORKER_EVALUATION'];
 const toP = (inr) => Math.round(Number(inr) * 100);
 const toINR = (p) => p / 100;
 const STALE_CLAIM_MS = 2 * 60 * 1000;
+// wallet payments reuse the online confirmation with a synthetic payment id (no gateway involved)
+const WALLET_PREFIX = 'WALLET_';
 
 const addMinutes = (hhmm, minutes) => {
   const [h, m] = String(hhmm || '00:00').split(':').map(Number);
@@ -229,9 +231,10 @@ const confirmExtensionPayment = async ({ extensionId, farmerId = null, orderId, 
       { new: true }
     );
 
+    const viaWallet = String(paymentId || '').startsWith(WALLET_PREFIX);
     await ledger.recordPassbookOnce(`ext_payment_${paymentId}`, {
-      userId: claimed.farmerId, amount: order.amountPaise / 100, type: 'booking_payment', paymentMethod: 'razorpay', status: 'completed',
-      description: 'Online payment for worker booking extension', referenceId: paymentId,
+      userId: claimed.farmerId, amount: order.amountPaise / 100, type: 'booking_payment', paymentMethod: viaWallet ? 'wallet' : 'razorpay', status: 'completed',
+      description: `${viaWallet ? 'Wallet' : 'Online'} payment for worker booking extension`, referenceId: paymentId,
       metadata: { extensionId: claimed._id, razorpayOrderId: orderId, razorpayPaymentId: paymentId }
     });
     return { ok: true, extension: done || claimed };
@@ -241,4 +244,69 @@ const confirmExtensionPayment = async ({ extensionId, farmerId = null, orderId, 
   }
 };
 
-module.exports = { closeEvaluationIfDone, applyExtension, confirmExtensionPayment, computeTotals, refundExtensionAmount, OPEN, toP, toINR };
+/**
+ * Pay a frozen extension entirely from the farmer's wallet (no part payment).
+ * Debit → the same single-shot confirmation as an online payment. A refused confirmation gives the money back;
+ * a crash mid-way keeps it and is resumed (same payment id, no second debit) by the next tap.
+ * @returns {{ok, code?, reason?, insufficient?, balance?, required?, extension?, already?, refunded?}}
+ */
+const payFromWallet = async ({ extensionId, parentRequestId, farmerId }) => {
+  let ext = await IndWorkerExtension.findOne({ _id: extensionId, parentRequestId, farmerId });
+  if (!ext) return { ok: false, code: 404, reason: 'Extension not found' };
+  ext = await closeEvaluationIfDone(ext._id);
+  if (ext.paymentMode === 'cash') return { ok: false, code: 400, reason: 'This extension is part of a cash booking and has no online payment.' };
+  if (ext.status !== 'PAYMENT_PENDING') {
+    const waiting = OPEN.includes(ext.status);
+    return { ok: false, code: waiting ? 409 : 400, reason: waiting ? 'Workers are still responding to this extension.' : `This extension cannot be paid (status: ${ext.status}).` };
+  }
+  const totalPaise = toP(ext.totalPayable);
+  if (!(totalPaise > 0)) return { ok: false, code: 400, reason: 'No workers have accepted this extension' };
+  const orderId = `${WALLET_PREFIX}ORDER_${ext._id}_${totalPaise}`;
+
+  // a wallet payment that was debited but not finished (crash): finish THAT payment, never debit twice
+  if (ext.paymentStatus === 'processing') {
+    if (!String(ext.razorpayPaymentId || '').startsWith(WALLET_PREFIX)) return { ok: false, code: 409, reason: 'This extension is already paid or being processed.' };
+    await IndWorkerExtension.updateOne({ _id: ext._id, paymentStatus: 'processing' }, { $set: { confirmClaimedAt: new Date(0) } });
+    const resumed = await confirmExtensionPayment({ extensionId: ext._id, farmerId, orderId, paymentId: ext.razorpayPaymentId });
+    return resumed.ok ? resumed : { ...resumed, reason: resumed.code === 500 ? 'Your wallet payment is safe. Finishing the extension failed; please try again in a minute.' : resumed.reason };
+  }
+  if (ext.paymentStatus === 'success') return { ok: false, code: 409, reason: 'This extension is already paid or being processed.' };
+
+  await IndWorkerExtension.updateOne(
+    { _id: ext._id, 'paymentOrders.orderId': { $ne: orderId } },
+    { $push: { paymentOrders: { orderId, amountPaise: totalPaise, createdAt: new Date() } } }
+  );
+  await IndWorkerExtension.updateOne({ _id: ext._id, paymentStatus: { $in: ['not_started', 'failed'] } }, { $set: { paymentStatus: 'pending' } });
+
+  const paymentId = `${WALLET_PREFIX}${ext._id}_${Date.now()}_${require('crypto').randomBytes(3).toString('hex')}`;
+  const debit = await ledger.debitIfEnough({
+    ownerId: farmerId, ownerModel: 'User', amount: toINR(totalPaise), key: `wallet_pay_${paymentId}`, reason: 'booking_payment', referenceId: ext._id
+  });
+  if (debit.insufficient) {
+    const bal = Number(debit.balance) || 0;
+    return { ok: false, code: 402, insufficient: true, balance: bal, required: toINR(totalPaise), reason: `Wallet balance is low. You need ₹${toINR(totalPaise)}, you have ₹${bal}.` };
+  }
+  if (!debit.applied) return { ok: false, code: 409, reason: 'This wallet payment is already being processed.' };
+
+  let result;
+  try {
+    result = await confirmExtensionPayment({ extensionId: ext._id, farmerId, orderId, paymentId });
+  } catch (err) {
+    console.error('[extension payFromWallet] confirmation threw after the debit:', err);
+    result = { ok: false, code: 500, reason: 'Extension confirmation failed.' };
+  }
+  if (!result.ok && result.code === 500) {
+    // the claim is ours and the work is idempotent: one immediate resume before giving up
+    await IndWorkerExtension.updateOne({ _id: ext._id, paymentStatus: 'processing', razorpayPaymentId: paymentId }, { $set: { confirmClaimedAt: new Date(0) } });
+    result = await confirmExtensionPayment({ extensionId: ext._id, farmerId, orderId, paymentId }).catch(() => ({ ok: false, code: 500 }));
+    if (!result.ok) return { ok: false, code: 500, reason: 'Your wallet payment is safe. Finishing the extension failed; please try again in a minute.' };
+  }
+  if (!result.ok && !result.refunded) {
+    // refused without its own refund (e.g. another payment is being processed): the wallet gets the money back
+    const r = await refundExtensionAmount({ ext, amountPaise: totalPaise, paymentId, reason: result.reason || 'extension could not be confirmed', key: `late_ext_refund_${paymentId}` });
+    result = { ...result, refunded: r.refunded, reason: `${result.reason} Your money is back in your wallet.` };
+  }
+  return result;
+};
+
+module.exports = { closeEvaluationIfDone, applyExtension, confirmExtensionPayment, payFromWallet, computeTotals, refundExtensionAmount, OPEN, toP, toINR };

@@ -486,6 +486,28 @@ exports.verifyExtensionPayment = async (req, res) => {
 };
 
 /**
+ * POST /api/user/farmer-worker-request/:id/extension/:extensionId/pay-wallet — whole amount from the wallet
+ */
+exports.payExtensionFromWallet = async (req, res) => {
+  try {
+    const { id, extensionId } = req.params;
+    if (!oidOk(id) || !oidOk(extensionId)) return res.status(404).json({ success: false, message: 'Extension not found' });
+    const result = await extSvc.payFromWallet({ extensionId, parentRequestId: id, farmerId: req.user._id });
+    if (!result.ok) {
+      return res.status(result.code || 400).json({
+        success: false, message: result.reason, refunded: !!result.refunded,
+        ...(result.insufficient ? { balance: result.balance, required: result.required } : {})
+      });
+    }
+    if (!result.already) await announceExtensionConfirmed(result.extension);
+    return res.json({ success: true, message: result.already ? 'Extension payment already verified' : 'Paid from wallet. Extension applied.', data: result.extension });
+  } catch (err) {
+    console.error('[payExtensionFromWallet]', err);
+    return res.status(500).json({ success: false, message: 'Wallet payment failed: ' + err.message });
+  }
+};
+
+/**
  * GET /api/user/farmer-worker-request/:id/extensions  — the booking's own farmer only.
  */
 exports.getExtensions = async (req, res) => {

@@ -1480,7 +1480,8 @@ exports.verifyGroupBookingPayment = async (req, res) => {
     }
 
     // ── Verify Razorpay signature ───────────────────────────────────────────
-    const isValid = verifyPayment(razorpay_order_id, razorpay_payment_id, razorpay_signature);
+    // a wallet payment (payGroupBookingFromWallet) has already debited the wallet: there is no gateway signature
+    const isValid = req.walletPaid === true ? true : verifyPayment(razorpay_order_id, razorpay_payment_id, razorpay_signature);
     if (!isValid) {
       request.paymentStatus = 'failed';
       await request.save();
@@ -1501,7 +1502,7 @@ exports.verifyGroupBookingPayment = async (req, res) => {
     }
 
     request.paymentStatus    = 'success';
-    request.paymentMethod    = 'online';
+    request.paymentMethod    = req.walletPaid === true ? 'wallet' : 'online';
     request.razorpayPaymentId = razorpay_payment_id;
 
     const snap         = request.financialSnapshot;
@@ -1590,8 +1591,7 @@ exports.verifyGroupBookingPayment = async (req, res) => {
       const commissionAmount = toINR(commissionPaise);
       const netEarning      = toINR(netPaise);
 
-      const isLeader = wId.toString() === request.teamLeaderId.toString();
-      const workerType = isLeader ? 'TEAM_LEADER' : 'TEAM_MEMBER';
+      const workerType = 'TEAM_MEMBER'; // the model only knows INDEPENDENT | TEAM_MEMBER; the leader is identified by teamLeaderId
 
       // Generate visit OTP
       const rawVisitOtp  = Math.floor(1000 + Math.random() * 9000).toString();
@@ -1765,6 +1765,127 @@ exports.verifyGroupBookingPayment = async (req, res) => {
   } catch (err) {
     console.error('[verifyGroupBookingPayment]', err);
     return res.status(500).json({ success: false, message: 'Payment verification failed: ' + err.message });
+  }
+};
+
+// ─── Pay a group booking from the wallet (whole amount, no part payment) ──────────────────────────
+const WALLET_ORDER_RE = /^WALLET_ORDER_/;
+const GROUP_WALLET_STALE_MS = 2 * 60 * 1000;
+
+/**
+ * Take back one wallet payment attempt that did not end in a confirmed booking: remove whatever the confirmation
+ * managed to create for it (parent request, assignments, bookings: all keyed by this attempt's payment id), then
+ * return the debit to the wallet. Safe to repeat (the refund is keyed by the payment id).
+ */
+const undoGroupWalletAttempt = async ({ farmerId, groupRequest, paymentId }) => {
+  const ledger = require('../../services/ledgerService');
+  const parents = await WorkerBookingRequest.find({ farmerId, razorpayPaymentId: paymentId }).select('_id');
+  for (const p of parents) {
+    await IndWorkerAssignment.deleteMany({ parentRequestId: p._id });
+    await Booking.deleteMany({ workerRequestId: p._id });
+    await WorkerBookingRequest.deleteOne({ _id: p._id });
+  }
+  const debit = await WalletTransaction.findOne({ idempotencyKey: `wallet_pay_${paymentId}`, status: 'completed' }).lean();
+  if (!debit) return { refunded: false };
+  const key = `grp_wallet_refund_${paymentId}`;
+  const r = await ledger.applyOnce({ ownerId: farmerId, ownerModel: 'User', amount: debit.amount, key, reason: 'refund', referenceId: String(groupRequest._id) });
+  if (r.applied) {
+    await ledger.recordPassbookOnce(key, {
+      userId: farmerId, type: 'refund', amount: debit.amount, status: 'completed', paymentMethod: 'wallet',
+      description: `Refund: the team booking "${groupRequest.workTitle}" could not be confirmed`, referenceId: String(groupRequest._id)
+    });
+  }
+  return { refunded: r.applied || r.duplicate, amount: debit.amount };
+};
+
+/**
+ * POST /user/group-request/:id/pay-wallet
+ * claim (one attempt at a time) → debit if the balance covers it all → the same confirmation as an online payment.
+ * Anything that fails after the debit is undone and refunded; a crashed attempt is undone by the next tap.
+ */
+exports.payGroupBookingFromWallet = async (req, res) => {
+  const farmerId = req.user._id;
+  const groupId  = req.params.id;
+  try {
+    const ledger = require('../../services/ledgerService');
+
+    // an attempt that died half-way (process crash) is undone before a new one starts
+    const stale = await WorkerGroupRequest.findOne({
+      _id: groupId, farmerId, status: { $ne: 'confirmed' }, razorpayOrderId: WALLET_ORDER_RE,
+      updatedAt: { $lt: new Date(Date.now() - GROUP_WALLET_STALE_MS) }
+    });
+    if (stale && stale.razorpayPaymentId) {
+      await undoGroupWalletAttempt({ farmerId, groupRequest: stale, paymentId: stale.razorpayPaymentId });
+      await WorkerGroupRequest.updateOne({ _id: stale._id, razorpayOrderId: stale.razorpayOrderId }, { $set: { razorpayOrderId: null, razorpayPaymentId: null, paymentStatus: 'pending' } });
+    }
+
+    const attempt   = crypto.randomBytes(4).toString('hex');
+    const orderId   = `WALLET_ORDER_${groupId}_${attempt}`;
+    const paymentId = `WALLET_${groupId}_${Date.now()}_${attempt}`;
+    const claimed = await WorkerGroupRequest.findOneAndUpdate(
+      {
+        _id: groupId, farmerId, status: { $in: ['awaiting_payment', 'payment_pending'] },
+        paymentStatus: { $in: ['not_started', 'pending', 'failed'] }, razorpayOrderId: { $not: WALLET_ORDER_RE }
+      },
+      { $set: { status: 'payment_pending', paymentStatus: 'pending', razorpayOrderId: orderId, razorpayPaymentId: paymentId } },
+      { new: true }
+    );
+    if (!claimed) {
+      return res.status(409).json({ success: false, message: 'Group request not found, not ready for payment, or a payment is already in progress.' });
+    }
+    const release = () => WorkerGroupRequest.updateOne(
+      { _id: groupId, razorpayOrderId: orderId, status: { $ne: 'confirmed' } },
+      { $set: { razorpayOrderId: null, razorpayPaymentId: null, paymentStatus: 'pending', status: 'payment_pending' } }
+    );
+
+    const total = Number(claimed.financialSnapshot?.totalPayable) || 0;
+    if (!(total > 0)) {
+      await release();
+      return res.status(400).json({ success: false, message: 'Financial snapshot is missing. Leader must re-select workers.' });
+    }
+
+    const debit = await ledger.debitIfEnough({ ownerId: farmerId, ownerModel: 'User', amount: total, key: `wallet_pay_${paymentId}`, reason: 'booking_payment', referenceId: claimed._id });
+    if (!debit.applied) {
+      await release();
+      if (debit.insufficient) {
+        const bal = Number(debit.balance) || 0;
+        return res.status(402).json({ success: false, message: `Wallet balance is low. You need ₹${total}, you have ₹${bal}.`, balance: bal, required: total });
+      }
+      return res.status(409).json({ success: false, message: 'This wallet payment is already being processed.' });
+    }
+
+    // the existing confirmation handler, driven in-process (signature check skipped: no gateway involved)
+    const outcome = await new Promise((resolve) => {
+      const fakeRes = { statusCode: 200, status(c) { this.statusCode = c; return this; }, json(b) { resolve({ status: this.statusCode, body: b }); return this; } };
+      Promise.resolve(exports.verifyGroupBookingPayment({
+        user: req.user, params: { id: groupId }, query: {}, app: req.app, walletPaid: true,
+        body: { razorpay_order_id: orderId, razorpay_payment_id: paymentId }
+      }, fakeRes)).catch((e) => resolve({ status: 500, body: { success: false, message: e.message } }));
+    });
+
+    const fresh = await WorkerGroupRequest.findById(groupId).select('status workerBookingRequestId assignmentIds workTitle');
+    if (outcome.status === 200 || (fresh && fresh.status === 'confirmed' && fresh.workerBookingRequestId)) {
+      await ledger.recordPassbookOnce(`group_wallet_payment_${paymentId}`, {
+        userId: farmerId, amount: total, type: 'booking_payment', paymentMethod: 'wallet', status: 'completed',
+        description: `Wallet payment for team booking "${claimed.workTitle}"`, referenceId: paymentId,
+        metadata: { groupRequestId: claimed._id, workerRequestId: fresh?.workerBookingRequestId || null }
+      });
+      return res.json(outcome.status === 200 ? { ...outcome.body, message: 'Paid from wallet. Group booking confirmed.' } : {
+        success: true, message: 'Paid from wallet. Group booking confirmed.',
+        data: { groupRequestId: claimed._id, workerBookingRequestId: fresh.workerBookingRequestId, assignmentIds: fresh.assignmentIds }
+      });
+    }
+
+    const undone = await undoGroupWalletAttempt({ farmerId, groupRequest: claimed, paymentId });
+    await release();
+    return res.status(outcome.status >= 400 ? outcome.status : 500).json({
+      success: false,
+      message: `${outcome.body?.message || 'The booking could not be confirmed.'}${undone.refunded ? ' Your money is back in your wallet.' : ''}`,
+      refunded: Boolean(undone.refunded)
+    });
+  } catch (err) {
+    console.error('[payGroupBookingFromWallet]', err);
+    return res.status(500).json({ success: false, message: 'Wallet payment failed: ' + err.message });
   }
 };
 
@@ -2028,8 +2149,7 @@ exports.confirmGroupBookingCash = async (req, res) => {
       const commissionAmount = toINR(commissionPaise);
       const netEarning = toINR(netPaise);
 
-      const isLeader = wId.toString() === request.teamLeaderId.toString();
-      const workerType = isLeader ? 'TEAM_LEADER' : 'TEAM_MEMBER';
+      const workerType = 'TEAM_MEMBER'; // the model only knows INDEPENDENT | TEAM_MEMBER; the leader is identified by teamLeaderId
 
       const rawVisitOtp = Math.floor(1000 + Math.random() * 9000).toString();
       const visitOtpHash = crypto.createHash('sha256').update(rawVisitOtp).digest('hex');

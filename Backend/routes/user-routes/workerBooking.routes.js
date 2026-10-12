@@ -46,6 +46,7 @@ router.get('/farmer-worker-request/:id/extensions',                             
 router.post('/farmer-worker-request/:id/extension',                                        authenticate, isUser, ext.createExtension);
 router.post('/farmer-worker-request/:id/extension/:extensionId/create-payment',            authenticate, isUser, ext.createExtensionPayment);
 router.post('/farmer-worker-request/:id/extension/:extensionId/payment',                   authenticate, isUser, ext.createExtensionPayment);
+router.post('/farmer-worker-request/:id/extension/:extensionId/pay-wallet',                authenticate, isUser, ext.payExtensionFromWallet);
 router.post('/farmer-worker-request/:id/extension/:extensionId/verify-payment',            authenticate, isUser, ext.verifyExtensionPayment);
 router.post('/farmer-worker-request/:id/extension/:extensionId/payment/verify',            authenticate, isUser, ext.verifyExtensionPayment);
 
@@ -72,6 +73,7 @@ router.get('/group-requests',                          authenticate, isUser, gb.
 router.patch('/group-request/:id/respond',             authenticate, isUser, gb.farmerRespondToGroupCounter);
 router.delete('/group-request/:id',                    authenticate, isUser, gb.cancelGroupRequest);
 router.post('/group-request/:id/create-payment',        authenticate, isUser, gb.createGroupBookingPayment);
+router.post('/group-request/:id/pay-wallet',            authenticate, isUser, gb.payGroupBookingFromWallet);
 router.post('/group-request/:id/verify-payment',        authenticate, isUser, gb.verifyGroupBookingPayment);
 router.post('/group-request/:id/confirm-cash',          authenticate, isUser, gb.confirmGroupBookingCash);
 router.post('/group-request/:id/generate-completion-otp', authenticate, isUser, gb.generateGroupCompletionOtp);

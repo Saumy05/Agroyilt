@@ -228,6 +228,12 @@ confirmFarmerRequest: async (id, accept) => {
     return response.data;
   },
 
+  /** Farmer pays a group booking in full from the wallet */
+  payGroupBookingFromWallet: async (id) => {
+    const response = await api.post(`/users/group-request/${id}/pay-wallet`);
+    return response.data;
+  },
+
   /** Farmer confirms group booking with Cash to Team Leader upon completion */
   confirmGroupBookingCash: async (id) => {
     const response = await api.post(`/users/group-request/${id}/confirm-cash`);
