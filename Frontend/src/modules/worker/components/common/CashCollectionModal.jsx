@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   FiX, FiPlus, FiTrash2, FiCreditCard, FiClock, FiCheck,
   FiDollarSign, FiPlusCircle, FiShield, FiCheckCircle, FiRefreshCw
@@ -151,7 +152,7 @@ const CashCollectionModal = ({
     try {
       setQrLoading(true);
       setQrError(null);
-      const res = await workerService.generateAdminQr(bookingId, finalTotal, extraItems);
+      const res = await workerService.generateAdminQr(bookingId, finalTotal, extraItems.filter(i => String(i.title || "").trim() && parseFloat(i.price) > 0));
       if (res?.success && res.data) {
         setQrData(res.data);
       } else {
@@ -230,15 +231,18 @@ const CashCollectionModal = ({
   };
 
   const handleSendOTP = async () => {
-    for (const item of extraItems) {
-      if (!item.title || !item.price || parseFloat(item.price) <= 0) {
+    // a row the user added but left empty is just dropped; a half-filled row is an error
+    const filledItems = extraItems.filter(i => String(i.title || '').trim() || String(i.price || '').trim());
+    for (const item of filledItems) {
+      if (!String(item.title || '').trim() || !item.price || parseFloat(item.price) <= 0) {
         toastManager.error('Please provide title and price for all extra items');
         return;
       }
     }
+    if (filledItems.length !== extraItems.length) setExtraItems(filledItems);
 
     const isPlanBenefit = booking?.paymentMethod === 'plan_benefit';
-    const hasExtras = extraItems.length > 0 && totalExtra > 0;
+    const hasExtras = filledItems.length > 0 && totalExtra > 0;
 
     if (isPlanBenefit && !hasExtras) {
       setSubmitting(true);
@@ -256,7 +260,7 @@ const CashCollectionModal = ({
 
     setSubmitting(true);
     try {
-      await onInitiateOTP(finalTotal, extraItems);
+      await onInitiateOTP(finalTotal, filledItems);
       setStep('otp');
       toastManager.success('OTP sent to customer');
     } catch (error) {
@@ -275,7 +279,7 @@ const CashCollectionModal = ({
 
     setSubmitting(true);
     try {
-      await onConfirm(finalTotal, extraItems, otpString);
+      await onConfirm(finalTotal, extraItems.filter(i => String(i.title || '').trim() && parseFloat(i.price) > 0), otpString);
       onClose();
       toastManager.success('Payment recorded successfully');
     } catch (error) {
@@ -287,7 +291,7 @@ const CashCollectionModal = ({
 
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[10000] flex items-end sm:items-center justify-center p-4 bg-black/65 backdrop-blur-sm transition-opacity">
       <div className={`
         bg-white w-full max-w-md rounded-3xl overflow-hidden shadow-2xl 
@@ -666,7 +670,7 @@ const CashCollectionModal = ({
         )}
       </div>
     </div>
-  );
+  , document.body);
 };
 
 // Internal icon for button
