@@ -24,6 +24,7 @@ const AdminSettings = () => {
     bookingCommissionPercentage: 10,
     workerCommissionPercentage: 10,
     workerPlatformChargePercentage: 1,
+    landLeaseCommissionPercentage: 2,
     rentalGstPercentage: 5,
     minWithdrawalAmount: 300
   });
@@ -327,6 +328,7 @@ const AdminSettings = () => {
             bookingCommissionPercentage: res.settings.bookingCommissionPercentage ?? 10,
             workerCommissionPercentage: res.settings.workerCommissionPercentage ?? 10,
             workerPlatformChargePercentage: res.settings.workerPlatformChargePercentage ?? 1,
+            landLeaseCommissionPercentage: res.settings.landLeaseCommissionPercentage ?? 2,
             rentalGstPercentage: res.settings.rentalGstPercentage ?? 5,
             minWithdrawalAmount: res.settings.minWithdrawalAmountPaise ? Math.round(res.settings.minWithdrawalAmountPaise / 100) : (res.settings.minWithdrawalAmount || 300)
           });
@@ -1145,6 +1147,24 @@ const AdminSettings = () => {
                         className="w-full px-4 py-2.5 bg-emerald-50 border border-emerald-200 rounded-lg outline-none focus:border-emerald-500 transition-all font-bold text-emerald-700"
                       />
                       <p className="text-[10px] text-gray-400 mt-1">Deducted from independent worker earnings per completed job</p>
+                    </div>
+
+                    {/* Land Lease Commission */}
+                    <div className="md:col-span-2">
+                      <div className="flex justify-between items-center mb-1.5">
+                        <label className="block text-xs font-semibold text-gray-500 uppercase">Land Lease Commission (%)</label>
+                        <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
+                          Landowner Keeps: {100 - (financialSettings.landLeaseCommissionPercentage || 0)}%
+                        </span>
+                      </div>
+                      <input
+                        type="number" name="landLeaseCommissionPercentage"
+                        value={financialSettings.landLeaseCommissionPercentage}
+                        onChange={handleFinancialChange}
+                        min="0" max="100"
+                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all font-bold text-gray-800"
+                      />
+                      <p className="text-[10px] text-gray-400 mt-1">Deducted from the landowner's share of every rent installment and crop-share settlement. Applies to new leases only.</p>
                     </div>
 
                     {/* Worker Platform Charge */}

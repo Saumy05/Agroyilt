@@ -1,6 +1,12 @@
 const LandLease = require('../../models/LandLease');
 const User = require('../../models/User');
 const mongoose = require('mongoose');
+const Settings = require('../../models/Settings');
+const { buildAgreement, commissionSplit, round2 } = require('../../services/landLeaseScheduleService');
+const { payItem } = require('../../services/landLeasePaymentService');
+const { notifyLease } = require('../../services/landLeaseNotifyService');
+
+const escapeRegex = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // Helper to ensure a dedicated verified demo landowner account exists
 const getOrCreateDemoLandowner = async () => {
@@ -31,6 +37,8 @@ const getOrCreateDemoLandowner = async () => {
 
 // Seed realistic agricultural lands if empty, and detach sample lands from personal accounts
 const seedInitialLandsIfNeeded = async (userId) => {
+  // Demo owner + sample lands are for local testing only; never create them on a real database
+  if (process.env.NODE_ENV === 'production') return;
   try {
     const sampleKhasras = ['142/18', '89/3', '210/4-5', '55/1'];
     const demoOwnerId = await getOrCreateDemoLandowner();
@@ -204,6 +212,15 @@ const seedInitialLandsIfNeeded = async (userId) => {
   }
 };
 
+// Freeze the agreed terms (and the fixed-rent installment schedule) on the lease being accepted
+const applyAgreement = async (lease, offer) => {
+  const settings = await Settings.findOne({ type: 'global' }).select('landLeaseCommissionPercentage').lean();
+  const commission = settings?.landLeaseCommissionPercentage ?? 2;
+  const { agreement, installments } = buildAgreement(lease, offer, commission);
+  lease.agreement = agreement;
+  lease.installments = installments;
+};
+
 const farmerLandLeaseController = {
   // 1. List Land (Post Farmland for lease)
   listLand: async (req, res) => {
@@ -240,6 +257,37 @@ const farmerLandLeaseController = {
         });
       }
 
+      if (!['fixed-rent', 'crop-share'].includes(leaseType)) {
+        return res.status(400).json({
+          success: false,
+          message: 'अमान्य पट्टा प्रकार (Invalid lease type)'
+        });
+      }
+
+      if (!(Number(sizeInAcres) > 0)) {
+        return res.status(400).json({
+          success: false,
+          message: 'भूमि का आकार शून्य से अधिक होना चाहिए (Land size must be greater than 0)'
+        });
+      }
+
+      if (leaseType === 'fixed-rent' && !(Number(pricePerAcre) > 0)) {
+        return res.status(400).json({
+          success: false,
+          message: 'कृपया प्रति एकड़ किराया दर्ज करें (Price per acre is required for fixed-rent)'
+        });
+      }
+
+      if (leaseType === 'crop-share') {
+        const share = Number(sharePercentage);
+        if (!(share > 0 && share <= 100)) {
+          return res.status(400).json({
+            success: false,
+            message: 'हिस्सेदारी 1 से 100 प्रतिशत के बीच होनी चाहिए (Share must be between 1 and 100%)'
+          });
+        }
+      }
+
       const latitude = lat || location?.lat || 26.9124;
       const longitude = lng || location?.lng || 75.8577;
 
@@ -264,8 +312,8 @@ const farmerLandLeaseController = {
           coordinates: [Number(longitude), Number(latitude)]
         },
         leaseType,
-        pricePerAcre: leaseType === 'fixed-rent' ? Number(pricePerAcre || 0) : null,
-        sharePercentage: leaseType === 'crop-share' ? Number(sharePercentage || 50) : null,
+        pricePerAcre: leaseType === 'fixed-rent' ? Number(pricePerAcre) : null,
+        sharePercentage: leaseType === 'crop-share' ? Number(sharePercentage) : null,
         availableFrom: new Date(availableFrom),
         availableTo: new Date(availableTo),
         documents: documents || [],
@@ -340,15 +388,15 @@ const farmerLandLeaseController = {
       }
 
       if (soilType) {
-        filter.soilType = new RegExp(soilType, 'i');
+        filter.soilType = new RegExp(escapeRegex(soilType), 'i');
       }
 
       if (irrigationSource) {
-        filter.irrigationSource = new RegExp(irrigationSource, 'i');
+        filter.irrigationSource = new RegExp(escapeRegex(irrigationSource), 'i');
       }
 
       if (search && search.trim()) {
-        const regex = new RegExp(search.trim(), 'i');
+        const regex = new RegExp(escapeRegex(search.trim()), 'i');
         filter.$or = [
           { title: regex },
           { description: regex },
@@ -525,6 +573,27 @@ const farmerLandLeaseController = {
         });
       }
 
+      const alreadyDecided = (lease.offers || []).find(
+        o => String(o.farmerId) === String(req.user.id) && ['rejected', 'accepted'].includes(o.status)
+      );
+      if (alreadyDecided) {
+        return res.status(400).json({
+          success: false,
+          message: alreadyDecided.status === 'accepted'
+            ? 'आपका प्रस्ताव पहले ही स्वीकार हो चुका है (Your offer was already accepted)'
+            : 'मालिक ने आपका प्रस्ताव अस्वीकार कर दिया है (The owner has declined your offer)'
+        });
+      }
+
+      const bid = lease.leaseType === 'fixed-rent' ? Number(proposedPrice || lease.pricePerAcre) : Number(proposedShare || lease.sharePercentage);
+      if (!(bid > 0) || (lease.leaseType === 'crop-share' && bid > 100)) {
+        return res.status(400).json({ success: false, message: 'अमान्य प्रस्ताव राशि या हिस्सा (Invalid offer amount or share)' });
+      }
+      const months = Number(durationMonths);
+      if (!(months >= 1 && months <= 120)) {
+        return res.status(400).json({ success: false, message: 'अवधि 1 से 120 माह के बीच होनी चाहिए (Duration must be 1-120 months)' });
+      }
+
       // Check if user already has a pending offer
       const existingOfferIndex = (lease.offers || []).findIndex(
         o => String(o.farmerId) === String(req.user.id) && o.status === 'pending'
@@ -534,9 +603,9 @@ const farmerLandLeaseController = {
         farmerId: req.user.id,
         farmerName: req.user.name || 'Interested Farmer',
         farmerPhone: req.user.phone || '',
-        proposedPrice: lease.leaseType === 'fixed-rent' ? Number(proposedPrice || lease.pricePerAcre) : null,
-        proposedShare: lease.leaseType === 'crop-share' ? Number(proposedShare || lease.sharePercentage) : null,
-        durationMonths: Number(durationMonths) || 12,
+        proposedPrice: lease.leaseType === 'fixed-rent' ? bid : null,
+        proposedShare: lease.leaseType === 'crop-share' ? bid : null,
+        durationMonths: months,
         proposedCrops: proposedCrops || '',
         message: message || '',
         status: 'pending',
@@ -551,6 +620,9 @@ const farmerLandLeaseController = {
       }
 
       await lease.save();
+
+      notifyLease(lease.ownerId, 'land_lease_offer', `🌾 नया पट्टा प्रस्ताव: ${offerObj.farmerName}`,
+        `${offerObj.farmerName} ने "${lease.title}" पर प्रस्ताव भेजा है।`, lease._id);
 
       res.status(200).json({
         success: true,
@@ -582,19 +654,43 @@ const farmerLandLeaseController = {
         return res.status(404).json({ success: false, message: 'प्रस्ताव नहीं मिला (Offer not found)' });
       }
 
+      if (lease.status !== 'active') {
+        return res.status(400).json({
+          success: false,
+          message: 'यह भूमि पहले ही पट्टे पर दी जा चुकी है या उपलब्ध नहीं है (Land is not available for lease)'
+        });
+      }
+
+      if (offer.status !== 'pending') {
+        return res.status(400).json({
+          success: false,
+          message: 'यह प्रस्ताव अब लंबित नहीं है (Offer is no longer pending)'
+        });
+      }
+
       // Set offer status to accepted
       offer.status = 'accepted';
 
-      // Reject all other pending offers
+      // Reject all other pending offers (remember who, so only they get the notification)
+      const newlyRejected = [];
       lease.offers.forEach(o => {
         if (String(o._id) !== String(offerId) && o.status === 'pending') {
           o.status = 'rejected';
+          newlyRejected.push(o.farmerId);
         }
       });
 
+      await applyAgreement(lease, offer);
       lease.status = 'leased';
       lease.currentTenantId = offer.farmerId;
       await lease.save();
+
+      notifyLease(offer.farmerId, 'land_lease_offer_accepted', '✅ प्रस्ताव स्वीकार (Offer accepted)',
+        `"${lease.title}" का पट्टा आपके नाम हो गया। किस्तें "भुगतान" में देखें।`, lease._id);
+      newlyRejected.forEach(farmerId => {
+        notifyLease(farmerId, 'land_lease_offer_rejected', 'प्रस्ताव अस्वीकार (Offer declined)',
+          `"${lease.title}" किसी और किसान को दे दी गई।`, lease._id);
+      });
 
       res.status(200).json({
         success: true,
@@ -603,6 +699,49 @@ const farmerLandLeaseController = {
       });
     } catch (error) {
       console.error('Error accepting offer:', error);
+      res.status(500).json({ success: false, message: 'Server Error' });
+    }
+  },
+
+  // 6b. Reject Offer (Landowner rejects a specific tenant offer)
+  rejectOffer: async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { offerId } = req.body;
+
+      const lease = await LandLease.findOne({ _id: id, ownerId: req.user.id });
+      if (!lease) {
+        return res.status(404).json({
+          success: false,
+          message: 'भूमि नहीं मिली या आप इसके मालिक नहीं हैं (Land not found or unauthorized)'
+        });
+      }
+
+      const offer = offerId ? lease.offers.id(offerId) : null;
+      if (!offer) {
+        return res.status(404).json({ success: false, message: 'प्रस्ताव नहीं मिला (Offer not found)' });
+      }
+
+      if (offer.status !== 'pending') {
+        return res.status(400).json({
+          success: false,
+          message: 'यह प्रस्ताव अब लंबित नहीं है (Offer is no longer pending)'
+        });
+      }
+
+      offer.status = 'rejected';
+      await lease.save();
+
+      notifyLease(offer.farmerId, 'land_lease_offer_rejected', 'प्रस्ताव अस्वीकार (Offer declined)',
+        `मालिक ने "${lease.title}" पर आपका प्रस्ताव अस्वीकार कर दिया।`, lease._id);
+
+      res.status(200).json({
+        success: true,
+        message: 'प्रस्ताव अस्वीकार कर दिया गया (Offer rejected)',
+        data: lease
+      });
+    } catch (error) {
+      console.error('Error rejecting offer:', error);
       res.status(500).json({ success: false, message: 'Server Error' });
     }
   },
@@ -618,9 +757,26 @@ const farmerLandLeaseController = {
         return res.status(404).json({ success: false, message: 'Lease not found or you are not the owner' });
       }
 
-      if (!tenantId) {
-        return res.status(400).json({ success: false, message: 'Tenant ID is required' });
+      if (!tenantId || !mongoose.Types.ObjectId.isValid(tenantId)) {
+        return res.status(400).json({ success: false, message: 'Valid tenant ID is required' });
       }
+
+      if (lease.status !== 'active') {
+        return res.status(400).json({ success: false, message: 'Land is not available for lease' });
+      }
+
+      const tenantOffer = lease.offers.find(
+        o => String(o.farmerId) === String(tenantId) && o.status === 'pending'
+      );
+      if (!tenantOffer) {
+        return res.status(400).json({ success: false, message: 'No pending offer from this tenant' });
+      }
+
+      await applyAgreement(lease, tenantOffer);
+      tenantOffer.status = 'accepted';
+      lease.offers.forEach(o => {
+        if (o !== tenantOffer && o.status === 'pending') o.status = 'rejected';
+      });
 
       lease.status = 'leased';
       lease.currentTenantId = tenantId;
@@ -637,6 +793,175 @@ const farmerLandLeaseController = {
     }
   },
 
+  // 7b. Payment summary (agreement, installments, settlements) - owner and tenant only
+  getPayments: async (req, res) => {
+    try {
+      const me = String(req.user.id);
+      const access = await LandLease.findById(req.params.id).select('ownerId currentTenantId').lean();
+      if (!access) return res.status(404).json({ success: false, message: 'Land lease not found' });
+
+      const isOwner = String(access.ownerId) === me;
+      if (!isOwner && String(access.currentTenantId || '') !== me) {
+        return res.status(403).json({ success: false, message: 'Not allowed' });
+      }
+
+      const lease = await LandLease.findById(req.params.id)
+        .select('title leaseType sizeInAcres ownerId currentTenantId status agreement installments settlements')
+        .populate('ownerId', 'name')
+        .populate('currentTenantId', 'name')
+        .lean();
+
+      const sum = (arr, status) => arr.filter(i => i.status === status).reduce((t, i) => t + i.amount, 0);
+      res.status(200).json({
+        success: true,
+        data: {
+          ...lease,
+          role: isOwner ? 'owner' : 'tenant',
+          totals: {
+            paid: sum(lease.installments, 'paid') + sum(lease.settlements, 'paid'),
+            pendingRent: lease.installments.filter(i => i.status !== 'paid').reduce((t, i) => t + i.amount, 0)
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching lease payments:', error);
+      res.status(500).json({ success: false, message: 'Server Error' });
+    }
+  },
+
+  // 7c. Tenant pays a monthly rent installment from the wallet
+  payInstallment: async (req, res) => {
+    try {
+      const result = await payItem({
+        leaseId: req.params.id, tenantId: req.user.id, kind: 'installment', itemId: req.params.itemId
+      });
+      if (!result.ok) {
+        return res.status(result.code || 400).json({
+          success: false,
+          message: result.reason,
+          insufficient: result.insufficient || false,
+          balance: result.balance,
+          required: result.required
+        });
+      }
+      res.status(200).json({ success: true, message: 'किराया सफलतापूर्वक चुकाया गया (Rent paid successfully)', data: result.lease });
+    } catch (error) {
+      console.error('Error paying installment:', error);
+      res.status(500).json({ success: false, message: 'Server Error' });
+    }
+  },
+
+  // 7d. Crop-share: tenant submits the harvest value, the owner's share is calculated from the agreed %
+  submitSettlement: async (req, res) => {
+    try {
+      const { cropName = '', harvestValue, note = '' } = req.body;
+      const value = round2(harvestValue);
+
+      if (!(value > 0)) {
+        return res.status(400).json({ success: false, message: 'फसल का कुल मूल्य दर्ज करें (Enter the total harvest value)' });
+      }
+
+      const lease = await LandLease.findOne({ _id: req.params.id, currentTenantId: req.user.id, status: 'leased' });
+      if (!lease) {
+        return res.status(404).json({ success: false, message: 'Active lease not found for you' });
+      }
+      if (lease.leaseType !== 'crop-share') {
+        return res.status(400).json({ success: false, message: 'Settlements are only for crop-share leases' });
+      }
+      if (lease.settlements.some(st => ['submitted', 'confirmed', 'processing'].includes(st.status))) {
+        return res.status(409).json({
+          success: false,
+          message: 'पिछला हिसाब अभी लंबित है (Finish the open settlement first)'
+        });
+      }
+
+      const share = lease.agreement?.agreedShare ?? lease.sharePercentage;
+      const amount = round2((value * share) / 100);
+      lease.settlements.push({
+        cropName: String(cropName).trim(),
+        harvestValue: value,
+        sharePercentage: share,
+        amount,
+        ...commissionSplit(amount, lease.agreement?.commissionPercentage),
+        note: String(note).trim(),
+        status: 'submitted'
+      });
+      await lease.save();
+
+      notifyLease(lease.ownerId, 'land_lease_settlement', '🌾 फसल हिसाब भेजा गया (Harvest settlement)',
+        `"${lease.title}" पर आपके हिस्से ₹${amount} का हिसाब पुष्टि के लिए आया है।`, lease._id);
+
+      res.status(201).json({
+        success: true,
+        message: 'हिसाब मालिक को भेजा गया (Settlement sent to the owner for confirmation)',
+        data: lease.settlements[lease.settlements.length - 1]
+      });
+    } catch (error) {
+      console.error('Error submitting settlement:', error);
+      res.status(500).json({ success: false, message: 'Server Error' });
+    }
+  },
+
+  // 7e. Owner confirms or rejects a submitted settlement
+  reviewSettlement: (decision) => async (req, res) => {
+    try {
+      const lease = await LandLease.findOne({ _id: req.params.id, ownerId: req.user.id });
+      if (!lease) {
+        return res.status(404).json({ success: false, message: 'Land not found or unauthorized' });
+      }
+
+      const settlement = lease.settlements.id(req.params.itemId);
+      if (!settlement) {
+        return res.status(404).json({ success: false, message: 'Settlement not found' });
+      }
+      if (settlement.status !== 'submitted') {
+        return res.status(400).json({ success: false, message: 'यह हिसाब अब लंबित नहीं है (Settlement is no longer awaiting review)' });
+      }
+
+      settlement.status = decision;
+      await lease.save();
+
+      notifyLease(lease.currentTenantId, 'land_lease_settlement',
+        decision === 'confirmed' ? '✅ हिसाब स्वीकार (Settlement confirmed)' : 'हिसाब अस्वीकार (Settlement rejected)',
+        decision === 'confirmed'
+          ? `मालिक ने "${lease.title}" का ₹${settlement.amount} का हिसाब स्वीकार किया। अब भुगतान करें।`
+          : `मालिक ने "${lease.title}" का हिसाब अस्वीकार किया। सही मूल्य के साथ दोबारा भेजें।`, lease._id);
+
+      res.status(200).json({
+        success: true,
+        message: decision === 'confirmed'
+          ? 'हिसाब स्वीकार किया गया, किसान अब भुगतान करेगा (Settlement confirmed)'
+          : 'हिसाब अस्वीकार किया गया (Settlement rejected)',
+        data: settlement
+      });
+    } catch (error) {
+      console.error('Error reviewing settlement:', error);
+      res.status(500).json({ success: false, message: 'Server Error' });
+    }
+  },
+
+  // 7f. Tenant pays a confirmed settlement from the wallet
+  paySettlement: async (req, res) => {
+    try {
+      const result = await payItem({
+        leaseId: req.params.id, tenantId: req.user.id, kind: 'settlement', itemId: req.params.itemId
+      });
+      if (!result.ok) {
+        return res.status(result.code || 400).json({
+          success: false,
+          message: result.reason,
+          insufficient: result.insufficient || false,
+          balance: result.balance,
+          required: result.required
+        });
+      }
+      res.status(200).json({ success: true, message: 'बटाई का हिस्सा चुकाया गया (Crop-share paid successfully)', data: result.lease });
+    } catch (error) {
+      console.error('Error paying settlement:', error);
+      res.status(500).json({ success: false, message: 'Server Error' });
+    }
+  },
+
   // 8. Delete / Withdraw Land Listing
   deleteLand: async (req, res) => {
     try {
@@ -647,7 +972,7 @@ const farmerLandLeaseController = {
         return res.status(404).json({ success: false, message: 'Land not found or unauthorized' });
       }
 
-      if (lease.status === 'leased') {
+      if (lease.status === 'leased' || lease.currentTenantId) {
         return res.status(400).json({
           success: false,
           message: 'सक्रिय पट्टे वाली भूमि को हटाया नहीं जा सकता (Cannot delete currently leased land)'

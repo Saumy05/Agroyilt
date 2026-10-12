@@ -36,6 +36,7 @@ const Marketplace = lazy(() => import('../pages/Products/EcommerceManager'));
 const StoreApprovals = lazy(() => import('../pages/Products/StoreApprovals'));
 const RegisteredShops = lazy(() => import('../pages/Products/RegisteredShops'));
 const SoilTesting = lazy(() => import('../pages/SoilTesting'));
+const LandLeases = lazy(() => import('../pages/LandLeases'));
 const Disputes = lazy(() => import('../pages/Disputes'));
 const WebsiteSettings = lazy(() => import('../pages/WebsiteSettings'));
 const EquipmentApproval = lazy(() => import('../pages/EquipmentApproval'));
@@ -99,6 +100,7 @@ const AdminRoutes = () => {
             <Route path="marketplace/store-approvals" element={<StoreApprovals />} />
             <Route path="marketplace/registered-shops" element={<RegisteredShops />} />
             <Route path="soil-tests" element={<SoilTesting />} />
+            <Route path="land-leases" element={<LandLeases />} />
             <Route path="disputes" element={<Disputes />} />
             <Route path="withdrawals" element={<Withdrawals />} />
             <Route path="withdrawals/*" element={<Withdrawals />} />

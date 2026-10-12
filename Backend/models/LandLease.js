@@ -46,6 +46,35 @@ const offerSchema = new mongoose.Schema({
   }
 });
 
+const installmentSchema = new mongoose.Schema({
+  number: { type: Number, required: true },
+  dueDate: { type: Date, required: true },
+  amount: { type: Number, required: true }, // INR the tenant pays
+  commission: { type: Number, default: 0 }, // INR kept by the platform
+  ownerAmount: { type: Number, default: 0 }, // INR credited to the owner
+  status: { type: String, enum: ['pending', 'processing', 'paid'], default: 'pending' },
+  paidAt: { type: Date, default: null },
+  paymentKey: { type: String, default: null }
+});
+
+const settlementSchema = new mongoose.Schema({
+  cropName: { type: String, trim: true, default: '' },
+  harvestValue: { type: Number, required: true }, // INR total value of the harvest
+  sharePercentage: { type: Number, required: true }, // owner % frozen at submission
+  amount: { type: Number, required: true }, // INR owner's share = harvestValue * share%
+  commission: { type: Number, default: 0 },
+  ownerAmount: { type: Number, default: 0 },
+  note: { type: String, trim: true, default: '' },
+  status: {
+    type: String,
+    enum: ['submitted', 'confirmed', 'rejected', 'processing', 'paid'],
+    default: 'submitted'
+  },
+  paidAt: { type: Date, default: null },
+  paymentKey: { type: String, default: null },
+  createdAt: { type: Date, default: Date.now }
+});
+
 const landLeaseSchema = new mongoose.Schema({
   ownerId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -159,7 +188,19 @@ const landLeaseSchema = new mongoose.Schema({
     ref: 'User',
     default: null
   },
-  offers: [offerSchema]
+  offers: [offerSchema],
+  // Terms frozen when the owner accepts an offer
+  agreement: {
+    startDate: { type: Date, default: null },
+    endDate: { type: Date, default: null },
+    durationMonths: { type: Number, default: null },
+    agreedPrice: { type: Number, default: null }, // fixed-rent: INR / acre / year
+    agreedShare: { type: Number, default: null }, // crop-share: owner %
+    totalRent: { type: Number, default: null }, // fixed-rent: INR for the whole term
+    commissionPercentage: { type: Number, default: 0 }
+  },
+  installments: [installmentSchema],
+  settlements: [settlementSchema]
 }, {
   timestamps: true
 });

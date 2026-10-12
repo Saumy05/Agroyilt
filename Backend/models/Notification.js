@@ -208,6 +208,13 @@ const notificationSchema = new mongoose.Schema({
       'bid_expired',
       'vendor_cash_limit_exceeded',
       'vendor_settlement_request',
+      // Land Lease / Theka
+      'land_lease_offer',
+      'land_lease_offer_accepted',
+      'land_lease_offer_rejected',
+      'land_lease_payment',
+      'land_lease_settlement',
+      'land_lease_ended',
       'general'
     ],
     index: true

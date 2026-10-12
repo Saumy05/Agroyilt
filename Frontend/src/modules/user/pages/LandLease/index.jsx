@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   FiArrowLeft,
   FiSearch,
@@ -29,9 +29,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import landLeaseService from '../../services/landLeaseService';
 import { toastManager } from '../../../../utils/toastManager';
 import authStorage from '../../../../utils/authStorage';
+import LeasePaymentsModal from './LeasePaymentsModal';
 
 const LandLeasePage = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const currentUser = authStorage.getUserData('user');
 
   // Active Main Tab
@@ -55,6 +57,18 @@ const LandLeasePage = () => {
   const [selectedLandDetail, setSelectedLandDetail] = useState(null);
   const [offerModalLand, setOfferModalLand] = useState(null);
   const [submittingOffer, setSubmittingOffer] = useState(false);
+  const [paymentsLandId, setPaymentsLandId] = useState(null);
+
+  // Deep link from a notification: ?tab=my-leases&sub=listings|offers&pay=<landId>
+  useEffect(() => {
+    if (searchParams.get('tab') === 'my-leases') {
+      setActiveTab('my-leases');
+      if (['listings', 'offers'].includes(searchParams.get('sub'))) setMyLeasesSubTab(searchParams.get('sub'));
+      if (searchParams.get('pay')) setPaymentsLandId(searchParams.get('pay'));
+      setSearchParams({}, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Offer Form State
   const [offerForm, setOfferForm] = useState({
@@ -226,6 +240,24 @@ const LandLeasePage = () => {
       }
     } catch (err) {
       toastManager.error(err.response?.data?.message || 'Error accepting offer');
+    }
+  };
+
+  // Landowner rejects tenant's offer
+  const handleRejectOffer = async (landId, offerId) => {
+    if (!window.confirm('क्या आप इस प्रस्ताव को अस्वीकार करना चाहते हैं? (Reject this offer?)')) {
+      return;
+    }
+    try {
+      const res = await landLeaseService.rejectOffer(landId, offerId);
+      if (res?.success) {
+        toastManager.success('प्रस्ताव अस्वीकार कर दिया गया (Offer rejected)');
+        fetchMyLeases();
+      } else {
+        toastManager.error(res?.message || 'Failed to reject offer');
+      }
+    } catch (err) {
+      toastManager.error(err.response?.data?.message || 'Error rejecting offer');
     }
   };
 
@@ -1032,6 +1064,15 @@ const LandLeasePage = () => {
                         </div>
 
                         <div className="flex items-center gap-2">
+                          {item.status === 'leased' && (
+                            <button
+                              onClick={() => setPaymentsLandId(item._id)}
+                              className="p-2 rounded-xl text-emerald-800 hover:bg-emerald-50 border border-emerald-200 text-xs flex items-center gap-1 font-bold"
+                            >
+                              <FiDollarSign className="w-3.5 h-3.5" />
+                              <span>भुगतान (Payments)</span>
+                            </button>
+                          )}
                           <button
                             onClick={() => handleDeleteLand(item._id)}
                             className="p-2 rounded-xl text-red-600 hover:bg-red-50 border border-red-100 text-xs flex items-center gap-1 font-bold"
@@ -1121,13 +1162,21 @@ const LandLeasePage = () => {
                                 </div>
 
                                 {offer.status === 'pending' && item.status !== 'leased' && (
-                                  <button
-                                    onClick={() => handleAcceptOffer(item._id, offer._id)}
-                                    className="py-1.5 px-3 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl text-xs font-bold shadow-xs shrink-0 flex items-center gap-1"
-                                  >
-                                    <FiCheck className="w-3.5 h-3.5" />
-                                    <span>स्वीकार करें (Accept)</span>
-                                  </button>
+                                  <div className="flex gap-1.5 shrink-0">
+                                    <button
+                                      onClick={() => handleRejectOffer(item._id, offer._id)}
+                                      className="py-1.5 px-3 bg-white hover:bg-red-50 text-red-600 border border-red-200 rounded-xl text-xs font-bold shadow-xs flex items-center gap-1"
+                                    >
+                                      <span>अस्वीकार (Reject)</span>
+                                    </button>
+                                    <button
+                                      onClick={() => handleAcceptOffer(item._id, offer._id)}
+                                      className="py-1.5 px-3 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1"
+                                    >
+                                      <FiCheck className="w-3.5 h-3.5" />
+                                      <span>स्वीकार करें (Accept)</span>
+                                    </button>
+                                  </div>
                                 )}
                               </div>
                             ))}
@@ -1177,6 +1226,16 @@ const LandLeasePage = () => {
                           स्थान: {item.location?.city || item.location?.district || 'Rajasthan'} • {item.sizeInAcres} एकड़
                         </p>
                       </div>
+
+                      {item.isCurrentTenant && item.status === 'leased' && (
+                        <button
+                          onClick={() => setPaymentsLandId(item.landId)}
+                          className="py-2 px-3 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl text-xs font-bold flex items-center gap-1 shrink-0"
+                        >
+                          <FiDollarSign className="w-3.5 h-3.5" />
+                          <span>भुगतान (Payments)</span>
+                        </button>
+                      )}
 
                       <div className="bg-gray-50 p-2.5 rounded-xl border border-gray-100 text-xs">
                         <span className="text-gray-400 block text-[10px]">आपका भेजा गया प्रस्ताव</span>
@@ -1468,6 +1527,14 @@ const LandLeasePage = () => {
           </div>
         )}
       </AnimatePresence>
+
+      {paymentsLandId && (
+        <LeasePaymentsModal
+          landId={paymentsLandId}
+          onClose={() => setPaymentsLandId(null)}
+          onChanged={fetchMyLeases}
+        />
+      )}
     </div>
   );
 };

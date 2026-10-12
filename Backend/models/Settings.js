@@ -68,6 +68,12 @@ const settingsSchema = new mongoose.Schema({
     min: 0,
     max: 100
   },
+  landLeaseCommissionPercentage: {
+    type: Number,
+    default: 2, // % platform commission on land lease rent / crop-share payments
+    min: 0,
+    max: 100
+  },
   workerCommissionPercentage: {
     type: Number,
     default: 10, // 10% default admin commission on worker earnings

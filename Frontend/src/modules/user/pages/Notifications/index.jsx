@@ -141,7 +141,14 @@ const Notifications = () => {
     const relatedType = (notif.relatedType || '').toLowerCase();
     const relatedId = notif.relatedId || notif.data?.bookingId || notif.bookingId;
 
-    if (type.includes('support') || relatedType.includes('support')) {
+    if (type.startsWith('land_lease')) {
+      // payment-related alerts open the payments modal of that lease; offer alerts open the right My Leases sub-tab
+      const sub = ['land_lease_offer_rejected'].includes(type) ? 'offers' : type === 'land_lease_offer_accepted' ? 'offers' : 'listings';
+      const pay = ['land_lease_payment', 'land_lease_settlement', 'land_lease_offer_accepted', 'land_lease_ended'].includes(type);
+      const params = new URLSearchParams({ tab: 'my-leases', sub });
+      if (pay && relatedId) params.set('pay', relatedId);
+      navigate(`/user/land-lease?${params.toString()}`);
+    } else if (type.includes('support') || relatedType.includes('support')) {
       const tId = notif.data?.ticketId || notif.relatedId;
       navigate(`/user/help-support${tId ? `?ticketId=${tId}` : ''}`);
     } else if (type.includes('dispute') || relatedType.includes('dispute')) {

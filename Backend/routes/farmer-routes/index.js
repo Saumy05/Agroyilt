@@ -66,7 +66,14 @@ router.get('/land-leases/my-leases', landLeaseController.getMyLandLeases);
 router.get('/land-leases/:id', landLeaseController.getLandLeaseById);
 router.post('/land-leases/:id/negotiate', landLeaseController.negotiateLease);
 router.post('/land-leases/:id/accept-offer', landLeaseController.acceptOffer);
+router.post('/land-leases/:id/reject-offer', landLeaseController.rejectOffer);
 router.post('/land-leases/:id/accept', landLeaseController.acceptLeaseTerms);
+router.get('/land-leases/:id/payments', landLeaseController.getPayments);
+router.post('/land-leases/:id/installments/:itemId/pay', landLeaseController.payInstallment);
+router.post('/land-leases/:id/settlements', landLeaseController.submitSettlement);
+router.post('/land-leases/:id/settlements/:itemId/confirm', landLeaseController.reviewSettlement('confirmed'));
+router.post('/land-leases/:id/settlements/:itemId/reject', landLeaseController.reviewSettlement('rejected'));
+router.post('/land-leases/:id/settlements/:itemId/pay', landLeaseController.paySettlement);
 router.delete('/land-leases/:id', landLeaseController.deleteLand);
 
 // 9. Agreements

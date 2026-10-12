@@ -88,6 +88,7 @@ const AdminHeader = ({ onMenuClick }) => {
       { path: '/admin/marketplace', title: 'Agri Marketplace', description: 'Manage agricultural products (Seeds, Fertilizers) and marketplace listings' },
       { path: '/admin/products/orders', title: 'Global Marketplace Orders', description: 'Monitor all marketplace sales and fulfillment' },
       { path: '/admin/products', title: 'Machinery Management', description: 'Approve and manage heavy equipment, tractors, and machinery' },
+      { path: '/admin/land-leases', title: 'Land Leases', description: 'Monitor land lease listings, rent payments and commission' },
       { path: '/admin/soil-tests', title: 'Soil Testing', description: 'Manage and monitor soil testing requests' },
       { path: '/admin/roles', title: 'Roles', description: 'Save sets of permissions (Support Agent, Site Manager…) and reuse them when creating admins' },
       { path: '/admin/admin-management', title: 'Admin Management', description: 'Configure admins, track lead attribution & record monthly salary' },

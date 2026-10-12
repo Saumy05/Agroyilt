@@ -122,6 +122,16 @@
   },
   {
     "category": "FINANCE & PAYOUTS",
+    "title": "Land Leases",
+    "route": "/admin/land-leases",
+    "allowedRoles": [
+      "super_admin",
+      "admin"
+    ],
+    "children": []
+  },
+  {
+    "category": "FINANCE & PAYOUTS",
     "title": "Withdrawals",
     "route": "/admin/withdrawals",
     "allowedRoles": [

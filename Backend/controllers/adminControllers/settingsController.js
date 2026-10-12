@@ -55,6 +55,7 @@ exports.updateSettings = async (req, res, next) => {
       appName, appTagline, appLogo, appFavicon,
       // Worker Hiring & Commission Rules
       workerCommissionPercentage,
+      landLeaseCommissionPercentage,
       workerPlatformChargePercentage,
       maxIndependentWorkerRequest,
       workerSearchRadiusKm,
@@ -169,6 +170,12 @@ exports.updateSettings = async (req, res, next) => {
         const val = Number(workerCommissionPercentage);
         if (!isNaN(val) && val >= 0 && val <= 100) {
           settings.workerCommissionPercentage = val;
+        }
+      }
+      if (landLeaseCommissionPercentage !== undefined) {
+        const val = Number(landLeaseCommissionPercentage);
+        if (!isNaN(val) && val >= 0 && val <= 100) {
+          settings.landLeaseCommissionPercentage = val;
         }
       }
       if (workerPlatformChargePercentage !== undefined) {

@@ -54,6 +54,7 @@ startBookingReminderScheduler();
 // Initialize Requirement Expiry Scheduler (Bidding System)
 const { startRequirementScheduler } = require('./services/requirementScheduler');
 startRequirementScheduler();
+require('./services/landLeaseScheduler').startLandLeaseScheduler();
 
 // Initialize Worker Booking Expiry Scheduler (Worker request alerts & auto-expiry)
 const { startWorkerBookingExpiryScheduler } = require('./services/workerBookingExpiryService');
@@ -276,6 +277,7 @@ app.use('/api/admin', require('./routes/admin-routes/settings.routes'));
 app.use('/api/admin', require('./routes/admin-routes/reviewManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/productManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/soilTest.routes'));
+app.use('/api/admin', require('./routes/admin-routes/landLeaseManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/reportManagement.routes'));
 app.use('/api/admin/disputes', require('./routes/admin-routes/disputeManagement.routes'));
 app.use('/api/admin/settlements', require('./routes/admin-routes/settlementManagement.routes'));
