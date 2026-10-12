@@ -64,6 +64,23 @@ const ActiveWorkMonitoringHub = ({
     return candidate || Date.now();
   }, [activeWorkers, primaryWorker]);
 
+  // Break of the worker whose start drives the clock: the work time leaves out finished breaks and the one running now
+  const clockWorker = useMemo(() => {
+    let best = null;
+    let bestT = Infinity;
+    for (const w of activeWorkers.length ? activeWorkers : [primaryWorker]) {
+      const t = new Date(w.workStartedAt || w.otpVerifiedAt || NaN).getTime();
+      if (!isNaN(t) && t < bestT) { best = w; bestT = t; }
+    }
+    return best || primaryWorker || {};
+  }, [activeWorkers, primaryWorker]);
+  const doneBreakMs = (Number(clockWorker.breakDurationMinutes) || 0) * 60 * 1000;
+  const breakStartMs = clockWorker.breakStatus === 'ON_BREAK' && clockWorker.breakStartedAt
+    ? new Date(clockWorker.breakStartedAt).getTime() : null;
+  const onBreak = Boolean(breakStartMs) && !isNaN(breakStartMs);
+  const [breakUsed, setBreakUsed] = useState('00:00:00');
+  const [breakTotalMs, setBreakTotalMs] = useState(0);
+
   // Duration in minutes (defaults to 60 for hourly, or derived from durationMinutes)
   const durationMinutes = Number(trackingData?.durationMinutes) || 60;
   const isDaily = trackingData?.bookingType === 'DAILY';
@@ -79,9 +96,14 @@ const ActiveWorkMonitoringHub = ({
   useEffect(() => {
     const updateStopwatch = () => {
       const now = stopTimestamp || Date.now();
-      const diffMs = Math.max(0, now - startTimestamp);
+      const runningBreakMs = onBreak && !stopTimestamp ? Math.max(0, now - breakStartMs) : 0;
+      const totalBreakMs = doneBreakMs + runningBreakMs;
+      const diffMs = Math.max(0, now - startTimestamp - totalBreakMs);
       const totalSecs = Math.floor(diffMs / 1000);
       setElapsedSeconds(totalSecs);
+      setBreakTotalMs(totalBreakMs);
+      const bs = Math.floor(totalBreakMs / 1000);
+      setBreakUsed(`${String(Math.floor(bs / 3600)).padStart(2, '0')}:${String(Math.floor((bs % 3600) / 60)).padStart(2, '0')}:${String(bs % 60).padStart(2, '0')}`);
 
       const hours = String(Math.floor(totalSecs / 3600)).padStart(2, '0');
       const mins = String(Math.floor((totalSecs % 3600) / 60)).padStart(2, '0');
@@ -93,7 +115,7 @@ const ActiveWorkMonitoringHub = ({
     if (allStopped) return undefined;
     const interval = setInterval(updateStopwatch, 1000);
     return () => clearInterval(interval);
-  }, [startTimestamp, stopTimestamp, allStopped]);
+  }, [startTimestamp, stopTimestamp, allStopped, doneBreakMs, onBreak, breakStartMs]);
 
   // Progress and schedule metrics
   const elapsedMinutes = Math.floor(elapsedSeconds / 60);
@@ -205,7 +227,7 @@ const ActiveWorkMonitoringHub = ({
             <div className="flex items-center gap-1.5">
               <span className={`w-2.5 h-2.5 rounded-full shadow-sm ${allStopped ? 'bg-slate-300' : 'bg-emerald-300 animate-pulse'}`} />
               <span className="text-[11px] font-black uppercase tracking-wider text-white/80">
-                {allStopped ? 'Total Work Time' : 'Work Time'}
+                {allStopped ? 'Total Work Time' : onBreak ? 'Work Time (paused: on break)' : 'Work Time'}
               </span>
             </div>
           </div>
@@ -214,11 +236,16 @@ const ActiveWorkMonitoringHub = ({
             <p className="text-3xl sm:text-4xl font-mono font-black tracking-wider text-white drop-shadow-sm">
               {elapsed}
             </p>
+            {breakTotalMs > 0 && (
+              <p className="text-[11px] font-semibold text-white/80 mt-1">
+                ☕ {onBreak ? 'On break' : 'Break taken'}: {breakUsed} (not counted in work time)
+              </p>
+            )}
           </div>
 
           <div className="flex items-center justify-between text-xs text-white/80 pt-2 border-t border-white/20">
             <span className="text-[11px] font-semibold">For information only — the price is fixed</span>
-            <span className="font-bold text-white text-[11px]">{allStopped ? `⏹ Stopped ${stopDisplay}` : '🟢 Running'}</span>
+            <span className="font-bold text-white text-[11px]">{allStopped ? `⏹ Stopped ${stopDisplay}` : onBreak ? '☕ On break' : '🟢 Running'}</span>
           </div>
         </div>
 

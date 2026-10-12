@@ -18,9 +18,20 @@ import authStorage from '../../../../utils/authStorage';
 import flutterBridge from '../../../../utils/flutterBridge';
 import { rupees, paymentLineLabel } from '../../../../utils/workerPayment';
 
+const fmtClock = (ms) => {
+  const totalSecs = Math.floor(Math.max(0, ms) / 1000);
+  const hours = String(Math.floor(totalSecs / 3600)).padStart(2, '0');
+  const mins = String(Math.floor((totalSecs % 3600) / 60)).padStart(2, '0');
+  const secs = String(totalSecs % 60).padStart(2, '0');
+  return `${hours}:${mins}:${secs}`;
+};
+
 // Real-time Active Work Stopwatch component
+// Work time and break time are kept apart: work = time since start − finished breaks − the break running now.
 const ActiveWorkStopwatch = ({ job }) => {
-  const [elapsed, setElapsed] = useState('00:00:00');
+  const [work, setWork] = useState('00:00:00');
+  const [breakUsed, setBreakUsed] = useState('00:00:00');
+  const [breakTaken, setBreakTaken] = useState(false);
 
   useEffect(() => {
     let start = null;
@@ -29,14 +40,17 @@ const ActiveWorkStopwatch = ({ job }) => {
     else if (job?.inProgressAt) start = new Date(job.inProgressAt);
 
     const startTime = start ? start.getTime() : Date.now();
+    const doneBreakMs = (Number(job?.breakDurationMinutes) || 0) * 60 * 1000;
+    const onBreak = job?.breakStatus === 'ON_BREAK' && job?.breakStartedAt;
+    const breakStart = onBreak ? new Date(job.breakStartedAt).getTime() : null;
 
     const updateTimer = () => {
-      const diffMs = Math.max(0, Date.now() - startTime);
-      const totalSecs = Math.floor(diffMs / 1000);
-      const hours = String(Math.floor(totalSecs / 3600)).padStart(2, '0');
-      const mins = String(Math.floor((totalSecs % 3600) / 60)).padStart(2, '0');
-      const secs = String(totalSecs % 60).padStart(2, '0');
-      setElapsed(`${hours}:${mins}:${secs}`);
+      const now = Date.now();
+      const runningBreakMs = breakStart ? Math.max(0, now - breakStart) : 0;
+      const totalBreakMs = doneBreakMs + runningBreakMs;
+      setWork(fmtClock(now - startTime - totalBreakMs));
+      setBreakUsed(fmtClock(totalBreakMs));
+      setBreakTaken(totalBreakMs > 0);
     };
 
     updateTimer();
@@ -56,14 +70,15 @@ const ActiveWorkStopwatch = ({ job }) => {
           <div>
             <div className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-amber-300 animate-ping" />
-              <p className="text-[11px] font-black uppercase tracking-wider text-amber-200">1-Hour Lunch Break Active</p>
+              <p className="text-[11px] font-black uppercase tracking-wider text-amber-200">On Break</p>
             </div>
-            <p className="text-sm font-bold text-white mt-0.5">Work timer paused • Auto-resumes in 60m</p>
+            <p className="text-2xl font-mono font-black tracking-wider text-white mt-0.5">{breakUsed}</p>
+            <p className="text-[10px] text-amber-200 font-semibold">Work timer paused • Auto-resumes after 60m</p>
           </div>
         </div>
         <div className="text-right text-xs text-amber-100">
-          <p className="font-semibold text-[10px] uppercase tracking-wider">Productive Work</p>
-          <p className="font-mono font-bold text-white text-base">{elapsed}</p>
+          <p className="font-semibold text-[10px] uppercase tracking-wider">Work Done</p>
+          <p className="font-mono font-bold text-white text-base">{work}</p>
         </div>
       </div>
     );
@@ -80,7 +95,8 @@ const ActiveWorkStopwatch = ({ job }) => {
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
             <p className="text-[11px] font-black uppercase tracking-wider text-amber-100">Live Work Timer</p>
           </div>
-          <p className="text-2xl font-mono font-black tracking-wider text-white mt-0.5">{elapsed}</p>
+          <p className="text-2xl font-mono font-black tracking-wider text-white mt-0.5">{work}</p>
+          {breakTaken && <p className="text-[10px] text-amber-100 font-semibold">Break taken: {breakUsed} (not counted)</p>}
         </div>
       </div>
       <div className="text-right text-xs text-amber-100">
