@@ -1224,6 +1224,7 @@ exports.leaderSelectWorkers = async (req, res) => {
     const offlineTeamWorkers = await Worker.find({
       _id: { $in: workerIds },
       isOfflineMember: true,
+      isActive: { $ne: false }, // inactive until the registration fee is paid
       $or: [
         { managedByLeaderId: leaderId },
         { teamId: request.teamId }

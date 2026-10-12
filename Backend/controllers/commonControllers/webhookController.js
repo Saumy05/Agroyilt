@@ -70,6 +70,14 @@ exports.razorpayWebhook = async (req, res) => {
         paymentRecord = await RegistrationFeePayment.findOne({ gatewayOrderId: paymentEntity.order_id });
       }
 
+      // a Team Leader paying an offline member's fee: same single-shot path as the leader's verify call
+      if (paymentRecord && paymentRecord.paidByWorkerId) {
+        await require('../../services/offlineMemberFeeService').markPaid(paymentRecord._id, { gatewayPaymentId: gatewayTransactionId });
+        logEntry.processedStatus = 'processed';
+        await logEntry.save();
+        return res.status(200).send('OK');
+      }
+
       if (paymentRecord) {
         if (paymentRecord.status !== 'PAID') {
           paymentRecord.status = 'PAID';

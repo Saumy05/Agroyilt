@@ -172,6 +172,12 @@ const AppLogin = () => {
         return;
       }
 
+      if (errorData?.code === 'OFFLINE_MEMBER_ACCOUNT') {
+        setFormError(errorData.message);
+        toastManager.error(errorData.message, { duration: 6000 });
+        return;
+      }
+
       if (errorData?.code === 'ACCOUNT_REJECTED') {
         const msg = 'Your registration was not approved. Please contact support for assistance.';
         setFormError(msg);
@@ -316,7 +322,8 @@ const AppLogin = () => {
         throw new Error('Verification token not received.');
       }
     } catch (err) {
-      const msg = 'Invalid or expired verification code. Please check and try again.';
+      const offlineMember = err.response?.data?.code === 'OFFLINE_MEMBER_ACCOUNT';
+      const msg = offlineMember ? err.response.data.message : 'Invalid or expired verification code. Please check and try again.';
       setFormError(msg);
       toastManager.error(msg);
       setIsLoading(false);

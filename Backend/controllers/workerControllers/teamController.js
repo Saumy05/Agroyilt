@@ -6,6 +6,7 @@ const Notification = require('../../models/Notification');
 
 const { getIO } = require('../../sockets');
 const { sendNotificationToWorker } = require('../../services/firebaseAdmin');
+const offlineMemberFeeService = require('../../services/offlineMemberFeeService');
 
 // Safe emit helper
 const emitSafe = (room, event, data) => {
@@ -80,7 +81,7 @@ exports.getMyTeam = async (req, res) => {
       
       const team = worker.teamId;
       const members = await Worker.find({ teamId: team._id, _id: { $ne: req.userId } })
-        .select('name phone status workerType skills rating profilePhoto dailyRate hourlyRate experience experienceYears serviceCategory serviceCategories isOfflineMember managedByLeaderId');
+        .select('name phone status workerType skills rating profilePhoto dailyRate hourlyRate experience experienceYears serviceCategory serviceCategories isOfflineMember managedByLeaderId registrationFeeStatus');
       return res.status(200).json({ success: true, team, members, isIndependent: false });
     } else {
       // WORKER (Single Active Team model: 0 or 1 team at any moment)
@@ -751,6 +752,10 @@ exports.addOfflineMember = async (req, res) => {
       skillsArray = leader.skills;
     }
 
+    // The admin's worker registration fee applies here too: the member stays inactive until the leader pays it
+    const fee = await offlineMemberFeeService.getWorkerFee();
+    const feeDue = fee.amount > 0;
+
     // Create the offline member worker
     const [offlineWorker] = await Worker.create([{
       name: name.trim(),
@@ -763,9 +768,11 @@ exports.addOfflineMember = async (req, res) => {
       creationSource: 'OFFLINE_MEMBER_CREATED',
       skills: skillsArray,
       status: 'active',
-      isActive: true,
+      isActive: !feeDue,
       approvalStatus: 'approved',
-      registrationFeeStatus: 'PAID',
+      registrationFeeStatus: feeDue ? 'UNPAID' : 'PAID',
+      registrationFeeAmount: 0,
+      registrationFeeVersion: fee.version,
       isAvailable: true,
       dailyRate: Number(dailyRate) || leader.dailyRate || 500,
       hourlyRate: Number(hourlyRate) || leader.hourlyRate || 70,
@@ -783,8 +790,11 @@ exports.addOfflineMember = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: `Offline member "${offlineWorker.name}" added to team successfully`,
+      message: feeDue
+        ? `Offline member "${offlineWorker.name}" added. Pay the ₹${fee.amount} registration fee to activate them.`
+        : `Offline member "${offlineWorker.name}" added to team successfully`,
       member: offlineWorker,
+      feeRequired: feeDue ? { amount: fee.amount, currency: fee.currency } : null,
       team
     });
   } catch (error) {
@@ -850,3 +860,41 @@ exports.updateOfflineMember = async (req, res) => {
   }
 };
 
+
+/**
+ * Registration fee for an offline member, paid by the Team Leader (see services/offlineMemberFeeService)
+ */
+const sendFeeResult = (res, r) => r.ok
+  ? res.status(200).json({ success: true, message: r.message, ...(r.data ? { data: r.data } : {}), free: Boolean(r.free) })
+  : res.status(r.code || 400).json({ success: false, message: r.message });
+
+/** POST /workers/team/offline-member/:memberId/fee/wallet */
+exports.payOfflineMemberFeeFromWallet = async (req, res) => {
+  try {
+    sendFeeResult(res, await offlineMemberFeeService.payFromWallet({ leaderId: req.userId, memberId: req.params.memberId }));
+  } catch (error) {
+    console.error('payOfflineMemberFeeFromWallet error:', error);
+    res.status(500).json({ success: false, message: 'Failed to pay registration fee' });
+  }
+};
+
+/** POST /workers/team/offline-member/:memberId/fee/order */
+exports.createOfflineMemberFeeOrder = async (req, res) => {
+  try {
+    sendFeeResult(res, await offlineMemberFeeService.createOnlineOrder({ leaderId: req.userId, memberId: req.params.memberId }));
+  } catch (error) {
+    console.error('createOfflineMemberFeeOrder error:', error);
+    res.status(500).json({ success: false, message: 'Failed to start registration fee payment' });
+  }
+};
+
+/** POST /workers/team/offline-member/fee/verify */
+exports.verifyOfflineMemberFee = async (req, res) => {
+  try {
+    const { razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: signature } = req.body || {};
+    sendFeeResult(res, await offlineMemberFeeService.verifyOnline({ leaderId: req.userId, orderId, paymentId, signature }));
+  } catch (error) {
+    console.error('verifyOfflineMemberFee error:', error);
+    res.status(500).json({ success: false, message: 'Failed to verify registration fee payment' });
+  }
+};

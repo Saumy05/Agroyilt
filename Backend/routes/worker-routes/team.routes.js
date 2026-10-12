@@ -42,6 +42,9 @@ router.post('/upgrade-to-leader', authenticate, isWorker, teamController.upgrade
 // 12. Add & Update Offline Member (A6)
 router.post('/offline-member', authenticate, isWorker, teamController.addOfflineMember);
 router.put('/offline-member/:memberId', authenticate, isWorker, teamController.updateOfflineMember);
+router.post('/offline-member/fee/verify', authenticate, isWorker, teamController.verifyOfflineMemberFee);
+router.post('/offline-member/:memberId/fee/wallet', authenticate, isWorker, teamController.payOfflineMemberFeeFromWallet);
+router.post('/offline-member/:memberId/fee/order', authenticate, isWorker, teamController.createOfflineMemberFeeOrder);
 
 module.exports = router;
 

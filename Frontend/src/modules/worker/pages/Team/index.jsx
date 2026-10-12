@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { 
   FiArrowLeft, FiUsers, FiUserPlus, FiUserCheck, FiUserX, 
   FiCheck, FiX, FiLogOut, FiUser, FiStar, FiCalendar, FiArrowRight,
-  FiPhone, FiAward, FiActivity, FiLayers, FiEdit2
+  FiPhone, FiAward, FiActivity, FiLayers, FiEdit2, FiCreditCard
 } from 'react-icons/fi';
 import { workerTheme as themeColors } from '../../../../theme';
 import api from '../../../../services/api';
@@ -11,6 +12,15 @@ import { toastManager } from '../../../../utils/toastManager';
 import { useSocket } from '../../../../context/SocketContext';
 import Header from '../../components/layout/Header';
 import workerRequestService from '../../../../services/workerRequestService';
+
+const loadRazorpay = () => new Promise((resolve) => {
+  if (window.Razorpay) return resolve(true);
+  const script = document.createElement('script');
+  script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+  script.onload = () => resolve(true);
+  script.onerror = () => resolve(false);
+  document.body.appendChild(script);
+});
 
 const WorkerTeam = () => {
   const navigate = useNavigate();
@@ -63,6 +73,73 @@ const WorkerTeam = () => {
 
   const [customSkillInput, setCustomSkillInput] = useState('');
 
+  // Registration fee for offline members: the admin's worker fee, paid by the Team Leader
+  const [offlineMemberFee, setOfflineMemberFee] = useState(0);
+  const [feeMethod, setFeeMethod] = useState('wallet'); // 'wallet' | 'online'
+  const [feeSheetMember, setFeeSheetMember] = useState(null);
+  const [payingFee, setPayingFee] = useState(false);
+  const walletBalance = Number(profile?.wallet?.balance) || 0;
+
+  /** Pays the member's fee; resolves true once the member is active. Amounts come from the server. */
+  const payMemberFee = async (memberId, method) => {
+    if (method === 'wallet') {
+      const res = await api.post(`/workers/team/offline-member/${memberId}/fee/wallet`);
+      toastManager.success(res.data.message || 'Registration fee paid');
+      return true;
+    }
+    if (!(await loadRazorpay())) throw new Error('Payment could not load. Check your internet.');
+    const orderRes = await api.post(`/workers/team/offline-member/${memberId}/fee/order`);
+    if (orderRes.data.free) {
+      toastManager.success(orderRes.data.message);
+      return true;
+    }
+    const order = orderRes.data.data;
+    const key = order.key || import.meta.env.VITE_RAZORPAY_KEY_ID;
+    if (!key) throw new Error('Online payment is not configured.');
+    return new Promise((resolve, reject) => {
+      const rzp = new window.Razorpay({
+        key,
+        amount: Math.round(order.amount * 100),
+        currency: order.currency || 'INR',
+        order_id: order.orderId,
+        name: 'AgroYilt',
+        description: 'Team member registration fee',
+        handler: async (response) => {
+          try {
+            const res = await api.post('/workers/team/offline-member/fee/verify', {
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature
+            });
+            toastManager.success(res.data.message || 'Registration fee paid');
+            resolve(true);
+          } catch (err) {
+            reject(err);
+          }
+        },
+        modal: { ondismiss: () => resolve(false) },
+        theme: { color: '#059669' }
+      });
+      rzp.open();
+    });
+  };
+
+  const handlePayFeeFromSheet = async (method) => {
+    if (!feeSheetMember) return;
+    try {
+      setPayingFee(true);
+      const paid = await payMemberFee(feeSheetMember._id, method);
+      if (paid) {
+        setFeeSheetMember(null);
+        fetchData();
+      }
+    } catch (err) {
+      toastManager.error(err.response?.data?.message || err.message || 'Registration fee payment failed');
+    } finally {
+      setPayingFee(false);
+    }
+  };
+
   const openAddOfflineModal = () => {
     setEditingMemberId(null);
     setOfflineForm({ name: '', phone: '', gender: 'male', skills: ['General Labor'], dailyRate: '', experienceYears: 1 });
@@ -113,6 +190,10 @@ const WorkerTeam = () => {
       toastManager.error('Please enter member name');
       return;
     }
+    if (!editingMemberId && offlineMemberFee > 0 && feeMethod === 'wallet' && walletBalance < offlineMemberFee) {
+      toastManager.error('Wallet balance is low for the registration fee. Choose Pay Online.');
+      return;
+    }
     try {
       setSubmittingOffline(true);
       const payload = {
@@ -131,8 +212,20 @@ const WorkerTeam = () => {
         res = await api.post('/workers/team/offline-member', payload);
       }
 
-      if (res.data.success) {
+      if (res.data.success && res.data.feeRequired && res.data.member?._id) {
+        // member saved but inactive: pay the fee now; if that fails it can be paid from the member list
+        let paid = false;
+        try {
+          paid = await payMemberFee(res.data.member._id, feeMethod);
+        } catch (err) {
+          toastManager.error(err.response?.data?.message || err.message || 'Registration fee payment failed');
+        }
+        if (!paid) toastManager.info('Member saved. Pay the registration fee from your team list to activate them.', { duration: 6000 });
+      } else if (res.data.success) {
         toastManager.success(res.data.message || (editingMemberId ? 'Offline member updated successfully!' : 'Offline member added successfully!'));
+      }
+
+      if (res.data.success) {
         setIsOfflineModalOpen(false);
         setEditingMemberId(null);
         setOfflineForm({ name: '', phone: '', gender: 'male', skills: ['General Labor'], dailyRate: '', experienceYears: 1 });
@@ -162,6 +255,11 @@ const WorkerTeam = () => {
         setProfile(profileRes.data.worker);
         currentWorkerType = profileRes.data.worker.workerType;
       }
+
+      // Registration fee the admin set for workers (applies to offline members; none set = free)
+      api.get('/fees/config/WORKER')
+        .then(r => setOfflineMemberFee(Number(r.data?.config?.amount) || 0))
+        .catch(() => setOfflineMemberFee(0));
 
       // Fetch team
       const teamRes = await api.get('/workers/team/me');
@@ -551,6 +649,7 @@ const WorkerTeam = () => {
               ) : (
                 members.map(member => {
                   const online = isOnlineStatus(member.status);
+                  const feePending = member.isOfflineMember && member.registrationFeeStatus && member.registrationFeeStatus !== 'PAID';
                   const skillsList = Array.isArray(member.skills) && member.skills.length > 0 
                     ? member.skills 
                     : (member.serviceCategory ? [member.serviceCategory] : []);
@@ -595,10 +694,24 @@ const WorkerTeam = () => {
                               <FiPhone size={11} className="text-slate-400" /> 
                               {member.phone || (member.isOfflineMember ? 'No Phone (Leader Managed)' : 'No Phone')}
                             </span>
-                            <span className={`text-[10px] font-bold uppercase tracking-wider ${member.isOfflineMember ? 'text-amber-600 font-bold' : (online ? 'text-emerald-600' : 'text-slate-400')}`}>
-                              {member.isOfflineMember ? '• Direct Dispatch' : (online ? '• Online' : '• Offline')}
+                            <span className={`text-[10px] font-bold uppercase tracking-wider ${feePending ? 'text-red-600' : member.isOfflineMember ? 'text-amber-600 font-bold' : (online ? 'text-emerald-600' : 'text-slate-400')}`}>
+                              {feePending ? '• Inactive' : member.isOfflineMember ? '• Direct Dispatch' : (online ? '• Online' : '• Offline')}
                             </span>
                           </div>
+
+                          {feePending && (
+                            <div className="mt-2 flex items-center justify-between gap-2 bg-red-50 border border-red-100 rounded-xl px-3 py-2">
+                              <p className="text-[11px] text-red-700 font-bold leading-snug">
+                                Registration fee pending. This member cannot be sent on jobs until it is paid.
+                              </p>
+                              <button
+                                onClick={() => setFeeSheetMember(member)}
+                                className="shrink-0 bg-red-600 hover:bg-red-700 text-white text-[11px] font-black px-3 py-1.5 rounded-lg"
+                              >
+                                Pay{offlineMemberFee > 0 ? ` ₹${offlineMemberFee}` : ''}
+                              </button>
+                            </div>
+                          )}
 
                           {/* Skill Tags */}
                           {skillsList.length > 0 ? (
@@ -799,8 +912,8 @@ const WorkerTeam = () => {
       </main>
 
       {/* Add Offline Member Modal (A6) */}
-      {isOfflineModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+      {isOfflineModalOpen && createPortal(
+        <div className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100">
               <div className="flex items-center gap-2.5">
@@ -950,6 +1063,41 @@ const WorkerTeam = () => {
                 </div>
               </div>
 
+              {!editingMemberId && offlineMemberFee > 0 && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-3.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black uppercase tracking-wider text-amber-800">Registration Fee</span>
+                    <span className="text-base font-black text-amber-900">₹{offlineMemberFee}</span>
+                  </div>
+                  <p className="text-[11px] text-amber-800/80 mt-1 leading-snug">
+                    One-time fee set by the admin, paid by you as Team Leader. The member can be sent on jobs once it is paid.
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 mt-3">
+                    {[
+                      { id: 'wallet', label: 'From Wallet', sub: `Balance ₹${walletBalance.toLocaleString('en-IN')}` },
+                      { id: 'online', label: 'Pay Online', sub: 'UPI / Card' }
+                    ].map(opt => (
+                      <button
+                        type="button"
+                        key={opt.id}
+                        onClick={() => setFeeMethod(opt.id)}
+                        className={`py-2 px-3 rounded-xl text-left border transition-all ${
+                          feeMethod === opt.id
+                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span className="block text-xs font-black">{opt.label}</span>
+                        <span className={`block text-[10px] ${feeMethod === opt.id ? 'text-emerald-50' : 'text-slate-400'}`}>{opt.sub}</span>
+                      </button>
+                    ))}
+                  </div>
+                  {feeMethod === 'wallet' && walletBalance < offlineMemberFee && (
+                    <p className="text-[11px] text-red-600 font-bold mt-2">Wallet balance is low. Choose Pay Online.</p>
+                  )}
+                </div>
+              )}
+
               <div className="pt-2 flex gap-3">
                 <button
                   type="button"
@@ -965,12 +1113,59 @@ const WorkerTeam = () => {
                 >
                   {submittingOffline 
                     ? (editingMemberId ? 'Saving...' : 'Adding...') 
-                    : (editingMemberId ? 'Save Changes' : 'Add to Team')}
+                    : (editingMemberId ? 'Save Changes' : (offlineMemberFee > 0 ? `Add & Pay ₹${offlineMemberFee}` : 'Add to Team'))}
                 </button>
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Pay a pending offline member's registration fee */}
+      {feeSheetMember && createPortal(
+        <div className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-100">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                  <FiCreditCard size={20} />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-800 text-base">Registration Fee</h3>
+                  <p className="text-xs text-slate-400">For {feeSheetMember.name}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => !payingFee && setFeeSheetMember(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center"
+              >
+                <FiX size={16} />
+              </button>
+            </div>
+            <div className="flex items-center justify-between mt-4">
+              <span className="text-xs font-bold text-slate-500">Amount</span>
+              <span className="text-xl font-black text-slate-800">₹{offlineMemberFee}</span>
+            </div>
+            <div className="space-y-2 mt-4">
+              <button
+                disabled={payingFee || walletBalance < offlineMemberFee}
+                onClick={() => handlePayFeeFromSheet('wallet')}
+                className="w-full py-3 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-md hover:bg-emerald-700 disabled:opacity-50"
+              >
+                Pay from Wallet (Balance ₹{walletBalance.toLocaleString('en-IN')})
+              </button>
+              <button
+                disabled={payingFee}
+                onClick={() => handlePayFeeFromSheet('online')}
+                className="w-full py-3 rounded-xl border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50 disabled:opacity-50"
+              >
+                {payingFee ? 'Processing...' : 'Pay Online (UPI / Card)'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

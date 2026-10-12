@@ -46,6 +46,17 @@ const registrationFeePaymentSchema = new mongoose.Schema({
   },
   paidAt: {
     type: Date
+  },
+  // Set when a Team Leader paid this fee for an offline (no-smartphone) member
+  paidByWorkerId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Worker',
+    default: null
+  },
+  paymentMethod: {
+    type: String,
+    enum: ['razorpay', 'wallet'],
+    default: 'razorpay'
   }
 }, { timestamps: true });
 

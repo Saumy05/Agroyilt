@@ -8,6 +8,13 @@ const { USER_ROLES, WORKER_STATUS } = require('../../utils/constants');
 const { validationResult } = require('express-validator');
 const mpinService = require('../../utils/mpinService');
 
+// Offline team members are run by their Team Leader (no KYC or approval of their own): no app login with that number
+const offlineMemberLoginBlocked = (res) => res.status(403).json({
+  success: false,
+  code: 'OFFLINE_MEMBER_ACCOUNT',
+  message: 'This number is added as an offline member of a team. To use the app yourself, ask your Team Leader to remove you from the team, then register as a worker.'
+});
+
 /**
  * Send OTP for worker registration/login
  */
@@ -84,6 +91,7 @@ const verifyLogin = async (req, res) => {
 
     // 2. Check if worker exists
     const worker = await Worker.findOne({ phone });
+    if (worker?.isOfflineMember) return offlineMemberLoginBlocked(res);
 
     // NEW FLOW: Always return a verification token, whether new or existing user.
     // The frontend will then either go to Register (if new) or Set MPIN / Reset MPIN.
@@ -328,6 +336,8 @@ const login = async (req, res) => {
       });
     }
 
+    if (worker.isOfflineMember) return offlineMemberLoginBlocked(res);
+
     if (!worker.isActive) {
       return res.status(403).json({ success: false, message: 'Account deactivated.' });
     }
@@ -471,6 +481,9 @@ const refreshToken = async (req, res) => {
       });
     }
 
+    // sessions an offline member opened before logins were blocked end here
+    if (worker.isOfflineMember) return offlineMemberLoginBlocked(res);
+
     // Check status
     if (!worker.isActive) {
       return res.status(403).json({
@@ -519,6 +532,8 @@ const loginWithMpin = async (req, res) => {
     if (!worker) {
       return res.status(404).json({ success: false, message: 'Worker not found' });
     }
+
+    if (worker.isOfflineMember) return offlineMemberLoginBlocked(res);
 
     if (!worker.isActive) {
       return res.status(403).json({ success: false, message: 'Your account has been deactivated.' });
@@ -699,6 +714,8 @@ const resetMpin = async (req, res) => {
     if (!worker) {
       return res.status(404).json({ success: false, message: 'Worker not found' });
     }
+
+    if (worker.isOfflineMember) return offlineMemberLoginBlocked(res);
 
     worker.mpin = await mpinService.hashMpin(mpin);
     worker.isMpinSet = true;
