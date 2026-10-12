@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import Button from '../Button';
 import NotificationWindow from './NotificationWindow';
+import AdminSearch from './AdminSearch';
 import { adminAuthService } from '../../../../services/authService';
 import authStorage from '../../../../utils/authStorage';
 import LogoutModal from '../../../../components/common/LogoutModal';
@@ -184,7 +185,7 @@ const AdminHeader = ({ onMenuClick }) => {
     >
       <div className="flex items-center justify-between px-4 lg:px-6 py-6">
         {/* Left: Menu Button & Page Title */}
-        <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
+        <div className="flex items-center gap-2 sm:gap-4 min-w-0 md:flex-1">
           <Button
             onClick={onMenuClick}
             variant="icon"
@@ -195,6 +196,11 @@ const AdminHeader = ({ onMenuClick }) => {
             <h1 className="text-lg sm:text-2xl font-bold text-gray-800 mb-0.5 sm:mb-1 truncate">{title}</h1>
             <p className="text-[10px] sm:text-xs text-gray-500 font-medium truncate hidden sm:block">{description}</p>
           </div>
+        </div>
+
+        {/* Center: Page search */}
+        <div className="flex-1 flex justify-center px-4">
+          <AdminSearch />
         </div>
 
         {/* Right: Notifications & Logout */}
