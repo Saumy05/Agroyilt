@@ -98,7 +98,7 @@ const FarmerRequestDetail = () => {
     setSelectedWorkerIds(prev => {
       if (prev.includes(workerId)) {
         if (prev.length <= 1) {
-          toast.error('At least 1 worker must be selected.');
+          toast.error('At least 1 worker must stay selected. To drop everyone, cancel the request instead.');
           return prev;
         }
         return prev.filter(id => id !== workerId);
@@ -198,6 +198,8 @@ const FarmerRequestDetail = () => {
 
   // Safely get available offers
   const offers = request.workerOffers || [];
+  // a team of one has nothing to choose: its card is not a toggle (tapping it would only raise an error)
+  const singleWorkerTeam = offers.length <= 1;
 
   return (
     <div className="min-h-screen bg-slate-50 pb-20">
@@ -346,8 +348,10 @@ const FarmerRequestDetail = () => {
                 </div>
 
                 <p className="text-xs text-slate-500 mb-4 font-medium">
-                  {offers.length > 0 
+                  {offers.length > 1
                     ? `The Team Leader assembled ${offers.length} workers. You can tap on any worker to include or exclude them according to your need and budget:`
+                    : offers.length === 1
+                    ? 'The Team Leader assembled 1 worker for your request:'
                     : `Searching for nearby Team Leaders who can provide a full team of ${request.requiredWorkers} workers...`}
                 </p>
 
@@ -370,8 +374,8 @@ const FarmerRequestDetail = () => {
                       return (
                         <div 
                           key={worker._id || idx} 
-                          onClick={() => toggleWorkerSelection(worker._id)}
-                          className={`flex items-start gap-3 p-3.5 rounded-2xl border-2 cursor-pointer transition-all ${
+                          onClick={() => { if (!singleWorkerTeam) toggleWorkerSelection(worker._id); }}
+                          className={`flex items-start gap-3 p-3.5 rounded-2xl border-2 ${singleWorkerTeam ? 'cursor-default' : 'cursor-pointer'} transition-all ${
                             isSelected 
                               ? 'border-emerald-500 bg-emerald-50/20 shadow-sm' 
                               : 'border-slate-200 bg-slate-50/60 opacity-60 hover:opacity-100 hover:border-slate-300'
