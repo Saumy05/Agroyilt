@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiSettings, FiGrid, FiDollarSign, FiSave, FiUser, FiMail, FiTrash2, FiPlus, FiUsers, FiShield, FiFileText, FiMapPin, FiPhone, FiHeadphones, FiMessageCircle, FiEdit, FiLock, FiUnlock, FiX, FiGlobe, FiUpload, FiCamera } from 'react-icons/fi';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { getSettings, updateSettings, updateAdminProfile, getAdminProfile, getAllAdmins, createAdmin, deleteAdmin, updateAdminDetails, toggleAdminStatus, getRegistrationFees, updateRegistrationFee } from '../../services/settingsService';
 import { toastManager } from '../../../../utils/toastManager';
 import { useBrand } from '../../../../context/BrandContext';
@@ -10,6 +10,7 @@ import authStorage from '../../../../utils/authStorage';
 
 const AdminSettings = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { refreshBrandSettings } = useBrand();
   const [settings, setSettings] = useState({
     // No operator assignment in Agroyilt
@@ -265,6 +266,30 @@ const AdminSettings = () => {
   const [loading, setLoading] = useState(false);
   const [profileLoading, setProfileLoading] = useState(false);
   const [activeView, setActiveView] = useState('main'); // 'main', 'profile', 'financial', 'system', 'admins'
+
+  // Deep link from the admin search: ?view=financial&field=<input name>
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const view = params.get('view');
+    const field = params.get('field');
+    if (!view) return;
+    setActiveView(view);
+    if (!field) return;
+    let tries = 0;
+    const timer = setInterval(() => {
+      const el = document.querySelector(`[name="${field}"]`);
+      if (el || ++tries > 20) {
+        clearInterval(timer);
+        if (!el) return;
+        const box = el.closest('div') || el;
+        box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        try { el.focus({ preventScroll: true }); } catch (e) { /* not focusable */ }
+        box.classList.add('ring-2', 'ring-blue-400', 'rounded-lg', 'transition-shadow');
+        setTimeout(() => box.classList.remove('ring-2', 'ring-blue-400'), 2500);
+      }
+    }, 150);
+    return () => clearInterval(timer);
+  }, [location.key]);
 
   const storedRole = (() => {
     try {

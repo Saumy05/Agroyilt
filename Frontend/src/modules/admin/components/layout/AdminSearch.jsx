@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import adminMenu from '../../config/adminMenu.json';
 import authStorage from '../../../../utils/authStorage';
 import { getChildRoute, filterMenuForAdmin } from '../../utils/adminNavigation';
+import { ADMIN_SETTINGS_INDEX, settingRoute } from '../../utils/adminSettingsIndex';
 
 const MAX_RESULTS = 8;
 
@@ -19,7 +20,7 @@ const AdminSearch = () => {
   const entries = useMemo(() => {
     const admin = authStorage.getUserData('admin') || {};
     const menu = filterMenuForAdmin(adminMenu, { role: admin.role || 'admin', permissions: admin.permissions });
-    return menu.flatMap((item) => [
+    const pages = menu.flatMap((item) => [
       { label: item.title, group: item.category, route: item.route },
       ...(item.children || []).map((child) => ({
         label: child,
@@ -27,6 +28,16 @@ const AdminSearch = () => {
         route: getChildRoute(item.route, child),
       })),
     ]);
+    // Individual settings are searchable only if the admin can open Settings
+    const settings = menu.some((item) => item.title === 'Settings')
+      ? ADMIN_SETTINGS_INDEX.map((s) => ({
+          label: s.label,
+          group: `Settings · ${s.view === 'financial' ? 'Financial' : 'System Preferences'}`,
+          route: settingRoute(s),
+          keywords: s.keywords,
+        }))
+      : [];
+    return [...pages, ...settings];
   }, []);
 
   const results = useMemo(() => {
@@ -40,6 +51,7 @@ const AdminSearch = () => {
         if (label.startsWith(q)) score = 3;
         else if (label.includes(q)) score = 2;
         else if (`${group} ${label}`.includes(q)) score = 1;
+        else if (e.keywords && e.keywords.includes(q)) score = 1;
         return { ...e, score };
       })
       .filter((e) => e.score > 0)
@@ -105,8 +117,8 @@ const AdminSearch = () => {
         }}
         onFocus={() => setOpen(true)}
         onKeyDown={onKeyDown}
-        placeholder="Search pages…  (Ctrl K)"
-        aria-label="Search admin pages"
+        placeholder="Search pages & settings…  (Ctrl K)"
+        aria-label="Search admin pages and settings"
         className="w-full h-10 pl-9 pr-8 rounded-xl bg-gray-50 border border-gray-200/80 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
       />
       {query && (
@@ -125,7 +137,7 @@ const AdminSearch = () => {
       {open && query.trim() && (
         <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl border border-gray-200 shadow-lg overflow-hidden z-40">
           {results.length === 0 ? (
-            <p className="px-4 py-3 text-sm text-gray-500">No pages match “{query.trim()}”</p>
+            <p className="px-4 py-3 text-sm text-gray-500">No pages or settings match “{query.trim()}”</p>
           ) : (
             <ul role="listbox">
               {results.map((r, i) => (
