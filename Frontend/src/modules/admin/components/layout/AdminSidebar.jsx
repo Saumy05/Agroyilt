@@ -38,6 +38,7 @@ import {
 import adminMenu from "../../config/adminMenu.json";
 import dashboardService from "../../services/dashboardService";
 import authStorage from "../../../../utils/authStorage";
+import { useBrand } from "../../../../context/BrandContext";
 import { getChildRoute, filterMenuForAdmin } from "../../utils/adminNavigation";
 
 // Icon mapping for menu items
@@ -75,6 +76,7 @@ const iconMap = {
 const AdminSidebar = ({ isOpen, onClose }) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { appLogo, appName } = useBrand();
   const [expandedItems, setExpandedItems] = useState({});
   const [isMobile, setIsMobile] = useState(false);
   const [query, setQuery] = useState("");
@@ -380,7 +382,20 @@ const AdminSidebar = ({ isOpen, onClose }) => {
   const sidebarContent = (
     <div className="h-full w-full flex flex-col bg-slate-800">
       {/* Header Section */}
-      <div className="px-4 py-5 border-b border-slate-700/80 bg-slate-900">
+      <div className="px-4 pt-4 pb-5 border-b border-slate-700/80 bg-slate-900">
+        {/* Brand logo */}
+        <div
+          className="flex items-center gap-3 pb-4 mb-4 border-b border-slate-700/60 cursor-pointer"
+          onClick={() => handleMenuItemClick("/admin/dashboard")}>
+          <img
+            src={appLogo}
+            alt={appName}
+            className="h-10 w-10 rounded-lg object-contain bg-white/95 p-1 flex-shrink-0"
+          />
+          <span className="font-black text-white text-lg tracking-tight truncate">
+            {appName}
+          </span>
+        </div>
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <div
