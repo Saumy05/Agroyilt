@@ -118,7 +118,7 @@ const AppEntry = () => {
           fontWeight: 800,
           letterSpacing: '-0.5px',
           marginBottom: '12px',
-          fontFamily: "'Inter', 'Segoe UI', sans-serif",
+          fontFamily: "'Plus Jakarta Sans', 'Segoe UI', sans-serif",
         }}>
           {appName || 'AgroYilt'}
         </h1>
@@ -130,7 +130,7 @@ const AppEntry = () => {
           fontWeight: 400,
           lineHeight: 1.6,
           maxWidth: '280px',
-          fontFamily: "'Inter', 'Segoe UI', sans-serif",
+          fontFamily: "'Plus Jakarta Sans', 'Segoe UI', sans-serif",
         }}>
           Smart farming services — book equipment, grow your business, find work near you.
         </p>
@@ -168,7 +168,7 @@ const AppEntry = () => {
             fontWeight: 700,
             cursor: 'pointer',
             boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
-            fontFamily: "'Inter', 'Segoe UI', sans-serif",
+            fontFamily: "'Plus Jakarta Sans', 'Segoe UI', sans-serif",
             transition: 'transform 0.15s, box-shadow 0.15s',
             width: '100%',
           }}
@@ -194,7 +194,7 @@ const AppEntry = () => {
             fontWeight: 600,
             cursor: 'pointer',
             backdropFilter: 'blur(8px)',
-            fontFamily: "'Inter', 'Segoe UI', sans-serif",
+            fontFamily: "'Plus Jakarta Sans', 'Segoe UI', sans-serif",
             transition: 'transform 0.15s',
             width: '100%',
           }}
@@ -210,7 +210,7 @@ const AppEntry = () => {
           color: 'rgba(255,255,255,0.5)',
           fontSize: '0.75rem',
           marginTop: '8px',
-          fontFamily: "'Inter', 'Segoe UI', sans-serif",
+          fontFamily: "'Plus Jakarta Sans', 'Segoe UI', sans-serif",
         }}>
           By continuing, you agree to our Terms & Privacy Policy
         </p>
