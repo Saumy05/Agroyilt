@@ -457,7 +457,18 @@ const AdminSettings = () => {
       const payload = Object.fromEntries(
         Object.entries(financialSettings).map(([k, v]) => [k, v === '' ? 0 : Number(v)])
       );
-      await updateSettings(payload);
+      await updateSettings({
+        ...payload,
+        workerPenaltyEnabled: Boolean(systemSettings.workerPenaltyEnabled),
+        workerPenaltyType: systemSettings.workerPenaltyType || 'fixed',
+        workerPenaltyAmount: Number(systemSettings.workerPenaltyAmount) || 0,
+        workerPenaltyPerMinute: Number(systemSettings.workerPenaltyPerMinute) || 0,
+        workerPenaltyFreeMinutes: Number(systemSettings.workerPenaltyFreeMinutes) || 0,
+        workerPenaltyMaxAmount: Number(systemSettings.workerPenaltyMaxAmount) || 0,
+        workerPenaltyPercentage: Number(systemSettings.workerPenaltyPercentage) || 0,
+        maxWorkerDues: Math.max(0, Number(systemSettings.maxWorkerDues) || 0),
+        workerCashPaymentEnabled: Boolean(systemSettings.workerCashPaymentEnabled)
+      });
       toastManager.success('Financial settings updated');
     } catch (error) {
       toastManager.error('Failed to update settings');
@@ -574,17 +585,8 @@ const AdminSettings = () => {
       const payload = {
         maxIndependentWorkerRequest: Number(systemSettings.maxIndependentWorkerRequest) || 5,
         workerSearchRadiusKm: Number(systemSettings.workerSearchRadiusKm) || 25,
-        workerPenaltyEnabled: Boolean(systemSettings.workerPenaltyEnabled),
-        workerPenaltyType: systemSettings.workerPenaltyType || 'fixed',
-        workerPenaltyAmount: Number(systemSettings.workerPenaltyAmount) || 0,
-        workerPenaltyPerMinute: Number(systemSettings.workerPenaltyPerMinute) || 0,
-        workerPenaltyFreeMinutes: Number(systemSettings.workerPenaltyFreeMinutes) || 0,
-        workerPenaltyMaxAmount: Number(systemSettings.workerPenaltyMaxAmount) || 0,
-        workerPenaltyPercentage: Number(systemSettings.workerPenaltyPercentage) || 0,
         extensionExpiryMinutes: Number(systemSettings.extensionExpiryMinutes) || 30,
-        maxWorkerDues: Math.max(0, Number(systemSettings.maxWorkerDues) || 0),
         supportMaxOpenClaims: Math.min(50, Math.max(1, Math.floor(Number(systemSettings.supportMaxOpenClaims)) || 5)),
-        workerCashPaymentEnabled: Boolean(systemSettings.workerCashPaymentEnabled),
         workerJourneyWindowMinutes: Math.max(0, Number(systemSettings.workerJourneyWindowMinutes) || 0),
         workerEarlyStartMinutes: Math.max(0, Number(systemSettings.workerEarlyStartMinutes) || 0)
       };
@@ -1093,26 +1095,16 @@ const AdminSettings = () => {
                   <h2 className="text-lg font-bold text-gray-800">Financial Configuration</h2>
                 </div>
 
+                <p className="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 mb-5">
+                  Per-service rates (hourly, per-acre, distance trips) are set in{' '}
+                  <button type="button" onClick={() => navigate('/admin/equipment-catalog/sections')} className="font-semibold text-green-700 hover:underline">
+                    Services
+                  </button>.
+                </p>
+
                 <form onSubmit={handleFinancialSave} className="space-y-5">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Vendor Cash Limit (₹)</label>
-                      <input type="number" name="vendorCashLimit" value={financialSettings.vendorCashLimit} onChange={handleFinancialChange}
-                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Machinery Booking GST (%)</label>
-                      <input type="number" name="rentalGstPercentage" value={financialSettings.rentalGstPercentage} onChange={handleFinancialChange}
-                        min="0" max="100"
-                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all" />
-                      <p className="text-[10px] text-gray-400 mt-1">GST added to every machinery booking (tractor, harvester, drone, etc.)</p>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Cancellation Penalty (₹)</label>
-                      <input type="number" name="cancellationPenalty" value={financialSettings.cancellationPenalty} onChange={handleFinancialChange}
-                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all" />
-                    </div>
+                    <h3 className="md:col-span-2 text-xs font-bold text-gray-700 uppercase tracking-wider pb-1 border-b border-gray-100">Commissions & Fees</h3>
                     {/* Vendor Booking Commission Field */}
                     <div className="md:col-span-1">
                       <div className="flex justify-between items-center mb-1.5">
@@ -1179,6 +1171,160 @@ const AdminSettings = () => {
                       />
                     </div>
 
+                    <h3 className="md:col-span-2 text-xs font-bold text-gray-700 uppercase tracking-wider pb-1 border-b border-gray-100 mt-2">Taxes</h3>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Machinery Booking GST (%)</label>
+                      <input type="number" name="rentalGstPercentage" value={financialSettings.rentalGstPercentage} onChange={handleFinancialChange}
+                        min="0" max="100"
+                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all" />
+                      <p className="text-[10px] text-gray-400 mt-1">GST added to every machinery booking (tractor, harvester, drone, etc.)</p>
+                    </div>
+
+                    <h3 className="md:col-span-2 text-xs font-bold text-gray-700 uppercase tracking-wider pb-1 border-b border-gray-100 mt-2">Penalties</h3>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Cancellation Penalty (₹)</label>
+                      <input type="number" name="cancellationPenalty" value={financialSettings.cancellationPenalty} onChange={handleFinancialChange}
+                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all" />
+                    </div>
+                  {/* Worker Late-Arrival Penalty Rules (Hourly Only) */}
+                  <div className="md:col-span-2">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="text-xs font-bold text-amber-900 uppercase tracking-wider">Worker Late-Arrival Penalty (Hourly)</h3>
+                        <p className="text-xs text-gray-500">Deducts a penalty from worker earnings if worker arrives after grace period.</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          name="workerPenaltyEnabled"
+                          checked={Boolean(systemSettings.workerPenaltyEnabled)}
+                          onChange={handleSystemChange}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600"></div>
+                      </label>
+                    </div>
+
+                    {systemSettings.workerPenaltyEnabled && (
+                      <div className="p-4 bg-amber-50/60 rounded-xl border border-amber-200/60 space-y-4 animate-fadeIn">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs font-semibold text-amber-950 uppercase mb-1.5">Penalty Rule Type</label>
+                            <select
+                              name="workerPenaltyType"
+                              value={systemSettings.workerPenaltyType}
+                              onChange={handleSystemChange}
+                              className="w-full px-4 py-2.5 bg-white border border-amber-300 rounded-lg outline-none focus:border-amber-600 font-bold text-gray-800 text-sm"
+                            >
+                              <option value="fixed">Fixed Flat Penalty (₹)</option>
+                              <option value="per_minute">Per Minute Late (₹/min)</option>
+                              <option value="percentage">Percentage of Booking (%)</option>
+                            </select>
+                            <p className="text-[10px] text-amber-700 mt-1">Choose how late penalty is calculated.</p>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold text-amber-950 uppercase mb-1.5">Grace Period (Free Minutes)</label>
+                            <input
+                              type="number"
+                              name="workerPenaltyFreeMinutes"
+                              value={systemSettings.workerPenaltyFreeMinutes}
+                              onChange={handleSystemChange}
+                              min="0" max="60"
+                              className="w-full px-4 py-2.5 bg-white border border-amber-300 rounded-lg outline-none focus:border-amber-600 font-bold text-gray-800 text-sm"
+                            />
+                            <p className="text-[10px] text-amber-700 mt-1">No penalty applied if arrival is within these minutes.</p>
+                          </div>
+                        </div>
+
+                        {systemSettings.workerPenaltyType === 'fixed' && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                            <div>
+                              <label className="block text-xs font-semibold text-amber-950 uppercase mb-1.5">Flat Penalty Amount (₹)</label>
+                              <input
+                                type="number"
+                                name="workerPenaltyAmount"
+                                value={systemSettings.workerPenaltyAmount}
+                                onChange={handleSystemChange}
+                                min="0"
+                                className="w-full px-4 py-2.5 bg-white border border-amber-300 rounded-lg outline-none focus:border-amber-600 font-bold text-gray-800 text-sm"
+                              />
+                              <p className="text-[10px] text-amber-700 mt-1">Fixed rupee deduction on worker earnings.</p>
+                            </div>
+                          </div>
+                        )}
+
+                        {systemSettings.workerPenaltyType === 'per_minute' && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                            <div>
+                              <label className="block text-xs font-semibold text-amber-950 uppercase mb-1.5">Rate Per Minute (₹/min)</label>
+                              <input
+                                type="number"
+                                name="workerPenaltyPerMinute"
+                                value={systemSettings.workerPenaltyPerMinute}
+                                onChange={handleSystemChange}
+                                min="0"
+                                className="w-full px-4 py-2.5 bg-white border border-amber-300 rounded-lg outline-none focus:border-amber-600 font-bold text-gray-800 text-sm"
+                              />
+                              <p className="text-[10px] text-amber-700 mt-1">Penalty accumulated for each minute late after grace period.</p>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-amber-950 uppercase mb-1.5">Maximum Penalty Cap (₹)</label>
+                              <input
+                                type="number"
+                                name="workerPenaltyMaxAmount"
+                                value={systemSettings.workerPenaltyMaxAmount}
+                                onChange={handleSystemChange}
+                                min="0"
+                                className="w-full px-4 py-2.5 bg-white border border-amber-300 rounded-lg outline-none focus:border-amber-600 font-bold text-gray-800 text-sm"
+                              />
+                              <p className="text-[10px] text-amber-700 mt-1">Maximum penalty ceiling that cannot be exceeded.</p>
+                            </div>
+                          </div>
+                        )}
+
+                        {systemSettings.workerPenaltyType === 'percentage' && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                            <div>
+                              <label className="block text-xs font-semibold text-amber-950 uppercase mb-1.5">Penalty Percentage (%)</label>
+                              <input
+                                type="number"
+                                name="workerPenaltyPercentage"
+                                value={systemSettings.workerPenaltyPercentage}
+                                onChange={handleSystemChange}
+                                min="0" max="100"
+                                className="w-full px-4 py-2.5 bg-white border border-amber-300 rounded-lg outline-none focus:border-amber-600 font-bold text-gray-800 text-sm"
+                              />
+                              <p className="text-[10px] text-amber-700 mt-1">Deducted as a % of worker gross earnings.</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                    <h3 className="md:col-span-2 text-xs font-bold text-gray-700 uppercase tracking-wider pb-1 border-b border-gray-100 mt-2">Limits</h3>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Vendor Cash Limit (₹)</label>
+                      <input type="number" name="vendorCashLimit" value={financialSettings.vendorCashLimit} onChange={handleFinancialChange}
+                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all" />
+                    </div>
+                    {/* Worker dues & cash bookings */}
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Worker Dues Limit (₹)</label>
+                      <input type="number" name="maxWorkerDues" value={systemSettings.maxWorkerDues} onChange={handleSystemChange}
+                        min="0"
+                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all" />
+                      <p className="text-[10px] text-gray-400 mt-1">A worker who owes more than this (platform fees, commission, penalties) cannot take new jobs until they pay. Unblocked automatically once back under it.</p>
+                    </div>
+                    <label className="flex items-start gap-3 cursor-pointer pt-5">
+                      <input type="checkbox" name="workerCashPaymentEnabled" checked={Boolean(systemSettings.workerCashPaymentEnabled)} onChange={handleSystemChange}
+                        className="w-5 h-5 mt-0.5 accent-green-600" />
+                      <span>
+                        <span className="block text-sm font-semibold text-gray-800">Allow cash payment for worker bookings</span>
+                        <span className="block text-[10px] text-gray-500">When off, farmers must pay online when booking workers.</span>
+                      </span>
+                    </label>
                     {/* Minimum Withdrawal Amount */}
                     <div className="md:col-span-2">
                       <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">
@@ -1433,123 +1579,6 @@ const AdminSettings = () => {
                     </div>
                   </div>
 
-                  {/* Worker Late-Arrival Penalty Rules (Hourly Only) */}
-                  <div className="pt-4 border-t border-gray-100">
-                    <div className="flex items-center justify-between mb-4">
-                      <div>
-                        <h3 className="text-xs font-bold text-amber-900 uppercase tracking-wider">Worker Late-Arrival Penalty (Hourly)</h3>
-                        <p className="text-xs text-gray-500">Deducts a penalty from worker earnings if worker arrives after grace period.</p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          name="workerPenaltyEnabled"
-                          checked={Boolean(systemSettings.workerPenaltyEnabled)}
-                          onChange={handleSystemChange}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600"></div>
-                      </label>
-                    </div>
-
-                    {systemSettings.workerPenaltyEnabled && (
-                      <div className="p-4 bg-amber-50/60 rounded-xl border border-amber-200/60 space-y-4 animate-fadeIn">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-xs font-semibold text-amber-950 uppercase mb-1.5">Penalty Rule Type</label>
-                            <select
-                              name="workerPenaltyType"
-                              value={systemSettings.workerPenaltyType}
-                              onChange={handleSystemChange}
-                              className="w-full px-4 py-2.5 bg-white border border-amber-300 rounded-lg outline-none focus:border-amber-600 font-bold text-gray-800 text-sm"
-                            >
-                              <option value="fixed">Fixed Flat Penalty (₹)</option>
-                              <option value="per_minute">Per Minute Late (₹/min)</option>
-                              <option value="percentage">Percentage of Booking (%)</option>
-                            </select>
-                            <p className="text-[10px] text-amber-700 mt-1">Choose how late penalty is calculated.</p>
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-semibold text-amber-950 uppercase mb-1.5">Grace Period (Free Minutes)</label>
-                            <input
-                              type="number"
-                              name="workerPenaltyFreeMinutes"
-                              value={systemSettings.workerPenaltyFreeMinutes}
-                              onChange={handleSystemChange}
-                              min="0" max="60"
-                              className="w-full px-4 py-2.5 bg-white border border-amber-300 rounded-lg outline-none focus:border-amber-600 font-bold text-gray-800 text-sm"
-                            />
-                            <p className="text-[10px] text-amber-700 mt-1">No penalty applied if arrival is within these minutes.</p>
-                          </div>
-                        </div>
-
-                        {systemSettings.workerPenaltyType === 'fixed' && (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-                            <div>
-                              <label className="block text-xs font-semibold text-amber-950 uppercase mb-1.5">Flat Penalty Amount (₹)</label>
-                              <input
-                                type="number"
-                                name="workerPenaltyAmount"
-                                value={systemSettings.workerPenaltyAmount}
-                                onChange={handleSystemChange}
-                                min="0"
-                                className="w-full px-4 py-2.5 bg-white border border-amber-300 rounded-lg outline-none focus:border-amber-600 font-bold text-gray-800 text-sm"
-                              />
-                              <p className="text-[10px] text-amber-700 mt-1">Fixed rupee deduction on worker earnings.</p>
-                            </div>
-                          </div>
-                        )}
-
-                        {systemSettings.workerPenaltyType === 'per_minute' && (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-                            <div>
-                              <label className="block text-xs font-semibold text-amber-950 uppercase mb-1.5">Rate Per Minute (₹/min)</label>
-                              <input
-                                type="number"
-                                name="workerPenaltyPerMinute"
-                                value={systemSettings.workerPenaltyPerMinute}
-                                onChange={handleSystemChange}
-                                min="0"
-                                className="w-full px-4 py-2.5 bg-white border border-amber-300 rounded-lg outline-none focus:border-amber-600 font-bold text-gray-800 text-sm"
-                              />
-                              <p className="text-[10px] text-amber-700 mt-1">Penalty accumulated for each minute late after grace period.</p>
-                            </div>
-                            <div>
-                              <label className="block text-xs font-semibold text-amber-950 uppercase mb-1.5">Maximum Penalty Cap (₹)</label>
-                              <input
-                                type="number"
-                                name="workerPenaltyMaxAmount"
-                                value={systemSettings.workerPenaltyMaxAmount}
-                                onChange={handleSystemChange}
-                                min="0"
-                                className="w-full px-4 py-2.5 bg-white border border-amber-300 rounded-lg outline-none focus:border-amber-600 font-bold text-gray-800 text-sm"
-                              />
-                              <p className="text-[10px] text-amber-700 mt-1">Maximum penalty ceiling that cannot be exceeded.</p>
-                            </div>
-                          </div>
-                        )}
-
-                        {systemSettings.workerPenaltyType === 'percentage' && (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-                            <div>
-                              <label className="block text-xs font-semibold text-amber-950 uppercase mb-1.5">Penalty Percentage (%)</label>
-                              <input
-                                type="number"
-                                name="workerPenaltyPercentage"
-                                value={systemSettings.workerPenaltyPercentage}
-                                onChange={handleSystemChange}
-                                min="0" max="100"
-                                className="w-full px-4 py-2.5 bg-white border border-amber-300 rounded-lg outline-none focus:border-amber-600 font-bold text-gray-800 text-sm"
-                              />
-                              <p className="text-[10px] text-amber-700 mt-1">Deducted as a % of worker gross earnings.</p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
                   {/* When workers may start (before the booked time) */}
                   <div className="border border-gray-200 rounded-xl p-4 space-y-4">
                     <h3 className="text-sm font-bold text-gray-800">Job Start Timing</h3>
@@ -1576,42 +1605,8 @@ const AdminSettings = () => {
                           min="0" max="1440"
                           className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-gray-500 font-bold text-gray-800 text-sm"
                         />
-                        <p className="text-[10px] text-gray-500 mt-1">How early work may start if the farmer agrees. Being late is always allowed (late penalty applies).</p>
+                        <p className="text-[10px] text-gray-500 mt-1">How early work may start if the farmer agrees. Being late is always allowed (see Financial → Penalties).</p>
                       </div>
-                    </div>
-                  </div>
-
-                  {/* Worker dues & cash bookings */}
-                  <div className="border border-gray-200 rounded-xl p-4 space-y-4">
-                    <h3 className="text-sm font-bold text-gray-800">Worker Dues & Cash Bookings</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-600 uppercase mb-1.5">Dues Limit (₹)</label>
-                        <input
-                          type="number"
-                          name="maxWorkerDues"
-                          value={systemSettings.maxWorkerDues}
-                          onChange={handleSystemChange}
-                          min="0"
-                          className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-gray-500 font-bold text-gray-800 text-sm"
-                        />
-                        <p className="text-[10px] text-gray-500 mt-1">
-                          A worker who owes more than this (platform fees, commission, penalties) cannot take new jobs until they pay. They are unblocked automatically once they are back under it.
-                        </p>
-                      </div>
-                      <label className="flex items-start gap-3 cursor-pointer pt-5">
-                        <input
-                          type="checkbox"
-                          name="workerCashPaymentEnabled"
-                          checked={Boolean(systemSettings.workerCashPaymentEnabled)}
-                          onChange={handleSystemChange}
-                          className="w-5 h-5 mt-0.5 accent-gray-800"
-                        />
-                        <span>
-                          <span className="block text-sm font-semibold text-gray-800">Allow cash payment for worker bookings</span>
-                          <span className="block text-[10px] text-gray-500">When off, farmers must pay online when booking workers.</span>
-                        </span>
-                      </label>
                     </div>
                   </div>
 
