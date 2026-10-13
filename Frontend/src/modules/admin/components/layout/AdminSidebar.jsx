@@ -33,6 +33,7 @@ import {
   FiShoppingCart,
   FiPieChart,
   FiTrendingUp,
+  FiSearch,
 } from "react-icons/fi";
 import adminMenu from "../../config/adminMenu.json";
 import dashboardService from "../../services/dashboardService";
@@ -76,6 +77,7 @@ const AdminSidebar = ({ isOpen, onClose }) => {
   const navigate = useNavigate();
   const [expandedItems, setExpandedItems] = useState({});
   const [isMobile, setIsMobile] = useState(false);
+  const [query, setQuery] = useState("");
   const [adminUser, setAdminUser] = useState({ name: 'Admin', email: '', role: 'admin' });
   const [counts, setCounts] = useState({
     bookings: 0,
@@ -111,6 +113,19 @@ const AdminSidebar = ({ isOpen, onClose }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [adminUser.role, adminUser.permissions]
   );
+
+  // Sidebar search: match parent titles or child names; matching children auto-expand
+  const visibleMenu = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return filteredMenu;
+    return filteredMenu
+      .map((item) => {
+        if (item.title.toLowerCase().includes(q)) return item;
+        const kids = (item.children || []).filter((c) => c.toLowerCase().includes(q));
+        return kids.length ? { ...item, children: kids, forceOpen: true } : null;
+      })
+      .filter(Boolean);
+  }, [filteredMenu, query]);
 
   // Fetch pending counts for badges
   useEffect(() => {
@@ -245,6 +260,7 @@ const AdminSidebar = ({ isOpen, onClose }) => {
         };
       });
     }
+    setQuery("");
     navigate(route);
     if (window.innerWidth < 1024) {
       onClose();
@@ -255,7 +271,7 @@ const AdminSidebar = ({ isOpen, onClose }) => {
   const renderMenuItem = (item) => {
     const Icon = iconMap[item.title] || FiHome;
     const hasChildren = item.children && item.children.length > 0;
-    const isExpanded = expandedItems[item.title];
+    const isExpanded = expandedItems[item.title] || item.forceOpen;
     const active = isActive(item);
 
     return (
@@ -404,12 +420,45 @@ const AdminSidebar = ({ isOpen, onClose }) => {
         </div>
       </div>
 
+      {/* Menu Search */}
+      <div className="px-3 pt-3">
+        <div className="relative">
+          <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none" />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setQuery("");
+              if (e.key === "Enter" && visibleMenu.length === 1 && !visibleMenu[0].children?.length) {
+                handleMenuItemClick(visibleMenu[0].route);
+              }
+            }}
+            placeholder="Search menu..."
+            aria-label="Search menu"
+            className="w-full pl-9 pr-8 py-2 text-sm rounded-xl bg-slate-900/60 border border-slate-700 text-slate-200 placeholder-slate-500 outline-none focus:border-blue-500 transition-colors"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-white">
+              <FiX className="text-sm" />
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Navigation Menu */}
       <nav className="flex-1 overflow-y-auto px-3 py-2 scrollbar-admin lg:pb-3 space-y-0.5">
-        {filteredMenu.map((item, index) => {
+        {query && visibleMenu.length === 0 && (
+          <p className="px-3.5 py-6 text-center text-xs text-slate-400">No menu items match "{query}"</p>
+        )}
+        {visibleMenu.map((item, index) => {
           const showCategoryHeader =
             item.category &&
-            (index === 0 || filteredMenu[index - 1].category !== item.category);
+            (index === 0 || visibleMenu[index - 1].category !== item.category);
 
           return (
             <div key={item.route || index}>
