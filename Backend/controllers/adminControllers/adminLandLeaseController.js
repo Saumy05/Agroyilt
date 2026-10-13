@@ -29,7 +29,14 @@ const adminLandLeaseController = {
       if (['fixed-rent', 'crop-share'].includes(leaseType)) filter.leaseType = leaseType;
       if (search && search.trim()) {
         const regex = new RegExp(escapeRegex(search.trim()), 'i');
-        filter.$or = [{ title: regex }, { khasraNumber: regex }, { 'location.city': regex }, { 'location.district': regex }];
+        filter.$or = [
+          { title: regex },
+          { khasraNumber: regex },
+          { 'location.village': regex },
+          { 'location.tehsil': regex },
+          { 'location.city': regex },
+          { 'location.district': regex }
+        ];
       }
 
       const pageNum = Math.max(1, Number(page) || 1);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   FiArrowLeft,
@@ -23,13 +23,19 @@ import {
   FiCheck,
   FiInfo,
   FiMaximize2,
-  FiChevronRight
+  FiChevronRight,
+  FiCamera,
+  FiUploadCloud,
+  FiImage
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import landLeaseService from '../../services/landLeaseService';
 import { toastManager } from '../../../../utils/toastManager';
 import authStorage from '../../../../utils/authStorage';
 import LeasePaymentsModal from './LeasePaymentsModal';
+import flutterBridge from '../../../../utils/flutterBridge';
+import { uploadToCloudinary } from '../../../../utils/cloudinaryUpload';
+import { compressImage } from '../../../../utils/imageCompression';
 
 const LandLeasePage = () => {
   const navigate = useNavigate();
@@ -55,6 +61,7 @@ const LandLeasePage = () => {
 
   // Modals
   const [selectedLandDetail, setSelectedLandDetail] = useState(null);
+  const [activeModalImageIndex, setActiveModalImageIndex] = useState(0);
   const [offerModalLand, setOfferModalLand] = useState(null);
   const [submittingOffer, setSubmittingOffer] = useState(false);
   const [paymentsLandId, setPaymentsLandId] = useState(null);
@@ -87,6 +94,8 @@ const LandLeasePage = () => {
     khasraNumber: '',
     state: 'Rajasthan',
     district: '',
+    tehsil: '',
+    village: '',
     city: '',
     addressLine1: '',
     pincode: '',
@@ -101,8 +110,15 @@ const LandLeasePage = () => {
     fencing: false,
     roadAccess: 'Paved Road / पक्की सड़क',
     suitableCrops: 'Wheat, Mustard, Gram',
-    images: 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1000&q=80'
+    images: ''
   });
+  const [listingPhotos, setListingPhotos] = useState([]);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [showManualUrlInput, setShowManualUrlInput] = useState(false);
+  const [manualUrlInput, setManualUrlInput] = useState('');
+  const cameraInputRef = useRef(null);
+  const galleryInputRef = useRef(null);
   const [submittingListing, setSubmittingListing] = useState(false);
 
   // Fetch available land leases
@@ -173,10 +189,12 @@ const LandLeasePage = () => {
         const q = searchQuery.toLowerCase();
         const titleMatch = land.title?.toLowerCase().includes(q);
         const cityMatch = land.location?.city?.toLowerCase().includes(q);
+        const tehsilMatch = land.location?.tehsil?.toLowerCase().includes(q);
+        const villageMatch = land.location?.village?.toLowerCase().includes(q);
         const districtMatch = land.location?.district?.toLowerCase().includes(q);
         const stateMatch = land.location?.state?.toLowerCase().includes(q);
         const khasraMatch = land.khasraNumber?.toLowerCase().includes(q);
-        return titleMatch || cityMatch || districtMatch || stateMatch || khasraMatch;
+        return titleMatch || cityMatch || tehsilMatch || villageMatch || districtMatch || stateMatch || khasraMatch;
       }
 
       return true;
@@ -278,11 +296,112 @@ const LandLeasePage = () => {
     }
   };
 
+  // Handle adding photo file(s) (either from camera capture or gallery upload)
+  const processAndAddFiles = async (files) => {
+    if (!files || files.length === 0) return;
+    const fileList = Array.from(files);
+
+    if (listingPhotos.length + fileList.length > 5) {
+      toastManager.error('अधिकतम 5 फोटो अपलोड कर सकते हैं (Max 5 photos allowed)');
+      return;
+    }
+
+    try {
+      setUploadingPhoto(true);
+      const newPhotoUrls = [];
+
+      for (let i = 0; i < fileList.length; i++) {
+        const file = fileList[i];
+        setUploadProgress(Math.round(((i + 1) / fileList.length) * 100));
+
+        // 1. Client-side image compression
+        let fileToUpload = file;
+        try {
+          fileToUpload = await compressImage(file, { maxWidth: 1600, maxHeight: 1600, quality: 0.8 });
+        } catch (compErr) {
+          console.warn('Image compression fallback:', compErr);
+        }
+
+        // 2. Upload to Cloudinary with fallback to base64 Data URL
+        let photoUrl = null;
+        try {
+          photoUrl = await uploadToCloudinary(fileToUpload, 'land_leases');
+        } catch (uploadErr) {
+          console.warn('Cloudinary upload error, using local Data URL fallback:', uploadErr);
+          photoUrl = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.readAsDataURL(fileToUpload);
+          });
+        }
+
+        if (photoUrl) {
+          newPhotoUrls.push(photoUrl);
+        }
+      }
+
+      if (newPhotoUrls.length > 0) {
+        setListingPhotos((prev) => [...prev, ...newPhotoUrls]);
+        toastManager.success(`${newPhotoUrls.length} फोटो सफलतापूर्वक जोड़ी गई`);
+      }
+    } catch (err) {
+      console.error('Error uploading land photos:', err);
+      toastManager.error('फोटो जोड़ने में समस्या आई');
+    } finally {
+      setUploadingPhoto(false);
+      setUploadProgress(0);
+      if (cameraInputRef.current) cameraInputRef.current.value = '';
+      if (galleryInputRef.current) galleryInputRef.current.value = '';
+    }
+  };
+
+  // Direct Camera Trigger
+  const handleTriggerCamera = async () => {
+    if (flutterBridge.isFlutter) {
+      try {
+        const file = await flutterBridge.openCamera();
+        if (file) {
+          await processAndAddFiles([file]);
+          return;
+        }
+      } catch (err) {
+        console.warn('Flutter native camera failed, fallback to HTML:', err);
+      }
+    }
+    cameraInputRef.current?.click();
+  };
+
+  // Gallery Picker Trigger
+  const handleTriggerGallery = () => {
+    galleryInputRef.current?.click();
+  };
+
+  // Remove photo
+  const handleRemovePhoto = (index) => {
+    setListingPhotos((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // Add URL photo manually
+  const handleAddManualUrl = () => {
+    if (!manualUrlInput.trim()) return;
+    if (listingPhotos.length >= 5) {
+      toastManager.error('अधिकतम 5 फोटो अपलोड कर सकते हैं');
+      return;
+    }
+    setListingPhotos((prev) => [...prev, manualUrlInput.trim()]);
+    setManualUrlInput('');
+    setShowManualUrlInput(false);
+    toastManager.success('फोटो लिंक जोड़ा गया');
+  };
+
   // Handle Create Listing
   const handleCreateListing = async (e) => {
     e.preventDefault();
     if (!listingForm.title || !listingForm.sizeInAcres || !listingForm.khasraNumber) {
       return toastManager.error('कृपया शीर्षक, रकबा (एकड़) और खसरा नंबर दर्ज करें');
+    }
+    if (!listingForm.district || !listingForm.tehsil || !listingForm.village) {
+      return toastManager.error('कृपया जिला, तहसील और गांव का विवरण दर्ज करें');
     }
 
     try {
@@ -292,10 +411,17 @@ const LandLeasePage = () => {
         .map((c) => c.trim())
         .filter(Boolean);
 
-      const imagesArray = listingForm.images
-        .split(',')
-        .map((img) => img.trim())
-        .filter(Boolean);
+      // Photos to save: use uploaded photos if available, else manual URL or realistic fallback
+      let finalImages = [...listingPhotos];
+      if (finalImages.length === 0 && listingForm.images && listingForm.images.trim()) {
+        finalImages = listingForm.images
+          .split(',')
+          .map((img) => img.trim())
+          .filter(Boolean);
+      }
+      if (finalImages.length === 0) {
+        finalImages = ['https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1000&q=80'];
+      }
 
       const payload = {
         title: listingForm.title,
@@ -304,11 +430,19 @@ const LandLeasePage = () => {
         khasraNumber: listingForm.khasraNumber,
         location: {
           addressLine1: listingForm.addressLine1,
-          city: listingForm.city,
-          district: listingForm.district || listingForm.city,
+          village: listingForm.village,
+          tehsil: listingForm.tehsil,
+          city: listingForm.tehsil || listingForm.village || listingForm.district,
+          district: listingForm.district || listingForm.tehsil,
           state: listingForm.state,
           pincode: listingForm.pincode,
-          fullAddress: `${listingForm.addressLine1 ? listingForm.addressLine1 + ', ' : ''}${listingForm.city}, ${listingForm.state}`
+          fullAddress: [
+            listingForm.addressLine1,
+            listingForm.village ? `ग्राम ${listingForm.village}` : '',
+            listingForm.tehsil ? `तहसील ${listingForm.tehsil}` : '',
+            listingForm.district ? `जिला ${listingForm.district}` : '',
+            listingForm.state
+          ].filter(Boolean).join(', ')
         },
         leaseType: listingForm.leaseType,
         pricePerAcre: listingForm.leaseType === 'fixed-rent' ? Number(listingForm.pricePerAcre) : null,
@@ -321,12 +455,38 @@ const LandLeasePage = () => {
         fencing: listingForm.fencing,
         roadAccess: listingForm.roadAccess,
         suitableCrops: cropsArray,
-        images: imagesArray.length > 0 ? imagesArray : undefined
+        images: finalImages
       };
 
       const res = await landLeaseService.listLand(payload);
       if (res?.success) {
         toastManager.success('कृषि भूमि सफलतापूर्वक पट्टे हेतु सूचीबद्ध की गई! (Land listed successfully!)');
+        setListingPhotos([]);
+        setListingForm({
+          title: '',
+          description: '',
+          sizeInAcres: '',
+          khasraNumber: '',
+          state: 'Rajasthan',
+          district: '',
+          tehsil: '',
+          village: '',
+          city: '',
+          addressLine1: '',
+          pincode: '',
+          leaseType: 'fixed-rent',
+          pricePerAcre: '',
+          sharePercentage: '50',
+          availableFrom: new Date().toISOString().split('T')[0],
+          availableTo: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          soilType: 'Alluvial Soil (दोमट मिट्टी)',
+          irrigationSource: 'Tubewell / बोरवेल',
+          electricity: true,
+          fencing: false,
+          roadAccess: 'Paved Road / पक्की सड़क',
+          suitableCrops: 'Wheat, Mustard, Gram',
+          images: ''
+        });
         setActiveTab('explore');
         fetchLeases();
         fetchMyLeases();
@@ -413,7 +573,7 @@ const LandLeasePage = () => {
                 <FiSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 w-3.5 h-3.5" />
                 <input
                   type="text"
-                  placeholder="खेत का नाम, जिला, तहसील, खसरा नंबर खोजें..."
+                  placeholder="खेत का नाम, जिला, तहसील, गांव, खसरा नंबर खोजें..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-8 pr-7 py-1.5 bg-gray-50 rounded-lg text-xs border border-gray-200 focus:outline-none focus:ring-1 focus:ring-emerald-600 focus:bg-white text-gray-800"
@@ -604,7 +764,11 @@ const LandLeasePage = () => {
                             <div className="flex items-center gap-1 text-[11px] font-bold drop-shadow-sm truncate">
                               <FiMapPin className="w-3 h-3 text-emerald-400 shrink-0" />
                               <span className="truncate">
-                                {land.location?.city || land.location?.district || 'Rajasthan'}, {land.location?.state || 'India'}
+                                {[
+                                  land.location?.village ? `ग्राम ${land.location.village}` : '',
+                                  land.location?.tehsil ? `तहसील ${land.location.tehsil}` : (land.location?.city || ''),
+                                  land.location?.district
+                                ].filter(Boolean).join(', ') || land.location?.state || 'Rajasthan'}
                               </span>
                             </div>
                             <span className="bg-black/50 backdrop-blur-md px-1.5 py-0.5 rounded text-[10.5px] font-black text-emerald-200 shrink-0 ml-1">
@@ -773,8 +937,8 @@ const LandLeasePage = () => {
                 </div>
               </div>
 
-              {/* Location Fields */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Location Fields: Separate Tehsil and Village */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-gray-800 mb-1">राज्य (State)</label>
                   <input
@@ -785,22 +949,41 @@ const LandLeasePage = () => {
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-gray-800 mb-1">जिला (District)</label>
+                  <label className="block font-bold text-gray-800 mb-1">
+                    जिला (District) <span className="text-red-500">*</span>
+                  </label>
                   <input
                     type="text"
-                    placeholder="उदा. Kota"
+                    required
+                    placeholder="उदा. Kota / कोटा"
                     value={listingForm.district}
                     onChange={(e) => setListingForm({ ...listingForm, district: e.target.value })}
                     className="w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white text-gray-900 font-medium"
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-gray-800 mb-1">तहसील / गांव (City/Village)</label>
+                  <label className="block font-bold text-gray-800 mb-1">
+                    तहसील (Tehsil) <span className="text-red-500">*</span>
+                  </label>
                   <input
                     type="text"
-                    placeholder="उदा. Ladpura"
-                    value={listingForm.city}
-                    onChange={(e) => setListingForm({ ...listingForm, city: e.target.value })}
+                    required
+                    placeholder="उदा. Ladpura / लाडपुरा"
+                    value={listingForm.tehsil}
+                    onChange={(e) => setListingForm({ ...listingForm, tehsil: e.target.value, city: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white text-gray-900 font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-800 mb-1">
+                    गांव (Village) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="उदा. Ranpur / रानपुर"
+                    value={listingForm.village}
+                    onChange={(e) => setListingForm({ ...listingForm, village: e.target.value })}
                     className="w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white text-gray-900 font-medium"
                   />
                 </div>
@@ -960,16 +1143,152 @@ const LandLeasePage = () => {
                 </label>
               </div>
 
-              {/* Photo URL */}
-              <div>
-                <label className="block font-bold text-gray-800 mb-1">खेत की फोटो (Image URL)</label>
+              {/* Photo Upload & Camera Section */}
+              <div className="pt-2">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block font-bold text-gray-800">
+                    खेत की फोटो (Farmland Photos)
+                  </label>
+                  <span className="text-[11px] font-semibold text-gray-500">
+                    {listingPhotos.length}/5 फोटो जोड़ी गई
+                  </span>
+                </div>
+
+                {/* Hidden native file inputs */}
                 <input
-                  type="url"
-                  placeholder="खेत की फोटो का लिंक (URL)"
-                  value={listingForm.images}
-                  onChange={(e) => setListingForm({ ...listingForm, images: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white text-gray-900 font-medium"
+                  ref={cameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={(e) => processAndAddFiles(e.target.files)}
                 />
+                <input
+                  ref={galleryInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => processAndAddFiles(e.target.files)}
+                />
+
+                {/* Action buttons: Direct Camera & Gallery Upload */}
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <button
+                    type="button"
+                    disabled={uploadingPhoto || listingPhotos.length >= 5}
+                    onClick={handleTriggerCamera}
+                    className="p-3 sm:p-4 rounded-2xl border-2 border-dashed border-emerald-600 bg-emerald-50/70 hover:bg-emerald-100/70 active:scale-[0.98] transition-all flex flex-col items-center justify-center gap-1.5 text-emerald-900 group cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-emerald-700 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
+                      <FiCamera className="w-5 h-5" />
+                    </div>
+                    <span className="font-extrabold text-xs sm:text-sm">फोटो खींचें (Camera)</span>
+                    <span className="text-[10px] text-emerald-700/80 font-medium">सीधे कैमरे से फोटो लें</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={uploadingPhoto || listingPhotos.length >= 5}
+                    onClick={handleTriggerGallery}
+                    className="p-3 sm:p-4 rounded-2xl border-2 border-dashed border-teal-600 bg-teal-50/70 hover:bg-teal-100/70 active:scale-[0.98] transition-all flex flex-col items-center justify-center gap-1.5 text-teal-900 group cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-teal-700 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
+                      <FiUploadCloud className="w-5 h-5" />
+                    </div>
+                    <span className="font-extrabold text-xs sm:text-sm">गैलरी से चुनें (Upload)</span>
+                    <span className="text-[10px] text-teal-700/80 font-medium">फ़ोन या कंप्यूटर से फ़ाइल</span>
+                  </button>
+                </div>
+
+                {/* Upload Spinner / Progress */}
+                {uploadingPhoto && (
+                  <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-200 flex items-center gap-3 mb-3">
+                    <div className="w-5 h-5 border-2 border-emerald-700 border-t-transparent rounded-full animate-spin shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-emerald-900">फोटो तैयार और अपलोड की जा रही है...</p>
+                      <div className="w-full bg-emerald-200 h-1.5 rounded-full mt-1 overflow-hidden">
+                        <div
+                          className="bg-emerald-700 h-full transition-all duration-300"
+                          style={{ width: `${uploadProgress || 50}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Photos Preview Grid */}
+                {listingPhotos.length > 0 && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mb-3">
+                    {listingPhotos.map((photoUrl, index) => (
+                      <div
+                        key={index}
+                        className="relative rounded-xl overflow-hidden aspect-video sm:aspect-square bg-gray-100 border border-gray-200 group shadow-2xs"
+                      >
+                        <img
+                          src={photoUrl}
+                          alt={`खेत फोटो ${index + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                        {index === 0 && (
+                          <span className="absolute top-1.5 left-1.5 bg-emerald-800 text-white text-[9.5px] font-black px-1.5 py-0.5 rounded-md shadow-xs">
+                            मुख्य फोटो
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePhoto(index)}
+                          className="absolute top-1.5 right-1.5 p-1 rounded-full bg-black/60 hover:bg-rose-600 text-white transition-colors"
+                          title="हटाएं"
+                        >
+                          <FiTrash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Optional Web Link / URL Toggle */}
+                <div className="pt-1">
+                  {!showManualUrlInput ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowManualUrlInput(true)}
+                      className="text-[11px] font-bold text-emerald-800 hover:text-emerald-900 flex items-center gap-1 hover:underline cursor-pointer"
+                    >
+                      <span>🔗 या फोटो का वेब लिंक (Image URL) जोड़ें</span>
+                    </button>
+                  ) : (
+                    <div className="space-y-1.5 bg-gray-50 p-2.5 rounded-xl border border-gray-200">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-gray-700">फोटो का वेब लिंक (URL) दर्ज करें</span>
+                        <button
+                          type="button"
+                          onClick={() => setShowManualUrlInput(false)}
+                          className="text-gray-400 hover:text-gray-600 text-xs"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <div className="flex gap-2">
+                        <input
+                          type="url"
+                          placeholder="https://example.com/farm-image.jpg"
+                          value={manualUrlInput}
+                          onChange={(e) => setManualUrlInput(e.target.value)}
+                          className="flex-1 px-3 py-1.5 bg-white rounded-lg border border-gray-300 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-700 text-gray-800"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddManualUrl}
+                          className="px-3 py-1.5 bg-emerald-800 text-white rounded-lg text-xs font-bold hover:bg-emerald-900 cursor-pointer"
+                        >
+                          जोड़ें
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Submit CTA */}
@@ -1223,7 +1542,7 @@ const LandLeasePage = () => {
                         </div>
                         <h4 className="font-extrabold text-sm sm:text-base text-gray-900 mt-1">{item.title}</h4>
                         <p className="text-xs text-gray-500">
-                          स्थान: {item.location?.city || item.location?.district || 'Rajasthan'} • {item.sizeInAcres} एकड़
+                          स्थान: {[item.location?.village ? `ग्राम ${item.location.village}` : '', item.location?.tehsil ? `तहसील ${item.location.tehsil}` : (item.location?.city || ''), item.location?.district].filter(Boolean).join(', ') || item.location?.state || 'Rajasthan'} • {item.sizeInAcres} एकड़
                         </p>
                       </div>
 
@@ -1414,19 +1733,40 @@ const LandLeasePage = () => {
                   {selectedLandDetail.title}
                 </h3>
                 <p className="text-xs text-gray-500 flex items-center gap-1 mt-1">
-                  <FiMapPin className="w-3.5 h-3.5 text-emerald-600" />
-                  {selectedLandDetail.location?.fullAddress || `${selectedLandDetail.location?.city}, ${selectedLandDetail.location?.state}`}
+                  <FiMapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  {selectedLandDetail.location?.fullAddress || [
+                    selectedLandDetail.location?.village ? `ग्राम ${selectedLandDetail.location.village}` : '',
+                    selectedLandDetail.location?.tehsil ? `तहसील ${selectedLandDetail.location.tehsil}` : (selectedLandDetail.location?.city || ''),
+                    selectedLandDetail.location?.district,
+                    selectedLandDetail.location?.state
+                  ].filter(Boolean).join(', ')}
                 </p>
               </div>
 
-              {/* Photo */}
-              <div className="rounded-2xl overflow-hidden h-52 bg-gray-100 mb-4">
+              {/* Photo & Multiple Photos Carousel */}
+              <div className="rounded-2xl overflow-hidden h-52 bg-gray-100 mb-2">
                 <img
-                  src={selectedLandDetail.images?.[0] || 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1000&q=80'}
+                  src={selectedLandDetail.images?.[activeModalImageIndex || 0] || 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1000&q=80'}
                   alt={selectedLandDetail.title}
                   className="w-full h-full object-cover"
                 />
               </div>
+              {selectedLandDetail.images && selectedLandDetail.images.length > 1 && (
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-2 mb-3 scrollbar-none">
+                  {selectedLandDetail.images.map((imgUrl, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setActiveModalImageIndex(i)}
+                      className={`relative w-14 h-14 rounded-lg overflow-hidden shrink-0 border-2 transition-all cursor-pointer ${
+                        (activeModalImageIndex || 0) === i ? 'border-emerald-700 ring-2 ring-emerald-500/30' : 'border-gray-200 opacity-70 hover:opacity-100'
+                      }`}
+                    >
+                      <img src={imgUrl} alt={`Thumbnail ${i + 1}`} className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {/* Specs Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs mb-4">

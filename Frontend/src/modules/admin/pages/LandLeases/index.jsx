@@ -163,7 +163,7 @@ const LandLeases = () => {
                 <td className="p-3">
                   <div className="font-bold text-gray-900 line-clamp-1">{r.title}</div>
                   <div className="text-[11px] text-gray-500">
-                    Khasra {r.khasraNumber} • {r.sizeInAcres} acre • {r.location?.city || r.location?.district || '-'}
+                    Khasra {r.khasraNumber} • {r.sizeInAcres} acre • {[r.location?.village ? `ग्राम ${r.location.village}` : '', r.location?.tehsil ? `तहसील ${r.location.tehsil}` : (r.location?.city || ''), r.location?.district].filter(Boolean).join(', ') || '-'}
                   </div>
                 </td>
                 <td className="p-3">{r.owner?.name || '-'}<div className="text-[11px] text-gray-400">{r.owner?.phone}</div></td>
@@ -198,9 +198,34 @@ const LandLeases = () => {
             <div className="pr-10">
               <h3 className="text-lg font-black text-gray-900">{detail.title}</h3>
               <p className="text-xs text-gray-500">
-                Khasra {detail.khasraNumber} • {detail.sizeInAcres} acre • {detail.location?.fullAddress}
+                Khasra {detail.khasraNumber} • {detail.sizeInAcres} acre • {[detail.location?.village ? `ग्राम ${detail.location.village}` : '', detail.location?.tehsil ? `तहसील ${detail.location.tehsil}` : (detail.location?.city || ''), detail.location?.district, detail.location?.state].filter(Boolean).join(', ') || detail.location?.fullAddress}
               </p>
             </div>
+
+            {/* Farm Photos Gallery for Admin */}
+            {detail.images && detail.images.length > 0 && (
+              <div className="space-y-1.5">
+                <span className="text-xs font-bold text-gray-700 block">खेत की फोटो (Photos - {detail.images.length})</span>
+                <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+                  {detail.images.map((imgUrl, idx) => (
+                    <a
+                      key={idx}
+                      href={imgUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="relative w-24 h-20 rounded-xl overflow-hidden shrink-0 border border-gray-200 group hover:opacity-90 transition-opacity bg-gray-100"
+                    >
+                      <img src={imgUrl} alt={`Land photo ${idx + 1}`} className="w-full h-full object-cover" />
+                      {idx === 0 && (
+                        <span className="absolute bottom-0 inset-x-0 bg-emerald-800/80 text-white text-[9px] font-bold text-center py-0.5">
+                          Main
+                        </span>
+                      )}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div className="bg-gray-50 rounded-xl p-3"><span className="text-gray-400 block">Owner</span><b>{detail.ownerId?.name}</b> {detail.ownerId?.phone}</div>
@@ -217,6 +242,14 @@ const LandLeases = () => {
               </div>
               <div className="bg-emerald-50 rounded-xl p-3"><span className="text-emerald-600 block">Collected</span><b>{inr(detail.totals.collected)}</b></div>
               <div className="bg-amber-50 rounded-xl p-3"><span className="text-amber-600 block">Commission ({detail.agreement?.commissionPercentage ?? 0}%)</span><b>{inr(detail.totals.commission)}</b></div>
+            </div>
+
+            {/* Farm Features Strip */}
+            <div className="flex flex-wrap items-center gap-1.5 text-[11px] pt-1">
+              <span className="bg-gray-100 px-2.5 py-1 rounded-lg font-medium text-gray-700">🌱 {detail.soilType || 'दोमट मिट्टी'}</span>
+              <span className="bg-gray-100 px-2.5 py-1 rounded-lg font-medium text-gray-700">💧 {detail.irrigationSource || 'ट्यूबवेल'}</span>
+              <span className="bg-gray-100 px-2.5 py-1 rounded-lg font-medium text-gray-700">⚡ {detail.electricity ? '3-फेज बिजली' : 'बिजली नहीं'}</span>
+              <span className="bg-gray-100 px-2.5 py-1 rounded-lg font-medium text-gray-700">🛡️ {detail.fencing ? 'तारबंदी उपलब्ध' : 'तारबंदी नहीं'}</span>
             </div>
 
             {detail.installments?.length > 0 && (

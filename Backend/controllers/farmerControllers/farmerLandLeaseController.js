@@ -299,13 +299,20 @@ const farmerLandLeaseController = {
         khasraNumber: khasraNumber.trim(),
         location: {
           addressLine1: location?.addressLine1 || '',
-          city: location?.city || '',
+          village: location?.village || '',
+          tehsil: location?.tehsil || '',
+          city: location?.city || location?.tehsil || location?.village || '',
           district: location?.district || location?.city || '',
           state: location?.state || 'Rajasthan',
           pincode: location?.pincode || '',
           lat: latitude,
           lng: longitude,
-          fullAddress: location?.fullAddress || `${location?.city || ''}, ${location?.state || 'Rajasthan'}`
+          fullAddress: location?.fullAddress || [
+            location?.village ? `ग्राम ${location.village}` : '',
+            location?.tehsil ? `तहसील ${location.tehsil}` : '',
+            location?.district || location?.city,
+            location?.state || 'Rajasthan'
+          ].filter(Boolean).join(', ')
         },
         geoLocation: {
           type: 'Point',
@@ -400,6 +407,8 @@ const farmerLandLeaseController = {
         filter.$or = [
           { title: regex },
           { description: regex },
+          { 'location.village': regex },
+          { 'location.tehsil': regex },
           { 'location.city': regex },
           { 'location.district': regex },
           { 'location.state': regex },

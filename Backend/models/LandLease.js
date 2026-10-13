@@ -103,6 +103,8 @@ const landLeaseSchema = new mongoose.Schema({
   },
   location: {
     addressLine1: String,
+    village: String,
+    tehsil: String,
     city: String,
     district: String,
     state: String,
