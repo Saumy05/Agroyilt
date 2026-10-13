@@ -161,10 +161,11 @@ export const endTrip = async (bookingId, kmPhotoUrl, otp, workUnits, workEvidenc
  * @param {string} otp - 4-digit OTP provided by farmer
  * @param {string} startKmPhoto - Cloudinary URL of starting meter photo
  */
-export const machineryStartWork = async (bookingId, otp, startKmPhoto) => {
+export const machineryStartWork = async (bookingId, otp, startKmPhoto, startLocation) => {
   const response = await api.post(`/vendors/equipment/bookings/${bookingId}/start`, {
     otp,
-    startKmPhoto
+    startKmPhoto,
+    ...(startLocation ? { startLocation } : {})
   });
   return response.data;
 };
@@ -177,9 +178,10 @@ export const machineryStartWork = async (bookingId, otp, startKmPhoto) => {
  * @param {number} workUnits - Amount of work done (e.g., acres) if land based
  * @param {string} evidencePhoto - Cloudinary URL of evidence of work
  */
-export const machineryCompleteWork = async (bookingId, endKmPhoto, workUnits, evidencePhoto) => {
+export const machineryCompleteWork = async (bookingId, endKmPhoto, workUnits, evidencePhoto, points) => {
   const response = await api.post(`/vendors/equipment/bookings/${bookingId}/complete`, {
-    endKmPhoto, workUnits, evidencePhoto
+    endKmPhoto, workUnits, evidencePhoto,
+    ...(points && points.length ? { points } : {})
   });
   return response.data;
 };

@@ -18,7 +18,13 @@ const serviceSchema = z.object({
   land_unit: z.string().min(1, 'Unit required').default('acre'),
   daily_price: z.number().optional(),
   pricing_context: z.enum(['standalone', 'sub-category', 'any']).default('any'),
-  parentSourceId: z.string().nullable().optional()
+  parentSourceId: z.string().nullable().optional(),
+  distance_pricing: z.object({
+    enabled: z.boolean(),
+    baseKm: z.number().min(0),
+    baseCharge: z.number().min(0),
+    perKmRate: z.number().min(0)
+  }).optional()
 });
 
 const ServicesPage = ({ catalog, setCatalog, selectedCity }) => {
@@ -133,7 +139,11 @@ const ServicesPage = ({ catalog, setCatalog, selectedCity }) => {
     land_unit: "acre",
     daily_price: "",
     pricing_context: "any",
-    parentSourceId: ""
+    parentSourceId: "",
+    distEnabled: false,
+    distBaseKm: "10",
+    distBaseCharge: "",
+    distPerKm: ""
   });
   const [saving, setSaving] = useState(false);
 
@@ -150,7 +160,11 @@ const ServicesPage = ({ catalog, setCatalog, selectedCity }) => {
       land_unit: "acre",
       daily_price: "",
       pricing_context: "any",
-      parentSourceId: ""
+      parentSourceId: "",
+      distEnabled: false,
+      distBaseKm: "10",
+      distBaseCharge: "",
+      distPerKm: ""
     });
     setIsModalOpen(false);
   };
@@ -167,7 +181,11 @@ const ServicesPage = ({ catalog, setCatalog, selectedCity }) => {
       land_unit: s.land_unit || "acre",
       daily_price: s.daily_price || "",
       pricing_context: s.pricing_context || "any",
-      parentSourceId: s.parentSourceId || ""
+      parentSourceId: s.parentSourceId || "",
+      distEnabled: !!s.distance_pricing?.enabled,
+      distBaseKm: String(s.distance_pricing?.baseKm ?? 10),
+      distBaseCharge: s.distance_pricing?.baseCharge || "",
+      distPerKm: s.distance_pricing?.perKmRate || ""
     });
     setIsModalOpen(true);
   };
@@ -178,7 +196,7 @@ const ServicesPage = ({ catalog, setCatalog, selectedCity }) => {
 
     const data = {
       title: form.title,
-      basePrice: parseFloat(form.hourly_price) || parseFloat(form.daily_price) || parseFloat(form.land_price) || 0,
+      basePrice: parseFloat(form.hourly_price) || parseFloat(form.daily_price) || parseFloat(form.land_price) || (form.distEnabled ? parseFloat(form.distBaseCharge) : 0) || 0,
       gstPercentage: parseFloat(form.gstPercentage) || 18,
       categoryId: form.categoryId,
       hourly_price: parseFloat(form.hourly_price) || 0,
@@ -186,8 +204,19 @@ const ServicesPage = ({ catalog, setCatalog, selectedCity }) => {
       land_unit: form.land_unit,
       daily_price: parseFloat(form.daily_price) || 0,
       pricing_context: form.pricing_context,
-      parentSourceId: form.parentSourceId || null
+      parentSourceId: form.parentSourceId || null,
+      distance_pricing: {
+        enabled: !!form.distEnabled,
+        baseKm: parseFloat(form.distBaseKm) || 0,
+        baseCharge: parseFloat(form.distBaseCharge) || 0,
+        perKmRate: parseFloat(form.distPerKm) || 0
+      }
     };
+
+    if (form.distEnabled && !(data.distance_pricing.baseCharge > 0)) {
+      toast.error('Enter the base charge for distance pricing');
+      return;
+    }
 
     const result = serviceSchema.safeParse(data);
     if (!result.success) {
@@ -389,6 +418,12 @@ const ServicesPage = ({ catalog, setCatalog, selectedCity }) => {
                           </div>
                         </div>
 
+                        {service.distance_pricing?.enabled && (
+                          <div className="mt-3 rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-[11px] font-bold text-emerald-700">
+                            Per KM: ₹{service.distance_pricing.baseCharge} for first {service.distance_pricing.baseKm} km, then ₹{service.distance_pricing.perKmRate}/km
+                          </div>
+                        )}
+
                         <div className="mt-4 flex items-center justify-between text-[10px] text-gray-400 font-medium">
                           <span>Base Unit Highlight</span>
                           <span className="text-gray-900 font-bold">₹{service.basePrice || service.hourly_price || 0}</span>
@@ -556,6 +591,34 @@ const ServicesPage = ({ catalog, setCatalog, selectedCity }) => {
               </div>
             </div>
             <p className="text-[10px] text-blue-500 leading-tight"> These values will be used to show <strong>estimated totals</strong> to farmers based on their selected rental type (Daily rate x 30 for Monthly). </p>
+          </div>
+
+          <div className="bg-emerald-50/60 p-4 rounded-xl border border-emerald-100 space-y-3 mt-4">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={!!form.distEnabled} onChange={e => setForm({ ...form, distEnabled: e.target.checked })} />
+              <span className="text-xs font-black text-emerald-700 uppercase tracking-wider">Distance-based pricing (Trolley)</span>
+            </label>
+            {form.distEnabled && (
+              <>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">First (km)</label>
+                    <input type="number" min="0" value={form.distBaseKm} onChange={e => setForm({ ...form, distBaseKm: e.target.value })} placeholder="10" className="w-full px-3 py-2 border border-emerald-200 rounded-lg bg-white text-sm font-bold" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Charge for first km (₹)</label>
+                    <input type="number" min="0" value={form.distBaseCharge} onChange={e => setForm({ ...form, distBaseCharge: e.target.value })} placeholder="100" className="w-full px-3 py-2 border border-emerald-200 rounded-lg bg-white text-sm font-bold" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Per extra km (₹)</label>
+                    <input type="number" min="0" value={form.distPerKm} onChange={e => setForm({ ...form, distPerKm: e.target.value })} placeholder="10" className="w-full px-3 py-2 border border-emerald-200 rounded-lg bg-white text-sm font-bold" />
+                  </div>
+                </div>
+                <p className="text-[10px] text-emerald-700 leading-tight">
+                  0–{form.distBaseKm || 0} km = ₹{form.distBaseCharge || 0}, then ₹{form.distPerKm || 0}/km. Example: 20 km = ₹{(parseFloat(form.distBaseCharge) || 0) + Math.max(0, 20 - (parseFloat(form.distBaseKm) || 0)) * (parseFloat(form.distPerKm) || 0)}. Billed on the road distance the vendor actually drives (GST extra).
+                </p>
+              </>
+            )}
           </div>
 
           <div className="pt-4 flex justify-end gap-3 border-t border-gray-100 mt-4">

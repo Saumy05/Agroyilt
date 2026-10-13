@@ -327,7 +327,7 @@ const bookingSchema = new mongoose.Schema({
   },
   rental_type: {
     type: String,
-    enum: ['hourly', 'land_based', 'monthly', 'daily'],
+    enum: ['hourly', 'land_based', 'monthly', 'daily', 'distance_based'],
     default: null
   },
   endDate: {
@@ -543,6 +543,31 @@ const bookingSchema = new mongoose.Schema({
   // ==========================================
   vendorNotes: { type: String, default: null },
   workerNotes: { type: String, default: null },
+
+  // ==========================================
+  // DISTANCE TRIP (trolley): road distance driven between Start and Complete.
+  // Pricing is snapshotted at booking time so later admin edits never change an open booking.
+  // ==========================================
+  distanceTrip: {
+    status: { type: String, enum: ['NOT_STARTED', 'RUNNING', 'STOPPED'], default: 'NOT_STARTED' },
+    pricing: {
+      baseKm:     { type: Number, default: 0 },
+      baseCharge: { type: Number, default: 0 },
+      perKmRate:  { type: Number, default: 0 }
+    },
+    startedAt: { type: Date, default: null },
+    stoppedAt: { type: Date, default: null },
+    totalDistanceKm: { type: Number, default: 0 },
+    fare: { type: Number, default: 0 },
+    lastPoint: {
+      lat: { type: Number, default: null },
+      lng: { type: Number, default: null },
+      ts:  { type: Number, default: null } // epoch ms of the last accepted GPS fix
+    },
+    pointsAccepted: { type: Number, default: 0 },
+    method: { type: String, default: null }, // google_roads | osrm_match | osrm_route | google_route | straight_line
+    seq: { type: Number, default: 0 }        // optimistic-concurrency counter for point batches
+  },
 
   // ==========================================
   // 15. LIVE AGRICULTURAL SERVICE TIMER (PLAY / PAUSE / BREAKDOWN)

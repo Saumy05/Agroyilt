@@ -94,7 +94,8 @@ const createService = async (req, res) => {
       land_unit,
       daily_price,
       pricing_context,
-      parentSourceId
+      parentSourceId,
+      distance_pricing
     } = req.body;
 
     // Verify brand exists if brandId is supplied
@@ -124,7 +125,8 @@ const createService = async (req, res) => {
       land_unit: land_unit || 'acre',
       daily_price: daily_price || 0,
       pricing_context: pricing_context || 'any',
-      parentSourceId: parentSourceId || null
+      parentSourceId: parentSourceId || null,
+      ...(distance_pricing ? { distance_pricing: sanitizeDistancePricing(distance_pricing) } : {})
     });
 
     res.status(201).json({
@@ -154,6 +156,11 @@ const createService = async (req, res) => {
  * Update service
  * PUT /api/admin/services/:id
  */
+const sanitizeDistancePricing = (d = {}) => {
+  const n = (v) => Math.max(0, Number(v) || 0);
+  return { enabled: Boolean(d.enabled), baseKm: n(d.baseKm), baseCharge: n(d.baseCharge), perKmRate: n(d.perKmRate) };
+};
+
 const updateService = async (req, res) => {
   try {
     const { id } = req.params;
@@ -195,6 +202,7 @@ const updateService = async (req, res) => {
     if (updates.daily_price !== undefined) service.daily_price = updates.daily_price;
     if (updates.pricing_context !== undefined) service.pricing_context = updates.pricing_context;
     if (updates.parentSourceId !== undefined) service.parentSourceId = updates.parentSourceId || null;
+    if (updates.distance_pricing !== undefined) service.distance_pricing = sanitizeDistancePricing(updates.distance_pricing);
     
     // Sync basePrice if it's not explicitly sent but rental rates are
     if (updates.basePrice === undefined) {

@@ -1556,7 +1556,13 @@ const startTrip = async (req, res) => {
     await markVendorBusy(vendorId);
 
     // Only start Live Service Timer for mechanized services with drivers, never for standalone rentals
-    const shouldStartTimer = !isRental && (requiresDriver || Boolean(
+    const isDistanceJob = claimed.rental_type === 'distance_based';
+    if (isDistanceJob) {
+      const { startTracking } = require('../../services/distanceTripService');
+      await startTracking(claimed._id, req.body.startLocation, now);
+      claimed.distanceTrip = (await Booking.findById(claimed._id).select('distanceTrip')).distanceTrip;
+    }
+    const shouldStartTimer = !isRental && !isDistanceJob && (requiresDriver || Boolean(
       claimed.serviceTimer ||
       claimed.rental_type === 'hourly' ||
       claimed.bookingType === 'hourly' ||
@@ -1648,7 +1654,7 @@ const endTrip = async (req, res) => {
     const check = await verifyBookingOtp(booking._id, 'end', booking.driver_end_otp, driver_end_otp);
     if (!check.ok) return res.status(check.status).json({ success: false, message: check.message });
 
-    const result = await completeMachineryTrip(req, booking, { end_kilometer_photo, workUnits, work_evidence_photo, endOtpUsed: true });
+    const result = await completeMachineryTrip(req, booking, { end_kilometer_photo, workUnits, work_evidence_photo, endOtpUsed: true, finalPoints: req.body.points });
     res.status(200).json({
       success: true,
       message: 'Trip ended and billed successfully',
@@ -1664,8 +1670,13 @@ const endTrip = async (req, res) => {
  * Shared by /trip/end and the machinery "complete work" endpoint:
  * closes the timer, bills once, reconciles advance payments and notifies the farmer.
  */
-const completeMachineryTrip = async (req, booking, { end_kilometer_photo, workUnits, work_evidence_photo, endOtpUsed }) => {
+const completeMachineryTrip = async (req, booking, { end_kilometer_photo, workUnits, work_evidence_photo, endOtpUsed, finalPoints }) => {
   const now = new Date();
+  // Distance jobs: flush the last GPS fixes so the final leg is billed, before the bill is cut
+  if (booking.rental_type === 'distance_based' && Array.isArray(finalPoints) && finalPoints.length) {
+    try { await require('../../services/distanceTripService').recordPoints(booking._id, booking.vendorId, finalPoints); }
+    catch (e) { console.warn('[CompleteTrip] final distance flush skipped:', e.message); }
+  }
   const wu = workUnits !== undefined && workUnits !== null && workUnits !== '' ? Number(workUnits) : null;
   if (wu !== null && (!Number.isFinite(wu) || wu <= 0 || wu > 100000)) {
     const e = new Error('workUnits must be a positive number'); e.status = 400; throw e;
@@ -1741,9 +1752,33 @@ const completeMachineryTrip = async (req, booking, { end_kilometer_photo, workUn
   return result;
 };
 
+/**
+ * Distance trip (trolley): vendor app streams GPS fixes while the trip is running.
+ * Body: { points: [{ lat, lng, ts(ms), accuracy? }] }
+ */
+const postDistancePoints = async (req, res) => {
+  try {
+    const out = await require('../../services/distanceTripService').recordPoints(req.params.id, req.user.id, req.body.points);
+    res.status(200).json({ success: true, data: out });
+  } catch (error) {
+    if (!error.status) console.error('Distance points error:', error);
+    res.status(error.status || 500).json({ success: false, message: error.status ? error.message : 'Failed to record location' });
+  }
+};
+
+const getDistanceTrip = async (req, res) => {
+  try {
+    const b = await Booking.findOne({ _id: req.params.id, vendorId: req.user.id }).select('rental_type distanceTrip');
+    if (!b) return res.status(404).json({ success: false, message: 'Booking not found' });
+    res.status(200).json({ success: true, data: require('../../services/distanceTripService').liveView(b) });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to load distance trip' });
+  }
+};
+
 /** Machinery "start work" used by the vendor app: same rules as /trip/start. */
 const machineryStart = (req, res) => {
-  req.body = { start_kilometer_photo: req.body.startKmPhoto || req.body.conditionPhoto || null, driver_start_otp: req.body.otp };
+  req.body = { start_kilometer_photo: req.body.startKmPhoto || req.body.conditionPhoto || null, driver_start_otp: req.body.otp, startLocation: req.body.startLocation };
   return startTrip(req, res);
 };
 
@@ -1757,7 +1792,7 @@ const machineryComplete = async (req, res) => {
       return res.status(400).json({ success: false, message: `Cannot complete work that is "${booking.status}"` });
     }
     const { endKmPhoto, workUnits, evidencePhoto } = req.body;
-    const result = await completeMachineryTrip(req, booking, { end_kilometer_photo: endKmPhoto, workUnits, work_evidence_photo: evidencePhoto, endOtpUsed: false });
+    const result = await completeMachineryTrip(req, booking, { end_kilometer_photo: endKmPhoto, workUnits, work_evidence_photo: evidencePhoto, endOtpUsed: false, finalPoints: req.body.points });
     res.status(200).json({
       success: true,
       message: result.booking.status === BOOKING_STATUS.WORK_DONE ? 'Work marked as done. Payment OTP sent to farmer.' : 'Work completed and settled.',
@@ -1873,6 +1908,8 @@ module.exports = {
   getPendingBookings,
   startTrip,
   endTrip,
+  postDistancePoints,
+  getDistanceTrip,
   approveExtension,
   rejectExtension,
   machineryStart,

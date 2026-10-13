@@ -4,6 +4,7 @@ import WorkerWorkTime from '../../components/booking/WorkerWorkTime';
 import { useNavigate, useParams, useLocation, useSearchParams } from 'react-router-dom';
 import { toastManager } from '../../../../utils/toastManager';
 import useAppNotifications from '../../../../hooks/useAppNotifications';
+import DistanceMeterCard from './DistanceMeterCard';
 import { themeColors } from '../../../../theme';
 import {
   FiArrowLeft,
@@ -1929,6 +1930,8 @@ const BookingDetails = () => {
                 )}
               </>
             )}
+
+            <DistanceMeterCard booking={booking} socket={socket} />
 
             <div className="bg-white rounded-3xl p-5 shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-gray-100">
               <div className="flex items-start gap-4 mb-4">

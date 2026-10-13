@@ -31,6 +31,8 @@ import { toastManager } from '../../../../utils/toastManager';
 import { useAppNotifications } from '../../../../hooks/useAppNotifications';
 import { useLocationTracking } from '../../../../hooks/useLocationTracking';
 import TripFlowModal from '../../components/common/TripFlowModal';
+import DistanceTripCard from '../../components/bookings/DistanceTripCard';
+import useDistanceTracker, { getCurrentFix } from '../../hooks/useDistanceTracker';
 import LiveServiceTimer from '../../../../components/common/LiveServiceTimer';
 import RentalTimer from '../../../../components/common/RentalTimer';
 import RentalHandoverCard from '../../../../components/rental/RentalHandoverCard';
@@ -234,6 +236,7 @@ export default function BookingDetails() {
           categoryId: apiData.categoryId, // Store whole object for trackingType/requiresDriver
           // Rental details
           rental_type: apiData.rental_type,
+          distanceTrip: apiData.distanceTrip,
           estimatedDuration: apiData.estimatedDuration,
           landSize: apiData.landSize,
           cropType: apiData.cropType,
@@ -535,6 +538,11 @@ export default function BookingDetails() {
     }
   };
 
+  // ──────── DISTANCE (PER-KM) TRIP TRACKING (must stay above early returns) ────
+  const isDistanceJob = booking?.rental_type === 'distance_based';
+  const distanceRunning = isDistanceJob && booking?.status === 'in_progress';
+  const tracker = useDistanceTracker({ bookingId: booking?.id || id, enabled: distanceRunning });
+
   if (!booking) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: themeColors.backgroundGradient }}>
@@ -657,8 +665,9 @@ export default function BookingDetails() {
           toastManager.success('📦 Equipment Handed Over! Rental period is now active.');
         } else if (isMachinery) {
           // Machinery service: vendor enters farmer's Start OTP + KM photo
-          await machineryStartWork(id, otp, photoUrl);
-          toastManager.success('🚜 Trip Started! OTP verified, work has begun.');
+          const startLocation = isDistanceJob ? await getCurrentFix() : null;
+          await machineryStartWork(id, otp, photoUrl, startLocation);
+          toastManager.success(isDistanceJob ? '🚜 Trip Started! Distance meter is running.' : '🚜 Trip Started! OTP verified, work has begun.');
         } else {
           await startTrip(id, photoUrl, otp);
           toastManager.success('🚜 Trip Started! KM Photo & OTP verified.');
@@ -670,7 +679,7 @@ export default function BookingDetails() {
           toastManager.success('✅ Equipment Returned! Bill Generated & Payment OTP sent to farmer.');
         } else if (isMachinery) {
           // Machinery service end: only KM photo needed — system auto-generates Payment OTP for farmer
-          await machineryCompleteWork(id, photoUrl, workUnits, evidencePhoto);
+          await machineryCompleteWork(id, photoUrl, workUnits, evidencePhoto, isDistanceJob ? tracker.pendingPoints() : undefined);
           toastManager.success('🏁 Work Completed! Bill Generated & Payment OTP sent to the farmer.');
         } else {
           await endTrip(id, photoUrl, otp, workUnits, evidencePhoto);
@@ -1648,6 +1657,16 @@ export default function BookingDetails() {
               </button>
             </div>
           </div>
+        )}
+
+        {isDistanceJob && ['in_progress', 'work_done', 'completed'].includes(booking.status?.toLowerCase()) && (
+          <DistanceTripCard
+            km={tracker.totalDistanceKm || booking.distanceTrip?.totalDistanceKm || 0}
+            fare={tracker.fare || booking.distanceTrip?.fare || 0}
+            pricing={booking.distanceTrip?.pricing}
+            running={distanceRunning}
+            gpsError={tracker.gpsError}
+          />
         )}
 
         {/* Booking Timeline & Status Navigation */}

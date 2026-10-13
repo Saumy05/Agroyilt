@@ -22,6 +22,8 @@ const {
   getPendingBookings,
   startTrip,
   endTrip,
+  postDistancePoints,
+  getDistanceTrip,
   approveExtension,
   rejectExtension
 } = require('../../controllers/bookingControllers/vendorBookingController');
@@ -79,6 +81,10 @@ router.post('/:id/self/payment/collect', authenticate, isVendor, collectSelfCash
 // Equipment Trip Routes (Agriculture flow)
 router.post('/:id/trip/start', authenticate, isVendor, startTrip);
 router.post('/:id/trip/end', authenticate, isVendor, endTrip);
+
+// Distance (trolley) tracking
+router.post('/:id/distance/points', authenticate, isVendor, postDistancePoints);
+router.get('/:id/distance', authenticate, isVendor, getDistanceTrip);
 
 // Payment Route
 router.post('/:id/pay-worker', authenticate, isVendor, payWorker);

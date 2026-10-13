@@ -95,8 +95,16 @@ const serviceSchema = new mongoose.Schema({
   // ==========================================
   rental_type: {
     type: String,
-    enum: ['hourly', 'land_based', 'monthly'],
+    enum: ['hourly', 'land_based', 'monthly', 'distance_based'],
     default: 'hourly'
+  },
+  // Distance (trolley) billing, controlled by admin: baseCharge covers the first baseKm,
+  // every km after that is billed at perKmRate. Snapshotted onto each booking.
+  distance_pricing: {
+    enabled:    { type: Boolean, default: false },
+    baseKm:     { type: Number, default: 10, min: 0 },
+    baseCharge: { type: Number, default: 0, min: 0 },
+    perKmRate:  { type: Number, default: 0, min: 0 }
   },
   priceRangeMin: {
     type: Number,

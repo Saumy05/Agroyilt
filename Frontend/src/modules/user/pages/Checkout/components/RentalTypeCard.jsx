@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect, useCallback } from 'react';
-import { FiClock, FiMap, FiCalendar, FiAlertTriangle, FiCheckCircle, FiLoader } from 'react-icons/fi';
+import { FiClock, FiMap, FiCalendar, FiAlertTriangle, FiCheckCircle, FiLoader, FiNavigation } from 'react-icons/fi';
 import { bookingService } from '../../../../../services/bookingService';
 
 /**
@@ -41,10 +41,19 @@ const RENTAL_OPTIONS = [
         bg: '#fff7ed',
         border: '#ffedd5',
         desc: 'Pay per day of usage'
+    },
+    {
+        value: 'distance_based',
+        label: 'Per KM',
+        icon: FiNavigation,
+        color: '#0d9488',
+        bg: '#f0fdfa',
+        border: '#99f6e4',
+        desc: 'Pay for the road distance driven'
     }
 ];
 
-const RentalTypeCard = ({ serviceId, selectedDate, selectedTime, onRentalChange, initialRentalType, initialQuantity, landUnit = 'acre', pricing }) => {
+const RentalTypeCard = ({ serviceId, selectedDate, selectedTime, onRentalChange, initialRentalType, initialQuantity, landUnit = 'acre', pricing, distancePricing }) => {
     const [selectedRental, setSelectedRental] = useState(initialRentalType || 'hourly');
     const [quantity, setQuantity] = useState(initialQuantity || 1);
     const [checking, setChecking] = useState(false);
@@ -164,6 +173,19 @@ const RentalTypeCard = ({ serviceId, selectedDate, selectedTime, onRentalChange,
             </div>
 
             {/* Quantity Input based on Type */}
+            {selectedRental === 'distance_based' ? (
+                <div className="mb-4 pt-3 border-t border-gray-50">
+                    <p className="text-sm font-extrabold text-gray-900">
+                        ₹{distancePricing?.baseCharge || 0} for the first {distancePricing?.baseKm || 0} km
+                    </p>
+                    <p className="text-xs font-bold text-gray-600 mt-1">
+                        then ₹{distancePricing?.perKmRate || 0} per extra km
+                    </p>
+                    <p className="text-[9px] text-gray-400 mt-2 italic">
+                        * The meter starts when the driver starts the trip and stops when it ends. You pay for the actual road distance (GST extra).
+                    </p>
+                </div>
+            ) : (
             <div className="mb-4 pt-3 border-t border-gray-50">
                 <div className="flex items-center justify-between gap-4">
                     <div className="flex-1">
@@ -196,6 +218,7 @@ const RentalTypeCard = ({ serviceId, selectedDate, selectedTime, onRentalChange,
                     * Final amount will be calculated by vendor based on actual {selectedRental === 'land_based' ? landUnit : 'usage'}.
                 </p>
             </div>
+            )}
 
             {/* Availability Status */}
             {selectedDate ? (

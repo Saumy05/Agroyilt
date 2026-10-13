@@ -285,7 +285,7 @@ const Checkout = () => {
         return;
       }
     } else {
-      const needsTime = rentalType === 'hourly' || rentalType === 'land_based' || rentalType === 'daily';
+      const needsTime = rentalType === 'hourly' || rentalType === 'land_based' || rentalType === 'daily' || rentalType === 'distance_based';
       if (!addressDetails || !selectedDate || (needsTime && !selectedTime)) {
         if (!addressDetails) setShowAddressModal(true);
         else if (!selectedDate || (needsTime && !selectedTime)) setShowTimeSlotModal(true);
@@ -1078,7 +1078,7 @@ const Checkout = () => {
     let basePrice = item.price || 0;
     // Data-driven: any item with rental price fields is treated as machinery
     const svc = item.serviceId && typeof item.serviceId === 'object' ? item.serviceId : item;
-    const isAgri = !!(svc.hourly_price || svc.land_price || svc.daily_price ||
+    const isAgri = !!(svc.hourly_price || svc.land_price || svc.daily_price || svc.distance_pricing?.enabled ||
       item.hourly_price || item.land_price || item.daily_price ||
       item.categoryTitle === 'Agriculture' || item.category === 'Agriculture');
 
@@ -1086,6 +1086,7 @@ const Checkout = () => {
       if (rentalType === 'hourly') basePrice = svc.hourly_price || item.hourly_price || basePrice;
       else if (rentalType === 'land_based') basePrice = svc.land_price || item.land_price || basePrice;
       else if (rentalType === 'daily' || rentalType === 'monthly') basePrice = svc.daily_price || item.daily_price || basePrice;
+      else if (rentalType === 'distance_based') basePrice = svc.distance_pricing?.baseCharge || item.distance_pricing?.baseCharge || basePrice;
     }
 
     // 2. Identify Item for Plan Matching
@@ -1132,7 +1133,7 @@ const Checkout = () => {
   // so that savings = 0 when no real plan discount exists (prevents fake BEST PRICE banner).
   const totalOriginalPrice = cartItems.reduce((sum, item) => {
     const svcO = item.serviceId && typeof item.serviceId === 'object' ? item.serviceId : item;
-    const isAgri = !!(svcO.hourly_price || svcO.land_price || svcO.daily_price ||
+    const isAgri = !!(svcO.hourly_price || svcO.land_price || svcO.daily_price || svcO.distance_pricing?.enabled ||
       item.hourly_price || item.land_price || item.daily_price ||
       item.categoryTitle === 'Agriculture' || item.category === 'Agriculture');
 
@@ -1142,6 +1143,7 @@ const Checkout = () => {
       if (rentalType === 'hourly') base = svcO.hourly_price || item.hourly_price || base;
       else if (rentalType === 'land_based') base = svcO.land_price || item.land_price || base;
       else if (rentalType === 'daily' || rentalType === 'monthly') base = svcO.daily_price || item.daily_price || base;
+      else if (rentalType === 'distance_based') base = svcO.distance_pricing?.baseCharge || item.distance_pricing?.baseCharge || base;
     }
 
     // Dynamic quantity — same as calculateItemPrice()
@@ -1475,6 +1477,10 @@ const Checkout = () => {
                        } else if (rentalType === 'daily' || rentalType === 'monthly') {
                          unitPrice = svc.daily_price || unitPrice;
                          unitLabel = "Daily Rate";
+                       } else if (rentalType === 'distance_based') {
+                         const dp = svc.distance_pricing || item.distance_pricing || {};
+                         unitPrice = dp.baseCharge || unitPrice;
+                         unitLabel = `First ${dp.baseKm || 0} km, then ₹${dp.perKmRate || 0}/km`;
                        }
                     }
 
@@ -1527,8 +1533,13 @@ const Checkout = () => {
             pricing={{
               hourly: cartItems[0]?.serviceId?.hourly_price || cartItems[0]?.hourly_price || 0,
               land_based: cartItems[0]?.serviceId?.land_price || cartItems[0]?.land_price || 0,
-              daily: cartItems[0]?.serviceId?.daily_price || cartItems[0]?.daily_price || 0
+              daily: cartItems[0]?.serviceId?.daily_price || cartItems[0]?.daily_price || 0,
+              distance_based: (() => {
+                const dp = cartItems[0]?.serviceId?.distance_pricing || cartItems[0]?.distance_pricing;
+                return dp?.enabled ? dp.baseCharge : 0;
+              })()
             }}
+            distancePricing={cartItems[0]?.serviceId?.distance_pricing || cartItems[0]?.distance_pricing}
           />
         )}
 

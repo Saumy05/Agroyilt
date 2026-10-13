@@ -95,7 +95,7 @@ const createBooking = async (req, res) => {
     } = req.body;
 
     // --- TIME VALIDATION (timezone-aware: past dates, passed slots, >90 days ahead) ---
-    const allowOvernight = Boolean(equipmentId || selectedImplements || ['hourly', 'land_based', 'daily'].includes(rental_type) || req.body.allowOvernight);
+    const allowOvernight = Boolean(equipmentId || selectedImplements || ['hourly', 'land_based', 'daily', 'distance_based'].includes(rental_type) || req.body.allowOvernight);
     const schedule = validateSchedule(scheduledDate, timeSlot, undefined, { allowOvernight });
     if (!schedule.ok) {
       return res.status(400).json({ success: false, message: schedule.message });
@@ -253,8 +253,15 @@ const createBooking = async (req, res) => {
       // Determine correct unit rate 
       // NEW: Prioritize vendor's actual equipment price over Admin's template cap
       let unitRate = service.basePrice || 500;
-      
-      if (equipmentObj && equipmentObj.pricing) {
+
+      if (rental_type === 'distance_based') {
+        // Admin-controlled tier: the booking starts at the base charge; the final bill uses the km driven
+        const dp = service.distance_pricing || {};
+        if (!dp.enabled || !(Number(dp.baseCharge) > 0)) {
+          return res.status(400).json({ success: false, message: 'Distance-based booking is not available for this service' });
+        }
+        unitRate = Number(dp.baseCharge);
+      } else if (equipmentObj && equipmentObj.pricing) {
         const ep = equipmentObj.pricing;
         if (rental_type === 'hourly' && ep.hourly?.isEnabled) unitRate = ep.hourly.price;
         else if (rental_type === 'land_based' && ep.land_based?.isEnabled) unitRate = ep.land_based.price;
@@ -694,6 +701,7 @@ const createBooking = async (req, res) => {
       brandIcon: reqBrandIcon || brandIcon,
       bookingType: bookingType || 'scheduled',
       rental_type: rental_type || null,
+      ...(rental_type === 'distance_based' ? { distanceTrip: { status: 'NOT_STARTED', pricing: require('../../services/distanceTripService').pricingFromService(service) } } : {}),
       cropType: cropType || null,
       chemicalUsed: chemicalUsed || null,
       landSize: landSize || null,
@@ -2175,7 +2183,13 @@ const calculatePrice = async (req, res) => {
       equipmentObj = await VendorEquipment.findById(equipmentId);
     }
 
-    if (equipmentObj && equipmentObj.pricing) {
+    if (rental_type === 'distance_based') {
+      const dp = service.distance_pricing || {};
+      if (!dp.enabled || !(Number(dp.baseCharge) > 0)) {
+        return res.status(400).json({ success: false, message: 'Distance-based booking is not available for this service' });
+      }
+      unitRate = Number(dp.baseCharge);
+    } else if (equipmentObj && equipmentObj.pricing) {
       const ep = equipmentObj.pricing;
       if (rental_type === 'hourly' && ep.hourly?.isEnabled) unitRate = ep.hourly.price;
       else if (rental_type === 'land_based' && ep.land_based?.isEnabled) unitRate = ep.land_based.price;
@@ -2230,7 +2244,8 @@ const calculatePrice = async (req, res) => {
         visitingCharges,
         finalAmount,
         unitRate,
-        multiplier
+        multiplier,
+        ...(rental_type === 'distance_based' ? { distancePricing: require('../../services/distanceTripService').pricingFromService(service), isEstimate: true } : {})
       }
     });
   } catch (error) {

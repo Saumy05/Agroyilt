@@ -536,6 +536,14 @@ const settleVendorCash = async (bookingId, { collectorRole, collectorId }) => {
  * Timer-based when a live timer exists, otherwise from the booked rental type.
  */
 const computeMachineryBase = ({ booking, service, equipment, workUnits, now }) => {
+  // Distance (trolley) jobs: admin's tier applied to the road distance actually driven
+  if (booking.rental_type === 'distance_based') {
+    const { calcDistanceFare } = require('./distanceTripService');
+    const d = booking.distanceTrip || {};
+    const distanceKm = round2(d.totalDistanceKm || 0);
+    return { base: calcDistanceFare(d.pricing, distanceKm), hasTimer: false, isDistance: true, distanceKm, pricing: d.pricing };
+  }
+
   const isRental = Boolean(
     booking.fulfillmentMode === 'rental' ||
     booking.categoryId?.fulfillmentMode === 'rental' ||
@@ -645,6 +653,7 @@ const finalizeMachineryBilling = async (booking, { service = null, equipment = n
   }
 
   const { gstPct, payoutPct } = await getRentalSettings();
+  if (booking.rental_type === 'distance_based') require('./distanceTripService').freezeTrip(booking, now);
   const calc = computeMachineryBase({ booking, service, equipment, workUnits, now });
   const base = calc.base;
   const gst = round2((base * gstPct) / 100);
@@ -652,7 +661,9 @@ const finalizeMachineryBilling = async (booking, { service = null, equipment = n
   const grandTotal = round2(base + gst + penalty);
   const vendorEarning = round2((base * payoutPct) / 100);
 
-  const name = calc.hasTimer
+  const name = calc.isDistance
+    ? `${service?.title || booking.serviceName || 'Trolley'} (${calc.distanceKm} km)`
+    : calc.hasTimer
     ? `${service?.title || booking.serviceName || 'Machinery Service'} (${calc.totalActiveMinutes} Mins Work)`
     : `${service?.title || booking.serviceName || 'Equipment Rental'} (${booking.rental_type || 'service'})`;
 
