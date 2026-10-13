@@ -4,7 +4,8 @@ const {
   getPublicEquipment, 
   getPublicEquipmentById, 
   checkAvailability,
-  findQualifiedVendors
+  findQualifiedVendors,
+  getImplementDistancePricing
 } = require('../../controllers/publicControllers/publicEquipmentController');
 
 const farmerSearchController = require('../../controllers/farmerControllers/farmerSearchController');
@@ -13,6 +14,7 @@ const farmerSearchController = require('../../controllers/farmerControllers/farm
 router.get('/', getPublicEquipment);
 router.post('/qualified-vendors', findQualifiedVendors);
 router.get('/qualified-vendors', findQualifiedVendors);
+router.get('/implement-distance-pricing', getImplementDistancePricing);
 router.get('/search', farmerSearchController.searchMachinery);
 router.get('/search/:id', farmerSearchController.getMachineryDetails);
 router.get('/:id', getPublicEquipmentById);

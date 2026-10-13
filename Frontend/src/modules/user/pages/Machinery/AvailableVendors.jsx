@@ -169,6 +169,7 @@ const AvailableVendors = () => {
           tax: item.pricing.tax,
           visitingCharges: item.pricing.visitingCharges,
           gstPercentage: item.pricing.gstPercentage ?? 5,
+          distancePricing: item.pricing.distancePricing || null,
           total: item.pricing.totalAmount,
           tractorTotal: item.pricing.tractorTotal || item.pricing.basePrice,
           implementTotal: item.pricing.implementTotal || 0,
@@ -285,6 +286,7 @@ const AvailableVendors = () => {
   const formatScopeText = (qty, type) => {
     const num = Math.round((parseFloat(qty) || 1) * 100) / 100;
     const formatted = Number(num.toFixed(2)).toString();
+    if (type === 'distance_based') return 'Per KM';
     if (type === 'hourly') return `${formatted} ${num === 1 ? 'Hr' : 'Hrs'}`;
     if (type === 'land_based') return `${formatted} ${num === 1 ? 'Acre' : 'Acres'}`;
     return `${formatted} ${num === 1 ? 'Day' : 'Days'}`;

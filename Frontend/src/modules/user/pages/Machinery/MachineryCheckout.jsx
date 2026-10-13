@@ -153,6 +153,7 @@ const MachineryCheckout = () => {
     const formatDuration = (qty, type) => {
         const num = Math.round((parseFloat(qty) || 1) * 100) / 100;
         const formatted = Number(num.toFixed(2)).toString();
+        if (type === 'distance_based') return 'Per KM (billed on distance driven)';
         if (type === 'hourly') {
             const totalMinutes = Math.round(num * 60);
             const hours = Math.floor(totalMinutes / 60);
@@ -220,13 +221,15 @@ const MachineryCheckout = () => {
                 bookedItems: [
                     {
                         title: equipment.name,
-                        price: rateType === 'hourly'
+                        price: rateType === 'distance_based'
+                            ? bookingData.distancePricing?.baseCharge
+                            : rateType === 'hourly'
                             ? equipment.pricing?.hourly?.price
                             : rateType === 'land_based'
                             ? equipment.pricing?.land_based?.price
                             : equipment.pricing?.daily?.price,
                         quantity: quantity,
-                        description: `${quantity} ${rateType === 'hourly' ? 'Hours' : rateType === 'land_based' ? 'Acres' : 'Days'}`
+                        description: rateType === 'distance_based' ? 'Per KM' : `${quantity} ${rateType === 'hourly' ? 'Hours' : rateType === 'land_based' ? 'Acres' : 'Days'}`
                     },
                     // Add implements as additional line items
                     ...selectedImplements.map(impl => ({
@@ -495,7 +498,14 @@ const MachineryCheckout = () => {
                         <div className="flex justify-between items-start text-xs pt-0.5">
                           <div className="space-y-0.5 max-w-[65%]">
                             <p className="font-bold text-slate-800 leading-snug">{equipment.name}</p>
-                            <span className="text-[9.5px] font-semibold text-slate-400 block">{formatDuration(quantity, rateType)} estimated service scope</span>
+                            <span className="text-[9.5px] font-semibold text-slate-400 block">
+                              {rateType === 'distance_based' && bookingData.distancePricing
+                                ? `Starting fare: first ${bookingData.distancePricing.baseKm} km. Then ₹${bookingData.distancePricing.perKmRate}/km extra`
+                                : `${formatDuration(quantity, rateType)} estimated service scope`}
+                            </span>
+                            {rateType === 'distance_based' && (
+                              <span className="text-[9.5px] font-bold text-teal-700 block">Final bill = actual road distance driven (shown live during the trip)</span>
+                            )}
                           </div>
                           <span className="font-black text-slate-900 shrink-0 text-xs">₹{finalTractorTotal}</span>
                         </div>

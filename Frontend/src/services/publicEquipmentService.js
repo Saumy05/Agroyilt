@@ -29,6 +29,12 @@ export const publicEquipmentService = {
     return response.data;
   },
 
+  // Per-km pricing tier for an attachment (e.g. Trolley), or null when it can't be booked per km
+  getImplementDistancePricing: async (implementId, categoryId) => {
+    const response = await api.get('/public/equipment/implement-distance-pricing', { params: { implementId, categoryId } });
+    return response.data;
+  },
+
   // Check equipment availability for specific date/time
   checkAvailability: async (equipmentId, date, timeSlot) => {
     const response = await api.get(`/public/equipment/${equipmentId}/availability`, {

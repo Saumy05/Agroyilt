@@ -94,6 +94,8 @@ const MachineryExplorer = () => {
     return 1;
   });
   const [isAreaModalOpen, setIsAreaModalOpen] = useState(false);
+  // Admin's per-km tier for the chosen attachment (e.g. Trolley); null when it can't be booked per km
+  const [distancePricing, setDistancePricing] = useState(null);
   const [measuredField, setMeasuredField] = useState(location.state?.measuredField || null);
 
   const handleApplyMeasuredField = (fieldData) => {
@@ -204,6 +206,26 @@ const MachineryExplorer = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const implId = selectedImplement?._id || selectedImplement?.id;
+    const catId = selectedCat?._id || selectedCat?.id;
+    let cancelled = false;
+    if (!implId) {
+      setDistancePricing(null);
+      setRentalType(prev => (prev === 'distance_based' ? 'hourly' : prev));
+      return undefined;
+    }
+    publicEquipmentService.getImplementDistancePricing(implId, catId)
+      .then(res => {
+        if (cancelled) return;
+        const dp = res?.success ? res.data : null;
+        setDistancePricing(dp || null);
+        if (!dp) setRentalType(prev => (prev === 'distance_based' ? 'hourly' : prev));
+      })
+      .catch(() => { if (!cancelled) setDistancePricing(null); });
+    return () => { cancelled = true; };
+  }, [selectedImplement, selectedCat]);
 
   const handleSelectSlotPreset = (start, end) => {
     setStartTime(start);
@@ -336,6 +358,7 @@ const MachineryExplorer = () => {
       const human = getDurationHumanReadable(num);
       return `${formatted} ${num === 1 ? 'Hour' : 'Hours'} (${human}) • Hourly Metered`;
     }
+    if (type === 'distance_based') return 'Per KM • Billed on road distance driven';
     if (type === 'land_based') {
       return `${formatted} ${num === 1 ? 'Acre' : 'Acres'} • Land Acreage`;
     }
@@ -348,6 +371,7 @@ const MachineryExplorer = () => {
     if (type === 'hourly') {
       return `${formatted} ${num === 1 ? 'Hr' : 'Hrs'}`;
     }
+    if (type === 'distance_based') return 'Per KM';
     if (type === 'land_based') {
       return `${formatted} ${num === 1 ? 'Acre' : 'Acres'}`;
     }
@@ -355,6 +379,7 @@ const MachineryExplorer = () => {
   };
 
   const getScopeLimits = (type) => {
+    if (type === 'distance_based') return { min: 1, max: 1, unit: 'Trip' };
     if (type === 'daily') return { min: 1, max: 30, unit: 'Days' };
     if (type === 'hourly') return { min: 0.5, max: 24, unit: 'Hours' };
     return { min: 0.5, max: 200, unit: 'Acres' };
@@ -362,6 +387,7 @@ const MachineryExplorer = () => {
 
   const handleRentalTypeChange = (newType) => {
     setRentalType(newType);
+    if (newType === 'distance_based') { setQuantity(1); return; }
     const { min, max } = getScopeLimits(newType);
     setQuantity(prev => {
       const current = parseFloat(prev) || 1;
@@ -903,10 +929,11 @@ const MachineryExplorer = () => {
                     </div>
 
                     {/* Service Type Segmented Tabs (Hourly/Minutes vs Acreage) */}
-                    <div className="grid grid-cols-2 gap-1 bg-slate-100/90 p-1 rounded-xl border border-slate-200/60">
+                    <div className={`grid ${distancePricing ? 'grid-cols-3' : 'grid-cols-2'} gap-1 bg-slate-100/90 p-1 rounded-xl border border-slate-200/60`}>
                       {[
                         { label: '⏱️ Hourly / Minutes', value: 'hourly' },
-                        { label: '🌾 Land Area (Acres)', value: 'land_based' }
+                        { label: '🌾 Land Area (Acres)', value: 'land_based' },
+                        ...(distancePricing ? [{ label: '🚛 Per KM', value: 'distance_based' }] : [])
                       ].map((t) => (
                         <button
                           key={t.value}
@@ -923,7 +950,18 @@ const MachineryExplorer = () => {
                       ))}
                     </div>
 
-                    {/* Stepper & Counter */}
+                    {rentalType === 'distance_based' && distancePricing ? (
+                      <div className="rounded-xl border border-teal-200 bg-teal-50/70 p-3 space-y-1">
+                        <p className="text-sm font-black text-teal-900">
+                          ₹{distancePricing.baseCharge} for the first {distancePricing.baseKm} km
+                        </p>
+                        <p className="text-xs font-bold text-teal-800">then ₹{distancePricing.perKmRate} per extra km</p>
+                        <p className="text-[10px] font-semibold text-teal-700/80 pt-1">
+                          🛰️ The meter starts when the driver starts the trip and stops when the work is completed. You pay for the actual road distance driven (GST extra).
+                        </p>
+                      </div>
+                    ) : (
+                    /* Stepper & Counter */
                     <div className="space-y-2 pt-0.5">
                       <div className="flex items-center justify-between">
                         <div>
@@ -1069,6 +1107,7 @@ const MachineryExplorer = () => {
                         ))}
                       </div>
                     </div>
+                    )}
                   </motion.div>
                 ) : currentStep > 3 ? (
                   /* Step 3 Collapsed Summary */

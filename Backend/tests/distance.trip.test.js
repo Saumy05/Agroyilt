@@ -212,3 +212,79 @@ describe('Trolley booking billed by distance', () => {
     assert.equal(b.finalAmount, 157.5); // (100 + 5 x 10) + 5% GST
   });
 });
+
+// ── Trolley booked as an attachment on a tractor (machinery flow) ────────────
+describe('Trolley as an attachment (per km)', () => {
+  let ctx, w, trolley;
+  const realGet = axios.get;
+  before(async () => { ctx = await h.boot(); });
+  after(async () => { axios.get = realGet; await h.shutdown(); });
+  beforeEach(async () => {
+    await h.clearDb(); h.fakeIo.reset();
+    w = await f.world(ctx);
+    trolley = await h.M('Category').create({ title: 'Trolley', slug: `trolley-${Date.now()}`, parentCategory: w.cat._id });
+    await h.M('VendorEquipment').updateOne({ _id: w.eq._id }, { $set: {
+      implements: [{ subCategoryId: trolley._id, pricing: { hourly: { isEnabled: true, price: 300 } } }]
+    } });
+    // admin's tier lives on a Service with the same name as the attachment
+    await h.make.service(w.cat, {
+      title: 'Trolley', categoryId: w.cat._id,
+      distance_pricing: { enabled: true, baseKm: 10, baseCharge: 100, perKmRate: 10 }
+    });
+    axios.get = async () => { throw new Error('offline'); };
+  });
+
+  const bookTrolley = (over = {}) => w.api.post('/api/user/bookings').set(h.auth(w.farmer, 'USER')).send(h.bookingPayload(w.eq, {
+    rental_type: 'distance_based',
+    selectedImplements: [{ subCategoryId: String(trolley._id), title: 'Trolley' }],
+    bookedItems: [{ title: 'Tractor', price: 99999, quantity: 1 }, { title: 'Trolley', price: 88888, quantity: 1 }],
+    ...over
+  }));
+
+  it('resolves the admin tier from the attachment name', async () => {
+    const r = await D.resolveImplementDistancePricing(trolley._id, w.cat._id);
+    assert.deepEqual({ baseKm: r.baseKm, baseCharge: r.baseCharge, perKmRate: r.perKmRate }, { baseKm: 10, baseCharge: 100, perKmRate: 10 });
+    assert.equal(await D.resolveImplementDistancePricing(w.cat._id, w.cat._id), null, 'Tractor has no distance tier');
+  });
+
+  it('books tractor + trolley at the admin base charge, ignoring client-sent prices and vendor rates', async () => {
+    const r = await bookTrolley();
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    const b = await h.M('Booking').findById(r.body.data._id);
+    assert.equal(b.basePrice, 100);
+    assert.equal(b.distanceTrip.pricing.perKmRate, 10);
+    assert.equal(b.finalAmount, 105);
+  });
+
+  it('bills the driven distance end to end', async () => {
+    const id = (await bookTrolley()).body.data._id;
+    await f.toInProgress(w, id);
+    axios.get = async (url) => url.includes('/match/') ? { data: { code: 'Ok', matchings: [{ distance: 20000 }] } } : Promise.reject(new Error('offline'));
+    const pts = Array.from({ length: 30 }, (_, i) => ({ lat: 18.52 + i * 0.001, lng: 73.85, ts: Date.now() - 3600000 + i * 5000, accuracy: 5 }));
+    assert.equal((await w.api.post(`/api/vendors/bookings/${id}/distance/points`).set(h.auth(w.vendor, 'VENDOR')).send({ points: pts })).status, 200);
+    assert.equal((await f.endTrip(w, id)).status, 200);
+    assert.equal((await h.M('Booking').findById(id)).finalAmount, 210);
+  });
+
+  it('is refused when the attachment has no per-km tier', async () => {
+    await h.M('Service').updateOne({ title: 'Trolley' }, { $set: { 'distance_pricing.enabled': false } });
+    assert.equal((await bookTrolley()).status, 400);
+  });
+
+  it('vendor search quotes the admin tier for the attachment and ignores vendor hourly rates', async () => {
+    const { findQualifiedVendors } = require('../controllers/publicControllers/publicEquipmentController');
+    const req = { query: { categoryId: String(w.cat._id), implementId: String(trolley._id), rental_type: 'distance_based', date: h.dateIn(2), timeSlot: '09:00 - 13:00' }, body: {} };
+    let out;
+    await findQualifiedVendors(req, { status() { return this; }, json(b) { out = b; } });
+    assert.equal(out.success, true, JSON.stringify(out));
+    assert.equal(out.data.length, 1);
+    assert.equal(out.data[0].pricing.basePrice, 100);
+    assert.equal(out.data[0].pricing.implementTotal, 0);
+    assert.equal(out.data[0].pricing.distancePricing.perKmRate, 10);
+
+    await h.M('Service').updateOne({ title: 'Trolley' }, { $set: { 'distance_pricing.enabled': false } });
+    let none;
+    await findQualifiedVendors(req, { status() { return this; }, json(b) { none = b; } });
+    assert.equal(none.data.length, 0);
+  });
+});

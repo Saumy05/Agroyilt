@@ -215,6 +215,7 @@ const createBooking = async (req, res) => {
     let equipmentObj = null;
     let calculatedDurationMinutes = null; // hoisted: persisted on the booking below
 
+    let distancePricing = null; // set for per-km (trolley) bookings
     if (isAgriService) {
       // ── Agriculture Dynamic Multiplier Logic ──
       let multiplier = 1;
@@ -255,9 +256,17 @@ const createBooking = async (req, res) => {
       let unitRate = service.basePrice || 500;
 
       if (rental_type === 'distance_based') {
-        // Admin-controlled tier: the booking starts at the base charge; the final bill uses the km driven
-        const dp = service.distance_pricing || {};
-        if (!dp.enabled || !(Number(dp.baseCharge) > 0)) {
+        // Admin-controlled tier: the booking starts at the base charge; the final bill uses the km driven.
+        // Booked as a service ("Trolley" service) or as an implement attached to a machine.
+        const distSvc = require('../../services/distanceTripService');
+        let dp = service.distance_pricing?.enabled ? service.distance_pricing : null;
+        if (!dp) {
+          const implId = Array.isArray(selectedImplements) && selectedImplements[0]
+            ? (selectedImplements[0].subCategoryId?._id || selectedImplements[0].subCategoryId) : null;
+          dp = await distSvc.resolveImplementDistancePricing(implId, categoryId || equipmentObj?.categoryId);
+        }
+        distancePricing = dp ? distSvc.pricingFromService({ distance_pricing: dp }) : null;
+        if (!dp || !(Number(dp.baseCharge) > 0)) {
           return res.status(400).json({ success: false, message: 'Distance-based booking is not available for this service' });
         }
         unitRate = Number(dp.baseCharge);
@@ -281,7 +290,8 @@ const createBooking = async (req, res) => {
       
       // Update the price of the main service in bookedItems to reflect the calculated Agri price
       // This ensures the items list and basePrice are consistent.
-      if (Array.isArray(bookedItems) && bookedItems.length > 0) {
+      // Per-km jobs start at the admin base charge no matter what the client sent as line items
+      if (rental_type !== 'distance_based' && Array.isArray(bookedItems) && bookedItems.length > 0) {
         let mainItemHandled = false;
         bookedItems.forEach(item => {
           const itemTitle = item.card?.title || item.title;
@@ -701,7 +711,7 @@ const createBooking = async (req, res) => {
       brandIcon: reqBrandIcon || brandIcon,
       bookingType: bookingType || 'scheduled',
       rental_type: rental_type || null,
-      ...(rental_type === 'distance_based' ? { distanceTrip: { status: 'NOT_STARTED', pricing: require('../../services/distanceTripService').pricingFromService(service) } } : {}),
+      ...(rental_type === 'distance_based' && distancePricing ? { distanceTrip: { status: 'NOT_STARTED', pricing: distancePricing } } : {}),
       cropType: cropType || null,
       chemicalUsed: chemicalUsed || null,
       landSize: landSize || null,

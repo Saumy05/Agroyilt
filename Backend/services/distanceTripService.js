@@ -14,6 +14,7 @@
  * (admin-controlled; snapshotted on the booking at creation).
  */
 const axios = require('axios');
+const mongoose = require('mongoose');
 const Booking = require('../models/Booking');
 const { BOOKING_STATUS } = require('../utils/constants');
 
@@ -191,6 +192,31 @@ const pricingFromService = (service) => {
   return { baseKm: Number(d.baseKm) || 0, baseCharge: Number(d.baseCharge) || 0, perKmRate: Number(d.perKmRate) || 0 };
 };
 
+/**
+ * Trolley is booked as an implement (a sub-category) attached to a machine, while the admin sets the
+ * per-km tier on a Service of the same name. Finds that tier for a given implement.
+ * Services under the same machine category win over same-named services elsewhere.
+ * @returns {Promise<{enabled:true, baseKm:number, baseCharge:number, perKmRate:number, serviceId:string}|null>}
+ */
+const resolveImplementDistancePricing = async (implementId, machineCategoryId = null) => {
+  if (!implementId || !mongoose.isValidObjectId(String(implementId))) return null;
+  const Category = require('../models/Category');
+  const Service = require('../models/Service');
+  const impl = await Category.findById(implementId).select('title').lean();
+  if (!impl?.title) return null;
+  const esc = impl.title.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const candidates = await Service.find({
+    'distance_pricing.enabled': true,
+    'distance_pricing.baseCharge': { $gt: 0 },
+    status: { $ne: 'inactive' },
+    title: new RegExp(`^\\s*${esc}\\s*$`, 'i')
+  }).lean();
+  if (!candidates.length) return null;
+  const sameMachine = candidates.find((s) => machineCategoryId && String(s.categoryId) === String(machineCategoryId));
+  const svc = sameMachine || candidates[0];
+  return { enabled: true, ...pricingFromService(svc), serviceId: String(svc._id) };
+};
+
 /** Starts tracking (called when the vendor starts the trip). Idempotent. */
 const startTracking = (bookingId, start = null, now = new Date()) => {
   const $set = { 'distanceTrip.status': 'RUNNING', 'distanceTrip.startedAt': now, 'distanceTrip.totalDistanceKm': 0, 'distanceTrip.fare': 0 };
@@ -282,6 +308,7 @@ module.exports = {
   haversineM,
   isDistanceBooking,
   pricingFromService,
+  resolveImplementDistancePricing,
   startTracking,
   recordPoints,
   freezeTrip,

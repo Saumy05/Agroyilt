@@ -345,6 +345,17 @@ exports.findQualifiedVendors = async (req, res) => {
       if (rental_type === 'monthly') multiplier *= 30;
     }
 
+    // Per-km (trolley) jobs: admin's tier for the chosen implement replaces vendor hourly/acre rates
+    let distancePricing = null;
+    if (rental_type === 'distance_based') {
+      const distSvc = require('../../services/distanceTripService');
+      const found = await distSvc.resolveImplementDistancePricing(implementId, categoryId);
+      if (!found) {
+        return res.status(200).json({ success: true, data: [], message: 'Per-km pricing is not available for this attachment.' });
+      }
+      distancePricing = distSvc.pricingFromService({ distance_pricing: found });
+    }
+
     // 2. Find nearby approved vendors
     const vendorQuery = {
       approvalStatus: 'approved',
@@ -461,7 +472,9 @@ exports.findQualifiedVendors = async (req, res) => {
 
       // Pricing validation for requested rental_type (must be explicitly enabled and price > 0)
       const pricingObj = eq.pricing?.[rental_type];
-      const tractorUnitRate = (pricingObj?.isEnabled && pricingObj.price > 0) ? pricingObj.price : 0;
+      const tractorUnitRate = distancePricing
+        ? distancePricing.baseCharge
+        : ((pricingObj?.isEnabled && pricingObj.price > 0) ? pricingObj.price : 0);
       if (tractorUnitRate <= 0) continue; // Not enabled or price <= 0
 
       // Implement validation & pricing
@@ -477,7 +490,7 @@ exports.findQualifiedVendors = async (req, res) => {
 
         if (foundImpl) {
           const implPriceObj = foundImpl.pricing?.[rental_type];
-          implementUnitRate = (implPriceObj?.isEnabled && implPriceObj.price > 0) ? implPriceObj.price : 0;
+          implementUnitRate = (!distancePricing && implPriceObj?.isEnabled && implPriceObj.price > 0) ? implPriceObj.price : 0;
           matchedImplement = {
             _id: foundImpl.subCategoryId?._id || foundImpl.subCategoryId,
             title: foundImpl.subCategoryId?.title || 'Selected Implement',
@@ -550,6 +563,7 @@ exports.findQualifiedVendors = async (req, res) => {
           implementUnitRate,
           implementTotal,
           basePrice,
+          ...(distancePricing ? { distancePricing, isEstimate: true } : {}),
           tax,
           gstPercentage,
           visitingCharges,
@@ -583,5 +597,23 @@ exports.findQualifiedVendors = async (req, res) => {
   } catch (error) {
     console.error('Find qualified vendors error:', error);
     res.status(500).json({ success: false, message: 'Failed to search qualified vendors' });
+  }
+};
+
+/**
+ * GET /api/public/equipment/implement-distance-pricing?implementId=&categoryId=
+ * Tells the booking screen whether an attachment (e.g. Trolley) can be booked per km, and at what tier.
+ */
+exports.getImplementDistancePricing = async (req, res) => {
+  try {
+    const { implementId, categoryId } = req.query;
+    const found = await require('../../services/distanceTripService').resolveImplementDistancePricing(implementId, categoryId);
+    res.status(200).json({
+      success: true,
+      data: found ? { baseKm: found.baseKm, baseCharge: found.baseCharge, perKmRate: found.perKmRate } : null
+    });
+  } catch (error) {
+    console.error('Implement distance pricing error:', error);
+    res.status(500).json({ success: false, message: 'Failed to load distance pricing' });
   }
 };
