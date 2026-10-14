@@ -650,48 +650,65 @@ const BookingConfirmation = () => {
               {booking.bookedItems && booking.bookedItems.length > 0 && (
                 <div className="pt-2 border-t border-dashed border-gray-100 space-y-2">
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Booked Equipment</p>
-                  {booking.bookedItems.map((item, idx) => (
-                    <div key={idx} className="flex justify-between items-start bg-slate-50/80 rounded-xl p-2.5 border border-slate-100">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className="text-[11px] font-bold px-1.5 py-0.5 rounded border"
-                            style={{ color: themeColors.button, backgroundColor: 'rgba(0, 166, 166, 0.08)', borderColor: 'rgba(0, 166, 166, 0.2)' }}
-                          >
-                            ×{item.quantity}
-                          </span>
-                          <span className="text-xs font-bold text-gray-900 truncate">{item.card?.title || booking.serviceName || 'Service'}</span>
-                        </div>
+                  {booking.bookedItems.map((item, idx) => {
+                    const isRental = !!booking.rental_type;
+                    const rawPrice = item.card?.price ?? item.price;
+                    const itemPrice = rawPrice !== undefined && rawPrice !== null
+                      ? rawPrice
+                      : (idx === 0 ? (booking.basePrice || 0) : 0);
+                    const itemTotal = isRental ? itemPrice : itemPrice * (item.quantity || 1);
 
-                        {/* Dynamic Agri & Rental Info */}
-                        {booking.rental_type && (
-                          <div className="ml-6 mt-1.5 flex flex-wrap gap-1">
-                            <span className="text-[9px] font-black tracking-wider uppercase text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100 capitalize">
-                              {booking.rental_type.replace('_', ' ')}
+                    return (
+                      <div key={idx} className="flex justify-between items-start bg-slate-50/80 rounded-xl p-2.5 border border-slate-100">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="text-[11px] font-bold px-1.5 py-0.5 rounded border"
+                              style={{ color: themeColors.button, backgroundColor: 'rgba(0, 166, 166, 0.08)', borderColor: 'rgba(0, 166, 166, 0.2)' }}
+                            >
+                              {isRental ? '1 Unit' : `×${item.quantity || 1}`}
                             </span>
-                            {booking.rental_type === 'land_based' && booking.landSize && (
-                              <span className="text-[9px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
-                                🌾 {booking.landSize}{typeof booking.landSize === 'string' && booking.landSize.match(/[a-zA-Z]/) ? '' : ' Acres'}
-                              </span>
-                            )}
-                            {booking.estimatedDuration && (
-                              <span className="text-[9px] font-bold text-blue-800 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
-                                ⏱ {booking.estimatedDuration} {booking.rental_type === 'daily' ? 'Days' : 'Hours'}
-                              </span>
-                            )}
-                            {booking.cropType && (
-                              <span className="text-[9px] font-bold text-purple-800 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100">
-                                🌱 {booking.cropType}
-                              </span>
-                            )}
+                            <span className="text-xs font-bold text-gray-900 truncate">{item.card?.title || item.title || booking.serviceName || 'Service'}</span>
                           </div>
-                        )}
+
+                          {/* Dynamic Agri & Rental Info */}
+                          {booking.rental_type && (
+                            <div className="ml-6 mt-1.5 flex flex-wrap gap-1">
+                              <span className="text-[9px] font-black tracking-wider uppercase text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100 capitalize">
+                                {booking.rental_type.replace('_', ' ')}
+                              </span>
+                              {booking.rental_type === 'land_based' && booking.landSize && (
+                                <span className="text-[9px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
+                                  🌾 {booking.landSize}{typeof booking.landSize === 'string' && booking.landSize.match(/[a-zA-Z]/) ? '' : ' Acres'}
+                                </span>
+                              )}
+                              {booking.estimatedDuration && (
+                                <span className="text-[9px] font-bold text-blue-800 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
+                                  ⏱ {booking.estimatedDuration} {booking.rental_type === 'daily' ? 'Days' : 'Hours'}
+                                </span>
+                              )}
+                              {booking.cropType && (
+                                <span className="text-[9px] font-bold text-purple-800 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100">
+                                  🌱 {booking.cropType}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <div className="ml-2 shrink-0 text-right">
+                          {itemTotal > 0 ? (
+                            <span className="text-xs font-black text-gray-900">
+                              ₹{itemTotal.toLocaleString('en-IN')}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
+                              Included (₹0)
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <span className="text-xs font-black text-gray-900 ml-2 shrink-0">
-                        ₹{((item.card?.price || booking.basePrice || 0) * (item.quantity || 1)).toLocaleString('en-IN')}
-                      </span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

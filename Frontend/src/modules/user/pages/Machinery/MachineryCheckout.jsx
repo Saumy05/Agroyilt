@@ -246,22 +246,17 @@ const MachineryCheckout = () => {
                 bookedItems: [
                     {
                         title: equipment.name,
-                        price: rateType === 'distance_based'
-                            ? bookingData.distancePricing?.baseCharge
-                            : rateType === 'hourly'
-                            ? equipment.pricing?.hourly?.price
-                            : rateType === 'land_based'
-                            ? equipment.pricing?.land_based?.price
-                            : equipment.pricing?.daily?.price,
-                        quantity: quantity,
-                        description: rateType === 'distance_based' ? 'Per KM' : `${quantity} ${rateType === 'hourly' ? 'Hours' : rateType === 'land_based' ? 'Acres' : 'Days'}`
+                        price: finalTractorTotal,
+                        quantity: 1,
+                        description: rateType === 'distance_based' ? 'Per KM' : `${formatDuration(quantity, rateType)} estimated service scope`
                     },
                     // Add implements as additional line items
                     ...selectedImplements.map(impl => ({
+                        subCategoryId: impl.subCategoryId?._id || impl.subCategoryId,
                         title: impl.subCategoryId?.title || impl.title || 'Unknown Implement',
-                        price: impl.pricing?.[rateType]?.price || 0,
-                        quantity: quantity,
-                        description: `${impl.subCategoryId?.title || impl.title || 'Unknown Implement'} add-on`
+                        price: typeof impl.total === 'number' ? impl.total : (implementTotal || 0),
+                        quantity: 1,
+                        description: 'Matched field attachment'
                     }))
                 ]
             };

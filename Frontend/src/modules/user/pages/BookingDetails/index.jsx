@@ -2046,46 +2046,65 @@ const BookingDetails = () => {
               {booking.bookedItems && booking.bookedItems.length > 0 && (
                 <div className="pt-3 border-t border-dashed border-gray-100 space-y-2">
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Services Booked</p>
-                  {booking.bookedItems.map((item, idx) => (
-                    <div key={idx} className="flex justify-between items-start bg-gray-50 rounded-xl p-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100">×{item.quantity}</span>
-                          <span className="text-sm font-semibold text-gray-900 truncate">{item.card?.title || 'Service'}</span>
-                        </div>
-                        {item.card?.subtitle && <p className="text-xs text-gray-400 mt-0.5 ml-8 line-clamp-1">{item.card.subtitle}</p>}
-                        {item.card?.duration && <p className="text-xs text-gray-400 mt-0.5 ml-8">⏱ {item.card.duration}</p>}
-                        
-                        {/* Dynamic Agri & Rental Info */}
-                        {booking.rental_type && (
-                          <div className="ml-8 mt-2 space-y-1">
-                            <span className="text-[10px] font-black tracking-widest uppercase text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 inline-block mb-1">
-                              {booking.rental_type.replace('_', ' ')}
+                  {booking.bookedItems.map((item, idx) => {
+                    const isRental = !!booking.rental_type;
+                    const rawPrice = item.card?.price ?? item.price;
+                    const itemPrice = rawPrice !== undefined && rawPrice !== null
+                      ? rawPrice
+                      : (idx === 0 ? (booking.basePrice || 0) : 0);
+                    const itemTotal = isRental ? itemPrice : itemPrice * (item.quantity || 1);
+
+                    return (
+                      <div key={idx} className="flex justify-between items-start bg-gray-50 rounded-xl p-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100">
+                              {isRental ? '1 Unit' : `×${item.quantity || 1}`}
                             </span>
-                            
-                            {booking.rental_type === 'land_based' && booking.landSize && (
-                              <p className="text-xs text-gray-500 font-medium">Area: <span className="text-gray-900 font-bold">{booking.landSize}{typeof booking.landSize === 'string' && booking.landSize.match(/[a-zA-Z]/) ? '' : ' Acres'}</span></p>
-                            )}
-                            
-                            {booking.rental_type === 'hourly' && booking.estimatedDuration && (
-                              <p className="text-xs text-gray-500 font-medium">Duration: <span className="text-gray-900 font-bold">{booking.estimatedDuration} Hours</span></p>
-                            )}
-                            
-                            {/* Days parameter is sometimes mapped to estimatedDuration logic based on the rentalt type */}
-                            {['daily', 'monthly'].includes(booking.rental_type) && booking.estimatedDuration && (
-                              <p className="text-xs text-gray-500 font-medium">Duration: <span className="text-gray-900 font-bold">{booking.estimatedDuration} Days</span></p>
-                            )}
-                            
-                            {booking.cropType && (
-                              <p className="text-xs text-gray-500 font-medium">Crop: <span className="text-gray-900">{booking.cropType}</span></p>
-                            )}
+                            <span className="text-sm font-semibold text-gray-900 truncate">{item.card?.title || item.title || 'Service'}</span>
                           </div>
-                        )}
-                        
+                          {item.card?.subtitle && <p className="text-xs text-gray-400 mt-0.5 ml-8 line-clamp-1">{item.card.subtitle}</p>}
+                          {item.card?.duration && <p className="text-xs text-gray-400 mt-0.5 ml-8">⏱ {item.card.duration}</p>}
+                          
+                          {/* Dynamic Agri & Rental Info */}
+                          {booking.rental_type && (
+                            <div className="ml-8 mt-2 space-y-1">
+                              <span className="text-[10px] font-black tracking-widest uppercase text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 inline-block mb-1">
+                                {booking.rental_type.replace('_', ' ')}
+                              </span>
+                              
+                              {booking.rental_type === 'land_based' && booking.landSize && (
+                                <p className="text-xs text-gray-500 font-medium">Area: <span className="text-gray-900 font-bold">{booking.landSize}{typeof booking.landSize === 'string' && booking.landSize.match(/[a-zA-Z]/) ? '' : ' Acres'}</span></p>
+                              )}
+                              
+                              {booking.rental_type === 'hourly' && booking.estimatedDuration && (
+                                <p className="text-xs text-gray-500 font-medium">Duration: <span className="text-gray-900 font-bold">{booking.estimatedDuration} Hours</span></p>
+                              )}
+                              
+                              {/* Days parameter is sometimes mapped to estimatedDuration logic based on the rentalt type */}
+                              {['daily', 'monthly'].includes(booking.rental_type) && booking.estimatedDuration && (
+                                <p className="text-xs text-gray-500 font-medium">Duration: <span className="text-gray-900 font-bold">{booking.estimatedDuration} Days</span></p>
+                              )}
+                              
+                              {booking.cropType && (
+                                <p className="text-xs text-gray-500 font-medium">Crop: <span className="text-gray-900">{booking.cropType}</span></p>
+                              )}
+                            </div>
+                          )}
+                          
+                        </div>
+                        <div className="shrink-0 ml-3 text-right">
+                          {itemTotal > 0 ? (
+                            <span className="text-sm font-bold text-gray-900">₹{itemTotal.toLocaleString('en-IN')}</span>
+                          ) : (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
+                              Included (₹0)
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <span className="text-sm font-bold text-gray-900 ml-3 shrink-0">₹{((item.card?.price || 0) * (item.quantity || 1)).toLocaleString('en-IN')}</span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

@@ -1125,7 +1125,14 @@ exports.createFarmerRequest = async (req, res) => {
         message: 'Cannot create a booking request for a scheduled time window that has already passed.'
       });
     }
-    requestDoc.expiresAt = new Date(Math.min(scheduledEnd.getTime(), Date.now() + REQUEST_TTL_MS));
+    // Snapshot active financial settings so estimates reflect admin configurations from creation
+    const finSettings = await getWorkerFinancialSettings();
+    requestDoc.financialSnapshot = {
+      platformChargeRate: Number(finSettings.workerPlatformChargePercentage) || 0,
+      commissionRate: Number(finSettings.workerCommissionPercentage) || 0,
+      currency: 'INR',
+      createdAt: new Date()
+    };
 
     const newRequest = await WorkerBookingRequest.create(requestDoc);
 

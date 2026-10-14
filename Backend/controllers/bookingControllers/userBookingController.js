@@ -342,39 +342,58 @@ const createBooking = async (req, res) => {
 
       const mainAgriPrice = Math.round(unitRate * finalMultiplier);
       
-      // Update the price of the main service in bookedItems to reflect the calculated Agri price
-      // This ensures the items list and basePrice are consistent.
-      // Per-km jobs start at the admin base charge no matter what the client sent as line items
+      // Update the price of the main service and implements in bookedItems to reflect the calculated Agri price.
+      // In rental bookings, each bookedItem is a single unit of machinery/attachment (quantity: 1), 
+      // with duration/area tracked in estimatedDuration / landSize.
       if (rental_type !== 'distance_based' && Array.isArray(bookedItems) && bookedItems.length > 0) {
         let mainItemHandled = false;
         bookedItems.forEach(item => {
           const itemTitle = item.card?.title || item.title;
+          // Normalize quantity to 1 for machinery rentals so duration is not multiplied twice
+          item.quantity = 1;
+          if (item.card) item.card.quantity = 1;
+
           if (itemTitle === service.title && !mainItemHandled) {
-            // Update this item's price with the calculated agri price
+            // Update main machine price with calculated agri price
             if (item.card) item.card.price = mainAgriPrice;
             else item.price = mainAgriPrice;
             mainItemHandled = true;
+          } else {
+            // Check if this item is a selected implement
+            const matchedImpl = Array.isArray(selectedImplements) && selectedImplements.find(impl => {
+              const implTitle = impl.title || impl.subCategoryId?.title;
+              const implId = String(impl.subCategoryId?._id || impl.subCategoryId || '');
+              const itemId = String(item.subCategoryId?._id || item.subCategoryId || '');
+              return (implTitle && itemTitle && implTitle.trim().toLowerCase() === itemTitle.trim().toLowerCase()) ||
+                     (implId && itemId && implId === itemId);
+            });
+            if (matchedImpl) {
+              const implPriceObj = matchedImpl.pricing?.[rental_type];
+              const implRate = (implPriceObj && implPriceObj.isEnabled) ? (Number(implPriceObj.price) || 0) : 0;
+              const implTotal = Math.round(implRate * finalMultiplier);
+              if (item.card) item.card.price = implTotal;
+              else item.price = implTotal;
+            }
           }
         });
 
         // Recalculate totalServiceValue from the updated items
         totalServiceValue = bookedItems.reduce((sum, item) => {
-          const itemPrice = item.card?.price || item.price || 0;
+          const itemPrice = item.card?.price ?? item.price ?? 0;
           return sum + (itemPrice * (item.quantity || 1));
         }, 0);
       } else {
         totalServiceValue = mainAgriPrice;
-      }
-      
-      // --- ADD IMPLEMENT PRICING ---
-      if (Array.isArray(selectedImplements) && selectedImplements.length > 0) {
-        selectedImplements.forEach(impl => {
-          const implPriceObj = impl.pricing?.[rental_type];
-          if (implPriceObj && implPriceObj.isEnabled) {
-            const implRate = implPriceObj.price || 0;
-            totalServiceValue += Math.round(implRate * finalMultiplier);
-          }
-        });
+        // Add implement pricing if implements were not in bookedItems
+        if (Array.isArray(selectedImplements) && selectedImplements.length > 0) {
+          selectedImplements.forEach(impl => {
+            const implPriceObj = impl.pricing?.[rental_type];
+            if (implPriceObj && implPriceObj.isEnabled) {
+              const implRate = Number(implPriceObj.price) || 0;
+              totalServiceValue += Math.round(implRate * finalMultiplier);
+            }
+          });
+        }
       }
       
       console.log(`[AgriPricing] unitRate=${unitRate}, multiplier=${multiplier}, totalServiceValue=${totalServiceValue}`);
