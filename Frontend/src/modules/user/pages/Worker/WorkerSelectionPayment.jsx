@@ -276,6 +276,21 @@ const WorkerSelectionPayment = () => {
                 <span className="text-sm font-black">₹{financials.platformChargeAmount}</span>
               </div>
             )}
+
+            {financials.travelChargeTotal > 0 && (
+              <div className="flex justify-between items-start text-slate-700">
+                <div>
+                  <span className="text-sm font-medium block">Travel Charge</span>
+                  <span className="text-[11px] text-slate-400">
+                    {(financials.travelCharges || []).length === 1 && financials.travelCharges[0].distanceKm
+                      ? `${financials.travelCharges[0].distanceKm} km to your farm · `
+                      : ''}
+                    paid to the worker in full
+                  </span>
+                </div>
+                <span className="text-sm font-black">₹{financials.travelChargeTotal}</span>
+              </div>
+            )}
           </div>
 
           <div className="mt-6 pt-6 border-t border-slate-100 flex items-end justify-between">

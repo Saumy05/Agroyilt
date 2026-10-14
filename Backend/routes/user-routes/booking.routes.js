@@ -13,6 +13,7 @@ const {
   getUserRatings,
   checkEquipmentAvailability,
   calculatePrice,
+  getTravelEstimate,
   reselectVendor,
   farmerConfirmFinalAmount,
   farmerSelectOfflinePayment
@@ -59,6 +60,7 @@ const addReviewValidation = [
 // Routes
 router.get('/check-availability', authenticate, isUser, checkEquipmentAvailability);
 router.post('/calculate-price', authenticate, isUser, calculatePrice);
+router.post('/travel-estimate', authenticate, isUser, getTravelEstimate);
 router.get('/ratings', authenticate, isUser, getUserRatings);
 router.post('/', authenticate, isUser, createBookingValidation, createBooking);
 router.get('/', authenticate, isUser, getUserBookings);

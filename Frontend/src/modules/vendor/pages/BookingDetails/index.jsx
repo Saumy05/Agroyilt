@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { FiMapPin, FiClock, FiDollarSign, FiUser, FiPhone, FiNavigation, FiArrowRight, FiChevronRight, FiEdit, FiCheckCircle, FiCreditCard, FiX, FiCheck, FiTool, FiXCircle, FiAward, FiPackage, FiAlertCircle, FiDownload, FiAlertTriangle, FiLoader, FiKey, FiCalendar, FiCompass } from 'react-icons/fi';
+import { FiMapPin, FiClock, FiDollarSign, FiUser, FiPhone, FiNavigation, FiArrowRight, FiChevronRight, FiEdit, FiCheckCircle, FiCreditCard, FiX, FiCheck, FiTool, FiXCircle, FiAward, FiPackage, FiAlertCircle, FiDownload, FiAlertTriangle, FiLoader, FiKey, FiCalendar, FiCompass, FiTruck } from 'react-icons/fi';
 import { FaSeedling } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
 import { vendorTheme as themeColors } from '../../../../theme';
@@ -206,6 +206,8 @@ export default function BookingDetails() {
           basePrice: parseFloat(apiData.basePrice || 0),
           tax: parseFloat(apiData.tax || (apiData.paymentMethod === 'plan_benefit' ? (apiData.basePrice || 0) * 0.18 : 0)),
           visitingCharges: parseFloat(apiData.visitingCharges || apiData.visitationFee || (apiData.paymentMethod === 'plan_benefit' ? 49 : 0)),
+          travelCharge: parseFloat(apiData.travelCharge || 0),
+          travelDistanceKm: apiData.travelDistanceKm ?? null,
           discount: parseFloat(apiData.discount || 0),
           platformCommission: parseFloat(apiData.adminCommission || apiData.platformFee || apiData.commission || 0),
           finalAmount: parseFloat(apiData.finalAmount || 0),
@@ -1255,6 +1257,20 @@ export default function BookingDetails() {
               </div>
             )}
 
+            {/* Travel Charge: paid by the farmer on top, yours in full */}
+            {(Number(bill?.travelCharge) > 0 || Number(booking.travelCharge) > 0) && (
+              <div>
+                <h4 className="font-bold text-gray-900 flex items-center gap-2 mb-2 pb-2 border-b border-gray-100">
+                  <span className="w-6 h-6 rounded-full bg-sky-50 text-sky-600 flex items-center justify-center text-xs"><FiTruck /></span>
+                  Travel Charge
+                </h4>
+                <div className="flex justify-between pl-2 font-bold text-gray-800">
+                  <span>{booking.travelDistanceKm ? `${booking.travelDistanceKm} km to the farm` : 'Travel to the farm'}</span>
+                  <span>₹{Number(bill?.travelCharge || booking.travelCharge || 0).toFixed(2)}</span>
+                </div>
+              </div>
+            )}
+
             {/* Transport Charges */}
             {bill?.transportCharges > 0 && (
               <div className="mt-4">
@@ -1282,6 +1298,12 @@ export default function BookingDetails() {
                   <div className="flex justify-between items-center text-emerald-700">
                     <span>Parts Earnings ({bill?.payoutConfig?.partsSplitPercentage || 10}%)</span>
                     <span className="font-bold">₹{(bill?.vendorPartsEarning || 0).toFixed(2)}</span>
+                  </div>
+                )}
+                {Number(bill?.travelCharge || booking.travelCharge) > 0 && (
+                  <div className="flex justify-between items-center text-emerald-700">
+                    <span>Travel Charge (yours in full)</span>
+                    <span className="font-bold">₹{Number(bill?.travelCharge || booking.travelCharge || 0).toFixed(2)}</span>
                   </div>
                 )}
               </div>

@@ -21,9 +21,15 @@ const WorkerPaymentBill = ({ bill }) => {
           <div className="min-w-0">
             <span className="font-bold text-slate-800 block">{paymentLineLabel(line)}</span>
             <span className="text-[11px] text-slate-500 block">
-              {line.workerCount} worker{line.workerCount === 1 ? '' : 's'}
-              {line.rate ? ` × ${rupees(line.rate)}/${unit}` : ''}
-              {' · '}workers {rupees(line.workerAmount)} + platform fee {rupees(line.platformFee)}
+              {line.kind === 'travel' ? (
+                <>For {line.workerCount === 1 ? 'the worker' : 'the workers'} travelling to your farm · paid to them in full</>
+              ) : (
+                <>
+                  {line.workerCount} worker{line.workerCount === 1 ? '' : 's'}
+                  {line.rate ? ` × ${rupees(line.rate)}/${unit}` : ''}
+                  {' · '}workers {rupees(line.workerAmount)} + platform fee {rupees(line.platformFee)}
+                </>
+              )}
             </span>
           </div>
           <div className="text-right shrink-0">

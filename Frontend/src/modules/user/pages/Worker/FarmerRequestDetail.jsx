@@ -511,6 +511,11 @@ const FarmerRequestDetail = () => {
                                   ₹{offer.offeredRate}/{request.bookingType === 'DAILY' ? 'day' : 'hr'}
                                 </span>
                               )}
+                              {offer.travelEstimate?.amount > 0 && (
+                                <span className="text-[11px] font-bold text-sky-700 bg-sky-50 px-1.5 py-0.5 rounded-md" title="Travel charge, paid to the worker in full">
+                                  + ₹{offer.travelEstimate.amount} travel{offer.travelEstimate.distanceKm ? ` · ${offer.travelEstimate.distanceKm} km` : ''}
+                                </span>
+                              )}
                             </div>
                           </div>
                           
@@ -736,9 +741,12 @@ const FarmerRequestDetail = () => {
                 ? Number(request.paymentSummary?.platformFeeAmount || request.financialSnapshot?.platformChargeAmount || Math.round((reserveAmount * platformRate) / 100))
                 : Math.round((reserveAmount * platformRate) / 100);
 
+              // travel charge is only known once workers are selected (it is fixed per worker at that point)
+              const travelAmount = Number(request.paymentSummary?.travelChargeAmount ?? request.financialSnapshot?.travelChargeTotal ?? 0) || 0;
+
               const totalAmount = isPaid
-                ? Number(request.paymentSummary?.totalPaidAmount || request.financialSnapshot?.totalPayable || (reserveAmount + platformFee))
-                : (reserveAmount + platformFee);
+                ? Number(request.paymentSummary?.totalPaidAmount || request.financialSnapshot?.totalPayable || (reserveAmount + platformFee + travelAmount))
+                : (reserveAmount + platformFee + travelAmount);
 
               const rateUnitDisplay = isDaily ? '/day' : '/hourly';
 
@@ -815,6 +823,18 @@ const FarmerRequestDetail = () => {
                       +₹{platformFee.toLocaleString('en-IN')}
                     </span>
                   </div>
+
+                  {travelAmount > 0 && (
+                    <div className="flex justify-between items-center text-slate-600">
+                      <div>
+                        <span className="font-medium">Travel Charge</span>
+                        <span className="block text-[11px] text-slate-400">Paid to the worker in full</span>
+                      </div>
+                      <span className="font-bold text-slate-900">
+                        +₹{travelAmount.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                  )}
 
                   {request.paymentMethod && (
                     <div className="flex justify-between items-center text-slate-600">

@@ -314,6 +314,8 @@ const getJobById = async (req, res) => {
             commissionRate: syntheticBooking.paymentSummary.commissionRate,
             commissionAmount: syntheticBooking.paymentSummary.commissionAmount,
             netEarnings: syntheticBooking.paymentSummary.netEarning,
+            travelCharge: syntheticBooking.paymentSummary.travelCharge || 0,
+            travelDistanceKm: syntheticBooking.paymentSummary.travelDistanceKm ?? null,
             extensionBreakdown: syntheticBooking.paymentSummary.extensionBreakdown
           };
           syntheticBooking.workerGrossEarning = syntheticBooking.paymentSummary.grossAmount;
@@ -398,6 +400,8 @@ const getJobById = async (req, res) => {
             commissionRate: jobData.paymentSummary.commissionRate,
             commissionAmount: jobData.paymentSummary.commissionAmount,
             netEarnings: jobData.paymentSummary.netEarning,
+            travelCharge: jobData.paymentSummary.travelCharge || 0,
+            travelDistanceKm: jobData.paymentSummary.travelDistanceKm ?? null,
             extensionBreakdown: jobData.paymentSummary.extensionBreakdown
           };
           jobData.workerGrossEarning = jobData.paymentSummary.grossAmount;

@@ -55,6 +55,17 @@ const toMins = (t) => {
 const toP   = (inr) => Math.round(Number(inr) * 100); // INR → paise
 const toINR = (p)   => p / 100;                        // paise → INR
 
+/** Travel charge fixed for this worker when the Team Leader selected the team (only the leader carries it: one trip). */
+const groupTravelFields = (snap, workerId) => {
+  const t = ((snap && snap.travelCharges) || []).find(x => String(x.workerId) === String(workerId));
+  if (!t || !(Number(t.amount) > 0)) return {};
+  return {
+    travelCharge: Number(t.amount),
+    travelDistanceKm: t.distanceKm ?? null,
+    travelBreakdown: { outboundAmount: Number(t.outboundAmount) || 0, returnAmount: Number(t.returnAmount) || 0, method: t.method || null, capped: !!t.capped }
+  };
+};
+
 const hasTimeConflict = async (workerId, scheduledDate, startTime, endTime) => {
   const dateStart = new Date(scheduledDate);
   dateStart.setHours(0, 0, 0, 0);
@@ -1277,7 +1288,30 @@ exports.leaderSelectWorkers = async (req, res) => {
     const platformRate   = Number(settings.workerPlatformChargePercentage) || 0;
     const platformPaise  = Math.round((toP(maxWorkerAmount) * platformRate) / 100);
     const platformCharge = toINR(platformPaise);
-    const totalPayable   = toINR(toP(maxWorkerAmount) + platformPaise);
+
+
+    // Travel charge: a team is one trip, so it is charged once for the Team Leader (admin: Settings > Travel Charges)
+    let travelCharges = [];
+    let travelPaise = 0;
+    try {
+      const { getTravelRule, computeTravelCharge } = require('../../services/travelChargeService');
+      const travelRule = await getTravelRule('worker');
+      if (travelRule.enabled) {
+        const leader = await Worker.findById(leaderId).select('location').lean();
+        const charge = await computeTravelCharge({ role: 'worker', from: leader?.location, to: request.location, rule: travelRule });
+        if (charge.applies) {
+          travelCharges = [{
+            workerId: leaderId, distanceKm: charge.distanceKm, method: charge.method,
+            outboundAmount: charge.outboundAmount, returnAmount: charge.returnAmount, amount: charge.total, capped: charge.capped
+          }];
+          travelPaise = toP(charge.total);
+        }
+      }
+    } catch (travelErr) {
+      console.warn('[leaderSelectWorkers] travel charge skipped:', travelErr.message);
+      travelCharges = []; travelPaise = 0;
+    }
+    const totalPayable   = toINR(toP(maxWorkerAmount) + platformPaise + travelPaise);
 
     request.selectedWorkers    = workerIds;
     request.agreedRatePerWorker = agreedRate;
@@ -1290,6 +1324,8 @@ exports.leaderSelectWorkers = async (req, res) => {
       platformChargeRate:   platformRate,
       platformChargeAmount: platformCharge,
       totalPayable,
+      travelChargeTotal:    toINR(travelPaise),
+      travelCharges,
       commissionRate:       settings.workerCommissionPercentage,
       currency:             'INR',
       bookingType:          request.bookingType || 'HOURLY',
@@ -1557,6 +1593,8 @@ exports.verifyGroupBookingPayment = async (req, res) => {
         platformChargeRate:   snap.platformChargeRate,
         platformChargeAmount: snap.platformChargeAmount,
         totalPayable:         snap.totalPayable,
+        travelChargeTotal:    snap.travelChargeTotal || 0,
+        travelCharges:        snap.travelCharges || [],
         commissionRate:       commissionRate,
         currency:             snap.currency || 'INR',
         createdAt:            new Date()
@@ -1617,6 +1655,7 @@ exports.verifyGroupBookingPayment = async (req, res) => {
         visitOtpCode:     rawVisitOtp,
         visitOtpHash,
         visitOtpExpiresAt: otpExpiry,
+        ...groupTravelFields(snap, wId),
         grossAmount,
         commissionRate,
         commissionAmount,
@@ -2119,6 +2158,8 @@ exports.confirmGroupBookingCash = async (req, res) => {
         platformChargeRate: snap.platformChargeRate,
         platformChargeAmount: snap.platformChargeAmount,
         totalPayable: snap.totalPayable,
+        travelChargeTotal: snap.travelChargeTotal || 0,
+        travelCharges: snap.travelCharges || [],
         commissionRate: commissionRate,
         currency: snap.currency || 'INR',
         createdAt: new Date()
@@ -2176,6 +2217,7 @@ exports.confirmGroupBookingCash = async (req, res) => {
         visitOtpCode: rawVisitOtp,
         visitOtpHash,
         visitOtpExpiresAt: otpExpiry,
+        ...groupTravelFields(snap, wId),
         grossAmount,
         commissionRate,
         commissionAmount,

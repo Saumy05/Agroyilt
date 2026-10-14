@@ -8,6 +8,7 @@ import { useBrand } from '../../../../context/BrandContext';
 import api from '../../../../services/api';
 import authStorage from '../../../../utils/authStorage';
 import Policies from './Policies';
+import TravelCharges from './TravelCharges';
 
 const AdminSettings = () => {
   const navigate = useNavigate();
@@ -266,7 +267,7 @@ const AdminSettings = () => {
 
   const [loading, setLoading] = useState(false);
   const [profileLoading, setProfileLoading] = useState(false);
-  const [activeView, setActiveView] = useState('main'); // 'main', 'profile', 'financial', 'system', 'branding', 'policies', 'admins'
+  const [activeView, setActiveView] = useState('main'); // 'main', 'profile', 'financial', 'system', 'branding', 'travel', 'policies', 'admins'
 
   // Deep link from the admin search: ?view=financial&field=<input name>
   useEffect(() => {
@@ -855,6 +856,18 @@ const AdminSettings = () => {
           </div>
           <h3 className="text-lg font-bold text-gray-800 mb-2">Branding & App Identity</h3>
           <p className="text-sm text-gray-500">Change App Name, Logo, Tagline & Browser Favicon</p>
+        </div>
+      )}
+
+      {/* Travel Charges Card - Super Admin Only */}
+      {isSuperAdmin && (
+        <div onClick={() => setActiveView('travel')}
+          className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer group">
+          <div className="w-12 h-12 bg-sky-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-sky-100 transition-colors">
+            <FiMapPin className="w-6 h-6 text-sky-600" />
+          </div>
+          <h3 className="text-lg font-bold text-gray-800 mb-2">Travel Charges</h3>
+          <p className="text-sm text-gray-500">Per-km charge for vendors and workers travelling to the farm, with return trip</p>
         </div>
       )}
 
@@ -1861,6 +1874,13 @@ const AdminSettings = () => {
           )
         }
 
+
+        {/* Travel Charges View - Super Admin Only */}
+        {activeView === 'travel' && isSuperAdmin && (
+          <motion.div key="travel" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
+            <TravelCharges />
+          </motion.div>
+        )}
 
         {/* Policies View - Super Admin Only */}
         {activeView === 'policies' && isSuperAdmin && (

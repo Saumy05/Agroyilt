@@ -306,6 +306,17 @@ const indWorkerAssignmentSchema = new mongoose.Schema(
       required: true,
       min: 0
     },
+    // Travel charge the farmer pays this worker for coming to the farm (fixed when the farmer selected the workers).
+    // Not part of gross / commission / net: it is paid in full on top, once arrival is confirmed.
+    travelCharge: { type: Number, default: 0, min: 0 },
+    travelDistanceKm: { type: Number, default: null },
+    travelBreakdown: {
+      _id: false,
+      outboundAmount: { type: Number, default: 0 },
+      returnAmount:   { type: Number, default: 0 },
+      method:         { type: String, default: null },
+      capped:         { type: Boolean, default: false }
+    },
     // Cash bookings: platform fee the worker collected in cash and gave back through the wallet at settlement.
     // null = not settled yet (computed then); 0 = the cash path collected no platform fee (legacy cash / QR).
     cashPlatformFee: {

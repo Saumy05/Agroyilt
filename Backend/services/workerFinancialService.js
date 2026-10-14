@@ -211,6 +211,7 @@ exports.buildFarmerPaymentSummary = (request, assignments = [], booking = null, 
     numberOfDays: isDaily ? days : null,
     workerReserveAmount,
     platformFeeAmount,
+    travelChargeAmount: Number(snap.travelChargeTotal) || 0,
     totalPaidAmount,
     actualWorkerAmount,
     unusedWorkerReserve,
@@ -315,6 +316,9 @@ exports.buildWorkerPaymentSummary = (assignment, booking = null, confirmedExtens
     commissionRate,
     commissionAmount,
     netEarning,
+    travelCharge: Number(assignment?.travelCharge) || 0,
+    travelDistanceKm: assignment?.travelDistanceKm ?? null,
+    totalEarning: Math.round((netEarning + (Number(assignment?.travelCharge) || 0)) * 100) / 100,
     settlementStatus,
     settlementTransactionId,
     settledAt,
@@ -393,6 +397,15 @@ exports.buildWorkerCashCollection = (assignment, request, extensions = [], { gro
     }))
   ];
 
+  // Travel charge: the farmer pays it to the worker in cash too. It is the worker's own money: no platform fee, no commission.
+  const travelP = toP(assignment.travelCharge || 0);
+  if (travelP > 0) {
+    lines.push({
+      kind: 'travel', distanceKm: assignment.travelDistanceKm ?? null,
+      workerAmount: toINR(travelP), platformFee: 0, amount: toINR(travelP)
+    });
+  }
+
   const totalP = sumP(lines, l => toP(l.amount));
   const feeP = sumP(lines, l => toP(l.platformFee));
   const commission = Number(assignment.commissionAmount) || 0;
@@ -402,13 +415,16 @@ exports.buildWorkerCashCollection = (assignment, request, extensions = [], { gro
     isCashBooking: true,
     totalToCollect: toINR(totalP),
     workerWage: toINR(grossP),
+    travelCharge: toINR(travelP),
     platformFee,
     platformFeeRate: baseRate,
     commissionAmount: commission,
     netEarnings: Number(assignment.netEarning ?? (toINR(grossP) - commission)),
+    // what the worker really ends up with from this job: wages after commission, plus the travel charge
+    totalEarnings: toINR(toP(assignment.netEarning ?? (toINR(grossP) - commission)) + travelP),
     walletDeduction: Math.round((platformFee + commission) * 100) / 100,
     lines,
-    instruction: `Collect ₹${toINR(totalP)} cash from the farmer. After the job, the platform fee (₹${platformFee}) and app commission (₹${commission}) are taken from your wallet.`
+    instruction: `Collect ₹${toINR(totalP)} cash from the farmer${travelP > 0 ? ` (includes ₹${toINR(travelP)} travel charge, which is yours)` : ''}. After the job, the platform fee (₹${platformFee}) and app commission (₹${commission}) are taken from your wallet.`
   };
 };
 
@@ -425,7 +441,9 @@ exports.buildFarmerAmountForWorker = (request, assignment, extensions = []) => {
     return { total: cash.totalToCollect, paymentMethod: 'cash', status: paid ? 'paid' : 'due' };
   }
   const snap = request.financialSnapshot || {};
-  let totalP = Math.round(toP(snap.totalPayable || 0) / (Number(snap.selectedWorkerCount) || 1));
+  // travel is per worker (not split evenly): everything else is shared equally
+  const sharedP = Math.max(0, toP(snap.totalPayable || 0) - toP(snap.travelChargeTotal || 0));
+  let totalP = Math.round(sharedP / (Number(snap.selectedWorkerCount) || 1)) + toP(assignment.travelCharge || 0);
   for (const ext of (extensions || []).filter(e => e && e.status === 'CONFIRMED' && e.paymentMode !== 'cash')) {
     const share = (ext.workerExtensions || []).find(w => w.status === 'ACCEPTED' && String(w.assignmentId) === String(assignment._id));
     if (!share) continue;
@@ -511,6 +529,16 @@ exports.buildFarmerBill = (request, assignments = [], extensions = [], { isPaid 
         payment: 'cash', status: shares.every(x => x.w.paid) ? 'paid' : 'due'
       });
     }
+    const travelWorkers = workers.filter(w => w.cash.lines.some(l => l.kind === 'travel'));
+    if (travelWorkers.length) {
+      lines.push({
+        kind: 'travel', workerCount: travelWorkers.length,
+        distanceKm: travelWorkers.length === 1 ? travelWorkers[0].cash.lines.find(l => l.kind === 'travel').distanceKm : null,
+        workerAmount: toINR(sumP(travelWorkers, w => toP(w.cash.travelCharge))), platformFee: 0,
+        total: toINR(sumP(travelWorkers, w => toP(w.cash.travelCharge))),
+        payment: 'cash', status: travelWorkers.every(w => w.paid) ? 'paid' : 'due'
+      });
+    }
     const cashDueP = sumP(workers.filter(w => !w.paid), w => toP(w.cash.totalToCollect));
     const cashPaidP = sumP(workers.filter(w => w.paid), w => toP(w.cash.totalToCollect));
     return {
@@ -530,9 +558,18 @@ exports.buildFarmerBill = (request, assignments = [], extensions = [], { isPaid 
     workerCount: Number(snap.selectedWorkerCount) || (request.selectedWorkerIds || []).length || 1,
     rate: Number(snap.maximumBudget) || null, rateUnit,
     workerAmount: Number(snap.maximumWorkerAmount) || 0, platformFee: Number(snap.platformChargeAmount) || 0,
-    total: Number(snap.totalPayable) || toINR(toP(snap.maximumWorkerAmount || 0) + toP(snap.platformChargeAmount || 0)),
+    // the booking line excludes travel (shown as its own line below) so the lines still add up to totalPayable
+    total: (Number(snap.totalPayable) || toINR(toP(snap.maximumWorkerAmount || 0) + toP(snap.platformChargeAmount || 0))) - (Number(snap.travelChargeTotal) || 0),
     payment: isCash ? 'cash' : 'online', status: !isCash && isPaid ? 'paid' : 'due'
   }];
+  if (Number(snap.travelChargeTotal) > 0) {
+    lines.push({
+      kind: 'travel', workerCount: (snap.travelCharges || []).length || 1,
+      distanceKm: (snap.travelCharges || []).length === 1 ? snap.travelCharges[0].distanceKm : null,
+      workerAmount: Number(snap.travelChargeTotal), platformFee: 0, total: Number(snap.travelChargeTotal),
+      payment: isCash ? 'cash' : 'online', status: !isCash && isPaid ? 'paid' : 'due'
+    });
+  }
   for (const ext of confirmed) {
     const extCash = ext.paymentMode === 'cash';
     lines.push({

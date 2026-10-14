@@ -1894,6 +1894,30 @@ exports.getFarmerRequestById = async (req, res) => {
       });
     }
 
+    // Travel estimate per worker, shown before the farmer selects (the final amount is fixed at selection).
+    // A team booking is one trip, so only the Team Leader carries it.
+    if (confirmSvc.SELECTABLE.includes(request.status)) {
+      try {
+        const { getTravelRule, computeTravelCharge } = require('../../services/travelChargeService');
+        const travelRule = await getTravelRule('worker');
+        if (travelRule.enabled) {
+          const isTL = request.bookingMode === 'TEAM_LEADER' || request.requestType === 'team_leader';
+          const leaderStr = request.teamLeaderId ? request.teamLeaderId.toString() : null;
+          await Promise.all((requestData.workerOffers || []).map(async (o) => {
+            const wId = (o.workerId?._id || o.workerId)?.toString();
+            if (!wId || !['pending', 'accepted', 'selected'].includes(o.status)) return;
+            if (isTL && wId !== leaderStr) return;
+            const c = await computeTravelCharge({ role: 'worker', from: o.workerId?.location, to: request.location, rule: travelRule });
+            if (c.applies) {
+              o.travelEstimate = { amount: c.total, distanceKm: c.distanceKm, outboundAmount: c.outboundAmount, returnAmount: c.returnAmount, capped: c.capped };
+            }
+          }));
+        }
+      } catch (travelErr) {
+        console.warn('[getFarmerRequestById] travel estimate skipped:', travelErr.message);
+      }
+    }
+
     requestData.paymentSummary = buildFarmerPaymentSummary(request, assignments, null, confirmedExtensions);
     requestData.confirmedExtensions = confirmedExtensions;
 
@@ -3312,13 +3336,42 @@ exports.farmerSelectWorkers = async (req, res) => {
 
     const platformRate = Number(settings.workerPlatformChargePercentage) || 0;
     const platformPaise = Math.round((maxWorkerPaise * platformRate) / 100);
+
+    // Travel charge (admin: Settings > Travel Charges): road distance from each worker to the farm, fixed now so the
+    // farmer pays exactly what is shown. A team booking is one trip: charged once, to the Team Leader.
+    let travelCharges = [];
+    let travelPaise = 0;
+    try {
+      const { getTravelRule, computeTravelCharge } = require('../../services/travelChargeService');
+      const travelRule = await getTravelRule('worker');
+      if (travelRule.enabled) {
+        const travellerIds = isTeamLeader ? selectedWorkerIds.filter(id => id === leaderIdStr) : selectedWorkerIds;
+        const travellers = await Worker.find({ _id: { $in: travellerIds } }).select('location').lean();
+        const results = await Promise.all(travellers.map(async (w) => ({
+          workerId: w._id,
+          charge: await computeTravelCharge({ role: 'worker', from: w.location, to: request.location, rule: travelRule })
+        })));
+        travelCharges = results.filter(r => r.charge.applies).map(r => ({
+          workerId: r.workerId, distanceKm: r.charge.distanceKm, method: r.charge.method,
+          outboundAmount: r.charge.outboundAmount, returnAmount: r.charge.returnAmount, amount: r.charge.total, capped: r.charge.capped
+        }));
+        travelPaise = travelCharges.reduce((sum, t) => sum + rupeesToPaise(t.amount), 0);
+      }
+    } catch (travelErr) {
+      // never block a booking on a distance lookup: no travel charge is added if it cannot be priced
+      console.warn('[farmerSelectWorkers] travel charge skipped:', travelErr.message);
+      travelCharges = []; travelPaise = 0;
+    }
+
     const snapshot = {
       maximumBudget: baseRate,
       selectedWorkerCount: selectedWorkerIds.length,
       maximumWorkerAmount: paiseToRupees(maxWorkerPaise),
       platformChargeRate: platformRate,
       platformChargeAmount: paiseToRupees(platformPaise),
-      totalPayable: paiseToRupees(maxWorkerPaise + platformPaise),
+      totalPayable: paiseToRupees(maxWorkerPaise + platformPaise + travelPaise),
+      travelChargeTotal: paiseToRupees(travelPaise),
+      travelCharges,
       commissionRate: settings.workerCommissionPercentage,
       currency: 'INR',
       bookingType: request.bookingType || 'HOURLY',

@@ -134,13 +134,22 @@ const generateInvoicePDF = (bill, booking, res, settings = {}) => {
         y += 20;
     }
 
+    if (bill.travelCharge > 0) {
+        doc.text('Travel Charge', 50, y)
+            .text('1', 280, y)
+            .text(`Rs. ${bill.travelCharge}`, 330, y)
+            .text('0%', 400, y)
+            .text(`Rs. ${bill.travelCharge}`, 480, y, { align: 'right' });
+        y += 20;
+    }
+
     // --- Totals ---
     const subtotalOver = y + 20;
     doc.strokeColor('#aaaaaa').lineWidth(1).moveTo(350, subtotalOver).lineTo(550, subtotalOver).stroke();
 
     doc.font('Helvetica-Bold').fontSize(10)
         .text('Subtotal:', 350, subtotalOver + 15)
-        .font('Helvetica').text(`Rs. ${(bill.totalServiceBase + bill.totalPartsBase + bill.visitingCharges + bill.transportCharges).toFixed(2)}`, 480, subtotalOver + 15, { align: 'right' })
+        .font('Helvetica').text(`Rs. ${(bill.totalServiceBase + bill.totalPartsBase + bill.visitingCharges + bill.transportCharges + (bill.travelCharge || 0)).toFixed(2)}`, 480, subtotalOver + 15, { align: 'right' })
 
         .font('Helvetica-Bold').text('Total GST:', 350, subtotalOver + 30)
         .font('Helvetica').text(`Rs. ${bill.totalGST.toFixed(2)}`, 480, subtotalOver + 30, { align: 'right' })

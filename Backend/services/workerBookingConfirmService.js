@@ -76,6 +76,17 @@ const validateSelectedWorkers = async (request) => {
   return unavailable;
 };
 
+/** The travel charge fixed for this worker when the farmer selected workers (see financialSnapshot.travelCharges). */
+const travelFields = (request, workerId) => {
+  const t = (request.financialSnapshot?.travelCharges || []).find(x => String(x.workerId) === String(workerId));
+  if (!t || !(Number(t.amount) > 0)) return {};
+  return {
+    travelCharge: Number(t.amount),
+    travelDistanceKm: t.distanceKm ?? null,
+    travelBreakdown: { outboundAmount: Number(t.outboundAmount) || 0, returnAmount: Number(t.returnAmount) || 0, method: t.method || null, capped: !!t.capped }
+  };
+};
+
 // ── Document builders ────────────────────────────────────────────────────────────────────────────
 const buildDocs = (request, { method, orderId, paymentId }) => {
   const isDaily = request.bookingType === 'DAILY';
@@ -126,6 +137,7 @@ const buildDocs = (request, { method, orderId, paymentId }) => {
       visitOtpCode: visit.code,
       visitOtpHash: visit.hash,
       visitOtpExpiresAt: visit.expiresAt,
+      ...travelFields(request, wId),
       grossAmount: toINR(grossPaise),
       commissionRate,
       commissionAmount: toINR(commissionPaise),

@@ -17,4 +17,6 @@ export const workLength = ({ minutes, days } = {}) => {
 
 /** "Booked work (1 hr)" / "Extra time (+30 min)" */
 export const paymentLineLabel = (line) =>
-  line.kind === 'extension' ? `Extra time (+${workLength(line)})` : `Booked work (${workLength(line)})`;
+  line.kind === 'travel'
+    ? `Travel charge${line.distanceKm ? ` (${line.distanceKm} km)` : ''}`
+    : line.kind === 'extension' ? `Extra time (+${workLength(line)})` : `Booked work (${workLength(line)})`;

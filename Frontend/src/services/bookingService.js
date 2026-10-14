@@ -83,6 +83,12 @@ export const bookingService = {
     return response.data;
   },
 
+  // Travel charge preview for a vendor's machine coming to a location (the booking recomputes it server-side)
+  getTravelEstimate: async (payload) => {
+    const response = await api.post('/users/bookings/travel-estimate', payload);
+    return response.data;
+  },
+
   // Calculate authoritative price from backend
   calculatePrice: async (payload) => {
     const response = await api.post('/users/bookings/calculate-price', payload);

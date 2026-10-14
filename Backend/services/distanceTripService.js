@@ -301,7 +301,20 @@ const freezeTrip = (booking, now = new Date()) => {
   return { distanceKm: d.totalDistanceKm, fare: d.fare };
 };
 
+/**
+ * Road distance (km) between two points, for pricing a trip before it happens (e.g. travel charge).
+ * Google Directions, else OSRM, else straight line x 1.3 (a typical road-to-air ratio) as a last resort.
+ * @returns {Promise<{km:number, method:string}|null>} null when either point is invalid
+ */
+const routeDistanceKm = async (a, b) => {
+  if (!validCoord(a) || !validCoord(b)) return null;
+  const ok = await firstOk([['google_directions', () => routeGoogle(a, b)], ['osrm_route', () => routeOsrm(a, b)]]);
+  if (ok) return { km: round2(ok.meters / 1000), method: ok.method };
+  return { km: round2((haversineM(a, b) * 1.3) / 1000), method: 'straight_line_estimate' };
+};
+
 module.exports = {
+  routeDistanceKm,
   calcDistanceFare,
   cleanPoints,
   roadDistance,

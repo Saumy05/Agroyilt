@@ -316,7 +316,9 @@ const WorkCompletionModal = ({ isOpen, onClose, job, onComplete, loading, onOpen
                           <div className="min-w-0">
                             <span className="font-bold text-slate-800 block">{paymentLineLabel(line)}</span>
                             <span className="text-[10px] text-slate-500">
-                              Your pay {rupees(line.workerAmount)} + platform fee {rupees(line.platformFee)}
+                              {line.kind === 'travel'
+                                ? 'Yours in full, no commission'
+                                : <>Your pay {rupees(line.workerAmount)} + platform fee {rupees(line.platformFee)}</>}
                             </span>
                           </div>
                           <span className="font-bold text-slate-800 shrink-0">{rupees(line.amount)}</span>

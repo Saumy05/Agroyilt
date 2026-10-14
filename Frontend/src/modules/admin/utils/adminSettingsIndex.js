@@ -18,6 +18,7 @@ export const ADMIN_SETTINGS_INDEX = [
   { label: 'Start Journey Opens (minutes before start)', view: 'system', field: 'workerJourneyWindowMinutes', keywords: 'on the way job start timing' },
   { label: 'Start OTP Opens (minutes before start)', view: 'system', field: 'workerEarlyStartMinutes', keywords: 'early start job start timing' },
   { label: 'Open Tickets per Support Agent', view: 'system', field: 'supportMaxOpenClaims', keywords: 'support desk claim limit' },
+  { label: 'Travel Charge (per km)', view: 'travel', field: 'travelCharge', keywords: 'travel fare distance km return trip worker vendor machinery free distance' },
   { label: 'Terms & Conditions / Privacy Policy', view: 'policies', field: 'policyContent', keywords: 'terms privacy policy legal agree consent farmer vendor worker' },
 ];
 

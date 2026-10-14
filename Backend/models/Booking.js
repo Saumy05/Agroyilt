@@ -183,6 +183,17 @@ const bookingSchema = new mongoose.Schema({
     default: 0,
     min: 0
   },
+  // Travel charge the farmer pays the vendor for bringing the machine to the farm (admin: Settings > Travel Charges).
+  // Part of finalAmount. Goes to the vendor in full: outside GST, commission and the platform's revenue.
+  travelCharge: { type: Number, default: 0, min: 0 },
+  travelDistanceKm: { type: Number, default: null },
+  travelBreakdown: {
+    _id: false,
+    outboundAmount: { type: Number, default: 0 },
+    returnAmount:   { type: Number, default: 0 },
+    method:         { type: String, default: null },
+    capped:         { type: Boolean, default: false }
+  },
   penalty: {
     type: Number,
     default: 0,

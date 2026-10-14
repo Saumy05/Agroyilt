@@ -1297,6 +1297,8 @@ const JobDetails = () => {
                 const extDays = extBreakdown?.additionalDays || 0;
                 const extDurationLabel = extDays > 0 ? `+${extDays} Day(s)` : `+${extMins} Mins`;
                 const cash = job.cashCollection?.isCashBooking ? job.cashCollection : null;
+                const travelCharge = Number(job.workerFinancials?.travelCharge) || 0;
+                const travelKm = job.workerFinancials?.travelDistanceKm;
 
                 return (
                   <>
@@ -1352,6 +1354,16 @@ const JobDetails = () => {
                         <span className="font-bold text-red-500">-₹{commAmount.toFixed(2)}</span>
                       </div>
 
+                      {travelCharge > 0 && (
+                        <div className="flex justify-between items-center text-emerald-700">
+                          <div>
+                            <span className="font-medium block">Travel Charge{travelKm ? ` (${travelKm} km)` : ''}</span>
+                            <span className="text-[10px] text-emerald-600/80">Yours in full, no commission</span>
+                          </div>
+                          <span className="font-bold">+₹{travelCharge.toFixed(2)}</span>
+                        </div>
+                      )}
+
                       {Number(job.extraChargesTotal) > 0 && (
                         <div className="flex justify-between text-gray-600">
                           <span className="font-medium">Extra Charges (Added by you)</span>
@@ -1370,7 +1382,7 @@ const JobDetails = () => {
                         )}
                       </div>
                       <span className="text-2xl font-black text-emerald-600">
-                        ₹{(netEarning + (job.extraChargesTotal || 0)).toFixed(2)}
+                        ₹{(netEarning + travelCharge + (job.extraChargesTotal || 0)).toFixed(2)}
                       </span>
                     </div>
 
@@ -1386,7 +1398,9 @@ const JobDetails = () => {
                             <div className="min-w-0">
                               <span className="font-semibold block">{paymentLineLabel(line)}</span>
                               <span className="text-[10px] text-amber-800/80">
-                                Your pay {rupees(line.workerAmount)} + platform fee {rupees(line.platformFee)}
+                                {line.kind === 'travel'
+                                  ? 'Yours in full, no commission'
+                                  : <>Your pay {rupees(line.workerAmount)} + platform fee {rupees(line.platformFee)}</>}
                               </span>
                             </div>
                             <span className="font-bold shrink-0">{rupees(line.amount)}</span>

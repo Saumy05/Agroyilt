@@ -76,6 +76,8 @@ exports.updateSettings = async (req, res, next) => {
       workerEarlyStartMinutes,
       // Support desk
       supportMaxOpenClaims,
+      // Travel charge (farmer pays vendor / worker for the trip)
+      travelCharge,
       // Withdrawal settings
       minWithdrawalAmount,
       minWithdrawalAmountPaise
@@ -221,6 +223,22 @@ exports.updateSettings = async (req, res, next) => {
       // How long before the booked start a worker may Start Journey / enter the Start OTP (services/workerScheduleService)
       if (workerJourneyWindowMinutes !== undefined) settings.workerJourneyWindowMinutes = Math.min(1440, Math.max(0, Number(workerJourneyWindowMinutes) || 0));
       if (workerEarlyStartMinutes !== undefined) settings.workerEarlyStartMinutes = Math.min(1440, Math.max(0, Number(workerEarlyStartMinutes) || 0));
+      if (travelCharge !== undefined && travelCharge !== null && typeof travelCharge === 'object') {
+        const { normalizeRule } = require('../../services/travelChargeService');
+        const current = settings.travelCharge?.toObject ? settings.travelCharge.toObject() : (settings.travelCharge || {});
+        const next = {};
+        for (const role of ['worker', 'vendor']) {
+          if (travelCharge[role] === undefined) { next[role] = normalizeRule(current[role] || {}); continue; }
+          const input = travelCharge[role] || {};
+          for (const f of ['freeKm', 'outboundPerKm', 'returnFreeKm', 'returnPerKm', 'maxCharge']) {
+            if (input[f] !== undefined && input[f] !== '' && (Number.isNaN(Number(input[f])) || Number(input[f]) < 0)) {
+              return res.status(400).json({ success: false, message: `Travel charge (${role}): ${f} must be a number of 0 or more.` });
+            }
+          }
+          next[role] = normalizeRule({ ...(current[role] || {}), ...input });
+        }
+        settings.travelCharge = next;
+      }
       // Open tickets one support agent may hold (services/supportClaimService)
       if (supportMaxOpenClaims !== undefined) settings.supportMaxOpenClaims = Math.min(50, Math.max(1, Math.floor(Number(supportMaxOpenClaims)) || 5));
 

@@ -180,6 +180,18 @@ const settleAssignment = async (assignmentId, { useStoredAmounts = false } = {})
         referenceId: key,
         metadata: { ...job, grossAmount: gross, commissionAmount: commission, netEarning: net, memberId: a.workerId }
       });
+      // Travel charge: paid in full on top of the earnings (no commission). Settlement only runs after the visit and
+      // completion OTPs, so arrival is already confirmed.
+      const travel = Number(a.travelCharge) || 0;
+      if (travel > 0) {
+        await ledger.applyOnce({ ownerId: recipientId, ownerModel: 'Worker', amount: travel, key: `${key}_travel_credit`, reason: 'earnings_credit', referenceId: a._id });
+        await ledger.recordPassbookOnce(`${key}_travel_credit`, {
+          workerId: recipientId, type: 'earnings_credit', amount: travel, status: 'completed', paymentMethod: 'wallet',
+          description: `Travel charge${forJob}${a.travelDistanceKm ? ` (${a.travelDistanceKm} km)` : ''}`,
+          referenceId: key,
+          metadata: { ...job, type: 'travel_charge', travelCharge: travel, distanceKm: a.travelDistanceKm, memberId: a.workerId }
+        });
+      }
       // money just landed in the wallet: pay any outstanding dues from it first
       await require('./workerDuesService').recoverDuesFromWallet({ workerId: recipientId, key: `${key}_dues_recovery`, referenceId: a._id });
       if (recipientId.toString() !== a.workerId.toString()) {

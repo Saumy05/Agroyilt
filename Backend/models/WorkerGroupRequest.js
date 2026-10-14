@@ -165,7 +165,19 @@ const workerGroupRequestSchema = new mongoose.Schema({
     bookingType:          { type: String, default: null },
     numberOfDays:         { type: Number, default: null },
     durationMinutes:      { type: Number, default: null },
-    createdAt:            { type: Date,   default: null }
+    createdAt:            { type: Date,   default: null },
+    // Travel charge for the Team Leader's trip to the farm (admin: Settings > Travel Charges); part of totalPayable
+    travelChargeTotal:    { type: Number, default: 0 },
+    travelCharges: [{
+      _id: false,
+      workerId:       { type: mongoose.Schema.Types.ObjectId, ref: 'Worker' },
+      distanceKm:     { type: Number, default: null },
+      method:         { type: String, default: null },
+      outboundAmount: { type: Number, default: 0 },
+      returnAmount:   { type: Number, default: 0 },
+      amount:         { type: Number, default: 0 },
+      capped:         { type: Boolean, default: false }
+    }]
   },
 
   // ════════════════════════════════════════════════════════════════════════

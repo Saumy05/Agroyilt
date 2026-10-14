@@ -1067,7 +1067,8 @@ const completeSelfJob = async (req, res) => {
 
     const visitingCharges = Number(booking.visitingCharges) || 0;
     const penaltyCharges = round2(booking.penalty || 0); // carried-over cancellation penalty: company revenue, not vendor earning
-    const grandTotal = parseFloat((totalServiceBase + totalPartsBase + totalGST + visitingCharges + penaltyCharges).toFixed(2));
+    const travelCharge = round2(booking.travelCharge || 0); // passed to the vendor in full (see Booking.travelCharge)
+    const grandTotal = parseFloat((totalServiceBase + totalPartsBase + totalGST + visitingCharges + penaltyCharges + travelCharge).toFixed(2));
 
     // ═══════════════════════════════════════════
     // STEP 5: REVENUE SPLIT (internal only)
@@ -1076,7 +1077,7 @@ const completeSelfJob = async (req, res) => {
 
     const vendorServiceEarning = parseFloat(((totalServiceBase * serviceSplitPct) / 100).toFixed(2));
     const vendorPartsEarning = parseFloat(((totalPartsBase * partsSplitPct) / 100).toFixed(2));
-    const vendorTotalEarning = parseFloat((vendorServiceEarning + vendorPartsEarning).toFixed(2));
+    const vendorTotalEarning = parseFloat((vendorServiceEarning + vendorPartsEarning + travelCharge).toFixed(2));
     const companyRevenue = parseFloat((grandTotal - vendorTotalEarning).toFixed(2));
 
     // ═══════════════════════════════════════════
@@ -1114,6 +1115,7 @@ const completeSelfJob = async (req, res) => {
       totalPartsBase,
       visitingCharges,
       penaltyCharges,
+      travelCharge,
 
       // GST totals
       originalGST,

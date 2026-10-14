@@ -1,5 +1,15 @@
 const mongoose = require('mongoose');
 
+const travelRuleSchema = new mongoose.Schema({
+  enabled:       { type: Boolean, default: false },
+  freeKm:        { type: Number, default: 3, min: 0 },
+  outboundPerKm: { type: Number, default: 2, min: 0 },
+  returnEnabled: { type: Boolean, default: false },
+  returnFreeKm:  { type: Number, default: 3, min: 0 },
+  returnPerKm:   { type: Number, default: 1, min: 0 },
+  maxCharge:     { type: Number, default: 0, min: 0 }
+}, { _id: false });
+
 const settingsSchema = new mongoose.Schema({
   type: {
     type: String,
@@ -284,7 +294,19 @@ const settingsSchema = new mongoose.Schema({
   workerEarlyStartMinutes:    { type: Number, default: 30,  min: 0 },
   workerCashPaymentEnabled: { type: Boolean, default: true },
   // Support: how many open tickets one agent may hold at a time (super admin is exempt)
-  supportMaxOpenClaims:     { type: Number, default: 5, min: 1, max: 50 }
+  supportMaxOpenClaims:     { type: Number, default: 5, min: 1, max: 50 },
+
+  // ==========================================
+  // TRAVEL CHARGE (farmer pays the vendor / worker for coming to the farm)
+  // Distance = road km between the farmer's booking location and the vendor / worker's location.
+  //   outbound = (km - freeKm) x outboundPerKm
+  //   return   = (km - returnFreeKm) x returnPerKm   (only when returnEnabled)
+  // maxCharge caps the total (0 = no cap). Off until an admin turns it on.
+  // ==========================================
+  travelCharge: {
+    worker: { type: travelRuleSchema, default: () => ({}) },
+    vendor: { type: travelRuleSchema, default: () => ({}) }
+  }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Settings', settingsSchema);

@@ -324,25 +324,29 @@ const ensureBill = async (booking) => {
     throw err;
   }
   const { gstPct, payoutPct } = await getRentalSettings();
-  const base = round2(total / (1 + gstPct / 100));
-  const gst = round2(total - base);
+  // the travel charge inside the total is neither taxed nor shared: it all goes to the vendor
+  const travel = round2(Math.min(total, Number(booking.travelCharge) || 0));
+  const taxable = round2(total - travel);
+  const base = round2(taxable / (1 + gstPct / 100));
+  const gst = round2(taxable - base);
   const earning = round2((base * payoutPct) / 100);
   return VendorBill.create({
     bookingId: booking._id,
     vendorId: booking.vendorId,
     services: [{
       name: booking.serviceName || 'Service',
-      price: base, gstPercentage: gstPct, quantity: 1, gstAmount: gst, total, isOriginal: true
+      price: base, gstPercentage: gstPct, quantity: 1, gstAmount: gst, total: taxable, isOriginal: true
     }],
     originalServiceBase: base,
     originalGST: gst,
     totalServiceBase: base,
     totalGST: gst,
+    travelCharge: travel,
     grandTotal: total,
     payoutConfig: { serviceSplitPercentage: payoutPct, serviceGstPercentage: gstPct },
     vendorServiceEarning: earning,
-    vendorTotalEarning: earning,
-    companyRevenue: round2(total - earning),
+    vendorTotalEarning: round2(earning + travel),
+    companyRevenue: round2(total - earning - travel),
     status: BILL_STATUS.GENERATED
   });
 };
@@ -658,8 +662,11 @@ const finalizeMachineryBilling = async (booking, { service = null, equipment = n
   const base = calc.base;
   const gst = round2((base * gstPct) / 100);
   const penalty = round2(booking.penalty || 0);
-  const grandTotal = round2(base + gst + penalty);
+  // Travel charge: paid by the farmer on top, passed to the vendor in full (no GST, no commission, not company revenue)
+  const travel = round2(booking.travelCharge || 0);
+  const grandTotal = round2(base + gst + penalty + travel);
   const vendorEarning = round2((base * payoutPct) / 100);
+  const vendorTotalEarning = round2(vendorEarning + travel);
 
   const name = calc.isDistance
     ? `${service?.title || booking.serviceName || 'Trolley'} (${calc.distanceKm} km)`
@@ -678,11 +685,12 @@ const finalizeMachineryBilling = async (booking, { service = null, equipment = n
         totalServiceBase: base,
         totalGST: gst,
         penaltyCharges: penalty,
+        travelCharge: travel,
         grandTotal,
         payoutConfig: { serviceSplitPercentage: payoutPct, serviceGstPercentage: gstPct },
         vendorServiceEarning: vendorEarning,
-        vendorTotalEarning: vendorEarning,
-        companyRevenue: round2(grandTotal - vendorEarning),
+        vendorTotalEarning,
+        companyRevenue: round2(grandTotal - vendorTotalEarning),
         status: BILL_STATUS.GENERATED
       }
     },
@@ -691,7 +699,7 @@ const finalizeMachineryBilling = async (booking, { service = null, equipment = n
 
   const refunded = await applyBillToBooking(booking, bill, { now });
 
-  return { bill, alreadyFinal: false, booking, grandTotal, vendorEarning, refunded, hasTimer: calc.hasTimer, calc };
+  return { bill, alreadyFinal: false, booking, grandTotal, vendorEarning: vendorTotalEarning, refunded, hasTimer: calc.hasTimer, calc };
 };
 
 module.exports = {

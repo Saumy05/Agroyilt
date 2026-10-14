@@ -526,6 +526,11 @@ const WorkerGroupRequests = () => {
                   <p className="text-xs font-black text-amber-900">
                     💵 Cash Job — Collect ₹{(req.financialSnapshot?.totalPayable || (ratePerWorker * req.requiredWorkers)).toLocaleString()} from Farmer
                   </p>
+                  {Number(req.financialSnapshot?.travelChargeTotal) > 0 && (
+                    <p className="text-[11px] text-amber-800 font-semibold mt-0.5">
+                      Includes ₹{req.financialSnapshot.travelChargeTotal} travel charge, which is yours in full.
+                    </p>
+                  )}
                   <p className="text-[11px] text-amber-700 mt-0.5">
                     Collect cash directly upon job completion. Platform fee & commission will be debited from your Team Leader wallet.
                   </p>

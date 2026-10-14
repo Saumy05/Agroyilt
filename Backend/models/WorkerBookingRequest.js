@@ -265,7 +265,20 @@ const workerBookingRequestSchema = new mongoose.Schema({
     totalPayable:         { type: Number, default: null },
     commissionRate:       { type: Number, default: null },
     currency:             { type: String, default: 'INR' },
-    createdAt:            { type: Date, default: null }
+    createdAt:            { type: Date, default: null },
+    // Travel charge the farmer pays for the worker(s) to come (admin: Settings > Travel Charges). Included in totalPayable.
+    // Paid to the worker in full, outside platform fee, commission and the unused-reserve refund.
+    travelChargeTotal:    { type: Number, default: 0 },
+    travelCharges: [{
+      _id: false,
+      workerId:       { type: mongoose.Schema.Types.ObjectId, ref: 'Worker' },
+      distanceKm:     { type: Number, default: null },
+      method:         { type: String, default: null },
+      outboundAmount: { type: Number, default: 0 },
+      returnAmount:   { type: Number, default: 0 },
+      amount:         { type: Number, default: 0 },
+      capped:         { type: Boolean, default: false }
+    }]
   },
 
   // Refund tracking

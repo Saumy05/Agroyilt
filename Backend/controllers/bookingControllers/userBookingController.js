@@ -10,6 +10,7 @@ const Worker = require('../../models/Worker');
 const Review = require('../../models/Review');
 const Settings = require('../../models/Settings');
 const VendorEquipment = require('../../models/VendorEquipment');
+const Transaction = require('../../models/Transaction');
 const WorkerBookingRequest = require('../../models/WorkerBookingRequest');
 const { validationResult } = require('express-validator');
 const { BOOKING_STATUS, PAYMENT_STATUS } = require('../../utils/constants');
@@ -31,6 +32,7 @@ const {
 } = require('../../services/bookingSettlementService');
 
 const MAX_OPEN_REQUESTS_PER_FARMER = 5;
+const round2Money = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
 /** Atomically moves a booking to CANCELLED on behalf of the farmer (refund is handled by the caller). */
 const cancelBookingWithRefundNoRefund = async (bookingId, userId, reason, allowedStatuses) => {
@@ -465,6 +467,8 @@ const createBooking = async (req, res) => {
     // PRICING CALCULATION LOGIC
     // -------------------------------------------------------------------------
 
+    let planWaivesTravel = false; // a plan with free transport also waives the vendor's travel charge
+
     // 1. Determine if we can use Plan Benefits
     let usePlanBenefits = false;
     if (paymentMethod === 'plan_benefit') {
@@ -559,6 +563,7 @@ const createBooking = async (req, res) => {
         visitingCharges = (await Settings.findOne({ type: 'global' }))?.visitedCharges ?? 49;
         if (userPlan.freeTransport) {
             visitingCharges = 0; // Waive transport fee
+            planWaivesTravel = true;
         }
 
         gstPercentage = 18;
@@ -633,6 +638,30 @@ const createBooking = async (req, res) => {
     console.log(`[CreateBooking] Payment=${paymentMethod}, FinalAmount=${finalAmount}, Penalty=${pendingPenalty}`);
 
     // NOTE: the carried-over penalty is cleared only after the booking is safely created (see end of createBooking).
+
+    // Travel charge (admin: Settings > Travel Charges): road distance from the vendor to the farmer's booking location.
+    // Only when the vendor is known now (the farmer picked the machine); it is added on top and passed to the vendor in full.
+    let travelCharge = 0;
+    let travelDistanceKm = null;
+    let travelBreakdown = null;
+    const travelVendorId = vendorId || (equipmentObj ? equipmentObj.vendorId : null);
+    if (providerType === 'VENDOR' && isAgriService && travelVendorId && !planWaivesTravel) {
+      try {
+        const { computeTravelCharge, vendorPoint } = require('../../services/travelChargeService');
+        const travelVendor = await Vendor.findById(travelVendorId).select('location geoLocation').lean();
+        const charge = await computeTravelCharge({ role: 'vendor', from: vendorPoint(travelVendor), to: bookingLocation });
+        if (charge.applies) {
+          travelCharge = charge.total;
+          travelDistanceKm = charge.distanceKm;
+          travelBreakdown = { outboundAmount: charge.outboundAmount, returnAmount: charge.returnAmount, method: charge.method, capped: charge.capped };
+          finalAmount = Math.round((Number(finalAmount) + travelCharge) * 100) / 100;
+        }
+      } catch (travelErr) {
+        // a distance lookup problem must never block a booking: it is simply created without a travel charge
+        console.warn('[CreateBooking] travel charge skipped:', travelErr.message);
+        travelCharge = 0; travelDistanceKm = null; travelBreakdown = null;
+      }
+    }
 
     // Ensure minimum amount for Razorpay (₹1) for paid bookings
     if (isNaN(finalAmount) || finalAmount < 1) {
@@ -728,6 +757,7 @@ const createBooking = async (req, res) => {
       gstPercentage,
       visitingCharges,
       penalty: pendingPenalty || 0,
+      ...(travelCharge > 0 ? { travelCharge, travelDistanceKm, travelBreakdown } : {}),
       finalAmount,
       userPayableAmount: finalAmount,
       districtId: user?.districtId || address?.districtId || null,
@@ -1454,6 +1484,14 @@ const cancelBooking = async (req, res) => {
       cancellationFee = hasReached ? (booking.visitingCharges || 49) : settingsPenalty;
     }
 
+    // The vendor already set off: they keep the outbound part of the travel charge (paid out of the farmer's advance).
+    // Without an advance there is nothing to pay it from, so it is not charged.
+    let vendorTravelPay = 0;
+    if (hasStartedJourney && !providerFault && booking.vendorId && Number(booking.travelCharge) > 0 && advancePaid > 0) {
+      const outbound = Number(booking.travelBreakdown?.outboundAmount) || Number(booking.travelCharge) || 0;
+      vendorTravelPay = round2Money(Math.min(outbound, Math.max(0, advancePaid - cancellationFee)));
+    }
+
     // Atomic claim: two simultaneous cancels (or a cancel racing an accept) cannot both win
     const { booking: claimed } = await cancelBookingWithRefundNoRefund(booking._id, userId, cancellationReason, CANCELLABLE);
     if (!claimed) {
@@ -1464,12 +1502,25 @@ const cancelBooking = async (req, res) => {
     let refundAmount = 0;
     if (advancePaid > 0) {
       refundAmount = await refundToWallet(booking, {
-        amount: Math.max(0, advancePaid - cancellationFee),
+        amount: Math.max(0, advancePaid - cancellationFee - vendorTravelPay),
         reason: cancellationFee > 0 ? `Refund (cancellation fee ₹${cancellationFee} deducted)` : 'Refund for cancelled booking'
       });
+      if (vendorTravelPay > 0) {
+        await Vendor.findByIdAndUpdate(booking.vendorId, { $inc: { 'wallet.earnings': vendorTravelPay } });
+        await Transaction.create({
+          vendorId: booking.vendorId, userId, bookingId: booking._id, type: 'earnings_credit', amount: vendorTravelPay,
+          status: 'completed', paymentMethod: 'system',
+          description: `Travel charge ₹${vendorTravelPay} for booking #${booking.bookingNumber} (cancelled after you set off)`,
+          metadata: { type: 'travel_charge_cancelled', bookingId: booking._id.toString() }
+        });
+      }
       // If the fee exceeded the refundable amount, the remainder stays with the platform
-      refundMessage = cancellationFee > 0
-        ? `Booking cancelled. Refund of ₹${refundAmount} initiated (cancellation fee ₹${cancellationFee} deducted).`
+      const deductions = [
+        cancellationFee > 0 ? `cancellation fee ₹${cancellationFee}` : null,
+        vendorTravelPay > 0 ? `travel charge ₹${vendorTravelPay} paid to the vendor` : null
+      ].filter(Boolean);
+      refundMessage = deductions.length
+        ? `Booking cancelled. Refund of ₹${refundAmount} initiated (${deductions.join(' and ')} deducted).`
         : `Booking cancelled successfully. Full refund of ₹${refundAmount} initiated to your wallet.`;
     } else if (cancellationFee > 0) {
       await User.updateOne({ _id: userId }, { $inc: { 'wallet.penalty': cancellationFee } });
@@ -2265,6 +2316,40 @@ const calculatePrice = async (req, res) => {
 };
 
 /**
+ * Travel charge a farmer would pay for a vendor's machine to come to their location (shown before confirming).
+ * POST /users/bookings/travel-estimate  { vendorId? | equipmentId?, lat, lng }
+ * The booking itself recomputes this server-side; this only previews it.
+ */
+const getTravelEstimate = async (req, res) => {
+  try {
+    const { vendorId, equipmentId, lat, lng } = req.body || {};
+    let targetVendorId = vendorId || null;
+    if (!targetVendorId && equipmentId) {
+      const eq = await VendorEquipment.findById(equipmentId).select('vendorId').lean();
+      targetVendorId = eq?.vendorId || null;
+    }
+    const empty = { applies: false, total: 0, distanceKm: null, outboundAmount: 0, returnAmount: 0, capped: false };
+    if (!targetVendorId || !Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) {
+      return res.json({ success: true, travel: empty });
+    }
+    const { computeTravelCharge, vendorPoint } = require('../../services/travelChargeService');
+    const vendor = await Vendor.findById(targetVendorId).select('location geoLocation').lean();
+    const charge = await computeTravelCharge({ role: 'vendor', from: vendorPoint(vendor), to: { lat: Number(lat), lng: Number(lng) } });
+    return res.json({
+      success: true,
+      travel: {
+        applies: charge.applies, total: charge.total, distanceKm: charge.distanceKm,
+        outboundAmount: charge.outboundAmount, returnAmount: charge.returnAmount, capped: charge.capped
+      }
+    });
+  } catch (error) {
+    console.error('Travel estimate error:', error);
+    // the preview is best-effort: never block checkout on it
+    return res.json({ success: true, travel: { applies: false, total: 0, distanceKm: null, outboundAmount: 0, returnAmount: 0, capped: false } });
+  }
+};
+
+/**
  * Reselect a vendor for an equipment/machinery booking when the previous vendor
  * rejected, timed out, or became unavailable.
  * Never auto-switches vendors; triggered exclusively by the farmer.
@@ -2347,6 +2432,33 @@ const reselectVendor = async (req, res) => {
       const [vLng, vLat] = targetVendor.geoLocation.coordinates;
       if (vLat && vLng) {
         vendorDist = Math.round(calculateDistance({ lat: booking.address.lat, lng: booking.address.lng }, { lat: vLat, lng: vLng }) * 10) / 10;
+      }
+    }
+
+    // The travel charge depends on how far the NEW vendor is. An unpaid booking is re-quoted; a prepaid one keeps its
+    // quote and the difference is settled in the final bill (the bill always uses the current travelCharge).
+    if ((booking.rental_type || booking.equipmentId) && booking.paymentMethod !== 'plan_benefit' && (booking.travelCharge > 0 || (booking.address?.lat && booking.address?.lng))) {
+      try {
+        const { computeTravelCharge, vendorPoint } = require('../../services/travelChargeService');
+        const charge = await computeTravelCharge({
+          role: 'vendor', from: vendorPoint(targetVendor), to: { lat: booking.address?.lat, lng: booking.address?.lng }
+        });
+        const oldTravel = Number(booking.travelCharge) || 0;
+        const newTravel = charge.applies ? charge.total : 0;
+        if (round2Money(newTravel) !== round2Money(oldTravel)) {
+          const unpaid = ![PAYMENT_STATUS.SUCCESS, PAYMENT_STATUS.PARTIAL].includes(booking.paymentStatus) && !(booking.advancePaidAmount > 0);
+          if (unpaid) {
+            booking.finalAmount = round2Money(Math.max(0, (Number(booking.finalAmount) || 0) - oldTravel + newTravel));
+            booking.userPayableAmount = booking.finalAmount;
+          }
+          booking.travelCharge = newTravel;
+          booking.travelDistanceKm = charge.applies ? charge.distanceKm : null;
+          booking.travelBreakdown = charge.applies
+            ? { outboundAmount: charge.outboundAmount, returnAmount: charge.returnAmount, method: charge.method, capped: charge.capped }
+            : { outboundAmount: 0, returnAmount: 0, method: null, capped: false };
+        }
+      } catch (travelErr) {
+        console.warn('[reselectVendor] travel charge not recomputed:', travelErr.message);
       }
     }
 
@@ -2526,6 +2638,7 @@ module.exports = {
   getUserRatings,
   checkEquipmentAvailability,
   calculatePrice,
+  getTravelEstimate,
   reselectVendor
 };
 

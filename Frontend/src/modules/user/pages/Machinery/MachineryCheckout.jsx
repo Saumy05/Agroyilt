@@ -37,6 +37,7 @@ const MachineryCheckout = () => {
     const [submitting, setSubmitting] = useState(false);
     const [showPaymentConfirmModal, setShowPaymentConfirmModal] = useState(false);
     const [adminRentalGst, setAdminRentalGst] = useState(null);
+    const [travel, setTravel] = useState(null); // travel charge for the vendor coming to the chosen address
 
     useEffect(() => {
         let isMounted = true;
@@ -55,6 +56,20 @@ const MachineryCheckout = () => {
         loadSettings();
         return () => { isMounted = false; };
     }, []);
+
+    // Travel charge (set by the admin): previewed once an address is picked. The booking recomputes it on the server.
+    const travelVendorId = equipment?.vendorId?._id || equipment?.vendorId;
+    const travelEquipmentId = equipment?._id || equipment?.id;
+    useEffect(() => {
+        const lat = selectedAddress?.lat;
+        const lng = selectedAddress?.lng;
+        if (!(lat && lng) || !(travelVendorId || travelEquipmentId)) { setTravel(null); return undefined; }
+        let alive = true;
+        bookingService.getTravelEstimate({ vendorId: travelVendorId, equipmentId: travelEquipmentId, lat, lng })
+            .then(res => { if (alive) setTravel(res?.travel?.applies ? res.travel : null); })
+            .catch(() => { if (alive) setTravel(null); });
+        return () => { alive = false; };
+    }, [selectedAddress?.lat, selectedAddress?.lng, travelVendorId, travelEquipmentId]);
 
     if (!equipment || !bookingData) {
         return (
@@ -110,7 +125,9 @@ const MachineryCheckout = () => {
         ? initialTotal
         : (calculatedBasePrice + calculatedTax + (visitingCharges || 0));
 
-    const total = calculatedTotal;
+    const travelCharge = Number(travel?.total) || 0;
+    const payableTotal = Math.round((calculatedTotal + travelCharge) * 100) / 100; // what the farmer actually pays
+    const total = payableTotal;
     const tax = calculatedTax;
     const basePrice = calculatedBasePrice;
 
@@ -207,7 +224,7 @@ const MachineryCheckout = () => {
                     lng: selectedAddress.lng
                 },
                 paymentMethod,
-                amount: calculatedTotal,
+                amount: payableTotal,
                 basePrice: calculatedBasePrice,
                 tax: calculatedTax,
                 visitingCharges: visitingCharges || 0,
@@ -265,7 +282,7 @@ const MachineryCheckout = () => {
                     const razorpayKey = orderRes.data?.key || import.meta.env.VITE_RAZORPAY_KEY_ID;
                     const options = {
                         key: razorpayKey,
-                        amount: Math.round((orderRes.data.amount || calculatedTotal) * 100),
+                        amount: Math.round((orderRes.data.amount || payableTotal) * 100),
                         currency: orderRes.data.currency || 'INR',
                         order_id: orderRes.data.orderId,
                         name: 'Agroyilt',
@@ -547,6 +564,19 @@ const MachineryCheckout = () => {
                           )}
                         </div>
 
+                        {/* Travel charge (admin-set, per km; goes to the vendor in full) */}
+                        {travelCharge > 0 && (
+                          <div className="flex justify-between items-start text-xs pt-0.5">
+                            <div>
+                              <span className="font-bold text-slate-500 text-[11px] block">Travel Charge</span>
+                              <span className="text-[9.5px] font-semibold text-slate-400">
+                                {travel?.distanceKm ? `${travel.distanceKm} km to your farm · ` : ''}paid to the vendor, no GST
+                              </span>
+                            </div>
+                            <span className="font-bold text-slate-700 text-xs">+ ₹{travelCharge}</span>
+                          </div>
+                        )}
+
                         {/* GST */}
                         <div className="flex justify-between items-center text-xs pt-0.5">
                           <span className="font-bold text-slate-500 text-[11px]">
@@ -561,7 +591,7 @@ const MachineryCheckout = () => {
                             <span className="text-[11px] font-black text-slate-900 uppercase tracking-wider block">Total Payable</span>
                             <span className="text-[9.5px] font-semibold text-slate-400">All taxes & operator expenses included</span>
                           </div>
-                          <span className="text-xl font-black text-emerald-800">₹{calculatedTotal}</span>
+                          <span className="text-xl font-black text-emerald-800">₹{payableTotal}</span>
                         </div>
                     </div>
                 </div>
@@ -659,7 +689,7 @@ const MachineryCheckout = () => {
                 <div className="max-w-xl mx-auto flex items-center justify-between gap-3">
                     <div>
                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider leading-none mb-0.5">Total Payable</p>
-                        <h4 className="text-xl font-black text-slate-900 leading-none">₹{calculatedTotal}</h4>
+                        <h4 className="text-xl font-black text-slate-900 leading-none">₹{payableTotal}</h4>
                         <span className="text-[9.5px] font-bold text-emerald-700 mt-0.5 block">
                           {paymentMethod === 'cash' ? 'Pay on field after work' : 'Online payment'}
                         </span>
@@ -729,7 +759,7 @@ const MachineryCheckout = () => {
                     <div className="rounded-2xl px-5 py-4 mb-5 flex items-center justify-between bg-gradient-to-r from-emerald-50 to-teal-50/60 border border-emerald-200/60">
                       <div>
                         <p className="text-[10px] font-black text-emerald-800 uppercase tracking-widest">Payable Amount</p>
-                        <p className="text-2xl font-black text-emerald-950">₹{calculatedTotal}</p>
+                        <p className="text-2xl font-black text-emerald-950">₹{payableTotal}</p>
                       </div>
                       <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-emerald-700 text-white shadow-sm">
                         <FiTruck className="w-6 h-6" />
@@ -807,7 +837,7 @@ const MachineryCheckout = () => {
                       disabled={submitting}
                       className="w-full py-4 rounded-2xl text-white font-black text-xs uppercase tracking-wider bg-gradient-to-r from-emerald-600 via-emerald-700 to-green-800 hover:from-emerald-700 hover:to-green-900 transition-all active:scale-95 shadow-lg shadow-emerald-700/25 cursor-pointer"
                     >
-                      {submitting ? 'Dispatching...' : `Confirm & Dispatch (₹${calculatedTotal}) ➔`}
+                      {submitting ? 'Dispatching...' : `Confirm & Dispatch (₹${payableTotal}) ➔`}
                     </button>
 
                     <p className="text-center text-[10px] text-slate-400 font-bold mt-3 flex items-center justify-center gap-1">

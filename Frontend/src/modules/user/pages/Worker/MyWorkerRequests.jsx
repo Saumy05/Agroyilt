@@ -418,6 +418,7 @@ const MyWorkerRequests = () => {
                 </div>
                 <p className="text-[11px] text-emerald-700">
                   Rate: ₹{snap.agreedRatePerWorker || req.agreedRatePerWorker || req.farmerOfferedRatePerWorker}/{req.rateUnit || 'day'} &bull; Platform fee included
+                  {Number(snap.travelChargeTotal) > 0 && <> &bull; Travel charge ₹{snap.travelChargeTotal} included</>}
                 </p>
               </div>
 

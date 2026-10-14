@@ -197,14 +197,15 @@ const createOrUpdateBill = async (req, res) => {
 
     const totalGST = parseFloat((originalGST + vendorServiceGST + partsGST).toFixed(2));
     const finalTransportCharges = Number(transportCharges) || 0;
-    const grandTotal = parseFloat((totalServiceBaseForBill + totalPartsBase + totalGST + visitingCharges + finalTransportCharges).toFixed(2));
+    const travelCharge = parseFloat((Number(booking.travelCharge) || 0).toFixed(2)); // passed to the vendor in full
+    const grandTotal = parseFloat((totalServiceBaseForBill + totalPartsBase + totalGST + visitingCharges + finalTransportCharges + travelCharge).toFixed(2));
 
     // ═══════════════════════════════════════
     // 5. REVENUE SPLIT (% applied on BASE only)
     // ═══════════════════════════════════════
     const vendorServiceEarning = parseFloat(((totalServiceBaseForEarnings * serviceSplitPct) / 100).toFixed(2));
     const vendorPartsEarning = parseFloat(((totalPartsBase * partsSplitPct) / 100).toFixed(2));
-    const vendorTotalEarning = parseFloat((vendorServiceEarning + vendorPartsEarning).toFixed(2));
+    const vendorTotalEarning = parseFloat((vendorServiceEarning + vendorPartsEarning + travelCharge).toFixed(2));
     const companyRevenue = parseFloat((grandTotal - vendorTotalEarning).toFixed(2));
 
     // ═══════════════════════════════════════
@@ -247,6 +248,7 @@ const createOrUpdateBill = async (req, res) => {
       totalGST,
       visitingCharges,
       transportCharges: finalTransportCharges,
+      travelCharge,
       grandTotal,
       payoutConfig: {
         serviceSplitPercentage: serviceSplitPct,

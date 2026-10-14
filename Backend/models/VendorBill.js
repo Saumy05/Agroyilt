@@ -85,6 +85,8 @@ const vendorBillSchema = new mongoose.Schema({
 
   // Transport Charges
   transportCharges: { type: Number, default: 0 },
+  // Travel charge passed through to the vendor in full (not in GST base, not in company revenue)
+  travelCharge: { type: Number, default: 0 },
 
   // GST breakdown
   originalGST: { type: Number, default: 0 },

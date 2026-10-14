@@ -32,7 +32,8 @@ import {
   FiAlertTriangle,
   FiCheckSquare,
   FiDollarSign,
-  FiRefreshCw
+  FiRefreshCw,
+  FiTruck
 } from 'react-icons/fi';
 import { FaRupeeSign } from 'react-icons/fa';
 import { bookingService } from '../../../../services/bookingService';
@@ -2211,6 +2212,18 @@ const BookingDetails = () => {
                       </div>
                     )}
 
+                    {/* Travel Charge (admin-set per-km charge, paid to the vendor in full) */}
+                    {(Number(bill?.travelCharge) > 0 || Number(booking.travelCharge) > 0) && (
+                      <div className="mt-2 pt-2 border-t border-gray-100">
+                        <div className="flex justify-between text-xs font-bold text-gray-600">
+                          <span className="flex items-center gap-2 uppercase tracking-wide">
+                            <FiTruck className="w-3.5 h-3.5 text-blue-400" /> Travel Charge{booking.travelDistanceKm ? ` (${booking.travelDistanceKm} km)` : ''}
+                          </span>
+                          <span className="font-mono">₹{Number(bill?.travelCharge || booking.travelCharge || 0).toFixed(2)}</span>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Transport Charges */}
                     {bill?.transportCharges > 0 && (
                       <div className="mt-2 pt-2 border-t border-gray-100">
@@ -2564,6 +2577,16 @@ const BookingDetails = () => {
                         </span>
                       )}
                     </div>
+
+                    {Number(booking.travelCharge) > 0 && (
+                      <div className="flex justify-between items-center text-gray-600">
+                        <span>
+                          Travel Charge{booking.travelDistanceKm ? ` (${booking.travelDistanceKm} km)` : ''}
+                          <span className="block text-[10px] text-gray-400">Paid to the vendor in full</span>
+                        </span>
+                        <span className="font-medium text-gray-900">₹{Number(booking.travelCharge).toLocaleString('en-IN')}</span>
+                      </div>
+                    )}
 
                     {booking.paymentMethod !== 'plan_benefit' && booking.discount > 0 && (
                       <div className="flex justify-between text-sm">
