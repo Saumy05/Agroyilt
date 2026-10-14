@@ -102,7 +102,11 @@ const findNearbyVendors = async (centerLocation, radiusKm = 10, filters = {}) =>
     if (serviceCategory) {
       const cleanCategory = serviceCategory.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const categoryRegex = new RegExp(cleanCategory, 'i');
+      // Also match by category id, so an admin renaming a category doesn't drop vendors who picked it
+      const matchedCats = await require('../models/Category').find({ title: serviceCategory.trim() })
+        .collation({ locale: 'en', strength: 2 }).select('_id').lean();
       baseQuery.$or = [
+        ...(matchedCats.length ? [{ serviceCategoryIds: { $in: matchedCats.map(c => c._id) } }] : []),
         { categories: { $in: [categoryRegex] } },
         { service: { $in: [categoryRegex] } },
         { service: { $in: [/^agriculture$/i, /^machinery$/i, /^tractor/i] } },

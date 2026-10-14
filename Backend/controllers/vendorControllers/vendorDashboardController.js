@@ -5,6 +5,7 @@ const Service = require('../../models/Service');
 const EcommerceOrder = require('../../models/EcommerceOrder');
 const Settings = require('../../models/Settings');
 const { getVendorPayoutPercentage } = require('../../utils/vendorPayout');
+const { getVendorCategoryNames } = require('../../utils/vendorCategories');
 const { BOOKING_STATUS, PAYMENT_STATUS, WORKER_STATUS } = require('../../utils/constants');
 
 const mongoose = require('mongoose');
@@ -17,7 +18,7 @@ const getDashboardStats = async (req, res) => {
     const vendorId = req.user.id;
     const vendorObjectId = new mongoose.Types.ObjectId(vendorId);
     const vendor = await require('../../models/Vendor').findById(vendorId);
-    const vendorCategories = vendor?.service || [];
+    const vendorCategories = await getVendorCategoryNames(vendor);
     const categoryRegexPatterns = (vendorCategories || []).map(cat => new RegExp(`^${cat.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'));
 
     const unassignedAlertCondition = {

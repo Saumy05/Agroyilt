@@ -1,4 +1,5 @@
 const Vendor = require('../../models/Vendor');
+const { resolveVendorServices } = require('../../utils/vendorCategories');
 const Admin = require('../../models/Admin');
 const City = require('../../models/City');
 const Booking = require('../../models/Booking');
@@ -611,8 +612,13 @@ const updateVendorServices = async (req, res) => {
     }
 
     if (services !== undefined) {
-      vendor.service = Array.isArray(services) ? services : [];
-      vendor.categories = vendor.service; // Sync
+      const resolved = await resolveVendorServices({
+        ids: req.body.serviceCategoryIds,
+        titles: Array.isArray(services) ? services : []
+      });
+      vendor.service = resolved.service;
+      vendor.categories = resolved.service; // Sync
+      vendor.serviceCategoryIds = resolved.serviceCategoryIds;
     }
 
     await vendor.save();
@@ -849,6 +855,7 @@ module.exports = {
       if (parsedLabDetails && !serviceArray.includes('soil_testing')) {
         serviceArray.push('soil_testing');
       }
+      const resolvedServices = await resolveVendorServices({ ids: req.body.serviceCategoryIds, titles: serviceArray });
 
       // Auto-assign admin's scope fields (Phase 4: scope enforcement on create)
       const scopeFields = extractAdminScopeFields(req.user);
@@ -860,8 +867,9 @@ module.exports = {
         email,
         phone: cleanPhone,
         businessName,
-        service: serviceArray,
-        categories: serviceArray,
+        service: resolvedServices.service,
+        categories: resolvedServices.service,
+        serviceCategoryIds: resolvedServices.serviceCategoryIds,
         aadhar: {
           number: aadhar,
           document: aadharUrl,

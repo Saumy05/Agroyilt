@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { resolveVendorServices } = require('../../utils/vendorCategories');
 const Vendor = require('../../models/Vendor');
 const { validationResult } = require('express-validator');
 const cloudinaryService = require('../../services/cloudinaryService');
@@ -168,13 +169,14 @@ const updateProfile = async (req, res) => {
 
     // Handle multiple service categories
     if (serviceCategory !== undefined) {
-      if (Array.isArray(serviceCategory)) {
-        vendor.service = serviceCategory;
-        vendor.categories = serviceCategory; // Sync categories field too
-      } else if (typeof serviceCategory === 'string') {
-        // If string, likely single value or comma separated
-        vendor.service = [serviceCategory];
-        vendor.categories = [serviceCategory];
+      if (Array.isArray(serviceCategory) || typeof serviceCategory === 'string') {
+        const resolved = await resolveVendorServices({
+          ids: req.body.serviceCategoryIds,
+          titles: Array.isArray(serviceCategory) ? serviceCategory : [serviceCategory]
+        });
+        vendor.service = resolved.service;
+        vendor.categories = resolved.service; // Sync categories field too
+        vendor.serviceCategoryIds = resolved.serviceCategoryIds;
       }
     }
 
@@ -368,8 +370,13 @@ const updateBusinessProfile = async (req, res) => {
 
     // Update services array safely
     if (services !== undefined) {
-      vendor.service = Array.isArray(services) ? services : [];
-      vendor.categories = vendor.service;
+      const resolved = await resolveVendorServices({
+        ids: req.body.serviceCategoryIds,
+        titles: Array.isArray(services) ? services : []
+      });
+      vendor.service = resolved.service;
+      vendor.categories = resolved.service;
+      vendor.serviceCategoryIds = resolved.serviceCategoryIds;
     }
 
     // Update Lab Details (if Soil Testing is enabled/managed)

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const {
+  getVendorSignupCategories,
   getPublicCategories,
   getPublicBrands,
   getPublicBrandBySlug,
@@ -11,6 +12,7 @@ const {
 
 // Public routes - no authentication required
 router.get('/categories', getPublicCategories);
+router.get('/vendor-categories', getVendorSignupCategories);
 router.get('/brands', getPublicBrands); // Formerly services
 router.get('/brands/slug/:slug', getPublicBrandBySlug);
 router.get('/services', getPublicServices); // New services

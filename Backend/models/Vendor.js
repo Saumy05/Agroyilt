@@ -67,6 +67,12 @@ const vendorSchema = new mongoose.Schema({
     type: [String],
     default: []
   },
+  // Same categories by id, so admin renames don't break matching (service/categories hold the names)
+  serviceCategoryIds: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Category',
+    index: true
+  }],
   skills: {
     type: [String],
     default: []

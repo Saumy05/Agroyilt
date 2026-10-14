@@ -607,7 +607,29 @@ const getPublicWorkers = async (req, res) => {
   }
 };
 
+// Categories offered to vendors at registration (dynamic: whatever the admin has set up as main equipment)
+const getVendorSignupCategories = async (req, res) => {
+  try {
+    const { getMainEquipmentCategories } = require('../../utils/vendorCategories');
+    const cats = await getMainEquipmentCategories();
+    res.status(200).json({
+      success: true,
+      categories: cats.map(c => ({
+        id: c._id.toString(),
+        title: c.title,
+        slug: c.slug,
+        icon: c.homeIconUrl || '',
+        fulfillmentMode: c.fulfillmentMode || 'service'
+      }))
+    });
+  } catch (error) {
+    console.error('Get vendor signup categories error:', error);
+    res.status(500).json({ success: false, message: 'Failed to load categories' });
+  }
+};
+
 module.exports = {
+  getVendorSignupCategories,
   getPublicCategories,
   getPublicBrands,
   getPublicBrandBySlug,

@@ -43,6 +43,7 @@ const VendorSignup = () => {
       gender: '',
       businessName: '',
       service: [],
+      serviceCategoryIds: [],
       aadhar: '',
       pan: '',
       documents: [],
@@ -97,7 +98,7 @@ const VendorSignup = () => {
   useEffect(() => {
     const loadCategories = async () => {
       try {
-        const response = await publicCatalogService.getCategories();
+        const response = await publicCatalogService.getVendorCategories();
         if (response.success) {
           setCategories(response.categories || []);
         }
@@ -162,14 +163,13 @@ const VendorSignup = () => {
     }));
   };
 
-  const toggleServiceSelection = (title) => {
+  // Selection is kept by category id (rename-proof); names ride along for display and older backends
+  const toggleServiceSelection = (cat) => {
     setFormData(prev => {
-      const currentServices = Array.isArray(prev.service) ? prev.service : [];
-      if (currentServices.includes(title)) {
-        return { ...prev, service: currentServices.filter(s => s !== title) };
-      } else {
-        return { ...prev, service: [...currentServices, title] };
-      }
+      const ids = Array.isArray(prev.serviceCategoryIds) ? prev.serviceCategoryIds : [];
+      const nextIds = ids.includes(cat.id) ? ids.filter(id => id !== cat.id) : [...ids, cat.id];
+      const nextTitles = categories.filter(c => nextIds.includes(c.id)).map(c => c.title);
+      return { ...prev, serviceCategoryIds: nextIds, service: nextTitles };
     });
   };
 
@@ -286,6 +286,12 @@ const VendorSignup = () => {
     if (!hasAadharDoc) { toastManager.error('Please upload Aadhar Front document'); return; }
     if (!hasAadharBackDoc) { toastManager.error('Please upload Aadhar Back document'); return; }
 
+    // At least one equipment category (a shop-only registration is the exception)
+    if (!(formData.serviceCategoryIds || []).length && !formData.isShopRegistration) {
+      toastManager.error('Please select at least one equipment category');
+      return;
+    }
+
     // Shop Validation
     if (formData.isShopRegistration) {
       if (!formData.shopDetails.shopName) { toastManager.error('Please enter Shop Name'); return; }
@@ -318,7 +324,8 @@ const VendorSignup = () => {
           businessName: formData.businessName,
           aadhar: formData.aadhar,
           pan: formData.pan,
-          service: formData.service, // It's already an array now
+          service: formData.service,
+          serviceCategoryIds: formData.serviceCategoryIds,
           aadharDocument: aadharDoc,
           aadharBackDocument: aadharBackDoc,
           panDocument: panDoc,
@@ -441,7 +448,8 @@ const VendorSignup = () => {
         businessName: formData.businessName,
         aadhar: formData.aadhar,
         pan: formData.pan,
-        service: formData.service, 
+        service: formData.service,
+        serviceCategoryIds: formData.serviceCategoryIds,
         aadharDocument: aadharDoc,
         aadharBackDocument: aadharBackDoc,
         panDocument: panDoc,
@@ -561,15 +569,15 @@ const VendorSignup = () => {
                   </div>
 
                   <div className="animate-fade-in" style={{ animationDelay: '0.2s' }}>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Equipment Category (Select All That Apply)</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Equipment Category (Select All That Apply) <span className="text-red-500">*</span></label>
                     <div className="flex flex-wrap gap-2">
                       {categories.map((cat, index) => {
-                        const isSelected = formData.service.includes(cat.title);
+                        const isSelected = (formData.serviceCategoryIds || []).includes(cat.id);
                         return (
                           <button
-                            key={cat._id || cat.id || index}
+                            key={cat.id || index}
                             type="button"
-                            onClick={() => toggleServiceSelection(cat.title)}
+                            onClick={() => toggleServiceSelection(cat)}
                             className={`px-4 py-2 rounded-full text-xs font-semibold border transition-all duration-300 ${
                               isSelected
                                 ? 'bg-[#347989] text-white border-[#347989] shadow-sm'

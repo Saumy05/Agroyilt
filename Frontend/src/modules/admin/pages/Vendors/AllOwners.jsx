@@ -72,7 +72,7 @@ const AllOwners = () => {
 
   const loadCategories = async () => {
     try {
-      const response = await publicCatalogService.getCategories();
+      const response = await publicCatalogService.getVendorCategories();
       if (response.success) {
         setCategories(response.categories || []);
       }
@@ -972,7 +972,7 @@ const AllOwners = () => {
                     const isSelected = formData.service.includes(cat.title);
                     return (
                       <button
-                        key={cat._id}
+                        key={cat.id}
                         type="button"
                         onClick={() => {
                           setFormData(prev => {

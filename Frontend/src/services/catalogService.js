@@ -208,6 +208,12 @@ export const homeContentService = {
  * Now with caching for faster data retrieval
  */
 export const publicCatalogService = {
+  // Main equipment categories a vendor can register for (managed by admin; implements and worker types excluded)
+  getVendorCategories: async () => {
+    const response = await api.get('/public/vendor-categories');
+    return response.data;
+  },
+
   // Get all active categories (cached for 5 minutes)
   getCategories: async (params = {}) => {
     // Legacy support for passing cityId directly or null

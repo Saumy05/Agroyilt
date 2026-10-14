@@ -1,4 +1,5 @@
 const Vendor = require('../../models/Vendor');
+const { resolveVendorServices } = require('../../utils/vendorCategories');
 const { generateOTP, hashOTP, storeOTP, verifyOTP, checkRateLimit } = require('../../utils/redisOtp.util');
 const { generateTokenPair, verifyRefreshToken, generateVerificationToken, verifyVerificationToken } = require('../../utils/tokenService');
 const { sendOTP: sendSMSOTP } = require('../../services/smsService');
@@ -173,7 +174,7 @@ const register = async (req, res) => {
     }
 
     // verificationToken handling
-    const { name, email, verificationToken, aadhar, pan, businessName, service, labDetails, shopDetails, gender } = req.body;
+    const { name, email, verificationToken, aadhar, pan, businessName, service, serviceCategoryIds, labDetails, shopDetails, gender } = req.body;
     let phone = req.body.phone;
 
     if (verificationToken) {
@@ -215,6 +216,16 @@ const register = async (req, res) => {
     let parsedLabDetails = labDetails ? (typeof labDetails === 'string' ? JSON.parse(labDetails) : labDetails) : null;
     let parsedShopDetails = shopDetails ? (typeof shopDetails === 'string' ? JSON.parse(shopDetails) : shopDetails) : null;
 
+    // Categories: ids are authoritative; names are derived from them (and kept for older clients)
+    const resolvedServices = await resolveVendorServices({ ids: serviceCategoryIds, titles: service });
+    if (resolvedServices.service.length === 0 && !parsedShopDetails) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please select at least one equipment category (or register a shop).'
+      });
+    }
+
+
     const pAadhar = uploadBase64(aadharUrl, 'vendors/documents');
     const pAadharBack = uploadBase64(aadharBackUrl, 'vendors/documents');
     const pPan = uploadBase64(panUrl, 'vendors/documents');
@@ -250,7 +261,9 @@ const register = async (req, res) => {
       name, phone,
       gender: (gender && ['male', 'female', 'other'].includes(String(gender).toLowerCase())) ? String(gender).toLowerCase() : null,
       businessName,
-      service: Array.isArray(service) ? service : (service ? [service] : []),
+      service: resolvedServices.service,
+      categories: resolvedServices.service,
+      serviceCategoryIds: resolvedServices.serviceCategoryIds,
       aadhar: {
         number: aadhar,
         document: aadharUrl,
