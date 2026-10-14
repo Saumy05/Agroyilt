@@ -4,6 +4,7 @@ import { FiUser, FiMail, FiPhone, FiFileText, FiUpload, FiCamera, FiX, FiArrowRi
 import { toastManager } from '../../../utils/toastManager';
 import { themeColors } from '../../../theme';
 import { workerAuthService } from '../../../services/authService';
+import { uploadSignupDocument } from '../../../services/signupUploadService';
 import Logo from '../../../components/common/Logo';
 import ReferralInput from '../../../components/common/ReferralInput';
 
@@ -54,6 +55,7 @@ const WorkerSignup = () => {
   const [verificationToken, setVerificationToken] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [documentPreview, setDocumentPreview] = useState({});
+  const [uploadedUrls, setUploadedUrls] = useState({}); // type -> uploaded file URL sent on register
   const [resendTimer, setResendTimer] = useState(0);
   const [errors, setErrors] = useState({});
   const [referralCode, setReferralCode] = useState('');
@@ -125,7 +127,7 @@ const WorkerSignup = () => {
     }
   };
 
-  const handleDocumentUpload = (e, type) => {
+  const handleDocumentUpload = async (e, type) => {
     const file = e.target.files[0];
     if (!file) return;
 
@@ -137,6 +139,16 @@ const WorkerSignup = () => {
 
     if (file.size > 5 * 1024 * 1024) {
       toastManager.error('File size should be less than 5MB');
+      return;
+    }
+
+    // Upload now so the register request only carries a URL, not the base64 file
+    let remoteUrl;
+    try {
+      remoteUrl = await uploadSignupDocument(file);
+    } catch (uploadError) {
+      console.error('Document upload failed', uploadError);
+      toastManager.error(uploadError.response?.data?.message || 'Failed to upload file. Please try again.');
       return;
     }
 
@@ -154,6 +166,7 @@ const WorkerSignup = () => {
         ...prev,
         [type]: reader.result
       }));
+      setUploadedUrls(prev => ({ ...prev, [type]: remoteUrl }));
     };
     reader.readAsDataURL(file);
   };
@@ -171,6 +184,7 @@ const WorkerSignup = () => {
       ...prev,
       [type]: null
     }));
+    setUploadedUrls(prev => ({ ...prev, [type]: null }));
   };
 
   const handleDetailsSubmit = async (e) => {
@@ -211,9 +225,9 @@ const WorkerSignup = () => {
 
     if (verificationToken) {
       try {
-        const aadharDoc = documentPreview.aadhar || null;
-        const aadharBackDoc = documentPreview.aadharBack || null;
-        const dlDoc = documentPreview.drivingLicense || null;
+        const aadharDoc = uploadedUrls.aadhar || null;
+        const aadharBackDoc = uploadedUrls.aadharBack || null;
+        const dlDoc = uploadedUrls.drivingLicense || null;
         const registerData = {
           name: formData.name,
           email: formData.email,
@@ -308,9 +322,9 @@ const WorkerSignup = () => {
     isSubmittingRef.current = true;
     setIsLoading(true);
     try {
-      const aadharDoc = documentPreview.aadhar || null;
-      const aadharBackDoc = documentPreview.aadharBack || null;
-      const dlDoc = documentPreview.drivingLicense || null;
+      const aadharDoc = uploadedUrls.aadhar || null;
+      const aadharBackDoc = uploadedUrls.aadharBack || null;
+      const dlDoc = uploadedUrls.drivingLicense || null;
       const registerData = {
         name: formData.name,
         email: formData.email,

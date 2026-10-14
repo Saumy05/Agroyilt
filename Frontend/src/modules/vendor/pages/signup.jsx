@@ -7,6 +7,7 @@ import { register, sendOTP as sendVendorOTP } from '../services/authService';
 import LogoLoader from '../../../components/common/LogoLoader';
 import Logo from '../../../components/common/Logo';
 import { compressImage } from '../../../utils/imageCompression';
+import { uploadSignupDocument } from '../../../services/signupUploadService';
 import ReferralInput from '../../../components/common/ReferralInput';
 
 import { z } from "zod";
@@ -22,6 +23,8 @@ const vendorSignupSchema = z.object({
   aadhar: z.string().regex(/^\d{12}$/, "Aadhar number must be exactly 12 digits"),
   pan: z.string().regex(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, "Invalid PAN format (e.g. ABCDE1234F)").optional().or(z.literal(''))
 });
+
+const sanitizePan = (value) => value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
 
 const VendorSignup = () => {
   const navigate = useNavigate();
@@ -62,6 +65,7 @@ const VendorSignup = () => {
   const [referralCode, setReferralCode] = useState('');
   const [isReferralVerified, setIsReferralVerified] = useState(false);
   const isSubmittingRef = useRef(false);
+  const panComposingRef = useRef(false);
 
   const [acceptedTerms, setAcceptedTerms] = useState(false);
 
@@ -212,12 +216,24 @@ const VendorSignup = () => {
         }
       }
 
+      // Upload now so the register request only carries a URL, not the base64 file
+      let remoteUrl;
+      try {
+        remoteUrl = await uploadSignupDocument(fileToUpload);
+      } catch (uploadError) {
+        console.error("Document upload failed", uploadError);
+        toastManager.dismiss(loadingToast);
+        toastManager.error(uploadError.response?.data?.message || 'Failed to upload file. Please try again.');
+        setUploadingDocs(prev => ({ ...prev, [type]: false }));
+        return;
+      }
+
       const reader = new FileReader();
       reader.onloadend = () => {
         previewUrl = reader.result;
         setFormData(prev => ({
           ...prev,
-          documents: [...prev.documents.filter(d => d.type !== type), { type, file: fileToUpload, url: previewUrl }]
+          documents: [...prev.documents.filter(d => d.type !== type), { type, file: fileToUpload, url: remoteUrl }]
         }));
         setDocumentPreview(prev => ({
           ...prev,
@@ -762,7 +778,19 @@ const VendorSignup = () => {
                       <input autoComplete="off"
                         type="text"
                         value={formData.pan}
-                        onChange={(e) => setFormData(p => ({ ...p, pan: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10) }))}
+                        onCompositionStart={() => { panComposingRef.current = true; }}
+                        onCompositionEnd={(e) => {
+                          panComposingRef.current = false;
+                          setFormData(p => ({ ...p, pan: sanitizePan(e.target.value) }));
+                        }}
+                        onChange={(e) => {
+                          // Leave the keyboard's in-progress text alone; rewriting it mid-composition makes mobile keyboards wipe the field
+                          const value = panComposingRef.current ? e.target.value : sanitizePan(e.target.value);
+                          setFormData(p => ({ ...p, pan: value }));
+                        }}
+                        autoCapitalize="characters"
+                        autoCorrect="off"
+                        spellCheck={false}
                         className="block w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-offset-2 transition-all duration-300 outline-none hover:border-gray-400"
                         style={{ '--tw-ring-color': brandColor }}
                         placeholder="ABCDE1234F"

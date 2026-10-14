@@ -346,6 +346,7 @@ app.use('/api/public/website', require('./routes/public-routes/website.routes'))
 app.use('/api/public', require('./routes/public-routes/catalog.routes'));
 app.use('/api/public', require('./routes/public-routes/plan.routes'));
 app.use('/api/public', require('./routes/public-routes/config.routes'));
+app.use('/api/public', require('./routes/public-routes/signupUpload.routes'));
 app.use('/api/products', require('./routes/public-routes/product.routes'));
 app.use('/api/weather', require('./routes/common-routes/weather.routes'));
 app.use('/api/field-area', require('./routes/common-routes/fieldArea.routes'));
