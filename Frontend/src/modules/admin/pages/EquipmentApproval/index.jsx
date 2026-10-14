@@ -40,7 +40,7 @@ const EquipmentApproval = () => {
         setSelectedItem(null);
       }
     } catch (err) {
-      toastManager.error('Update failed');
+      toastManager.error(err.response?.data?.message || 'Update failed');
     }
   };
 

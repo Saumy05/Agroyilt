@@ -54,6 +54,17 @@ exports.updateEquipmentStatus = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid status' });
     }
 
+    // A listing that only has a requested (not yet created) category can't go live: farmers browse by category
+    if (status === 'approved') {
+      const existing = await VendorEquipment.findById(id).select('categoryId requestedCategoryName');
+      if (existing && !existing.categoryId && existing.requestedCategoryName) {
+        return res.status(400).json({
+          success: false,
+          message: `Create the requested category "${existing.requestedCategoryName}" first (Machinery Management > Add to Catalog), then approve.`
+        });
+      }
+    }
+
     const equipment = await VendorEquipment.findByIdAndUpdate(
       id,
       { status, adminRemarks: remarks },
