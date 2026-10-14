@@ -20,6 +20,8 @@ const workerSignupSchema = z.object({
   drivingLicenseNumber: z.string().optional()
 });
 
+const sanitizeLicense = (value) => value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 20);
+
 const WorkerSignup = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -110,6 +112,7 @@ const WorkerSignup = () => {
   const nameInputRef = useRef(null);
   const otpInputRefs = useRef([]);
   const isSubmittingRef = useRef(false);
+  const dlComposingRef = useRef(false);
 
   // Pre-fill from navigation state (Unified Flow)
   useEffect(() => {
@@ -263,11 +266,12 @@ const WorkerSignup = () => {
           name: formData.name,
           email: formData.email,
           phone: formData.phoneNumber,
+          gender: formData.gender || 'male',
           aadhar: formData.aadhar,
           aadharDocument: aadharDoc,
           aadharBackDocument: aadharBackDoc,
           hasBike: Boolean(formData.hasBike),
-          drivingLicenseNumber: formData.hasBike ? formData.drivingLicenseNumber : undefined,
+          drivingLicenseNumber: formData.hasBike ? sanitizeLicense(formData.drivingLicenseNumber) : undefined,
           drivingLicenseDocument: formData.hasBike ? dlDoc : undefined,
           verificationToken,
           workerType: new URLSearchParams(location.search).get('type') || 'WORKER',
@@ -365,7 +369,7 @@ const WorkerSignup = () => {
         aadharDocument: aadharDoc,
         aadharBackDocument: aadharBackDoc,
         hasBike: Boolean(formData.hasBike),
-        drivingLicenseNumber: formData.hasBike ? formData.drivingLicenseNumber : undefined,
+        drivingLicenseNumber: formData.hasBike ? sanitizeLicense(formData.drivingLicenseNumber) : undefined,
         drivingLicenseDocument: formData.hasBike ? dlDoc : undefined,
         otp: otpValue,
         token: otpToken,
@@ -633,7 +637,19 @@ const WorkerSignup = () => {
                         type="text"
                         name="drivingLicenseNumber"
                         value={formData.drivingLicenseNumber}
-                        onChange={(e) => setFormData(p => ({ ...p, drivingLicenseNumber: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 20) }))}
+                        onCompositionStart={() => { dlComposingRef.current = true; }}
+                        onCompositionEnd={(e) => {
+                          dlComposingRef.current = false;
+                          setFormData(p => ({ ...p, drivingLicenseNumber: sanitizeLicense(e.target.value) }));
+                        }}
+                        onChange={(e) => {
+                          // Leave the keyboard's in-progress text alone; rewriting it mid-composition makes mobile keyboards drop what was typed
+                          const value = dlComposingRef.current ? e.target.value : sanitizeLicense(e.target.value);
+                          setFormData(p => ({ ...p, drivingLicenseNumber: value }));
+                        }}
+                        autoCapitalize="characters"
+                        autoCorrect="off"
+                        spellCheck={false}
                         className="block w-full px-3.5 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-offset-2 outline-none font-mono tracking-wider transition-all hover:border-gray-400 bg-white"
                         style={{ '--tw-ring-color': brandColor, textTransform: 'uppercase' }}
                         placeholder="e.g. DL1420210012345"

@@ -543,6 +543,9 @@ const AllWorkers = () => {
                       {selectedWorker.email && (
                         <span className="hidden sm:flex items-center gap-1"><FiMail className="text-indigo-500 shrink-0" /> {selectedWorker.email}</span>
                       )}
+                      <span className="flex items-center gap-1">
+                        <FiUser className="text-emerald-500 shrink-0" /> Gender: {selectedWorker.gender ? selectedWorker.gender.charAt(0).toUpperCase() + selectedWorker.gender.slice(1) : 'Not provided'}
+                      </span>
                       {selectedWorker.workerType === 'TEAM_LEADER' ? (
                         <span className="bg-purple-100 text-purple-800 border border-purple-200 font-bold px-2.5 py-0.5 rounded-lg inline-flex items-center gap-1.5 shadow-2xs">
                           <FiUsers size={12} className="text-purple-600" />

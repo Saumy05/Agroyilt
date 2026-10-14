@@ -463,6 +463,7 @@ const VendorSignup = () => {
         name: formData.name,
         email: formData.email,
         phone: formData.phoneNumber,
+        gender: formData.gender || undefined,
         businessName: formData.businessName,
         aadhar: formData.aadhar,
         pan: formData.pan,

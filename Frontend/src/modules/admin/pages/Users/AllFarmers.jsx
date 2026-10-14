@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiSearch, FiUser, FiPhone, FiMail, FiCheckCircle, FiSlash, FiCheck, FiTrash2, FiPlus, FiX, FiUserCheck } from 'react-icons/fi';
+import { FiSearch, FiUser, FiPhone, FiMail, FiCheckCircle, FiSlash, FiCheck, FiTrash2, FiPlus, FiX, FiUserCheck, FiEye } from 'react-icons/fi';
 import { toastManager } from '../../../../utils/toastManager';
 import { adminUserService } from '../../../../services/adminUserService';
 
@@ -20,6 +20,9 @@ const AllFarmers = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newFarmer, setNewFarmer] = useState({ name: '', phone: '', email: '' });
   const [isAdding, setIsAdding] = useState(false);
+
+  // View Farmer State
+  const [viewUser, setViewUser] = useState(null);
 
   // Debounce search
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -350,6 +353,13 @@ const AllFarmers = () => {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex justify-end items-center gap-1.5">
+                          <button
+                            onClick={() => setViewUser(user)}
+                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors border border-blue-200 cursor-pointer"
+                            title="View Farmer Details"
+                          >
+                            <FiEye className="w-3.5 h-3.5" />
+                          </button>
                           {!isApproved && (
                             <button
                               onClick={() => handleApprove(user._id)}
@@ -423,6 +433,50 @@ const AllFarmers = () => {
       </div>
 
       {/* Add Farmer Modal */}
+      <AnimatePresence>
+        {viewUser && (
+          <div
+            className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-[100000] flex items-center justify-center p-3 sm:p-4 pb-20 sm:pb-4"
+            onClick={() => setViewUser(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden"
+            >
+              <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                <h3 className="font-bold text-gray-800">Farmer Details</h3>
+                <button
+                  onClick={() => setViewUser(null)}
+                  className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                >
+                  <FiX className="w-5 h-5" />
+                </button>
+              </div>
+              <dl className="p-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                {[
+                  ['Name', viewUser.name],
+                  ['Farmer ID', viewUser._id.slice(-6).toUpperCase()],
+                  ['Phone', viewUser.phone],
+                  ['Email', viewUser.email || 'Not provided'],
+                  ['Gender', viewUser.gender ? viewUser.gender.charAt(0).toUpperCase() + viewUser.gender.slice(1) : 'Not provided'],
+                  ['Registered', new Date(viewUser.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })],
+                  ['Approval', (viewUser.approvalStatus || (viewUser.isActive ? 'approved' : 'pending')).replace(/^./, c => c.toUpperCase())],
+                  ['Account', viewUser.isActive ? 'Active' : 'Blocked'],
+                  ['Created By', viewUser.createdByAdmin?.name || 'Self signup']
+                ].map(([label, value]) => (
+                  <div key={label}>
+                    <dt className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{label}</dt>
+                    <dd className="text-gray-900 font-medium break-words">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
       <AnimatePresence>
         {isAddModalOpen && (
           <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-[100000] flex items-center justify-center p-3 sm:p-4 pb-20 sm:pb-4">
