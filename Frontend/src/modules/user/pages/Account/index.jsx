@@ -417,7 +417,7 @@ const Account = () => {
               <MenuItem
                 icon={FiLayers}
                 iconBg="bg-teal-50 text-teal-700"
-                label="Land Lease & Theka (भूमि पट्टा)"
+                label="Land Lease & Contract"
                 subtitle="Farmland rental listings, offers & records"
                 onClick={() => navigate('/user/land-lease')}
               />

@@ -169,7 +169,7 @@ const MachineryDiscoverySection = ({
             <div className="w-8 h-8 sm:w-9 sm:h-9 bg-white/15 rounded-full flex items-center justify-center mb-1.5 group-hover:scale-110 transition-transform">
               <FiArrowRight size={16} />
             </div>
-            <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-center">सभी देखें</p>
+            <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-center">View All</p>
             <p className="text-[7.5px] sm:text-[8px] font-bold text-slate-400 uppercase tracking-wider text-center mt-0.5">View All</p>
           </motion.div>
         )}

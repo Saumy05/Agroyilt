@@ -139,11 +139,11 @@ const landLeaseSchema = new mongoose.Schema({
   },
   soilType: {
     type: String,
-    default: 'Alluvial Soil (दोमट मिट्टी)'
+    default: 'Alluvial Soil'
   },
   irrigationSource: {
     type: String,
-    default: 'Tubewell / बोरवेल'
+    default: 'Tubewell'
   },
   electricity: {
     type: Boolean,
@@ -155,7 +155,7 @@ const landLeaseSchema = new mongoose.Schema({
   },
   roadAccess: {
     type: String,
-    default: 'Paved Road / पक्की सड़क'
+    default: 'Paved Road'
   },
   suitableCrops: [{
     type: String

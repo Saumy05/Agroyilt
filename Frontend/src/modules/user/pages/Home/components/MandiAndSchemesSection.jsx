@@ -6,56 +6,56 @@ import { LuWheat } from 'react-icons/lu';
 import api from '../../../../../services/api';
 
 const defaultMandiPrices = [
-  { id: 'wheat', name: 'गेहूं (Wheat)', market: 'करनाल APMC', modalPrice: 2275, change: '+₹25', isUp: true, quality: 'मिल क्वालिटी' },
-  { id: 'mustard', name: 'सरसों (Mustard)', market: 'हिसार APMC', modalPrice: 5450, change: '+₹60', isUp: true, quality: '42% तेल' },
-  { id: 'paddy', name: 'धान 1121 (Basmati)', market: 'कैथल APMC', modalPrice: 3650, change: '+₹40', isUp: true, quality: 'सुपर' },
-  { id: 'soybean', name: 'सोयाबीन (Soybean)', market: 'इंदौर APMC', modalPrice: 4650, change: '-₹15', isUp: false, quality: 'पीला दाना' },
-  { id: 'cotton', name: 'कपास / नरमा (Cotton)', market: 'सिरसा APMC', modalPrice: 7100, change: '+₹80', isUp: true, quality: 'मीडियम स्टेपल' },
-  { id: 'maize', name: 'मक्का (Maize)', market: 'दाहोद APMC', modalPrice: 2090, change: '+₹20', isUp: true, quality: 'हाइब्रिड' }
+  { id: 'wheat', name: 'Wheat', market: 'Karnal APMC', modalPrice: 2275, change: '+₹25', isUp: true, quality: 'Mill Quality' },
+  { id: 'mustard', name: 'Mustard', market: 'Hisar APMC', modalPrice: 5450, change: '+₹60', isUp: true, quality: '42% Oil' },
+  { id: 'paddy', name: 'Paddy 1121 (Basmati)', market: 'Kaithal APMC', modalPrice: 3650, change: '+₹40', isUp: true, quality: 'Super' },
+  { id: 'soybean', name: 'Soybean', market: 'Indore APMC', modalPrice: 4650, change: '-₹15', isUp: false, quality: 'Yellow Grain' },
+  { id: 'cotton', name: 'Cotton', market: 'Sirsa APMC', modalPrice: 7100, change: '+₹80', isUp: true, quality: 'Medium Staple' },
+  { id: 'maize', name: 'Maize', market: 'Dahod APMC', modalPrice: 2090, change: '+₹20', isUp: true, quality: 'Hybrid' }
 ];
 
 const defaultGovtSchemes = [
   {
     id: 'smam',
-    title: 'SMAM कृषि यंत्रीकरण योजना',
-    tag: '40% - 50% सब्सिडी',
-    category: 'उपकरण व मशीनरी',
-    summary: 'ट्रैक्टर, कटर, रोटावेटर एवं लेजर लेवलर पर 40% से 50% सरकारी अनुदान।',
-    eligibility: 'सभी लघु एवं सीमांत किसान, महिला कृषक एवं FPO समूह।',
-    docs: ['आधार कार्ड', 'जमीन की फर्द (खसरा/खतौनी)', 'बैंक पासबुक', 'जाति प्रमाण पत्र (यदि लागू हो)'],
+    title: 'SMAM Farm Mechanisation Scheme',
+    tag: '40% - 50% Subsidy',
+    category: 'Equipment & Machinery',
+    summary: '40% to 50% government subsidy on tractors, cutters, rotavators and laser levellers.',
+    eligibility: 'All small and marginal farmers, women farmers and FPO groups.',
+    docs: ['Aadhaar Card', 'Land record (Khasra/Khatauni)', 'Bank Passbook', 'Caste Certificate (if applicable)'],
     portalUrl: 'https://agrimachinery.nic.in',
     portalName: 'agrimachinery.nic.in'
   },
   {
     id: 'drone',
-    title: 'किसान ड्रोन सब्सिडी योजना',
-    tag: '₹5 लाख तक सहायता',
-    category: 'ड्रोन तकनीक',
-    summary: 'कृषि में कीटनाशक व नैनो यूरिया छिड़काव हेतु ड्रोन खरीद पर FPO/कस्टम हायरिंग केंद्रों को वित्तीय सहायता।',
-    eligibility: 'पंजीकृत FPO, Custom Hiring Centres एवं प्रगतिशील किसान।',
-    docs: ['FPO पंजीकरण प्रमाण', 'PAN कार्ड', 'बैंक खाता विवरण', 'ड्रोन पायलट प्रशिक्षण पत्र'],
+    title: 'Kisan Drone Subsidy Scheme',
+    tag: 'Up to ₹5 Lakh Assistance',
+    category: 'Drone Technology',
+    summary: 'Financial assistance to FPOs and Custom Hiring Centres for buying drones for pesticide and nano urea spraying.',
+    eligibility: 'Registered FPOs, Custom Hiring Centres and progressive farmers.',
+    docs: ['FPO Registration Proof', 'PAN Card', 'Bank Account Details', 'Drone Pilot Training Certificate'],
     portalUrl: 'https://agricoop.nic.in',
     portalName: 'agricoop.nic.in'
   },
   {
     id: 'pmkisan',
-    title: 'PM-किसान सम्मान निधि',
-    tag: '₹6,000 / वर्ष',
-    category: 'वित्तीय सहायता',
-    summary: 'प्रत्येक 4 माह में ₹2,000 की 3 किस्तों में सीधे बैंक खाते (DBT) में अंतरण।',
-    eligibility: 'खेती योग्य भूमि रखने वाले सभी पात्र किसान परिवार।',
-    docs: ['आधार कार्ड (e-KYC सत्यापित)', 'बैंक खाता आधार लिंक', 'जमीन का भूलेख रिकॉर्ड'],
+    title: 'PM-Kisan Samman Nidhi',
+    tag: '₹6,000 / year',
+    category: 'Financial Assistance',
+    summary: 'Paid directly to the bank account (DBT) in 3 instalments of ₹2,000, one every 4 months.',
+    eligibility: 'All eligible farmer families owning cultivable land.',
+    docs: ['Aadhaar Card (e-KYC verified)', 'Bank account linked to Aadhaar', 'Land ownership record'],
     portalUrl: 'https://pmkisan.gov.in',
     portalName: 'pmkisan.gov.in'
   },
   {
     id: 'irrigation',
-    title: 'PM कृषि सिंचाई योजना (PMKSY)',
-    tag: '55% तक अनुदान',
-    category: 'ड्रिप व स्प्रिंकलर',
-    summary: 'खेतों में पानी बचाने हेतु ड्रिप एवं मिनी स्प्रिंकलर लगाने पर 45% से 55% का अनुदान।',
-    eligibility: 'सिंचाई सुविधा वाले किसान जिनके पास कम से कम 0.5 एकड़ जमीन हो।',
-    docs: ['बिजली कनेक्शन / बोरवेल रिकॉर्ड', 'आधार कार्ड', 'जमीन का नक्शा', 'बैंक पासबुक'],
+    title: 'PM Krishi Sinchayee Yojana (PMKSY)',
+    tag: 'Up to 55% Subsidy',
+    category: 'Drip & Sprinkler',
+    summary: '45% to 55% subsidy on installing drip and mini sprinkler systems to save water in the fields.',
+    eligibility: 'Farmers with an irrigation source and at least 0.5 acre of land.',
+    docs: ['Electricity connection / Borewell record', 'Aadhaar Card', 'Land map', 'Bank Passbook'],
     portalUrl: 'https://pmksy.gov.in',
     portalName: 'pmksy.gov.in'
   }
@@ -112,12 +112,12 @@ const MandiAndSchemesSection = () => {
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-[17px] sm:text-[19px] font-black text-slate-900 tracking-tight flex items-center gap-2">
-              <span>किसान सुविधा व भाव</span>
+              <span>Farmer Services & Prices</span>
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             </h2>
           </div>
           <p className="text-[11px] font-semibold text-slate-400">
-            दैनिक APMC मंडी दरें एवं सरकारी कृषि योजनाएं
+            Daily APMC mandi rates & government farm schemes
           </p>
         </div>
 
@@ -132,7 +132,7 @@ const MandiAndSchemesSection = () => {
                   : 'text-slate-500 hover:text-slate-800'
               }`}
             >
-              📈 मंडी भाव
+              📈 Mandi Prices
             </button>
             <button
               onClick={() => setActiveTab('schemes')}
@@ -142,7 +142,7 @@ const MandiAndSchemesSection = () => {
                   : 'text-slate-500 hover:text-slate-800'
               }`}
             >
-              🏛️ योजनाएं
+              🏛️ Schemes
             </button>
           </div>
 
@@ -150,7 +150,7 @@ const MandiAndSchemesSection = () => {
             onClick={() => navigate('/user/mandi-bhav')}
             className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-0.5 group shrink-0 ml-1 cursor-pointer"
           >
-            <span>सभी देखें</span>
+            <span>View All</span>
             <FiChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
           </button>
         </div>
@@ -193,9 +193,9 @@ const MandiAndSchemesSection = () => {
               </div>
 
               <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-baseline justify-between">
-                <span className="text-[10px] font-bold text-slate-400">मॉडल भाव:</span>
+                <span className="text-[10px] font-bold text-slate-400">Modal price:</span>
                 <span className="text-[15px] font-black text-emerald-700">
-                  ₹{item.modalPrice.toLocaleString()} <span className="text-[9.5px] font-semibold text-slate-400">/क्विं.</span>
+                  ₹{item.modalPrice.toLocaleString()} <span className="text-[9.5px] font-semibold text-slate-400">/qtl</span>
                 </span>
               </div>
             </div>
@@ -237,9 +237,9 @@ const MandiAndSchemesSection = () => {
 
               <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between">
                 <span className="text-[11px] font-bold text-emerald-700 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                  पात्रता एवं दस्तावेज देखें →
+                  View eligibility & documents →
                 </span>
-                <span className="text-[10px] font-semibold text-slate-400">सरकारी पोर्टल</span>
+                <span className="text-[10px] font-semibold text-slate-400">Govt. portal</span>
               </div>
             </div>
           ))}
@@ -254,10 +254,10 @@ const MandiAndSchemesSection = () => {
           </div>
           <div className="min-w-0">
             <h5 className="text-[12px] font-black text-emerald-950 truncate">
-              किसान हेल्पलाइन सहायता (Toll-Free)
+              Farmer Helpline (Toll-Free)
             </h5>
             <p className="text-[10px] font-semibold text-emerald-800 truncate">
-              मशीनरी या मजदूर बुकिंग में सहायता के लिए 1800-180-1551 पर कॉल करें
+              Call 1800-180-1551 for help with machinery or labour bookings
             </p>
           </div>
         </div>
@@ -265,7 +265,7 @@ const MandiAndSchemesSection = () => {
           href="tel:18001801551"
           className="shrink-0 text-[11px] font-black bg-emerald-700 hover:bg-emerald-800 text-white px-3 py-1.5 rounded-xl transition-all shadow-xs"
         >
-          कॉल करें
+          Call Now
         </a>
       </div>
 
@@ -294,13 +294,13 @@ const MandiAndSchemesSection = () => {
                 {selectedScheme.title}
               </h3>
               <p className="text-xs font-bold text-emerald-700 mt-0.5">
-                लाभ: {selectedScheme.tag}
+                Benefit: {selectedScheme.tag}
               </p>
 
               <div className="mt-4 space-y-3.5">
                 <div>
                   <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
-                    योजना का विवरण
+                    Scheme Details
                   </h5>
                   <p className="text-xs font-semibold text-slate-700 leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-100">
                     {selectedScheme.summary}
@@ -309,7 +309,7 @@ const MandiAndSchemesSection = () => {
 
                 <div>
                   <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
-                    पात्रता (Eligibility)
+                    Eligibility
                   </h5>
                   <p className="text-xs font-semibold text-slate-700 bg-slate-50 p-3 rounded-xl border border-slate-100">
                     {selectedScheme.eligibility}
@@ -318,7 +318,7 @@ const MandiAndSchemesSection = () => {
 
                 <div>
                   <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
-                    आवश्यक दस्तावेज (Required Documents)
+                    Required Documents
                   </h5>
                   <ul className="space-y-1 bg-slate-50 p-3 rounded-xl border border-slate-100">
                     {selectedScheme.docs.map((doc, idx) => (
@@ -338,14 +338,14 @@ const MandiAndSchemesSection = () => {
                   rel="noopener noreferrer"
                   className="flex-1 py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-md transition-all"
                 >
-                  <span>आधिकारिक पोर्टल खोलें</span>
+                  <span>Open Official Portal</span>
                   <FiExternalLink className="w-3.5 h-3.5" />
                 </a>
                 <button
                   onClick={() => setSelectedScheme(null)}
                   className="py-3 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all"
                 >
-                  बंद करें
+                  Close
                 </button>
               </div>
             </motion.div>

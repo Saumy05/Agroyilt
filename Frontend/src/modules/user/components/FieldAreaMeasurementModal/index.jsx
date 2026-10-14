@@ -269,7 +269,7 @@ const FieldAreaMeasurementModal = ({
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <h2 className="text-sm sm:text-base font-black tracking-tight truncate">
-                    खेत का क्षेत्रफल मापन • Field Area Measurement
+                    Field Area Measurement
                   </h2>
                 </div>
                 <p className="text-[11px] text-emerald-100/90 font-medium truncate">
@@ -534,7 +534,7 @@ const FieldAreaMeasurementModal = ({
               <div className="col-span-2 sm:col-span-2 bg-gradient-to-br from-emerald-50 to-green-100/70 border border-emerald-300 rounded-2xl p-2.5 flex items-center justify-between">
                 <div>
                   <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 block">
-                    🌾 Measured Land Size (एकड़)
+                    🌾 Measured Land Size (Acres)
                   </span>
                   <div className="flex items-baseline gap-1 mt-0.5">
                     <span className="text-2xl sm:text-3xl font-black text-emerald-900 leading-none">
@@ -553,7 +553,7 @@ const FieldAreaMeasurementModal = ({
               {/* Bigha */}
               <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-2.5 flex flex-col justify-center">
                 <span className="text-[10px] font-bold text-slate-500 uppercase">
-                  बीघा • Bigha
+                  Bigha
                 </span>
                 <span className="text-base font-black text-slate-900 mt-0.5">
                   {areaData.bighaFormatted}
@@ -563,7 +563,7 @@ const FieldAreaMeasurementModal = ({
               {/* Guntha */}
               <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-2.5 flex flex-col justify-center">
                 <span className="text-[10px] font-bold text-slate-500 uppercase">
-                  गुंठा • Guntha
+                  Guntha
                 </span>
                 <span className="text-base font-black text-slate-900 mt-0.5">
                   {areaData.gunthaFormatted}
@@ -573,7 +573,7 @@ const FieldAreaMeasurementModal = ({
               {/* Hectare */}
               <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-2.5 flex flex-col justify-center">
                 <span className="text-[10px] font-bold text-slate-500 uppercase">
-                  हेक्टेयर • Hectares
+                  Hectares
                 </span>
                 <span className="text-base font-black text-slate-900 mt-0.5">
                   {areaData.hectaresFormatted}
@@ -583,7 +583,7 @@ const FieldAreaMeasurementModal = ({
               {/* Perimeter */}
               <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-2.5 flex flex-col justify-center">
                 <span className="text-[10px] font-bold text-slate-500 uppercase">
-                  घेरा • Perimeter
+                  Perimeter
                 </span>
                 <span className="text-base font-black text-slate-900 mt-0.5">
                   {areaData.perimeterMeters ? `${areaData.perimeterMeters} m` : '—'}
@@ -594,7 +594,7 @@ const FieldAreaMeasurementModal = ({
             {/* Extra details (Sq Meters / Sq Feet) */}
             <div className="hidden sm:flex items-center justify-between text-[11px] text-slate-500 mb-3 px-1">
               <span>
-                ≈ {areaData.sqMeters.toLocaleString('en-IN')} m² (वर्ग मीटर) • {areaData.sqFeet.toLocaleString('en-IN')} sq ft (वर्ग फीट)
+                ≈ {areaData.sqMeters.toLocaleString('en-IN')} m² • {areaData.sqFeet.toLocaleString('en-IN')} sq ft
               </span>
               <span>
                 Regional Standard: <strong className="text-slate-700">{areaData.regionLabel}</strong>

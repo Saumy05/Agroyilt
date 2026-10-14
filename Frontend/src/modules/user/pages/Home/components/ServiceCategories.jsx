@@ -16,7 +16,7 @@ const ServiceCategories = React.memo(({
   categories,
   onCategoryClick,
   onSeeAllClick,
-  title = "कृषि उपकरण व सेवा श्रेणियां",
+  title = "Equipment & Service Categories",
   subtitle = "EXPLORE EQUIPMENT & SERVICES",
   showViewAll = true
 }) => {
@@ -62,7 +62,7 @@ const ServiceCategories = React.memo(({
             onClick={onSeeAllClick}
             className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-0.5 group shrink-0"
           >
-            <span>सभी देखें</span>
+            <span>View All</span>
             <FiChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
           </button>
         )}
@@ -106,7 +106,7 @@ const ServiceCategories = React.memo(({
         {showViewAll && showMore && (
           <div className="flex justify-center h-full">
             <CategoryCard
-              title="सभी देखें"
+              title="View All"
               icon={
                 <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-emerald-100 to-teal-50 text-emerald-800 text-sm font-black flex-col gap-0.5 shadow-inner">
                   <span className="text-xl leading-none block font-black">+</span>

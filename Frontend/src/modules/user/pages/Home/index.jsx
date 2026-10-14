@@ -608,15 +608,15 @@ const Home = () => {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-[10px] uppercase font-black tracking-wider text-emerald-300 bg-black/25 px-2 py-0.5 rounded-full border border-emerald-400/20">
-                          भूमि पट्टा / ठेका
+                          Land Lease / Contract
                         </span>
-                        <span className="text-[10px] font-extrabold text-amber-300 bg-amber-500/20 px-1.5 py-0.5 rounded">नया</span>
+                        <span className="text-[10px] font-extrabold text-amber-300 bg-amber-500/20 px-1.5 py-0.5 rounded">New</span>
                       </div>
                       <h3 className="text-xs sm:text-sm font-black text-white mt-1 truncate">
                         Land Lease & Theka Marketplace
                       </h3>
                       <p className="text-[10.5px] sm:text-xs text-emerald-100/90 font-medium truncate mt-0.5">
-                        निश्चित किराया (Fixed Rent) या बटाई (Crop Share) पर खेत लें या दें
+                        Take or give farmland on Fixed Rent or Crop Share
                       </p>
                     </div>
                   </div>

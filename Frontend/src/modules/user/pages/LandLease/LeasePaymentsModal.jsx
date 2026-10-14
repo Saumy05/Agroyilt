@@ -17,12 +17,12 @@ const STATUS_STYLE = {
 };
 
 const STATUS_LABEL = {
-  paid: 'चुकाया (Paid)',
-  processing: 'प्रक्रिया में (Processing)',
-  pending: 'बाकी (Due)',
-  submitted: 'पुष्टि लंबित (Awaiting owner)',
-  confirmed: 'पुष्टि हुई (Confirmed)',
-  rejected: 'अस्वीकृत (Rejected)'
+  paid: 'Paid',
+  processing: 'Processing',
+  pending: 'Due',
+  submitted: 'Awaiting owner',
+  confirmed: 'Confirmed',
+  rejected: 'Rejected'
 };
 
 const StatusChip = ({ status }) => (
@@ -78,19 +78,19 @@ const LeasePaymentsModal = ({ landId, onClose, onChanged }) => {
   };
 
   const payInstallment = (item) => {
-    if (!window.confirm(`वॉलेट से ${inr(item.amount)} चुकाएं? (Pay ${inr(item.amount)} from wallet?)`)) return;
-    run(item._id, () => landLeaseService.payInstallment(landId, item._id), 'किराया चुकाया गया (Rent paid)');
+    if (!window.confirm(`Pay ${inr(item.amount)} from wallet?`)) return;
+    run(item._id, () => landLeaseService.payInstallment(landId, item._id), 'Rent paid');
   };
 
   const paySettlement = (item) => {
-    if (!window.confirm(`वॉलेट से ${inr(item.amount)} चुकाएं? (Pay ${inr(item.amount)} from wallet?)`)) return;
-    run(item._id, () => landLeaseService.paySettlement(landId, item._id), 'बटाई का हिस्सा चुकाया गया (Share paid)');
+    if (!window.confirm(`Pay ${inr(item.amount)} from wallet?`)) return;
+    run(item._id, () => landLeaseService.paySettlement(landId, item._id), 'Share paid');
   };
 
   const submitHarvest = (e) => {
     e.preventDefault();
-    if (!(Number(harvest.harvestValue) > 0)) return toastManager.error('फसल का कुल मूल्य दर्ज करें');
-    run('harvest', () => landLeaseService.submitSettlement(landId, harvest), 'हिसाब मालिक को भेजा गया (Sent to owner)')
+    if (!(Number(harvest.harvestValue) > 0)) return toastManager.error('Enter the total crop value');
+    run('harvest', () => landLeaseService.submitSettlement(landId, harvest), 'Settlement sent to owner')
       .then((ok) => ok && setHarvest({ cropName: '', harvestValue: '', note: '' }));
   };
 
@@ -114,40 +114,40 @@ const LeasePaymentsModal = ({ landId, onClose, onChanged }) => {
 
         <div className="border-b border-gray-100 pb-3 mb-4 pr-10">
           <span className="text-xs uppercase font-extrabold text-emerald-700 tracking-wider">Lease Payments</span>
-          <h3 className="text-base sm:text-lg font-black text-gray-900 mt-0.5">भुगतान व हिसाब (Payments)</h3>
+          <h3 className="text-base sm:text-lg font-black text-gray-900 mt-0.5">Payments & Settlements</h3>
           {data && <p className="text-xs text-gray-500 line-clamp-1">{data.title}</p>}
         </div>
 
         {loading || !data ? (
           <div className="py-10 text-center text-gray-400">
             <div className="w-8 h-8 border-3 border-emerald-700 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-            <p className="text-xs">लोड हो रहा है...</p>
+            <p className="text-xs">Loading...</p>
           </div>
         ) : (
           <div className="space-y-4 text-xs">
             {/* Agreement summary */}
             <div className="grid grid-cols-2 gap-2">
               <div className="bg-gray-50 p-2.5 rounded-xl">
-                <span className="text-gray-400 block text-[10px]">अवधि</span>
+                <span className="text-gray-400 block text-[10px]">Duration</span>
                 <span className="font-bold text-gray-800">
                   {fmtDate(agreement.startDate)} – {fmtDate(agreement.endDate)}
                 </span>
               </div>
               <div className="bg-gray-50 p-2.5 rounded-xl">
-                <span className="text-gray-400 block text-[10px]">शर्तें</span>
+                <span className="text-gray-400 block text-[10px]">Terms</span>
                 <span className="font-bold text-gray-800">
                   {data.leaseType === 'fixed-rent'
-                    ? `${inr(agreement.agreedPrice)}/एकड़/वर्ष`
-                    : `${agreement.agreedShare}% बटाई (मालिक का हिस्सा)`}
+                    ? `${inr(agreement.agreedPrice)}/acre/year`
+                    : `${agreement.agreedShare}% Crop Share (owner's share)`}
                 </span>
               </div>
               <div className="bg-emerald-50 p-2.5 rounded-xl border border-emerald-100">
-                <span className="text-emerald-700 block text-[10px]">अब तक चुकाया</span>
+                <span className="text-emerald-700 block text-[10px]">Paid so far</span>
                 <span className="font-extrabold text-emerald-900">{inr(data.totals?.paid)}</span>
               </div>
               {data.leaseType === 'fixed-rent' && (
                 <div className="bg-amber-50 p-2.5 rounded-xl border border-amber-100">
-                  <span className="text-amber-700 block text-[10px]">बाकी किराया</span>
+                  <span className="text-amber-700 block text-[10px]">Rent due</span>
                   <span className="font-extrabold text-amber-900">{inr(data.totals?.pendingRent)}</span>
                 </div>
               )}
@@ -155,23 +155,23 @@ const LeasePaymentsModal = ({ landId, onClose, onChanged }) => {
 
             {isTenant && (
               <p className="text-[11px] text-gray-500">
-                भुगतान आपके वॉलेट से कटता है। प्लेटफ़ॉर्म शुल्क {agreement.commissionPercentage || 0}% मालिक की रकम से कटता है।
+                Payment is deducted from your wallet. A platform fee of {agreement.commissionPercentage || 0}% is deducted from the owner's amount.
               </p>
             )}
 
             {/* Fixed-rent installments */}
             {data.leaseType === 'fixed-rent' && (
               <div className="space-y-2">
-                <h4 className="font-extrabold text-gray-900 text-xs">मासिक किस्तें (Monthly Installments)</h4>
+                <h4 className="font-extrabold text-gray-900 text-xs">Monthly Installments</h4>
                 {data.installments.map((item) => (
                   <div key={item._id} className="flex items-center justify-between gap-2 bg-white border border-gray-200 rounded-xl p-2.5">
                     <div>
                       <div className="font-bold text-gray-900">
-                        किस्त {item.number} • {inr(item.amount)}
+                        Installment {item.number} • {inr(item.amount)}
                       </div>
                       <div className="text-[11px] text-gray-500 flex items-center gap-1">
-                        <FiClock className="w-3 h-3" /> देय: {fmtDate(item.dueDate)}
-                        {isOwner && item.status === 'paid' && <span> • आपको मिला {inr(item.ownerAmount)}</span>}
+                        <FiClock className="w-3 h-3" /> Due: {fmtDate(item.dueDate)}
+                        {isOwner && item.status === 'paid' && <span> • You received {inr(item.ownerAmount)}</span>}
                         {item.status === 'paid' && item.paidAt && <span> • {fmtDate(item.paidAt)}</span>}
                       </div>
                     </div>
@@ -184,7 +184,7 @@ const LeasePaymentsModal = ({ landId, onClose, onChanged }) => {
                           className="py-1.5 px-3 bg-emerald-800 hover:bg-emerald-900 disabled:opacity-60 text-white rounded-xl font-bold flex items-center gap-1"
                         >
                           <FiCreditCard className="w-3.5 h-3.5" />
-                          <span>{busyId === item._id ? '...' : 'चुकाएं'}</span>
+                          <span>{busyId === item._id ? '...' : 'Pay'}</span>
                         </button>
                       )}
                     </div>
@@ -196,10 +196,10 @@ const LeasePaymentsModal = ({ landId, onClose, onChanged }) => {
             {/* Crop-share settlements */}
             {data.leaseType === 'crop-share' && (
               <div className="space-y-2">
-                <h4 className="font-extrabold text-gray-900 text-xs">फसल हिसाब (Harvest Settlements)</h4>
+                <h4 className="font-extrabold text-gray-900 text-xs">Harvest Settlements</h4>
 
                 {data.settlements.length === 0 && (
-                  <p className="text-gray-500 italic">अभी तक कोई हिसाब नहीं भेजा गया है।</p>
+                  <p className="text-gray-500 italic">No settlements have been sent yet.</p>
                 )}
 
                 {data.settlements.map((item) => (
@@ -207,10 +207,10 @@ const LeasePaymentsModal = ({ landId, onClose, onChanged }) => {
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <div className="font-bold text-gray-900">
-                          {item.cropName || 'फसल'} • कुल मूल्य {inr(item.harvestValue)}
+                          {item.cropName || 'Crop'} • Total value {inr(item.harvestValue)}
                         </div>
                         <div className="text-[11px] text-gray-500">
-                          मालिक का हिस्सा ({item.sharePercentage}%): <b>{inr(item.amount)}</b> • {fmtDate(item.createdAt)}
+                          Owner's share ({item.sharePercentage}%): <b>{inr(item.amount)}</b> • {fmtDate(item.createdAt)}
                         </div>
                         {item.note && <div className="text-[11px] text-gray-500 italic">"{item.note}"</div>}
                       </div>
@@ -220,18 +220,18 @@ const LeasePaymentsModal = ({ landId, onClose, onChanged }) => {
                     {isOwner && item.status === 'submitted' && (
                       <div className="flex gap-2 justify-end">
                         <button
-                          onClick={() => run(item._id, () => landLeaseService.reviewSettlement(landId, item._id, 'reject'), 'हिसाब अस्वीकार किया गया')}
+                          onClick={() => run(item._id, () => landLeaseService.reviewSettlement(landId, item._id, 'reject'), 'Settlement rejected')}
                           disabled={!!busyId}
                           className="py-1.5 px-3 border border-red-200 text-red-600 rounded-xl font-bold disabled:opacity-60"
                         >
-                          अस्वीकार
+                          Reject
                         </button>
                         <button
-                          onClick={() => run(item._id, () => landLeaseService.reviewSettlement(landId, item._id, 'confirm'), 'हिसाब स्वीकार किया गया')}
+                          onClick={() => run(item._id, () => landLeaseService.reviewSettlement(landId, item._id, 'confirm'), 'Settlement accepted')}
                           disabled={!!busyId}
                           className="py-1.5 px-3 bg-emerald-800 text-white rounded-xl font-bold flex items-center gap-1 disabled:opacity-60"
                         >
-                          <FiCheck className="w-3.5 h-3.5" /> स्वीकार करें
+                          <FiCheck className="w-3.5 h-3.5" /> Accept
                         </button>
                       </div>
                     )}
@@ -244,7 +244,7 @@ const LeasePaymentsModal = ({ landId, onClose, onChanged }) => {
                           className="py-1.5 px-3 bg-emerald-800 hover:bg-emerald-900 disabled:opacity-60 text-white rounded-xl font-bold flex items-center gap-1"
                         >
                           <FiCreditCard className="w-3.5 h-3.5" />
-                          <span>{busyId === item._id ? '...' : `${inr(item.amount)} चुकाएं`}</span>
+                          <span>{busyId === item._id ? '...' : `Pay ${inr(item.amount)}`}</span>
                         </button>
                       </div>
                     )}
@@ -253,11 +253,11 @@ const LeasePaymentsModal = ({ landId, onClose, onChanged }) => {
 
                 {isTenant && !hasOpenSettlement && (
                   <form onSubmit={submitHarvest} className="bg-emerald-50/60 border border-emerald-100 rounded-xl p-3 space-y-2">
-                    <h5 className="font-extrabold text-emerald-900">नई फसल का हिसाब भेजें</h5>
+                    <h5 className="font-extrabold text-emerald-900">Send New Crop Settlement</h5>
                     <input
                       value={harvest.cropName}
                       onChange={(e) => setHarvest({ ...harvest, cropName: e.target.value })}
-                      placeholder="फसल का नाम (जैसे गेहूं)"
+                      placeholder="Crop name (e.g. Wheat)"
                       className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-white"
                     />
                     <input
@@ -265,18 +265,18 @@ const LeasePaymentsModal = ({ landId, onClose, onChanged }) => {
                       min="1"
                       value={harvest.harvestValue}
                       onChange={(e) => setHarvest({ ...harvest, harvestValue: e.target.value })}
-                      placeholder="फसल का कुल मूल्य (₹)"
+                      placeholder="Total crop value (₹)"
                       className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-white"
                     />
                     {sharePreview > 0 && (
                       <p className="text-[11px] text-emerald-800">
-                        मालिक का हिस्सा ({agreement.agreedShare}%): <b>{inr(sharePreview.toFixed(2))}</b>
+                        Owner's share ({agreement.agreedShare}%): <b>{inr(sharePreview.toFixed(2))}</b>
                       </p>
                     )}
                     <input
                       value={harvest.note}
                       onChange={(e) => setHarvest({ ...harvest, note: e.target.value })}
-                      placeholder="टिप्पणी (वैकल्पिक)"
+                      placeholder="Note (optional)"
                       className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-white"
                     />
                     <button
@@ -284,7 +284,7 @@ const LeasePaymentsModal = ({ landId, onClose, onChanged }) => {
                       disabled={!!busyId}
                       className="w-full py-2 bg-emerald-800 hover:bg-emerald-900 disabled:opacity-60 text-white rounded-xl font-bold"
                     >
-                      {busyId === 'harvest' ? 'भेजा जा रहा है...' : 'मालिक को भेजें'}
+                      {busyId === 'harvest' ? 'Sending...' : 'Send to Owner'}
                     </button>
                   </form>
                 )}

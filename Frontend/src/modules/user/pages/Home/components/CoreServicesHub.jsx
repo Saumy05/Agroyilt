@@ -8,36 +8,36 @@ import { RiGamepadLine } from 'react-icons/ri';
 const pillars = [
   {
     id: 'rentals',
-    title: 'मशीनरी',
+    title: 'Machinery',
     titleEn: 'Machinery Rental',
-    subtitle: 'किराया व उपकरण',
+    subtitle: 'Rental & Equipment',
     image: '/landing_images/tracter.jpg',
     route: '/user/rentals',
     icon: LuTractor
   },
   {
     id: 'workers',
-    title: 'श्रमिक टोली',
+    title: 'Labour Teams',
     titleEn: 'Farm Workforce',
-    subtitle: 'खेत मजदूर',
+    subtitle: 'Farm Workers',
     image: '/landing_images/labour1.jpg',
     route: '/user/worker-explorer',
     icon: FiUsers
   },
   {
     id: 'drones',
-    title: 'ड्रोन स्प्रे',
+    title: 'Drone Spray',
     titleEn: 'Drone Spraying',
-    subtitle: 'छिड़काव सेवा',
+    subtitle: 'Spraying Service',
     image: '/landing_images/dron_spraying.jpg',
     route: '/user/drone-spraying',
     icon: RiGamepadLine
   },
   {
     id: 'mandi',
-    title: 'मंडी व योजना',
+    title: 'Mandi & Schemes',
     titleEn: 'Mandi & Schemes',
-    subtitle: 'दैनिक भाव',
+    subtitle: 'Daily Prices',
     image: '/landing_images/crop_advasory.jpg',
     route: '/user/mandi-bhav',
     icon: LuLandmark
@@ -66,11 +66,11 @@ const CoreServicesHub = ({ onScrollToMandi }) => {
       <div className="flex items-center justify-between mb-2.5">
         <div>
           <h2 className="text-[16px] sm:text-[18px] font-black text-slate-900 tracking-tight flex items-center gap-1.5">
-            <span>प्रमुख कृषि सेवाएँ</span>
+            <span>Core Farm Services</span>
             <span className="text-base select-none">🌱</span>
           </h2>
           <p className="text-[10.5px] sm:text-xs font-semibold text-slate-500 mt-0.5">
-            किराया, मजदूर, ड्रोन एवं सरकारी कृषि सुविधाएँ
+            Rentals, labour, drones & government farm schemes
           </p>
         </div>
 
@@ -78,7 +78,7 @@ const CoreServicesHub = ({ onScrollToMandi }) => {
           onClick={() => navigate('/user/machinery-categories')}
           className="text-xs sm:text-sm font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-0.5 shrink-0 group transition-colors"
         >
-          <span>सभी देखें</span>
+          <span>View All</span>
           <FiChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
         </button>
       </div>

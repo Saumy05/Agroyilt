@@ -2562,7 +2562,7 @@ const BookingDetails = () => {
                     {/* Attached Implements */}
                     {Array.isArray(booking.selectedImplements) && booking.selectedImplements.length > 0 && (
                       <div className="bg-emerald-50/70 rounded-xl p-2.5 border border-emerald-200/80 space-y-1.5 my-2">
-                        <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">Attached Implements (शामिल उपकरण)</span>
+                        <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">Attached Implements</span>
                         {booking.selectedImplements.map((impl, idx) => (
                           <div key={idx} className="flex justify-between text-xs text-gray-700">
                             <span>🚜 {impl.name || impl.title || 'Implement'}</span>

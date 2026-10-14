@@ -38,10 +38,10 @@ const CategoryCard = memo(({ icon, title, onClick, hasSaleBadge = false, index =
   const formatDisplayTitle = (rawTitle) => {
     if (!rawTitle) return '';
     if (rawTitle.includes('लाइट से चलने')) {
-      return 'थ्रेशर (Electric)';
+      return 'Thresher (Electric)';
     }
     if (rawTitle.toLowerCase().includes('petrol') && rawTitle.toLowerCase().includes('spry')) {
-      return 'स्प्रे पंप (Petrol)';
+      return 'Spray Pump (Petrol)';
     }
     return rawTitle;
   };

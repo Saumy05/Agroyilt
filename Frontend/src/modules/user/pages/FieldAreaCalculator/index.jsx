@@ -36,7 +36,7 @@ const FieldAreaCalculator = () => {
   return (
     <div className="min-h-screen bg-slate-50 pb-20">
       <Helmet>
-        <title>खेत का क्षेत्रफल मापन • Field Area Calculator | Agroyilt</title>
+        <title>Field Area Calculator | Agroyilt</title>
         <meta
           name="description"
           content="Satellite map based agricultural field area measurement. Compute exact Acres, Bigha, and Guntha for your farm."
@@ -56,7 +56,7 @@ const FieldAreaCalculator = () => {
             </button>
             <div>
               <h1 className="text-sm sm:text-base font-black text-slate-900 tracking-tight">
-                खेत का क्षेत्रफल मापन
+                Field Area Calculator
               </h1>
               <p className="text-[10px] sm:text-xs text-slate-500 font-semibold">
                 Field Area Measurement & Unit Converter
@@ -109,7 +109,7 @@ const FieldAreaCalculator = () => {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 py-5">
               <div className="bg-emerald-50 rounded-2xl p-3 border border-emerald-200/60">
                 <span className="text-[10px] font-bold text-emerald-800 uppercase block">
-                  Total Size (एकड़)
+                  Total Size (Acres)
                 </span>
                 <span className="text-2xl font-black text-emerald-900">
                   {measuredField.acres} Acres
@@ -117,7 +117,7 @@ const FieldAreaCalculator = () => {
               </div>
               <div className="bg-slate-50 rounded-2xl p-3 border border-slate-200/60">
                 <span className="text-[10px] font-bold text-slate-500 uppercase block">
-                  Bigha (बीघा)
+                  Bigha
                 </span>
                 <span className="text-xl font-black text-slate-800">
                   {measuredField.bigha} Bigha
@@ -125,7 +125,7 @@ const FieldAreaCalculator = () => {
               </div>
               <div className="bg-slate-50 rounded-2xl p-3 border border-slate-200/60">
                 <span className="text-[10px] font-bold text-slate-500 uppercase block">
-                  Guntha (गुंठा)
+                  Guntha
                 </span>
                 <span className="text-xl font-black text-slate-800">
                   {measuredField.guntha} Guntha
@@ -133,7 +133,7 @@ const FieldAreaCalculator = () => {
               </div>
               <div className="bg-slate-50 rounded-2xl p-3 border border-slate-200/60">
                 <span className="text-[10px] font-bold text-slate-500 uppercase block">
-                  Hectares (हेक्टेयर)
+                  Hectares
                 </span>
                 <span className="text-xl font-black text-slate-800">
                   {measuredField.hectares} Ha

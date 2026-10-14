@@ -34,24 +34,24 @@ const ActiveBookingCard = () => {
   if (loading || !activeBooking) return null;
 
   const status = (activeBooking.status || '').toUpperCase();
-  const itemName = activeBooking.equipment?.name || activeBooking.service?.name || activeBooking.workerName || activeBooking.itemTitle || 'कृषि सेवा';
+  const itemName = activeBooking.equipment?.name || activeBooking.service?.name || activeBooking.workerName || activeBooking.itemTitle || 'Farm Service';
   const bookingId = activeBooking._id || activeBooking.id;
 
   const getStatusBadge = () => {
     switch (status) {
       case 'IN_PROGRESS':
-        return { label: 'कार्य प्रगति पर है', color: 'bg-emerald-500 text-white', icon: FiTool };
+        return { label: 'Work in Progress', color: 'bg-emerald-500 text-white', icon: FiTool };
       case 'STARTED':
       case 'JOURNEY_STARTED':
       case 'DISPATCHED':
-        return { label: 'रास्ते में है (On the way)', color: 'bg-amber-500 text-white', icon: FiNavigation };
+        return { label: 'On the way', color: 'bg-amber-500 text-white', icon: FiNavigation };
       case 'VISITED':
-        return { label: 'खेत पर उपस्थित', color: 'bg-blue-500 text-white', icon: FiMapPin };
+        return { label: 'Arrived at Farm', color: 'bg-blue-500 text-white', icon: FiMapPin };
       case 'CONFIRMED':
       case 'ASSIGNED':
-        return { label: 'बुकिंग कन्फर्म', color: 'bg-emerald-600 text-white', icon: FiCheckCircle };
+        return { label: 'Booking Confirmed', color: 'bg-emerald-600 text-white', icon: FiCheckCircle };
       default:
-        return { label: 'बुकिंग सक्रिय', color: 'bg-teal-600 text-white', icon: FiClock };
+        return { label: 'Booking Active', color: 'bg-teal-600 text-white', icon: FiClock };
     }
   };
 
@@ -85,7 +85,7 @@ const ActiveBookingCard = () => {
               {isRental && (
                 <span className="text-[9.5px] font-bold text-amber-300 bg-amber-500/20 px-1.5 py-0.5 rounded-md border border-amber-400/30 flex items-center gap-1">
                   <FiShield className="w-2.5 h-2.5" />
-                  <span>डिपॉजिट सुरक्षित</span>
+                  <span>Deposit Secured</span>
                 </span>
               )}
             </div>
@@ -94,13 +94,13 @@ const ActiveBookingCard = () => {
               {itemName}
             </h4>
             <p className="text-[11px] font-semibold text-slate-300 truncate">
-              बुकिंग ID: #{bookingId?.slice(-6).toUpperCase()} • विवरण एवं हैंडओवर ट्रैक करें
+              Booking ID: #{bookingId?.slice(-6).toUpperCase()} • Track details & handover
             </p>
           </div>
 
           {/* Action button */}
           <div className="shrink-0 flex items-center gap-1 bg-white/10 group-hover:bg-emerald-500 group-hover:text-white px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all">
-            <span>देखें</span>
+            <span>View</span>
             <FiChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
           </div>
         </div>

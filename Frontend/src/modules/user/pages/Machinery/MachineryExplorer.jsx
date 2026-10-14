@@ -1075,7 +1075,7 @@ const MachineryExplorer = () => {
                               className="w-full py-2 px-3 bg-gradient-to-r from-emerald-600 to-green-700 hover:from-emerald-700 hover:to-green-800 active:scale-[0.99] text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 shadow-sm shadow-emerald-700/20 transition-all cursor-pointer border border-emerald-500/30"
                             >
                               <FiMapPin size={14} className="text-emerald-200" />
-                              <span>📐 Measure Field on Map (नक्शे पर खेत नापें)</span>
+                              <span>📐 Measure Field on Map</span>
                               <span className="text-[9.5px] bg-white/20 px-1.5 py-0.5 rounded font-bold">
                                 Auto-Calculate
                               </span>

@@ -104,11 +104,11 @@ const LandLeasePage = () => {
     sharePercentage: '50',
     availableFrom: new Date().toISOString().split('T')[0],
     availableTo: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    soilType: 'Alluvial Soil (दोमट मिट्टी)',
-    irrigationSource: 'Tubewell / बोरवेल',
+    soilType: 'Alluvial Soil',
+    irrigationSource: 'Tubewell',
     electricity: true,
     fencing: false,
-    roadAccess: 'Paved Road / पक्की सड़क',
+    roadAccess: 'Paved Road',
     suitableCrops: 'Wheat, Mustard, Gram',
     images: ''
   });
@@ -229,7 +229,7 @@ const LandLeasePage = () => {
       });
 
       if (res?.success) {
-        toastManager.success('प्रस्ताव सफलतापूर्वक भेजा गया! (Offer submitted to owner)');
+        toastManager.success('Offer submitted to the owner successfully!');
         setOfferModalLand(null);
         fetchMyLeases();
       } else {
@@ -244,13 +244,13 @@ const LandLeasePage = () => {
 
   // Landowner accepts tenant's offer
   const handleAcceptOffer = async (landId, offerId) => {
-    if (!window.confirm('क्या आप इस किसान के प्रस्ताव को स्वीकार करना चाहते हैं? (Accept this tenant offer?)')) {
+    if (!window.confirm('Do you want to accept this tenant offer?')) {
       return;
     }
     try {
       const res = await landLeaseService.acceptOffer(landId, offerId);
       if (res?.success) {
-        toastManager.success('प्रस्ताव स्वीकार कर लिया गया! पट्टा पंजीकृत हुआ। (Offer accepted!)');
+        toastManager.success('Offer accepted! The lease has been registered.');
         fetchMyLeases();
         fetchLeases();
       } else {
@@ -263,13 +263,13 @@ const LandLeasePage = () => {
 
   // Landowner rejects tenant's offer
   const handleRejectOffer = async (landId, offerId) => {
-    if (!window.confirm('क्या आप इस प्रस्ताव को अस्वीकार करना चाहते हैं? (Reject this offer?)')) {
+    if (!window.confirm('Do you want to reject this offer?')) {
       return;
     }
     try {
       const res = await landLeaseService.rejectOffer(landId, offerId);
       if (res?.success) {
-        toastManager.success('प्रस्ताव अस्वीकार कर दिया गया (Offer rejected)');
+        toastManager.success('Offer rejected');
         fetchMyLeases();
       } else {
         toastManager.error(res?.message || 'Failed to reject offer');
@@ -281,13 +281,13 @@ const LandLeasePage = () => {
 
   // Delete listing
   const handleDeleteLand = async (landId) => {
-    if (!window.confirm('क्या आप इस सूची को हटाना चाहते हैं? (Remove this land listing?)')) {
+    if (!window.confirm('Do you want to remove this land listing?')) {
       return;
     }
     try {
       const res = await landLeaseService.deleteLand(landId);
       if (res?.success) {
-        toastManager.success('सूची हटा दी गई (Listing removed)');
+        toastManager.success('Listing removed');
         fetchMyLeases();
         fetchLeases();
       }
@@ -302,7 +302,7 @@ const LandLeasePage = () => {
     const fileList = Array.from(files);
 
     if (listingPhotos.length + fileList.length > 5) {
-      toastManager.error('अधिकतम 5 फोटो अपलोड कर सकते हैं (Max 5 photos allowed)');
+      toastManager.error('Maximum 5 photos allowed');
       return;
     }
 
@@ -342,11 +342,11 @@ const LandLeasePage = () => {
 
       if (newPhotoUrls.length > 0) {
         setListingPhotos((prev) => [...prev, ...newPhotoUrls]);
-        toastManager.success(`${newPhotoUrls.length} फोटो सफलतापूर्वक जोड़ी गई`);
+        toastManager.success(`${newPhotoUrls.length} photo(s) added successfully`);
       }
     } catch (err) {
       console.error('Error uploading land photos:', err);
-      toastManager.error('फोटो जोड़ने में समस्या आई');
+      toastManager.error('Problem adding photo');
     } finally {
       setUploadingPhoto(false);
       setUploadProgress(0);
@@ -385,23 +385,23 @@ const LandLeasePage = () => {
   const handleAddManualUrl = () => {
     if (!manualUrlInput.trim()) return;
     if (listingPhotos.length >= 5) {
-      toastManager.error('अधिकतम 5 फोटो अपलोड कर सकते हैं');
+      toastManager.error('Maximum 5 photos allowed');
       return;
     }
     setListingPhotos((prev) => [...prev, manualUrlInput.trim()]);
     setManualUrlInput('');
     setShowManualUrlInput(false);
-    toastManager.success('फोटो लिंक जोड़ा गया');
+    toastManager.success('Photo link added');
   };
 
   // Handle Create Listing
   const handleCreateListing = async (e) => {
     e.preventDefault();
     if (!listingForm.title || !listingForm.sizeInAcres || !listingForm.khasraNumber) {
-      return toastManager.error('कृपया शीर्षक, रकबा (एकड़) और खसरा नंबर दर्ज करें');
+      return toastManager.error('Please enter the title, area (acres) and khasra number');
     }
     if (!listingForm.district || !listingForm.tehsil || !listingForm.village) {
-      return toastManager.error('कृपया जिला, तहसील और गांव का विवरण दर्ज करें');
+      return toastManager.error('Please enter the district, tehsil and village details');
     }
 
     try {
@@ -438,9 +438,9 @@ const LandLeasePage = () => {
           pincode: listingForm.pincode,
           fullAddress: [
             listingForm.addressLine1,
-            listingForm.village ? `ग्राम ${listingForm.village}` : '',
-            listingForm.tehsil ? `तहसील ${listingForm.tehsil}` : '',
-            listingForm.district ? `जिला ${listingForm.district}` : '',
+            listingForm.village ? `Village ${listingForm.village}` : '',
+            listingForm.tehsil ? `Tehsil ${listingForm.tehsil}` : '',
+            listingForm.district ? `District ${listingForm.district}` : '',
             listingForm.state
           ].filter(Boolean).join(', ')
         },
@@ -460,7 +460,7 @@ const LandLeasePage = () => {
 
       const res = await landLeaseService.listLand(payload);
       if (res?.success) {
-        toastManager.success('कृषि भूमि सफलतापूर्वक पट्टे हेतु सूचीबद्ध की गई! (Land listed successfully!)');
+        toastManager.success('Land listed successfully!');
         setListingPhotos([]);
         setListingForm({
           title: '',
@@ -479,11 +479,11 @@ const LandLeasePage = () => {
           sharePercentage: '50',
           availableFrom: new Date().toISOString().split('T')[0],
           availableTo: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          soilType: 'Alluvial Soil (दोमट मिट्टी)',
-          irrigationSource: 'Tubewell / बोरवेल',
+          soilType: 'Alluvial Soil',
+          irrigationSource: 'Tubewell',
           electricity: true,
           fencing: false,
-          roadAccess: 'Paved Road / पक्की सड़क',
+          roadAccess: 'Paved Road',
           suitableCrops: 'Wheat, Mustard, Gram',
           images: ''
         });
@@ -516,10 +516,10 @@ const LandLeasePage = () => {
             </button>
             <div className="min-w-0">
               <h1 className="text-xs sm:text-sm font-black text-white truncate leading-tight">
-                भूमि पट्टा व ठेका (Land Lease)
+                Land Lease & Contract
               </h1>
               <p className="text-[10px] text-emerald-200/90 font-medium truncate">
-                निश्चित किराया व बटाई मार्केटप्लेस
+                Fixed Rent & Crop Share Marketplace
               </p>
             </div>
           </div>
@@ -534,7 +534,7 @@ const LandLeasePage = () => {
                   : 'text-emerald-100/90 hover:text-white'
               }`}
             >
-              🌾 खोजें
+              🌾 Browse
             </button>
             <button
               onClick={() => setActiveTab('list')}
@@ -545,7 +545,7 @@ const LandLeasePage = () => {
               }`}
             >
               <FiPlus className="w-3 h-3 text-emerald-700" />
-              <span>पट्टा दें</span>
+              <span>List Land</span>
             </button>
             <button
               onClick={() => setActiveTab('my-leases')}
@@ -555,7 +555,7 @@ const LandLeasePage = () => {
                   : 'text-emerald-100/90 hover:text-white'
               }`}
             >
-              📑 रिकॉर्ड
+              📑 My Records
             </button>
           </div>
         </div>
@@ -573,7 +573,7 @@ const LandLeasePage = () => {
                 <FiSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 w-3.5 h-3.5" />
                 <input
                   type="text"
-                  placeholder="खेत का नाम, जिला, तहसील, गांव, खसरा नंबर खोजें..."
+                  placeholder="Search by farm name, district, tehsil, village, khasra number..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-8 pr-7 py-1.5 bg-gray-50 rounded-lg text-xs border border-gray-200 focus:outline-none focus:ring-1 focus:ring-emerald-600 focus:bg-white text-gray-800"
@@ -598,7 +598,7 @@ const LandLeasePage = () => {
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
-                  सभी (All)
+                  All
                 </button>
                 <button
                   onClick={() => setLeaseTypeFilter('fixed-rent')}
@@ -608,7 +608,7 @@ const LandLeasePage = () => {
                       : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
                   }`}
                 >
-                  <FiDollarSign className="w-3 h-3" /> नकद किराया (Fixed Rent)
+                  <FiDollarSign className="w-3 h-3" /> Fixed Rent
                 </button>
                 <button
                   onClick={() => setLeaseTypeFilter('crop-share')}
@@ -618,16 +618,16 @@ const LandLeasePage = () => {
                       : 'bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100'
                   }`}
                 >
-                  <FiPercent className="w-3 h-3" /> बटाई (Crop Share)
+                  <FiPercent className="w-3 h-3" /> Crop Share
                 </button>
 
                 <div className="h-4 w-[1px] bg-gray-200 shrink-0" />
 
                 {[
-                  { id: 'all', label: 'सभी आकार' },
-                  { id: 'small', label: '1-5 एकड़' },
-                  { id: 'medium', label: '5-15 एकड़' },
-                  { id: 'large', label: '15+ एकड़' }
+                  { id: 'all', label: 'All Sizes' },
+                  { id: 'small', label: '1-5 Acres' },
+                  { id: 'medium', label: '5-15 Acres' },
+                  { id: 'large', label: '15+ Acres' }
                 ].map((s) => (
                   <button
                     key={s.id}
@@ -652,7 +652,7 @@ const LandLeasePage = () => {
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
-                  {hideOwnListings ? '✓ अपनी सूची छिपी है' : 'मेरी जमीनें छुपाएं'}
+                  {hideOwnListings ? '✓ Own listings hidden' : 'Hide my lands'}
                 </button>
               </div>
             </div>
@@ -660,13 +660,13 @@ const LandLeasePage = () => {
             {/* Results Count & Refresh */}
             <div className="flex items-center justify-between px-1 mb-2">
               <span className="text-[11px] font-bold text-gray-500">
-                उपलब्ध कृषि भूमि: <b className="text-gray-800">{filteredLeases.length} सूचियां</b>
+                Available farmland: <b className="text-gray-800">{filteredLeases.length} listings</b>
               </span>
               <button
                 onClick={fetchLeases}
                 className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800"
               >
-                रिफ्रेश ↻
+                Refresh ↻
               </button>
             </div>
 
@@ -686,9 +686,9 @@ const LandLeasePage = () => {
                 <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 mx-auto flex items-center justify-center text-xl mb-2">
                   🌾
                 </div>
-                <h3 className="text-sm font-bold text-gray-800">कोई भूमि सूची नहीं मिली</h3>
+                <h3 className="text-sm font-bold text-gray-800">No land listings found</h3>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  फिल्टर बदलकर प्रयास करें या अपनी भूमि जोड़ें।
+                  Try changing the filters or add your own land.
                 </p>
                 <button
                   onClick={() => {
@@ -698,7 +698,7 @@ const LandLeasePage = () => {
                   }}
                   className="mt-3 px-3.5 py-1.5 bg-emerald-800 text-white rounded-lg text-xs font-bold shadow-2xs hover:bg-emerald-900"
                 >
-                  सभी फिल्टर हटाएं
+                  Clear all filters
                 </button>
               </div>
             ) : (
@@ -731,12 +731,12 @@ const LandLeasePage = () => {
                             {land.leaseType === 'fixed-rent' ? (
                               <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-600 text-white shadow-xs">
                                 <FiDollarSign className="w-3 h-3" />
-                                ₹{Number(land.pricePerAcre || 0).toLocaleString('en-IN')}/एकड़/वर्ष
+                                ₹{Number(land.pricePerAcre || 0).toLocaleString('en-IN')}/acre/year
                               </span>
                             ) : (
                               <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-500 text-white shadow-xs">
                                 <FiPercent className="w-3 h-3" />
-                                {land.sharePercentage}% बटाई
+                                {land.sharePercentage}% Crop Share
                               </span>
                             )}
                           </div>
@@ -745,7 +745,7 @@ const LandLeasePage = () => {
                           <div className="absolute top-2 right-2 flex items-center gap-1">
                             {isOwnLand && (
                               <span className="px-2 py-0.5 rounded-md text-[10px] font-black shadow-xs bg-blue-600 text-white">
-                                आपकी सूची
+                                Your Listing
                               </span>
                             )}
                             <span
@@ -755,7 +755,7 @@ const LandLeasePage = () => {
                                   : 'bg-black/50 backdrop-blur-md text-emerald-200'
                               }`}
                             >
-                              {land.status === 'leased' ? 'Leased' : 'उपलब्ध (Available)'}
+                              {land.status === 'leased' ? 'Leased' : 'Available'}
                             </span>
                           </div>
 
@@ -765,14 +765,14 @@ const LandLeasePage = () => {
                               <FiMapPin className="w-3 h-3 text-emerald-400 shrink-0" />
                               <span className="truncate">
                                 {[
-                                  land.location?.village ? `ग्राम ${land.location.village}` : '',
-                                  land.location?.tehsil ? `तहसील ${land.location.tehsil}` : (land.location?.city || ''),
+                                  land.location?.village ? `Village ${land.location.village}` : '',
+                                  land.location?.tehsil ? `Tehsil ${land.location.tehsil}` : (land.location?.city || ''),
                                   land.location?.district
                                 ].filter(Boolean).join(', ') || land.location?.state || 'Rajasthan'}
                               </span>
                             </div>
                             <span className="bg-black/50 backdrop-blur-md px-1.5 py-0.5 rounded text-[10.5px] font-black text-emerald-200 shrink-0 ml-1">
-                              {land.sizeInAcres} एकड़
+                              {land.sizeInAcres} acres
                             </span>
                           </div>
                         </div>
@@ -791,13 +791,13 @@ const LandLeasePage = () => {
                           {/* Compact Agricultural Features Strip */}
                           <div className="flex flex-wrap items-center gap-1 text-[10.5px] text-gray-600">
                             <span className="bg-gray-100 px-1.5 py-0.5 rounded font-medium">
-                              🌱 {land.soilType?.split(' ')[0] || 'दोमट'}
+                              🌱 {land.soilType?.split(' ')[0] || 'Alluvial'}
                             </span>
                             <span className="bg-gray-100 px-1.5 py-0.5 rounded font-medium">
-                              💧 {land.irrigationSource?.split('/')[0] || 'ट्यूबवेल'}
+                              💧 {land.irrigationSource?.split('/')[0] || 'Tubewell'}
                             </span>
                             <span className="bg-gray-100 px-1.5 py-0.5 rounded font-medium">
-                              खसरा: {land.khasraNumber}
+                              Khasra: {land.khasraNumber}
                             </span>
                           </div>
 
@@ -805,10 +805,10 @@ const LandLeasePage = () => {
                           <div className="flex items-center justify-between text-[10.5px] text-gray-500 pt-1 border-t border-gray-100">
                             <span className="inline-flex items-center gap-1 text-emerald-800 font-bold truncate">
                               <FiShield className="w-3 h-3 text-emerald-600 shrink-0" />
-                              <span className="truncate">{isOwnLand ? 'आपकी अपनी भूमि' : (land.owner?.name || 'Verified Owner')}</span>
+                              <span className="truncate">{isOwnLand ? 'Your own land' : (land.owner?.name || 'Verified Owner')}</span>
                             </span>
                             <span className="text-gray-400 font-medium shrink-0">
-                              {land.roadAccess?.split('/')[0] || 'पक्की सड़क'}
+                              {land.roadAccess?.split('/')[0] || 'Paved Road'}
                             </span>
                           </div>
                         </div>
@@ -821,7 +821,7 @@ const LandLeasePage = () => {
                           className="py-1.5 px-2 rounded-lg border border-emerald-900/20 text-emerald-900 hover:bg-emerald-50 text-xs font-bold transition-all flex items-center justify-center gap-1"
                         >
                           <FiMaximize2 className="w-3 h-3" />
-                          <span>विवरण</span>
+                          <span>Details</span>
                         </button>
 
                         {isOwnLand ? (
@@ -833,7 +833,7 @@ const LandLeasePage = () => {
                             className="py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 shadow-2xs bg-blue-700 hover:bg-blue-800 text-white active:scale-95"
                           >
                             <FiCheckCircle className="w-3 h-3" />
-                            <span>प्रबंधित करें</span>
+                            <span>Manage</span>
                           </button>
                         ) : (
                           <button
@@ -846,7 +846,7 @@ const LandLeasePage = () => {
                             }`}
                           >
                             <FiSend className="w-3 h-3" />
-                            <span>प्रस्ताव दें</span>
+                            <span>Make Offer</span>
                           </button>
                         )}
                       </div>
@@ -859,7 +859,7 @@ const LandLeasePage = () => {
         )}
 
         {/* ========================================================
-            TAB 2: LIST FARMLAND FOR LEASE (पट्टा दें)
+            TAB 2: LIST FARMLAND FOR LEASE
         ======================================================== */}
         {activeTab === 'list' && (
           <div className="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-emerald-900/10 mb-8 max-w-2xl mx-auto">
@@ -868,10 +868,10 @@ const LandLeasePage = () => {
                 Farmland Listing Form
               </span>
               <h2 className="text-lg sm:text-xl font-black text-gray-900">
-                अपनी कृषि भूमि पट्टे / ठेके हेतु सूचीबद्ध करें
+                List your farmland for lease / contract
               </h2>
               <p className="text-xs text-gray-500 mt-1">
-                अपनी भूमि का रकबा, स्थान, पट्टा मॉडल (नकद या बटाई) दर्ज कर तुरंत अन्य किसानों से प्रस्ताव प्राप्त करें।
+                Enter your land area, location and lease model (fixed rent or crop share) to receive offers from other farmers right away.
               </p>
             </div>
 
@@ -879,12 +879,12 @@ const LandLeasePage = () => {
               {/* Title */}
               <div>
                 <label className="block font-bold text-gray-800 mb-1">
-                  भूमि का शीर्षक (Title) <span className="text-red-500">*</span>
+                  Land Title <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="उदा. 10 एकड़ उपजाऊ नहरी खेत, सूरतगढ़ रोड"
+                  placeholder="e.g. 10 acre fertile canal-irrigated field, Suratgarh Road"
                   value={listingForm.title}
                   onChange={(e) => setListingForm({ ...listingForm, title: e.target.value })}
                   className="w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white text-gray-900 font-medium"
@@ -894,11 +894,11 @@ const LandLeasePage = () => {
               {/* Description */}
               <div>
                 <label className="block font-bold text-gray-800 mb-1">
-                  विवरण व विशेषताएं (Description)
+                  Description & Features
                 </label>
                 <textarea
                   rows={2}
-                  placeholder="मिट्टी की उपजाऊ क्षमता, पानी की धार, बिजली कनेक्शन व सड़क कनेक्टिविटी की जानकारी दें..."
+                  placeholder="Describe soil fertility, water source, electricity connection and road connectivity..."
                   value={listingForm.description}
                   onChange={(e) => setListingForm({ ...listingForm, description: e.target.value })}
                   className="w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white text-gray-900 font-medium"
@@ -909,13 +909,13 @@ const LandLeasePage = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-gray-800 mb-1">
-                    कुल रकबा एकड़ में (Size in Acres) <span className="text-red-500">*</span>
+                    Size in Acres <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="number"
                     step="0.1"
                     required
-                    placeholder="उदा. 12"
+                    placeholder="e.g. 12"
                     value={listingForm.sizeInAcres}
                     onChange={(e) => setListingForm({ ...listingForm, sizeInAcres: e.target.value })}
                     className="w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white text-gray-900 font-medium"
@@ -924,12 +924,12 @@ const LandLeasePage = () => {
 
                 <div>
                   <label className="block font-bold text-gray-800 mb-1">
-                    खसरा / खाता संख्या (Khasra No.) <span className="text-red-500">*</span>
+                    Khasra / Khata No. <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     required
-                    placeholder="उदा. 142/18"
+                    placeholder="e.g. 142/18"
                     value={listingForm.khasraNumber}
                     onChange={(e) => setListingForm({ ...listingForm, khasraNumber: e.target.value })}
                     className="w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white text-gray-900 font-medium"
@@ -940,7 +940,7 @@ const LandLeasePage = () => {
               {/* Location Fields: Separate Tehsil and Village */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-gray-800 mb-1">राज्य (State)</label>
+                  <label className="block font-bold text-gray-800 mb-1">State</label>
                   <input
                     type="text"
                     value={listingForm.state}
@@ -950,12 +950,12 @@ const LandLeasePage = () => {
                 </div>
                 <div>
                   <label className="block font-bold text-gray-800 mb-1">
-                    जिला (District) <span className="text-red-500">*</span>
+                    District <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     required
-                    placeholder="उदा. Kota / कोटा"
+                    placeholder="e.g. Kota"
                     value={listingForm.district}
                     onChange={(e) => setListingForm({ ...listingForm, district: e.target.value })}
                     className="w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white text-gray-900 font-medium"
@@ -963,12 +963,12 @@ const LandLeasePage = () => {
                 </div>
                 <div>
                   <label className="block font-bold text-gray-800 mb-1">
-                    तहसील (Tehsil) <span className="text-red-500">*</span>
+                    Tehsil <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     required
-                    placeholder="उदा. Ladpura / लाडपुरा"
+                    placeholder="e.g. Ladpura"
                     value={listingForm.tehsil}
                     onChange={(e) => setListingForm({ ...listingForm, tehsil: e.target.value, city: e.target.value })}
                     className="w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white text-gray-900 font-medium"
@@ -976,12 +976,12 @@ const LandLeasePage = () => {
                 </div>
                 <div>
                   <label className="block font-bold text-gray-800 mb-1">
-                    गांव (Village) <span className="text-red-500">*</span>
+                    Village <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     required
-                    placeholder="उदा. Ranpur / रानपुर"
+                    placeholder="e.g. Ranpur"
                     value={listingForm.village}
                     onChange={(e) => setListingForm({ ...listingForm, village: e.target.value })}
                     className="w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white text-gray-900 font-medium"
@@ -992,7 +992,7 @@ const LandLeasePage = () => {
               {/* Lease Type Selection (Fixed Rent vs Crop Share) */}
               <div className="pt-2">
                 <label className="block font-bold text-gray-800 mb-2">
-                  पट्टा मॉडल चुनें (Lease Arrangement) <span className="text-red-500">*</span>
+                  Lease Arrangement <span className="text-red-500">*</span>
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div
@@ -1006,7 +1006,7 @@ const LandLeasePage = () => {
                     <div className="flex items-center justify-between mb-1">
                       <span className="font-extrabold text-sm text-gray-900 flex items-center gap-1.5">
                         <FiDollarSign className="w-4 h-4 text-emerald-600" />
-                        निश्चित किराया (Fixed Rent)
+                        Fixed Rent
                       </span>
                       <div
                         className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
@@ -1019,7 +1019,7 @@ const LandLeasePage = () => {
                       </div>
                     </div>
                     <p className="text-xs text-gray-500">
-                      प्रति वर्ष नकद किराया प्राप्त करें (जैसे ₹35,000 / एकड़ / वर्ष)
+                      Receive a fixed cash rent every year (e.g. ₹35,000 / acre / year)
                     </p>
                   </div>
 
@@ -1034,7 +1034,7 @@ const LandLeasePage = () => {
                     <div className="flex items-center justify-between mb-1">
                       <span className="font-extrabold text-sm text-gray-900 flex items-center gap-1.5">
                         <FiPercent className="w-4 h-4 text-amber-600" />
-                        फसल साझा (बटाई / Batai)
+                        Crop Share (Batai)
                       </span>
                       <div
                         className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
@@ -1047,7 +1047,7 @@ const LandLeasePage = () => {
                       </div>
                     </div>
                     <p className="text-xs text-gray-500">
-                      उत्पादन में भागीदारी (जैसे 50-50 बटाई या 60-40 व्यवस्था)
+                      Share in the produce (e.g. 50-50 or 60-40 arrangement)
                     </p>
                   </div>
                 </div>
@@ -1057,12 +1057,12 @@ const LandLeasePage = () => {
               {listingForm.leaseType === 'fixed-rent' ? (
                 <div>
                   <label className="block font-bold text-gray-800 mb-1">
-                    मांगा गया वार्षिक किराया (₹ / एकड़ / वर्ष) <span className="text-red-500">*</span>
+                    Asking Annual Rent (₹ / acre / year) <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="number"
                     required
-                    placeholder="उदा. 35000"
+                    placeholder="e.g. 35000"
                     value={listingForm.pricePerAcre}
                     onChange={(e) => setListingForm({ ...listingForm, pricePerAcre: e.target.value })}
                     className="w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white text-gray-900 font-bold"
@@ -1071,17 +1071,17 @@ const LandLeasePage = () => {
               ) : (
                 <div>
                   <label className="block font-bold text-gray-800 mb-1">
-                    मालिक का फसल हिस्सा % (Owner Crop Share %) <span className="text-red-500">*</span>
+                    Owner Crop Share % <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={listingForm.sharePercentage}
                     onChange={(e) => setListingForm({ ...listingForm, sharePercentage: e.target.value })}
                     className="w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-amber-600 focus:bg-white text-gray-900 font-bold"
                   >
-                    <option value="50">50% मालिक हिस्सा (आधा-आधा / 50-50 Batai)</option>
-                    <option value="60">60% मालिक हिस्सा (60-40 Batai)</option>
-                    <option value="40">40% मालिक हिस्सा (40-60 Batai)</option>
-                    <option value="33">33.3% तिहाई हिस्सा (1/3rd Batai)</option>
+                    <option value="50">50% owner share (50-50 Batai)</option>
+                    <option value="60">60% owner share (60-40 Batai)</option>
+                    <option value="40">40% owner share (40-60 Batai)</option>
+                    <option value="33">33.3% owner share (1/3rd Batai)</option>
                   </select>
                 </div>
               )}
@@ -1089,33 +1089,33 @@ const LandLeasePage = () => {
               {/* Soil & Irrigation */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-gray-800 mb-1">मिट्टी का प्रकार (Soil Type)</label>
+                  <label className="block font-bold text-gray-800 mb-1">Soil Type</label>
                   <select
                     value={listingForm.soilType}
                     onChange={(e) => setListingForm({ ...listingForm, soilType: e.target.value })}
                     className="w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white text-gray-900 font-medium"
                   >
-                    <option value="Alluvial Soil (दोमट मिट्टी)">Alluvial Soil (दोमट मिट्टी)</option>
-                    <option value="Black Cotton Soil (काली दोमट)">Black Cotton Soil (काली दोमट)</option>
-                    <option value="Sandy Loam (बलुई दोमट)">Sandy Loam (बलुई दोमट)</option>
-                    <option value="Red Soil (लाल मिट्टी)">Red Soil (लाल मिट्टी)</option>
-                    <option value="Clay Soil (चिकनी मिट्टी)">Clay Soil (चिकनी मिट्टी)</option>
+                    <option value="Alluvial Soil">Alluvial Soil</option>
+                    <option value="Black Cotton Soil">Black Cotton Soil</option>
+                    <option value="Sandy Loam">Sandy Loam</option>
+                    <option value="Red Soil">Red Soil</option>
+                    <option value="Clay Soil">Clay Soil</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block font-bold text-gray-800 mb-1">सिंचाई का साधन (Irrigation)</label>
+                  <label className="block font-bold text-gray-800 mb-1">Irrigation Source</label>
                   <select
                     value={listingForm.irrigationSource}
                     onChange={(e) => setListingForm({ ...listingForm, irrigationSource: e.target.value })}
                     className="w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white text-gray-900 font-medium"
                   >
-                    <option value="Tubewell / बोरवेल">Tubewell / बोरवेल</option>
-                    <option value="Canal / नहर">Canal / नहर</option>
+                    <option value="Tubewell">Tubewell</option>
+                    <option value="Canal">Canal</option>
                     <option value="Canal + Tubewell">Canal + Tubewell</option>
-                    <option value="Solar Pump / सोलर पंप">Solar Pump / सोलर पंप</option>
-                    <option value="Drip System / ड्रिप">Drip System / ड्रिप</option>
-                    <option value="Rainfed / बारानी">Rainfed / बारानी</option>
+                    <option value="Solar Pump">Solar Pump</option>
+                    <option value="Drip System">Drip System</option>
+                    <option value="Rainfed">Rainfed</option>
                   </select>
                 </div>
               </div>
@@ -1129,7 +1129,7 @@ const LandLeasePage = () => {
                     onChange={(e) => setListingForm({ ...listingForm, electricity: e.target.checked })}
                     className="w-4 h-4 rounded text-emerald-700 focus:ring-emerald-600"
                   />
-                  <span className="font-semibold text-gray-700">3-फेज कृषि बिजली</span>
+                  <span className="font-semibold text-gray-700">3-Phase Farm Electricity</span>
                 </label>
 
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -1139,7 +1139,7 @@ const LandLeasePage = () => {
                     onChange={(e) => setListingForm({ ...listingForm, fencing: e.target.checked })}
                     className="w-4 h-4 rounded text-emerald-700 focus:ring-emerald-600"
                   />
-                  <span className="font-semibold text-gray-700">तारबंदी (Fencing)</span>
+                  <span className="font-semibold text-gray-700">Fencing</span>
                 </label>
               </div>
 
@@ -1147,10 +1147,10 @@ const LandLeasePage = () => {
               <div className="pt-2">
                 <div className="flex items-center justify-between mb-2">
                   <label className="block font-bold text-gray-800">
-                    खेत की फोटो (Farmland Photos)
+                    Farmland Photos
                   </label>
                   <span className="text-[11px] font-semibold text-gray-500">
-                    {listingPhotos.length}/5 फोटो जोड़ी गई
+                    {listingPhotos.length}/5 photos added
                   </span>
                 </div>
 
@@ -1183,8 +1183,8 @@ const LandLeasePage = () => {
                     <div className="w-10 h-10 rounded-xl bg-emerald-700 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
                       <FiCamera className="w-5 h-5" />
                     </div>
-                    <span className="font-extrabold text-xs sm:text-sm">फोटो खींचें (Camera)</span>
-                    <span className="text-[10px] text-emerald-700/80 font-medium">सीधे कैमरे से फोटो लें</span>
+                    <span className="font-extrabold text-xs sm:text-sm">Take Photo (Camera)</span>
+                    <span className="text-[10px] text-emerald-700/80 font-medium">Take a photo directly with the camera</span>
                   </button>
 
                   <button
@@ -1196,8 +1196,8 @@ const LandLeasePage = () => {
                     <div className="w-10 h-10 rounded-xl bg-teal-700 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
                       <FiUploadCloud className="w-5 h-5" />
                     </div>
-                    <span className="font-extrabold text-xs sm:text-sm">गैलरी से चुनें (Upload)</span>
-                    <span className="text-[10px] text-teal-700/80 font-medium">फ़ोन या कंप्यूटर से फ़ाइल</span>
+                    <span className="font-extrabold text-xs sm:text-sm">Choose from Gallery (Upload)</span>
+                    <span className="text-[10px] text-teal-700/80 font-medium">File from phone or computer</span>
                   </button>
                 </div>
 
@@ -1206,7 +1206,7 @@ const LandLeasePage = () => {
                   <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-200 flex items-center gap-3 mb-3">
                     <div className="w-5 h-5 border-2 border-emerald-700 border-t-transparent rounded-full animate-spin shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-emerald-900">फोटो तैयार और अपलोड की जा रही है...</p>
+                      <p className="text-xs font-bold text-emerald-900">Preparing and uploading photo...</p>
                       <div className="w-full bg-emerald-200 h-1.5 rounded-full mt-1 overflow-hidden">
                         <div
                           className="bg-emerald-700 h-full transition-all duration-300"
@@ -1227,19 +1227,19 @@ const LandLeasePage = () => {
                       >
                         <img
                           src={photoUrl}
-                          alt={`खेत फोटो ${index + 1}`}
+                          alt={`Farm photo ${index + 1}`}
                           className="w-full h-full object-cover"
                         />
                         {index === 0 && (
                           <span className="absolute top-1.5 left-1.5 bg-emerald-800 text-white text-[9.5px] font-black px-1.5 py-0.5 rounded-md shadow-xs">
-                            मुख्य फोटो
+                            Main Photo
                           </span>
                         )}
                         <button
                           type="button"
                           onClick={() => handleRemovePhoto(index)}
                           className="absolute top-1.5 right-1.5 p-1 rounded-full bg-black/60 hover:bg-rose-600 text-white transition-colors"
-                          title="हटाएं"
+                          title="Remove"
                         >
                           <FiTrash2 className="w-3.5 h-3.5" />
                         </button>
@@ -1256,12 +1256,12 @@ const LandLeasePage = () => {
                       onClick={() => setShowManualUrlInput(true)}
                       className="text-[11px] font-bold text-emerald-800 hover:text-emerald-900 flex items-center gap-1 hover:underline cursor-pointer"
                     >
-                      <span>🔗 या फोटो का वेब लिंक (Image URL) जोड़ें</span>
+                      <span>🔗 Or add a photo web link (Image URL)</span>
                     </button>
                   ) : (
                     <div className="space-y-1.5 bg-gray-50 p-2.5 rounded-xl border border-gray-200">
                       <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold text-gray-700">फोटो का वेब लिंक (URL) दर्ज करें</span>
+                        <span className="text-[11px] font-bold text-gray-700">Enter photo web link (URL)</span>
                         <button
                           type="button"
                           onClick={() => setShowManualUrlInput(false)}
@@ -1283,7 +1283,7 @@ const LandLeasePage = () => {
                           onClick={handleAddManualUrl}
                           className="px-3 py-1.5 bg-emerald-800 text-white rounded-lg text-xs font-bold hover:bg-emerald-900 cursor-pointer"
                         >
-                          जोड़ें
+                          Add
                         </button>
                       </div>
                     </div>
@@ -1303,7 +1303,7 @@ const LandLeasePage = () => {
                   ) : (
                     <>
                       <FiCheckCircle className="w-4 h-4" />
-                      <span>सूचीबद्ध करें (Publish Farmland Listing)</span>
+                      <span>Publish Farmland Listing</span>
                     </>
                   )}
                 </button>
@@ -1313,7 +1313,7 @@ const LandLeasePage = () => {
         )}
 
         {/* ========================================================
-            TAB 3: MY LEASES & OFFERS (मेरे रिकॉर्ड)
+            TAB 3: MY LEASES & OFFERS
         ======================================================== */}
         {activeTab === 'my-leases' && (
           <div>
@@ -1327,7 +1327,7 @@ const LandLeasePage = () => {
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                मेरी सूचीबद्ध भूमि ({myListings.length})
+                My Listed Land ({myListings.length})
               </button>
               <button
                 onClick={() => setMyLeasesSubTab('offers')}
@@ -1337,25 +1337,25 @@ const LandLeasePage = () => {
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                मेरे भेजे प्रस्ताव ({myOffers.length})
+                My Sent Offers ({myOffers.length})
               </button>
             </div>
 
             {loadingMyLeases ? (
               <div className="bg-white rounded-2xl p-8 text-center text-gray-400">
                 <div className="w-8 h-8 border-3 border-emerald-700 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                <p className="text-xs">रिकॉर्ड लोड हो रहे हैं...</p>
+                <p className="text-xs">Loading records...</p>
               </div>
             ) : myLeasesSubTab === 'listings' ? (
               /* Subtab A: My Listings */
               myListings.length === 0 ? (
                 <div className="bg-white rounded-2xl p-8 text-center border border-gray-200">
-                  <p className="text-sm font-bold text-gray-800">आपने अभी तक कोई भूमि सूचीबद्ध नहीं की है।</p>
+                  <p className="text-sm font-bold text-gray-800">You have not listed any land yet.</p>
                   <button
                     onClick={() => setActiveTab('list')}
                     className="mt-3 px-4 py-2 bg-emerald-800 text-white rounded-xl text-xs font-bold"
                   >
-                    + अभी अपनी जमीन पट्टे पर दें
+                    + List your land for lease now
                   </button>
                 </div>
               ) : (
@@ -1375,9 +1375,9 @@ const LandLeasePage = () => {
                                   : 'bg-emerald-100 text-emerald-800'
                               }`}
                             >
-                              {item.status === 'leased' ? 'पट्टे पर दिया गया (Leased)' : 'सक्रिय (Active)'}
+                              {item.status === 'leased' ? 'Leased' : 'Active'}
                             </span>
-                            <span className="text-xs text-gray-400 font-medium">खसरा: {item.khasraNumber}</span>
+                            <span className="text-xs text-gray-400 font-medium">Khasra: {item.khasraNumber}</span>
                           </div>
                           <h4 className="font-extrabold text-base text-gray-900 mt-1">{item.title}</h4>
                         </div>
@@ -1389,7 +1389,7 @@ const LandLeasePage = () => {
                               className="p-2 rounded-xl text-emerald-800 hover:bg-emerald-50 border border-emerald-200 text-xs flex items-center gap-1 font-bold"
                             >
                               <FiDollarSign className="w-3.5 h-3.5" />
-                              <span>भुगतान (Payments)</span>
+                              <span>Payments</span>
                             </button>
                           )}
                           <button
@@ -1398,7 +1398,7 @@ const LandLeasePage = () => {
                             title="Delete listing"
                           >
                             <FiTrash2 className="w-3.5 h-3.5" />
-                            <span>हटाएं</span>
+                            <span>Remove</span>
                           </button>
                         </div>
                       </div>
@@ -1406,21 +1406,21 @@ const LandLeasePage = () => {
                       {/* Specs */}
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                         <div className="bg-gray-50 p-2 rounded-xl">
-                          <span className="text-gray-400 block text-[10px]">रकबा</span>
-                          <span className="font-bold text-gray-800">{item.sizeInAcres} एकड़</span>
+                          <span className="text-gray-400 block text-[10px]">Area</span>
+                          <span className="font-bold text-gray-800">{item.sizeInAcres} acres</span>
                         </div>
                         <div className="bg-gray-50 p-2 rounded-xl">
-                          <span className="text-gray-400 block text-[10px]">मॉडल</span>
+                          <span className="text-gray-400 block text-[10px]">Model</span>
                           <span className="font-bold text-gray-800">
-                            {item.leaseType === 'fixed-rent' ? `₹${item.pricePerAcre}/एकड़` : `${item.sharePercentage}% बटाई`}
+                            {item.leaseType === 'fixed-rent' ? `₹${item.pricePerAcre}/acre` : `${item.sharePercentage}% Crop Share`}
                           </span>
                         </div>
                         <div className="bg-gray-50 p-2 rounded-xl">
-                          <span className="text-gray-400 block text-[10px]">मिट्टी</span>
+                          <span className="text-gray-400 block text-[10px]">Soil</span>
                           <span className="font-bold text-gray-800">{item.soilType}</span>
                         </div>
                         <div className="bg-gray-50 p-2 rounded-xl">
-                          <span className="text-gray-400 block text-[10px]">सिंचाई</span>
+                          <span className="text-gray-400 block text-[10px]">Irrigation</span>
                           <span className="font-bold text-gray-800">{item.irrigationSource}</span>
                         </div>
                       </div>
@@ -1430,13 +1430,13 @@ const LandLeasePage = () => {
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-xs font-extrabold text-emerald-900 flex items-center gap-1.5">
                             <FiSend className="w-3.5 h-3.5 text-emerald-700" />
-                            प्राप्त प्रस्ताव (Received Offers: {item.offers?.length || 0})
+                            Received Offers: {item.offers?.length || 0}
                           </span>
                         </div>
 
                         {(!item.offers || item.offers.length === 0) ? (
                           <p className="text-xs text-gray-500 italic">
-                            अभी तक कोई नया प्रस्ताव नहीं आया है।
+                            No new offers yet.
                           </p>
                         ) : (
                           <div className="space-y-2 mt-2">
@@ -1468,9 +1468,9 @@ const LandLeasePage = () => {
 
                                   <div className="text-xs text-emerald-800 font-bold mt-1">
                                     {item.leaseType === 'fixed-rent'
-                                      ? `प्रस्तावित किराया: ₹${offer.proposedPrice?.toLocaleString('en-IN') || item.pricePerAcre}/एकड़/वर्ष`
-                                      : `प्रस्तावित हिस्सा: ${offer.proposedShare || item.sharePercentage}% बटाई`}
-                                    <span className="text-gray-400 font-normal ml-2">({offer.durationMonths || 12} माह हेतु)</span>
+                                      ? `Proposed rent: ₹${offer.proposedPrice?.toLocaleString('en-IN') || item.pricePerAcre}/acre/year`
+                                      : `Proposed share: ${offer.proposedShare || item.sharePercentage}% Crop Share`}
+                                    <span className="text-gray-400 font-normal ml-2">({offer.durationMonths || 12} months)</span>
                                   </div>
 
                                   {offer.message && (
@@ -1486,14 +1486,14 @@ const LandLeasePage = () => {
                                       onClick={() => handleRejectOffer(item._id, offer._id)}
                                       className="py-1.5 px-3 bg-white hover:bg-red-50 text-red-600 border border-red-200 rounded-xl text-xs font-bold shadow-xs flex items-center gap-1"
                                     >
-                                      <span>अस्वीकार (Reject)</span>
+                                      <span>Reject</span>
                                     </button>
                                     <button
                                       onClick={() => handleAcceptOffer(item._id, offer._id)}
                                       className="py-1.5 px-3 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1"
                                     >
                                       <FiCheck className="w-3.5 h-3.5" />
-                                      <span>स्वीकार करें (Accept)</span>
+                                      <span>Accept</span>
                                     </button>
                                   </div>
                                 )}
@@ -1510,12 +1510,12 @@ const LandLeasePage = () => {
               /* Subtab B: Offers Made by Me */
               myOffers.length === 0 ? (
                 <div className="bg-white rounded-2xl p-8 text-center border border-gray-200">
-                  <p className="text-sm font-bold text-gray-800">आपने किसी भूमि पर प्रस्ताव नहीं भेजा है।</p>
+                  <p className="text-sm font-bold text-gray-800">You have not sent an offer on any land yet.</p>
                   <button
                     onClick={() => setActiveTab('explore')}
                     className="mt-3 px-4 py-2 bg-emerald-800 text-white rounded-xl text-xs font-bold"
                   >
-                    🌾 उपलब्ध भूमि खोजें
+                    🌾 Browse available land
                   </button>
                 </div>
               ) : (
@@ -1536,13 +1536,13 @@ const LandLeasePage = () => {
                                 : 'bg-amber-100 text-amber-800'
                             }`}
                           >
-                            स्थिति: {item.myOffer?.status || 'लंबित (Pending)'}
+                            Status: {item.myOffer?.status || 'Pending'}
                           </span>
-                          <span className="text-xs text-gray-400">मालिक: {item.ownerName}</span>
+                          <span className="text-xs text-gray-400">Owner: {item.ownerName}</span>
                         </div>
                         <h4 className="font-extrabold text-sm sm:text-base text-gray-900 mt-1">{item.title}</h4>
                         <p className="text-xs text-gray-500">
-                          स्थान: {[item.location?.village ? `ग्राम ${item.location.village}` : '', item.location?.tehsil ? `तहसील ${item.location.tehsil}` : (item.location?.city || ''), item.location?.district].filter(Boolean).join(', ') || item.location?.state || 'Rajasthan'} • {item.sizeInAcres} एकड़
+                          Location: {[item.location?.village ? `Village ${item.location.village}` : '', item.location?.tehsil ? `Tehsil ${item.location.tehsil}` : (item.location?.city || ''), item.location?.district].filter(Boolean).join(', ') || item.location?.state || 'Rajasthan'} • {item.sizeInAcres} acres
                         </p>
                       </div>
 
@@ -1552,16 +1552,16 @@ const LandLeasePage = () => {
                           className="py-2 px-3 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl text-xs font-bold flex items-center gap-1 shrink-0"
                         >
                           <FiDollarSign className="w-3.5 h-3.5" />
-                          <span>भुगतान (Payments)</span>
+                          <span>Payments</span>
                         </button>
                       )}
 
                       <div className="bg-gray-50 p-2.5 rounded-xl border border-gray-100 text-xs">
-                        <span className="text-gray-400 block text-[10px]">आपका भेजा गया प्रस्ताव</span>
+                        <span className="text-gray-400 block text-[10px]">Your offer</span>
                         <span className="font-extrabold text-emerald-900">
                           {item.leaseType === 'fixed-rent'
-                            ? `₹${item.myOffer?.proposedPrice || item.pricePerAcre}/एकड़/वर्ष`
-                            : `${item.myOffer?.proposedShare || item.sharePercentage}% बटाई हिस्सा`}
+                            ? `₹${item.myOffer?.proposedPrice || item.pricePerAcre}/acre/year`
+                            : `${item.myOffer?.proposedShare || item.sharePercentage}% Crop Share`}
                         </span>
                       </div>
                     </div>
@@ -1597,7 +1597,7 @@ const LandLeasePage = () => {
                   Lease Proposal / Negotiation
                 </span>
                 <h3 className="text-base sm:text-lg font-black text-gray-900 mt-0.5">
-                  पट्टा प्रस्ताव भेजें (Send Lease Offer)
+                  Send Lease Offer
                 </h3>
                 <p className="text-xs text-gray-500 line-clamp-1">{offerModalLand.title}</p>
               </div>
@@ -1607,34 +1607,34 @@ const LandLeasePage = () => {
                 {offerModalLand.leaseType === 'fixed-rent' ? (
                   <div>
                     <label className="block font-bold text-gray-800 mb-1">
-                      प्रस्तावित वार्षिक किराया (₹ / एकड़ / वर्ष)
+                      Proposed Annual Rent (₹ / acre / year)
                     </label>
                     <input
                       type="number"
                       required
-                      placeholder={`मालिक की मांग: ₹${offerModalLand.pricePerAcre}`}
+                      placeholder={`Owner's ask: ₹${offerModalLand.pricePerAcre}`}
                       value={offerForm.proposedPrice}
                       onChange={(e) => setOfferForm({ ...offerForm, proposedPrice: e.target.value })}
                       className="w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-700 font-bold text-gray-900"
                     />
                     <span className="text-[11px] text-gray-400 block mt-1">
-                      मालिक का निर्धारित किराया: ₹{Number(offerModalLand.pricePerAcre || 0).toLocaleString('en-IN')}/एकड़
+                      Owner-set rent: ₹{Number(offerModalLand.pricePerAcre || 0).toLocaleString('en-IN')}/acre
                     </span>
                   </div>
                 ) : (
                   <div>
                     <label className="block font-bold text-gray-800 mb-1">
-                      प्रस्तावित फसल हिस्सा (बटाई %)
+                      Proposed Crop Share (%)
                     </label>
                     <select
                       value={offerForm.proposedShare}
                       onChange={(e) => setOfferForm({ ...offerForm, proposedShare: e.target.value })}
                       className="w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-amber-600 font-bold text-gray-900"
                     >
-                      <option value="50">50% मालिक हिस्सा (50-50 बटाई)</option>
-                      <option value="60">60% मालिक हिस्सा (60-40)</option>
-                      <option value="40">40% मालिक हिस्सा (40-60)</option>
-                      <option value="33">33.3% तिहाई हिस्सा (1/3rd)</option>
+                      <option value="50">50% owner share (50-50)</option>
+                      <option value="60">60% owner share (60-40)</option>
+                      <option value="40">40% owner share (40-60)</option>
+                      <option value="33">33.3% owner share (1/3rd)</option>
                     </select>
                   </div>
                 )}
@@ -1642,28 +1642,28 @@ const LandLeasePage = () => {
                 {/* Duration */}
                 <div>
                   <label className="block font-bold text-gray-800 mb-1">
-                    पट्टे की अवधि (माह / Duration Months)
+                    Lease Duration (Months)
                   </label>
                   <select
                     value={offerForm.durationMonths}
                     onChange={(e) => setOfferForm({ ...offerForm, durationMonths: e.target.value })}
                     className="w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-700 text-gray-900 font-medium"
                   >
-                    <option value="6">6 माह (एक फसल सीजन / 1 Crop Season)</option>
-                    <option value="12">1 वर्ष (12 माह - रबी + खरीफ)</option>
-                    <option value="24">2 वर्ष (24 माह)</option>
-                    <option value="36">3 वर्ष (दीर्घकालिक / 3 Years)</option>
+                    <option value="6">6 months (1 crop season)</option>
+                    <option value="12">1 year (12 months - Rabi + Kharif)</option>
+                    <option value="24">2 years (24 months)</option>
+                    <option value="36">3 years (long term)</option>
                   </select>
                 </div>
 
                 {/* Proposed Crops */}
                 <div>
                   <label className="block font-bold text-gray-800 mb-1">
-                    प्रस्तावित फसलें (Proposed Crops to Sow)
+                    Proposed Crops to Sow
                   </label>
                   <input
                     type="text"
-                    placeholder="उदा. गेहूं, सरसों, चना"
+                    placeholder="e.g. Wheat, Mustard, Chana"
                     value={offerForm.proposedCrops}
                     onChange={(e) => setOfferForm({ ...offerForm, proposedCrops: e.target.value })}
                     className="w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-700 text-gray-900 font-medium"
@@ -1673,11 +1673,11 @@ const LandLeasePage = () => {
                 {/* Message */}
                 <div>
                   <label className="block font-bold text-gray-800 mb-1">
-                    मालिक के लिए संदेश या विशेष शर्तें (Message / Terms)
+                    Message or Special Terms for the Owner
                   </label>
                   <textarea
                     rows={2}
-                    placeholder="उदा. मेरे पास खुद का ट्रैक्टर व उपकरण उपलब्ध हैं, भुगतान दो किस्तों में करने का प्रस्ताव है..."
+                    placeholder="e.g. I have my own tractor and equipment, and I propose paying in two instalments..."
                     value={offerForm.message}
                     onChange={(e) => setOfferForm({ ...offerForm, message: e.target.value })}
                     className="w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-700 text-gray-900 font-medium"
@@ -1695,7 +1695,7 @@ const LandLeasePage = () => {
                     ) : (
                       <>
                         <FiSend className="w-4 h-4" />
-                        <span>प्रस्ताव भेजें (Submit Proposal to Owner)</span>
+                        <span>Submit Proposal to Owner</span>
                       </>
                     )}
                   </button>
@@ -1707,7 +1707,7 @@ const LandLeasePage = () => {
       </AnimatePresence>
 
       {/* ========================================================
-          MODAL 2: LAND DETAILS MODAL (विवरण देखें)
+          MODAL 2: LAND DETAILS MODAL
       ======================================================== */}
       <AnimatePresence>
         {selectedLandDetail && (
@@ -1735,8 +1735,8 @@ const LandLeasePage = () => {
                 <p className="text-xs text-gray-500 flex items-center gap-1 mt-1">
                   <FiMapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                   {selectedLandDetail.location?.fullAddress || [
-                    selectedLandDetail.location?.village ? `ग्राम ${selectedLandDetail.location.village}` : '',
-                    selectedLandDetail.location?.tehsil ? `तहसील ${selectedLandDetail.location.tehsil}` : (selectedLandDetail.location?.city || ''),
+                    selectedLandDetail.location?.village ? `Village ${selectedLandDetail.location.village}` : '',
+                    selectedLandDetail.location?.tehsil ? `Tehsil ${selectedLandDetail.location.tehsil}` : (selectedLandDetail.location?.city || ''),
                     selectedLandDetail.location?.district,
                     selectedLandDetail.location?.state
                   ].filter(Boolean).join(', ')}
@@ -1771,31 +1771,31 @@ const LandLeasePage = () => {
               {/* Specs Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs mb-4">
                 <div className="bg-gray-50 p-2.5 rounded-xl border border-gray-100">
-                  <span className="text-gray-400 block text-[10px]">कुल रकबा</span>
-                  <span className="font-extrabold text-gray-800 text-sm">{selectedLandDetail.sizeInAcres} एकड़</span>
+                  <span className="text-gray-400 block text-[10px]">Total Area</span>
+                  <span className="font-extrabold text-gray-800 text-sm">{selectedLandDetail.sizeInAcres} acres</span>
                 </div>
                 <div className="bg-gray-50 p-2.5 rounded-xl border border-gray-100">
-                  <span className="text-gray-400 block text-[10px]">खसरा संख्या</span>
+                  <span className="text-gray-400 block text-[10px]">Khasra No.</span>
                   <span className="font-extrabold text-gray-800 text-sm">{selectedLandDetail.khasraNumber}</span>
                 </div>
                 <div className="bg-emerald-50 p-2.5 rounded-xl border border-emerald-100">
-                  <span className="text-emerald-700 block text-[10px]">पट्टा मॉडल</span>
+                  <span className="text-emerald-700 block text-[10px]">Lease Model</span>
                   <span className="font-extrabold text-emerald-900 text-sm">
                     {selectedLandDetail.leaseType === 'fixed-rent'
-                      ? `₹${Number(selectedLandDetail.pricePerAcre || 0).toLocaleString('en-IN')}/एकड़`
-                      : `${selectedLandDetail.sharePercentage}% बटाई`}
+                      ? `₹${Number(selectedLandDetail.pricePerAcre || 0).toLocaleString('en-IN')}/acre`
+                      : `${selectedLandDetail.sharePercentage}% Crop Share`}
                   </span>
                 </div>
                 <div className="bg-gray-50 p-2.5 rounded-xl border border-gray-100">
-                  <span className="text-gray-400 block text-[10px]">मिट्टी का प्रकार</span>
+                  <span className="text-gray-400 block text-[10px]">Soil Type</span>
                   <span className="font-bold text-gray-800">{selectedLandDetail.soilType}</span>
                 </div>
                 <div className="bg-gray-50 p-2.5 rounded-xl border border-gray-100">
-                  <span className="text-gray-400 block text-[10px]">सिंचाई का साधन</span>
+                  <span className="text-gray-400 block text-[10px]">Irrigation Source</span>
                   <span className="font-bold text-gray-800">{selectedLandDetail.irrigationSource}</span>
                 </div>
                 <div className="bg-gray-50 p-2.5 rounded-xl border border-gray-100">
-                  <span className="text-gray-400 block text-[10px]">रास्ता</span>
+                  <span className="text-gray-400 block text-[10px]">Road Access</span>
                   <span className="font-bold text-gray-800">{selectedLandDetail.roadAccess}</span>
                 </div>
               </div>
@@ -1803,7 +1803,7 @@ const LandLeasePage = () => {
               {/* Suitable Crops */}
               {selectedLandDetail.suitableCrops && selectedLandDetail.suitableCrops.length > 0 && (
                 <div className="mb-4">
-                  <span className="text-xs font-bold text-gray-700 block mb-1.5">उपयुक्त फसलें (Suitable Crops):</span>
+                  <span className="text-xs font-bold text-gray-700 block mb-1.5">Suitable Crops:</span>
                   <div className="flex flex-wrap gap-1.5">
                     {selectedLandDetail.suitableCrops.map((crop, idx) => (
                       <span key={idx} className="bg-emerald-50 text-emerald-800 px-2.5 py-1 rounded-lg text-xs font-semibold border border-emerald-200">
@@ -1816,7 +1816,7 @@ const LandLeasePage = () => {
 
               {/* Description */}
               <div className="bg-gray-50 p-3.5 rounded-xl border border-gray-100 text-xs text-gray-700 mb-4">
-                <span className="font-bold text-gray-900 block mb-1">खेत का पूरा विवरण:</span>
+                <span className="font-bold text-gray-900 block mb-1">Full Land Description:</span>
                 <p className="leading-relaxed">{selectedLandDetail.description}</p>
               </div>
 
@@ -1829,10 +1829,10 @@ const LandLeasePage = () => {
                   <div>
                     <span className="text-xs font-extrabold text-gray-900 block">
                       {Boolean(selectedLandDetail.isOwner || (currentUser && String(selectedLandDetail.ownerId?._id || selectedLandDetail.ownerId) === String(currentUser._id || currentUser.id)))
-                        ? 'आपकी अपनी सूची (Your Listing)'
+                        ? 'Your Listing'
                         : (selectedLandDetail.owner?.name || 'Verified Landowner')}
                     </span>
-                    <span className="text-[10px] text-emerald-700 font-semibold">प्रमाणित भूमि मालिक</span>
+                    <span className="text-[10px] text-emerald-700 font-semibold">Verified Land Owner</span>
                   </div>
                 </div>
 
@@ -1846,7 +1846,7 @@ const LandLeasePage = () => {
                     className="py-2.5 px-4 bg-blue-700 hover:bg-blue-800 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5"
                   >
                     <FiCheckCircle className="w-3.5 h-3.5" />
-                    <span>अपनी सूची में देखें (Manage)</span>
+                    <span>Manage in My Listings</span>
                   </button>
                 ) : (
                   <button
@@ -1859,7 +1859,7 @@ const LandLeasePage = () => {
                     className="py-2.5 px-4 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5"
                   >
                     <FiSend className="w-3.5 h-3.5" />
-                    <span>प्रस्ताव दें (Make Offer)</span>
+                    <span>Make Offer</span>
                   </button>
                 )}
               </div>
