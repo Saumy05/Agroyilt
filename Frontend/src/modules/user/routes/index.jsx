@@ -5,12 +5,13 @@ import BottomNav from '../components/layout/BottomNav';
 import ErrorBoundary from '../components/common/ErrorBoundary';
 import ProtectedRoute from '../../../components/auth/ProtectedRoute';
 import PublicRoute from '../../../components/auth/PublicRoute';
+import { importOrReload } from '../../../utils/importOrReload';
 import useAppNotifications from '../../../hooks/useAppNotifications.jsx';
 
 // Lazy load wrapper with error handling
 const lazyLoad = (importFunc) => {
   return lazy(() => {
-    return Promise.resolve(importFunc()).catch((error) => {
+    return importOrReload(importFunc).catch((error) => {
       return Promise.resolve({
         default: () => (
           <div className="flex items-center justify-center min-h-screen bg-white">

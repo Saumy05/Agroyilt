@@ -206,7 +206,9 @@ body {
   background-color: #ffffff;
   background: linear-gradient(to bottom, rgba(52, 121, 137, 0.03) 0%, rgba(187, 95, 54, 0.02) 10%, #ffffff 20%);
   min-height: 100vh;
-  overflow-x: hidden; /* horizontal clip lives here, not on body */
+  overflow-x: hidden; /* fallback for old browsers */
+  /* clip does not turn #root into a scroll container (hidden does), which can swallow touch scrolling in mobile WebViews */
+  overflow-x: clip; /* horizontal clip lives here, not on body */
 }
 
 /* Hide scrollbar for horizontal scroll */

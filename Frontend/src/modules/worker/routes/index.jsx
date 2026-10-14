@@ -6,6 +6,7 @@ import BottomNav from '../components/layout/BottomNav';
 import ErrorBoundary from '../components/common/ErrorBoundary';
 import ProtectedRoute from '../../../components/auth/ProtectedRoute';
 import PublicRoute from '../../../components/auth/PublicRoute';
+import { importOrReload } from '../../../utils/importOrReload';
 import WorkerBookingRequestAlertModal from '../components/bookings/WorkerBookingRequestAlertModal';
 import workerService from '../../../services/workerService';
 import workerRequestService from '../../../services/workerRequestService';
@@ -14,7 +15,7 @@ import { stopAlertRing } from '../../../utils/notificationSound';
 // Lazy load wrapper with error handling
 const lazyLoad = (importFunc) => {
   return lazy(() => {
-    return Promise.resolve(importFunc()).catch((error) => {
+    return importOrReload(importFunc).catch((error) => {
       console.error('Failed to load worker page:', error);
       // Return a fallback component wrapped in a Promise
       return Promise.resolve({

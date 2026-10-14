@@ -7,6 +7,7 @@ import api from '../../../services/api';
 import { userAuthService, vendorAuthService, workerAuthService } from '../../../services/authService';
 import { useBrand } from '../../../context/BrandContext';
 import authStorage from '../../../utils/authStorage';
+import { findVerifiedRole } from '../../../utils/verifySession';
 
 // Phone validation
 const phoneSchema = z.object({
@@ -43,19 +44,17 @@ const AppLogin = () => {
   const mpinInputRef = useRef(null);
   const otpInputRefs = useRef([]);
 
-  const authenticatedRole = React.useMemo(() => {
-    if (authStorage.isAuthenticated('user')) return 'user';
-    if (authStorage.isAuthenticated('vendor')) return 'vendor';
-    if (authStorage.isAuthenticated('worker')) return 'worker';
-    return null;
-  }, []);
-
-  // Auto-redirect if already logged in
+  // Auto-redirect if already logged in. A stored token is only a hint (it may be left over from
+  // another account or backend), so confirm with the server before sending anyone into that app.
   useEffect(() => {
-    if (authenticatedRole) {
-      navigate(`/${authenticatedRole}`, { replace: true });
-    }
-  }, [authenticatedRole, navigate]);
+    const hasStoredSession = ['user', 'vendor', 'worker'].some((role) => authStorage.isAuthenticated(role));
+    if (!hasStoredSession) return undefined;
+    let cancelled = false;
+    findVerifiedRole().then((role) => {
+      if (!cancelled && role) navigate(`/${role}`, { replace: true });
+    });
+    return () => { cancelled = true; };
+  }, [navigate]);
 
   // Resend timer
   useEffect(() => {

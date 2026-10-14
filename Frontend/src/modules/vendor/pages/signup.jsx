@@ -69,6 +69,12 @@ const VendorSignup = () => {
   const isSubmittingRef = useRef(false);
   const panComposingRef = useRef(false);
 
+  // Overlapping modals elsewhere can leave the page scroll-locked; nothing on this page should be locked
+  useEffect(() => {
+    document.body.style.overflow = '';
+    document.documentElement.style.overflow = '';
+  }, []);
+
   const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   // Timer countdown effect
