@@ -62,6 +62,17 @@ const toAssetUrl = (url) => {
 };
 
 
+// Per-unit (hour/day) rate of a rental. basePrice is the booking TOTAL (rate × duration),
+// so it must be divided back by the duration when the equipment rate isn't populated.
+const getRentalUnitRate = (booking) => {
+  const type = booking.rental_type;
+  const equipRate = Number(booking.equipmentId?.pricing?.[type]?.price);
+  if (equipRate > 0) return equipRate;
+  const duration = Number(booking.estimatedDuration) || 1;
+  const total = Number(booking.basePrice) || 0;
+  return total > 0 ? Math.round(total / duration) : 25;
+};
+
 // Dynamic Countdown & Overdue/Overtime Timer for active machinery rentals (Customer side)
 const RentalTimer = ({ booking }) => {
   const [timeLeft, setTimeLeft] = useState(0);
@@ -110,7 +121,7 @@ const RentalTimer = ({ booking }) => {
 
   if (!isTimeBased || !isActive || !booking.startedAt) return null;
 
-  const rate = booking.equipmentId?.pricing?.hourly?.price || booking.basePrice || 25;
+  const rate = getRentalUnitRate(booking);
   const unitLabel = booking.rental_type === 'hourly' ? 'hr' : booking.rental_type === 'daily' ? 'day' : 'month';
 
   // Format timeLeft in HH:MM:SS or Days Hours Mins
@@ -1197,7 +1208,7 @@ const BookingDetails = () => {
                     {booking.equipmentId?.name || booking.serviceName || 'Rental Equipment'}
                   </h4>
                   <p className="text-xs text-gray-500 font-medium mt-0.5">
-                    Rate: <span className="font-bold text-gray-900">₹{booking.basePrice || booking.equipmentId?.pricing?.hourly?.price || 25}</span> / {booking.rental_type === 'hourly' ? 'Hour' : booking.rental_type === 'daily' ? 'Day' : 'Slot'}
+                    Rate: <span className="font-bold text-gray-900">₹{getRentalUnitRate(booking)}</span> / {booking.rental_type === 'hourly' ? 'Hour' : booking.rental_type === 'daily' ? 'Day' : 'Slot'}
                   </p>
                   <p className="text-[11px] text-teal-700 font-bold mt-0.5">
                     Duration: {booking.estimatedDuration || 1} {booking.rental_type === 'hourly' ? 'Hour(s)' : 'Day(s)'}
