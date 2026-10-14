@@ -219,6 +219,33 @@ const verifyFeePayment = async (req, res) => {
       console.error('Referral qualification on registration fee payment error:', refErr);
     }
 
+    // Notify Admins of Registration Fee Payment & Account Activation
+    try {
+      const Admin = require('../../models/Admin');
+      const { createNotification } = require('../notificationControllers/notificationController');
+      const activeAdmins = await Admin.find({ isActive: { $ne: false } }).select('_id');
+      const roleLabel = paymentRecord.role === 'USER' ? 'Farmer' : paymentRecord.role === 'VENDOR' ? 'Vendor' : 'Worker';
+
+      for (const admin of activeAdmins) {
+        await createNotification({
+          adminId: admin._id,
+          type: 'payment_received',
+          title: `Registration Fee Paid (${roleLabel})`,
+          message: `${account.name || roleLabel} successfully paid ₹${paymentRecord.amount} registration fee. Account is now active.`,
+          relatedId: paymentRecord._id,
+          relatedType: 'registration_fee',
+          data: {
+            role: paymentRecord.role,
+            accountId: account._id,
+            amount: paymentRecord.amount,
+            gatewayPaymentId: paymentRecord.gatewayPaymentId
+          }
+        });
+      }
+    } catch (notifErr) {
+      console.error('Failed to notify admins of registration fee payment:', notifErr.message);
+    }
+
     // Issue Full Access Tokens
     const roleEnum = paymentRecord.role === 'USER' ? 'user' : paymentRecord.role === 'VENDOR' ? 'vendor' : 'worker';
     const tokens = generateTokenPair({ userId: account._id, role: roleEnum });

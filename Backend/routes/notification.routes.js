@@ -15,6 +15,18 @@ const {
 } = require('../controllers/notificationControllers/notificationController');
 
 // Routes
+router.get('/', authenticate, (req, res, next) => {
+  const role = (req.user?.role || '').toLowerCase();
+  if (role.includes('admin')) {
+    return getAdminNotifications(req, res, next);
+  } else if (role === 'vendor') {
+    return getVendorNotifications(req, res, next);
+  } else if (role === 'worker') {
+    return getWorkerNotifications(req, res, next);
+  } else {
+    return getUserNotifications(req, res, next);
+  }
+});
 router.get('/user', authenticate, isUser, getUserNotifications);
 router.get('/vendor', authenticate, isVendor, getVendorNotifications);
 router.get('/worker', authenticate, isWorker, getWorkerNotifications);

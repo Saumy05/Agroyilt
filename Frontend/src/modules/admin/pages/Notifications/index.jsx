@@ -143,7 +143,7 @@ const Notifications = () => {
   const fetchNotifications = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await api.get('/notifications', { params: { limit: 100 } });
+      const res = await api.get('/notifications/admin', { params: { limit: 100 } });
       if (res.data.success && Array.isArray(res.data.data) && res.data.data.length > 0) {
         setNotifications(res.data.data);
       } else {
