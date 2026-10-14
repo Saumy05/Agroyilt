@@ -895,9 +895,9 @@ const VendorSignup = () => {
                   />
                   <label htmlFor="terms" className="ml-3 block text-sm text-gray-700">
                     I agree to the{' '}
-                    <a href="/terms/vendor" target="_blank" rel="noopener noreferrer" className="text-[#347989] hover:underline font-bold">Terms and Conditions</a>
+                    <Link to="/terms/vendor" className="text-[#347989] hover:underline font-bold">Terms and Conditions</Link>
                     {' '}and{' '}
-                    <a href="/privacy/vendor" target="_blank" rel="noopener noreferrer" className="text-[#347989] hover:underline font-bold">Privacy Policy</a>.
+                    <Link to="/privacy/vendor" className="text-[#347989] hover:underline font-bold">Privacy Policy</Link>.
                   </label>
                 </div>
 

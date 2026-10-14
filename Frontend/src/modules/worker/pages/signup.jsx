@@ -23,18 +23,32 @@ const WorkerSignup = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [step, setStep] = useState('details'); // 'details' or 'otp'
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    phoneNumber: '',
-    gender: 'male',
-    aadhar: '',
-    aadharDocument: null,
-    aadharBackDocument: null,
-    hasBike: false,
-    drivingLicenseNumber: '',
-    drivingLicenseDocument: null
+  const [formData, setFormData] = useState(() => {
+    const blank = {
+      name: '',
+      email: '',
+      phoneNumber: '',
+      gender: 'male',
+      aadhar: '',
+      aadharDocument: null,
+      aadharBackDocument: null,
+      hasBike: false,
+      drivingLicenseNumber: '',
+      drivingLicenseDocument: null
+    };
+    try {
+      const saved = sessionStorage.getItem('worker_signup_form_data');
+      if (saved) return { ...blank, ...JSON.parse(saved) };
+    } catch (e) { /* storage unavailable */ }
+    return blank;
   });
+  // Keep typed text while the person reads the Terms; uploaded documents are too large to keep
+  useEffect(() => {
+    try {
+      const { aadharDocument, aadharBackDocument, drivingLicenseDocument, ...text } = formData;
+      sessionStorage.setItem('worker_signup_form_data', JSON.stringify(text));
+    } catch (e) { /* ignore */ }
+  }, [formData]);
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [otpToken, setOtpToken] = useState('');
   const [verificationToken, setVerificationToken] = useState('');
@@ -219,6 +233,7 @@ const WorkerSignup = () => {
         const response = await workerAuthService.register(registerData);
         if (response.success) {
           toastManager.success('Registration details saved! Please set your MPIN to complete your profile.');
+          try { sessionStorage.removeItem('worker_signup_form_data'); } catch (e) { /* ignore */ }
           navigate('/worker/settings/mpin-setup', {
             state: {
               isFirstTime: true,
@@ -317,6 +332,7 @@ const WorkerSignup = () => {
       const response = await workerAuthService.register(registerData);
       if (response.success) {
         toastManager.success('Registration details saved! Please set your MPIN to complete your profile.');
+        try { sessionStorage.removeItem('worker_signup_form_data'); } catch (e) { /* ignore */ }
         navigate('/worker/settings/mpin-setup', {
           state: {
             isFirstTime: true,
@@ -631,9 +647,9 @@ const WorkerSignup = () => {
                 />
                 <label htmlFor="worker-terms" className="ml-3 block text-sm text-gray-700">
                   I agree to the{' '}
-                  <a href="/terms/worker" target="_blank" rel="noopener noreferrer" className="hover:underline font-bold" style={{ color: brandColor }}>Terms and Conditions</a>
+                  <Link to="/terms/worker" className="hover:underline font-bold" style={{ color: brandColor }}>Terms and Conditions</Link>
                   {' '}and{' '}
-                  <a href="/privacy/worker" target="_blank" rel="noopener noreferrer" className="hover:underline font-bold" style={{ color: brandColor }}>Privacy Policy</a>.
+                  <Link to="/privacy/worker" className="hover:underline font-bold" style={{ color: brandColor }}>Privacy Policy</Link>.
                 </label>
               </div>
 

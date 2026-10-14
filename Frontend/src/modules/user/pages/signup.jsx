@@ -21,12 +21,16 @@ const Signup = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [step, setStep] = useState('details'); // 'details' or 'otp'
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    phoneNumber: '',
-    gender: ''
+  const [formData, setFormData] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('user_signup_form_data');
+      if (saved) return JSON.parse(saved);
+    } catch (e) { /* storage unavailable */ }
+    return { name: '', email: '', phoneNumber: '', gender: '' };
   });
+  useEffect(() => {
+    try { sessionStorage.setItem('user_signup_form_data', JSON.stringify(formData)); } catch (e) { /* ignore */ }
+  }, [formData]);
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [otpToken, setOtpToken] = useState('');
   const [verificationToken, setVerificationToken] = useState('');
@@ -138,6 +142,7 @@ const Signup = () => {
             </div>,
             { icon: <FiCheckCircle className="text-green-500" /> }
           );
+          try { sessionStorage.removeItem('user_signup_form_data'); } catch (e) { /* ignore */ }
           navigate('/user/settings/mpin-setup', { state: { isFirstTime: true } });
         } else {
           toastManager.error(response.message || 'Registration failed');
@@ -244,6 +249,7 @@ const Signup = () => {
           </div>,
           { icon: <FiCheckCircle className="text-green-500" /> }
         );
+        try { sessionStorage.removeItem('user_signup_form_data'); } catch (e) { /* ignore */ }
         navigate('/user/settings/mpin-setup', { 
           state: { 
             isFirstTime: true, 
@@ -431,9 +437,9 @@ const Signup = () => {
                 />
                 <label htmlFor="user-terms" className="ml-3 block text-sm text-gray-700">
                   I agree to the{' '}
-                  <a href="/terms/farmer" target="_blank" rel="noopener noreferrer" className="text-[#426B4F] hover:underline font-bold">Terms and Conditions</a>
+                  <Link to="/terms/farmer" className="text-[#426B4F] hover:underline font-bold">Terms and Conditions</Link>
                   {' '}and{' '}
-                  <a href="/privacy/farmer" target="_blank" rel="noopener noreferrer" className="text-[#426B4F] hover:underline font-bold">Privacy Policy</a>.
+                  <Link to="/privacy/farmer" className="text-[#426B4F] hover:underline font-bold">Privacy Policy</Link>.
                 </label>
               </div>
 
