@@ -4,6 +4,7 @@ import { FiArrowRight } from 'react-icons/fi';
 import { useBrand } from '../../../context/BrandContext';
 import authStorage from '../../../utils/authStorage';
 import { findVerifiedRole } from '../../../utils/verifySession';
+import SupportContact from '../../../components/common/SupportContact';
 
 const AppEntry = () => {
   const navigate = useNavigate();
@@ -243,6 +244,8 @@ const AppEntry = () => {
             Privacy Policy
           </span>
         </p>
+
+        <SupportContact variant="dark" />
       </div>
     </div>
   );

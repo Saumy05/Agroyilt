@@ -8,6 +8,7 @@ import { userAuthService, vendorAuthService, workerAuthService } from '../../../
 import { useBrand } from '../../../context/BrandContext';
 import authStorage from '../../../utils/authStorage';
 import { findVerifiedRole } from '../../../utils/verifySession';
+import SupportContact from '../../../components/common/SupportContact';
 
 // Phone validation
 const phoneSchema = z.object({
@@ -926,7 +927,7 @@ const AppLogin = () => {
 
       {/* Footer (Only on Login screen) */}
       {step === 'login' && !selectingRole && (
-        <div style={{ padding: '16px 24px 40px', textAlign: 'center' }}>
+        <div style={{ padding: '16px 24px 8px', textAlign: 'center' }}>
           <p style={{ fontSize: '0.875rem', color: '#78909C' }}>
             Don't have an account?{' '}
             <button
@@ -942,6 +943,11 @@ const AppLogin = () => {
           </p>
         </div>
       )}
+
+      {/* Support stays reachable on every login step (OTP not arriving, locked, pending approval...) */}
+      <div style={{ padding: '0 24px 32px' }}>
+        <SupportContact variant="light" />
+      </div>
     </div>
   );
 };

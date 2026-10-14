@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { FiCheck, FiX, FiEye, FiSearch, FiFilter, FiDownload, FiLoader, FiPower, FiTrash2, FiPlus, FiUpload, FiUserCheck } from 'react-icons/fi';
 import { toastManager } from '../../../../utils/toastManager';
+import { downloadFile } from '../../../../utils/downloadFile';
 import CardShell from '../UserCategories/components/CardShell';
 import Modal from '../UserCategories/components/Modal';
 import adminVendorService from '../../../../services/adminVendorService';
@@ -113,6 +114,7 @@ const AllOwners = () => {
           name: owner.name,
           email: owner.email,
           phone: owner.phone,
+          gender: owner.gender,
           businessName: owner.businessName,
           service: owner.service,
           shopDetails: owner.shopDetails,
@@ -272,7 +274,7 @@ const AllOwners = () => {
           [type]: previewUrl
         }));
         setUploadingDocs(prev => ({ ...prev, [type]: false }));
-        toast.dismiss(loadingToast);
+        toastManager.dismiss(loadingToast);
         toastManager.success("Document uploaded successfully!", { duration: 2000 });
       };
 
@@ -283,7 +285,7 @@ const AllOwners = () => {
 
       reader.readAsDataURL(file);
     } catch (error) {
-      toast.dismiss(loadingToast);
+      toastManager.dismiss(loadingToast);
       toastManager.error("Failed to process file");
       setUploadingDocs(prev => ({ ...prev, [type]: false }));
     }
@@ -717,6 +719,20 @@ const AllOwners = () => {
                 <div className="text-gray-900">{selectedOwner.phone}</div>
               </div>
               <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Gender</label>
+                <div className="text-gray-900">
+                  {selectedOwner.gender ? selectedOwner.gender.charAt(0).toUpperCase() + selectedOwner.gender.slice(1) : 'Not provided'}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Aadhar Number</label>
+                <div className="text-gray-900 font-mono">{selectedOwner.aadhar || 'Not provided'}</div>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">PAN Number</label>
+                <div className="text-gray-900 font-mono">{selectedOwner.pan || 'Not provided'}</div>
+              </div>
+              <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Equipment Category</label>
                 <div className="text-gray-900">
                   {Array.isArray(selectedOwner.service) ? selectedOwner.service.join(', ') : (selectedOwner.service || 'N/A')}
@@ -761,13 +777,29 @@ const AllOwners = () => {
                       <span className="block text-xs text-gray-500">Address</span>
                       <span className="text-sm font-semibold text-gray-800">{selectedOwner.shopDetails.shopAddress || 'N/A'}</span>
                     </div>
-                    {selectedOwner.shopDetails.licenseDocument && (
-                      <div className="col-span-2">
-                         <a href={selectedOwner.shopDetails.licenseDocument} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline flex items-center gap-1">
-                           <FiEye className="w-3 h-3" /> View License Document
-                         </a>
-                      </div>
-                    )}
+                    <div>
+                      <span className="block text-xs text-gray-500">Shop License Number</span>
+                      <span className="text-sm font-semibold text-gray-800 font-mono">{selectedOwner.shopDetails.shopLicense || 'Not provided'}</span>
+                    </div>
+                    <div>
+                      <span className="block text-xs text-gray-500">License Document</span>
+                      {selectedOwner.shopDetails.licenseDocument ? (
+                        <span className="flex items-center gap-3">
+                          <a href={selectedOwner.shopDetails.licenseDocument} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                            <FiEye className="w-3 h-3" /> View
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => downloadFile(selectedOwner.shopDetails.licenseDocument, `${selectedOwner.name}_shop_license`)}
+                            className="text-xs text-blue-600 hover:underline flex items-center gap-1 cursor-pointer"
+                          >
+                            <FiDownload className="w-3 h-3" /> Download
+                          </button>
+                        </span>
+                      ) : (
+                        <span className="text-sm font-semibold text-gray-800">Not uploaded</span>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <form onSubmit={(e) => handleAddShopSubmit(e, selectedOwner.id)} className="mt-3 pt-3 border-t border-blue-200 space-y-3">
@@ -821,14 +853,14 @@ const AllOwners = () => {
                       alt="Aadhar Front"
                       className="w-full h-48 object-cover rounded-lg border-2 border-gray-200"
                     />
-                    <a
-                      href={selectedOwner.documents.aadhar}
-                      download
-                      className="mt-2 inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
+                    <button
+                      type="button"
+                      onClick={() => downloadFile(selectedOwner.documents.aadhar, `${selectedOwner.name}_aadhar_front`)}
+                      className="mt-2 inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 cursor-pointer"
                     >
                       <FiDownload className="w-4 h-4" />
                       Download
-                    </a>
+                    </button>
                   </div>
                 )}
                 {selectedOwner.documents.aadharBack && (
@@ -839,14 +871,14 @@ const AllOwners = () => {
                       alt="Aadhar Back"
                       className="w-full h-48 object-cover rounded-lg border-2 border-gray-200"
                     />
-                    <a
-                      href={selectedOwner.documents.aadharBack}
-                      download
-                      className="mt-2 inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
+                    <button
+                      type="button"
+                      onClick={() => downloadFile(selectedOwner.documents.aadharBack, `${selectedOwner.name}_aadhar_back`)}
+                      className="mt-2 inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 cursor-pointer"
                     >
                       <FiDownload className="w-4 h-4" />
                       Download
-                    </a>
+                    </button>
                   </div>
                 )}
                 {selectedOwner.documents.pan && (
@@ -857,14 +889,14 @@ const AllOwners = () => {
                       alt="PAN"
                       className="w-full h-48 object-cover rounded-lg border-2 border-gray-200"
                     />
-                    <a
-                      href={selectedOwner.documents.pan}
-                      download
-                      className="mt-2 inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
+                    <button
+                      type="button"
+                      onClick={() => downloadFile(selectedOwner.documents.pan, `${selectedOwner.name}_pan_card`)}
+                      className="mt-2 inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 cursor-pointer"
                     >
                       <FiDownload className="w-4 h-4" />
                       Download
-                    </a>
+                    </button>
                   </div>
                 )}
               </div>
