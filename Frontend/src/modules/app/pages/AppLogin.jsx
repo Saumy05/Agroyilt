@@ -28,6 +28,9 @@ const AppLogin = () => {
   const [phone, setPhone] = useState('');
   const [mpin, setMpin] = useState('');
   const [showMpin, setShowMpin] = useState(false);
+  // The set-new-MPIN fields each have their own eye, so revealing one never reveals the other
+  const [showNewMpin, setShowNewMpin] = useState(false);
+  const [showConfirmMpin, setShowConfirmMpin] = useState(false);
   const [formError, setFormError] = useState('');
 
   // Forgot MPIN states
@@ -857,12 +860,12 @@ const AppLogin = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#2E7D32' }}><FiLock size={18} /></div>
                 <div style={{ width: '1px', height: '28px', background: '#E0E0E0' }} />
                 <input
-                  type={showMpin ? 'text' : 'password'}
+                  type={showNewMpin ? 'text' : 'password'}
                   inputMode="numeric"
                   maxLength={4}
                   value={newMpin}
                   onChange={e => setNewMpin(e.target.value.replace(/\D/g, ''))}
-                  placeholder="? ? ? ?"
+                  placeholder="• • • •"
                   style={{
                     flex: 1, border: 'none', outline: 'none', background: 'transparent', 
                     fontSize: '1.2rem', fontWeight: 600, color: '#263238', padding: '14px 0',
@@ -870,8 +873,8 @@ const AppLogin = () => {
                     width: '100%', minWidth: 0
                   }}
                 />
-                <button type="button" onClick={() => setShowMpin(!showMpin)} style={{ background: 'none', border: 'none', color: '#9E9E9E', cursor: 'pointer', padding: '4px', flexShrink: 0 }}>
-                  {showMpin ? <FiEyeOff size={20} /> : <FiEye size={20} />}
+                <button type="button" aria-label={showNewMpin ? 'Hide MPIN' : 'Show MPIN'} onClick={() => setShowNewMpin(!showNewMpin)} style={{ background: 'none', border: 'none', color: '#9E9E9E', cursor: 'pointer', padding: '4px', flexShrink: 0 }}>
+                  {showNewMpin ? <FiEyeOff size={20} /> : <FiEye size={20} />}
                 </button>
               </div>
 
@@ -888,12 +891,12 @@ const AppLogin = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#2E7D32' }}><FiLock size={18} /></div>
                 <div style={{ width: '1px', height: '28px', background: '#E0E0E0' }} />
                 <input
-                  type={showMpin ? 'text' : 'password'}
+                  type={showConfirmMpin ? 'text' : 'password'}
                   inputMode="numeric"
                   maxLength={4}
                   value={confirmMpin}
                   onChange={e => setConfirmMpin(e.target.value.replace(/\D/g, ''))}
-                  placeholder="? ? ? ?"
+                  placeholder="• • • •"
                   style={{
                     flex: 1, border: 'none', outline: 'none', background: 'transparent', 
                     fontSize: '1.2rem', fontWeight: 600, color: '#263238', padding: '14px 0',
@@ -901,6 +904,9 @@ const AppLogin = () => {
                     width: '100%', minWidth: 0
                   }}
                 />
+                <button type="button" aria-label={showConfirmMpin ? 'Hide MPIN' : 'Show MPIN'} onClick={() => setShowConfirmMpin(!showConfirmMpin)} style={{ background: 'none', border: 'none', color: '#9E9E9E', cursor: 'pointer', padding: '4px', flexShrink: 0 }}>
+                  {showConfirmMpin ? <FiEyeOff size={20} /> : <FiEye size={20} />}
+                </button>
               </div>
 
               <button
