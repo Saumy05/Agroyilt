@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { toastManager } from '../../utils/toastManager';
 import authStorage, { normalizeRole } from '../../utils/authStorage';
+import { verifySessionOnce } from '../../utils/verifySession';
 
 /**
  * Protected Route Component
@@ -28,6 +29,16 @@ const ProtectedRoute = ({ children, userType = 'user', redirectTo = null }) => {
       }
     }
   }, [location.pathname, userType]);
+
+  // The token can look valid locally while the account is gone or suspended; ask the server once per login
+  useEffect(() => {
+    if (!isAuth) return undefined;
+    let cancelled = false;
+    verifySessionOnce(canonicalRole).then((ok) => {
+      if (!cancelled && !ok) setIsAuth(false);
+    });
+    return () => { cancelled = true; };
+  }, [isAuth, canonicalRole]);
 
   if (!isAuth) {
     // Determine redirect path

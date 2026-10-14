@@ -25,12 +25,8 @@ const AppRoutes = () => {
   const location = useLocation();
   const [isMobile, setIsMobile] = React.useState(isMobileApp());
 
-  const getMobileRedirect = () => {
-    if (authStorage.isAuthenticated('user')) return '/user';
-    if (authStorage.isAuthenticated('vendor')) return '/vendor';
-    if (authStorage.isAuthenticated('worker')) return '/worker';
-    return '/app';
-  };
+  // AppEntry verifies any stored login with the server before opening a dashboard
+  const getMobileRedirect = () => '/app';
 
   React.useEffect(() => {
     const handleResize = () => setIsMobile(isMobileApp());

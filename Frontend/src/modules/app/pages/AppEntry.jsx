@@ -3,26 +3,36 @@ import { useNavigate } from 'react-router-dom';
 import { FiArrowRight } from 'react-icons/fi';
 import { useBrand } from '../../../context/BrandContext';
 import authStorage from '../../../utils/authStorage';
+import { findVerifiedRole } from '../../../utils/verifySession';
 
 const AppEntry = () => {
   const navigate = useNavigate();
   const { appLogo, appName } = useBrand();
 
-  const authenticatedRole = React.useMemo(() => {
-    if (authStorage.isAuthenticated('user')) return 'user';
-    if (authStorage.isAuthenticated('vendor')) return 'vendor';
-    if (authStorage.isAuthenticated('worker')) return 'worker';
-    return null;
-  }, []);
+  // A stored, unexpired token is only a hint: confirm with the server before skipping login
+  const hasStoredSession = React.useMemo(
+    () => ['user', 'vendor', 'worker'].some((role) => authStorage.isAuthenticated(role)),
+    []
+  );
+  const [checking, setChecking] = React.useState(hasStoredSession);
+  const [authenticatedRole, setAuthenticatedRole] = React.useState(null);
 
-  // If already logged in, redirect immediately without flash
   useEffect(() => {
-    if (authenticatedRole) {
-      navigate(`/${authenticatedRole}`, { replace: true });
-    }
-  }, [authenticatedRole, navigate]);
+    if (!hasStoredSession) return undefined;
+    let cancelled = false;
+    findVerifiedRole().then((role) => {
+      if (cancelled) return;
+      if (role) {
+        setAuthenticatedRole(role);
+        navigate(`/${role}`, { replace: true });
+      } else {
+        setChecking(false);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [hasStoredSession, navigate]);
 
-  if (authenticatedRole) {
+  if (checking || authenticatedRole) {
     return (
       <div
         style={{
