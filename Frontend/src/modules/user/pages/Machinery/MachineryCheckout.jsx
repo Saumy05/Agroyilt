@@ -12,6 +12,7 @@ import { paymentService } from '../../../../services/paymentService';
 import { configService } from '../../../../services/configService';
 import authStorage from '../../../../utils/authStorage';
 import AddressSelectionModal from '../Checkout/components/AddressSelectionModal';
+import usePaymentMethods from '../../../../hooks/usePaymentMethods';
 
 const loadRazorpay = () => {
     return new Promise((resolve) => {
@@ -56,6 +57,13 @@ const MachineryCheckout = () => {
         loadSettings();
         return () => { isMounted = false; };
     }, []);
+
+    // Cash / online can be switched off per area by the admin (the server enforces it; this only hides the option)
+    const allowed = usePaymentMethods('machinery');
+    useEffect(() => {
+        if (paymentMethod === 'cash' && !allowed.cash && allowed.online) setPaymentMethod('online');
+        else if (paymentMethod === 'online' && !allowed.online && allowed.cash) setPaymentMethod('cash');
+    }, [allowed.cash, allowed.online, paymentMethod]);
 
     // Travel charge (set by the admin): previewed once an address is picked. The booking recomputes it on the server.
     const travelVendorId = equipment?.vendorId?._id || equipment?.vendorId;
@@ -610,7 +618,8 @@ const MachineryCheckout = () => {
 
                     <div className="grid grid-cols-1 gap-2 pt-0.5">
                         {/* Cash / Field Pay */}
-                        <button 
+                        {allowed.cash && (
+<button 
                           type="button"
                           onClick={() => setPaymentMethod('cash')}
                           className={`p-2.5 rounded-xl border flex items-center justify-between transition-all text-left cursor-pointer
@@ -634,9 +643,11 @@ const MachineryCheckout = () => {
                             </div>
                             {paymentMethod === 'cash' && <FiCheckCircle className="text-emerald-600 shrink-0" size={16} />}
                         </button>
+)}
 
                         {/* Online Payment */}
-                        <button 
+                        {allowed.online && (
+<button 
                           type="button"
                           onClick={() => setPaymentMethod('online')}
                           className={`p-2.5 rounded-xl border flex items-center justify-between transition-all text-left cursor-pointer
@@ -655,6 +666,7 @@ const MachineryCheckout = () => {
                             </div>
                             {paymentMethod === 'online' && <FiCheckCircle className="text-emerald-600 shrink-0" size={16} />}
                         </button>
+)}
                     </div>
                 </div>
 
@@ -769,7 +781,8 @@ const MachineryCheckout = () => {
                     {/* Payment Options Selection */}
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Settlement Method</p>
                     <div className="flex flex-col gap-2.5 mb-6">
-                      <button
+                      {allowed.cash && (
+<button
                         type="button"
                         onClick={() => setPaymentMethod('cash')}
                         className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all text-left cursor-pointer ${
@@ -797,8 +810,10 @@ const MachineryCheckout = () => {
                           {paymentMethod === 'cash' && <div className="w-2 h-2 bg-white rounded-full" />}
                         </div>
                       </button>
+)}
 
-                      <button
+                      {allowed.online && (
+<button
                         type="button"
                         onClick={() => setPaymentMethod('online')}
                         className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all text-left cursor-pointer ${
@@ -826,6 +841,7 @@ const MachineryCheckout = () => {
                           {paymentMethod === 'online' && <div className="w-2 h-2 bg-white rounded-full" />}
                         </div>
                       </button>
+)}
                     </div>
 
                     {/* Dispatch Action */}

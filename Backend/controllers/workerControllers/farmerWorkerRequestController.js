@@ -3450,6 +3450,10 @@ exports.farmerSelectWorkers = async (req, res) => {
 exports.createWorkerBookingPayment = async (req, res) => {
   try {
     const farmerId = req.user._id;
+    // Admin-controlled: is this payment method allowed in the farmer's area? (Settings > Payment Methods)
+    const gate = await require('../../services/paymentMethodService').checkMethod({ type: 'worker', method: 'online', userId: farmerId });
+    if (!gate.ok) return res.status(403).json({ success: false, code: 'PAYMENT_METHOD_UNAVAILABLE', message: gate.message, allowed: gate.allowed });
+
     const request = await WorkerBookingRequest.findOne({
       _id: req.params.id,
       farmerId,
@@ -3649,6 +3653,10 @@ exports.verifyWorkerBookingPayment = async (req, res) => {
 exports.payWorkerBookingFromWallet = async (req, res) => {
   try {
     const farmerId = req.user._id;
+    // Admin-controlled: is this payment method allowed in the farmer's area? (Settings > Payment Methods)
+    const gate = await require('../../services/paymentMethodService').checkMethod({ type: 'worker', method: 'online', userId: farmerId });
+    if (!gate.ok) return res.status(403).json({ success: false, code: 'PAYMENT_METHOD_UNAVAILABLE', message: gate.message, allowed: gate.allowed });
+
     const result = await confirmSvc.payFromWallet({ requestId: req.params.id, farmerId });
     if (result.ok && !result.already) {
       await announceConfirmation({ request: result.request, assignments: result.assignments, bookings: result.bookings, method: 'online' });
@@ -3676,6 +3684,10 @@ exports.confirmWorkerBookingCash = async (req, res) => {
     if (settings.workerCashPaymentEnabled === false) {
       return res.status(403).json({ success: false, message: 'Cash payment is currently disabled.' });
     }
+
+    // Admin-controlled: is this payment method allowed in the farmer's area? (Settings > Payment Methods)
+    const gate = await require('../../services/paymentMethodService').checkMethod({ type: 'worker', method: 'cash', userId: farmerId });
+    if (!gate.ok) return res.status(403).json({ success: false, code: 'PAYMENT_METHOD_UNAVAILABLE', message: gate.message, allowed: gate.allowed });
 
     const result = await confirmSvc.confirmRequest({ requestId: req.params.id, farmerId, method: 'cash' });
     if (result.ok && !result.already) {

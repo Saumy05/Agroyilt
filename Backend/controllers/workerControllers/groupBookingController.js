@@ -1446,6 +1446,10 @@ exports.getMemberResponses = async (req, res) => {
 exports.createGroupBookingPayment = async (req, res) => {
   try {
     const farmerId = req.user._id;
+    // Admin-controlled: is this payment method allowed in the farmer's area? (Settings > Payment Methods)
+    const gate = await require('../../services/paymentMethodService').checkMethod({ type: 'worker', method: 'online', userId: farmerId });
+    if (!gate.ok) return res.status(403).json({ success: false, code: 'PAYMENT_METHOD_UNAVAILABLE', message: gate.message, allowed: gate.allowed });
+
     const request  = await WorkerGroupRequest.findOne({
       _id: req.params.id,
       farmerId,
@@ -1846,6 +1850,10 @@ exports.payGroupBookingFromWallet = async (req, res) => {
   const farmerId = req.user._id;
   const groupId  = req.params.id;
   try {
+    // Admin-controlled: is this payment method allowed in the farmer's area? (Settings > Payment Methods)
+    const gate = await require('../../services/paymentMethodService').checkMethod({ type: 'worker', method: 'online', userId: farmerId });
+    if (!gate.ok) return res.status(403).json({ success: false, code: 'PAYMENT_METHOD_UNAVAILABLE', message: gate.message, allowed: gate.allowed });
+
     const ledger = require('../../services/ledgerService');
 
     // an attempt that died half-way (process crash) is undone before a new one starts
@@ -2071,6 +2079,10 @@ exports.generateGroupCompletionOtp = async (req, res) => {
 exports.confirmGroupBookingCash = async (req, res) => {
   try {
     const farmerId = req.user._id;
+    // Admin-controlled: is this payment method allowed in the farmer's area? (Settings > Payment Methods)
+    const gate = await require('../../services/paymentMethodService').checkMethod({ type: 'worker', method: 'cash', userId: farmerId });
+    if (!gate.ok) return res.status(403).json({ success: false, code: 'PAYMENT_METHOD_UNAVAILABLE', message: gate.message, allowed: gate.allowed });
+
     const request = await WorkerGroupRequest.findOne({
       _id: req.params.id,
       farmerId,

@@ -64,6 +64,14 @@ const createPaymentOrder = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Payment already completed for this booking' });
     }
 
+    {
+      const gate = await require('../../services/paymentMethodService').checkMethod({
+        type: booking.providerType === 'WORKER' ? 'worker' : 'machinery', method: 'online', userId,
+        geo: { districtId: booking.districtId, subDistrictId: booking.subDistrictId }
+      });
+      if (!gate.ok) return res.status(403).json({ success: false, code: 'PAYMENT_METHOD_UNAVAILABLE', message: gate.message, allowed: gate.allowed });
+    }
+
     const payableAmount = Math.max(1, Math.round(Number(amountDue(booking) || booking.userPayableAmount || booking.basePrice || 1) * 100) / 100);
 
     const orderResult = await createOrder(payableAmount, 'INR', booking.bookingNumber, {

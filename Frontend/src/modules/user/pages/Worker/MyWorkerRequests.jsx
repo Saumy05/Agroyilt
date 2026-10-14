@@ -10,6 +10,7 @@ import toast from 'react-hot-toast';
 import workerBookingService from '../../../../services/workerBookingService';
 import { walletService } from '../../../../services/walletService';
 import authStorage from '../../../../utils/authStorage';
+import usePaymentMethods from '../../../../hooks/usePaymentMethods';
 
 // ── Status styles ───────────────────────────────────────────────────────────
 
@@ -164,6 +165,7 @@ const MyWorkerRequests = () => {
   };
 
   const [walletBalance, setWalletBalance] = useState(null);
+  const allowedPay = usePaymentMethods('worker'); // admin switches cash / online off per area (the server enforces it too)
   useEffect(() => {
     walletService.getBalance()
       .then(r => setWalletBalance(Number(r?.data?.balance) || 0))
@@ -423,7 +425,7 @@ const MyWorkerRequests = () => {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {(() => {
+                {allowedPay.online && (() => {
                   const need = Number(snap.totalPayable) || 0;
                   const enough = walletBalance !== null && need > 0 && walletBalance >= need;
                   return (
@@ -440,6 +442,7 @@ const MyWorkerRequests = () => {
                     </button>
                   );
                 })()}
+                {allowedPay.cash && (
                 <button
                   type="button"
                   disabled={processingPaymentId === req._id}
@@ -449,6 +452,8 @@ const MyWorkerRequests = () => {
                   <FiDollarSign size={14} />
                   <span>Pay Cash on Completion</span>
                 </button>
+                )}
+                {allowedPay.online && (
                 <button
                   type="button"
                   disabled={processingPaymentId === req._id}
@@ -458,6 +463,7 @@ const MyWorkerRequests = () => {
                   <FiCreditCard size={14} />
                   <span>Pay Online (UPI / Card)</span>
                 </button>
+                )}
               </div>
             </div>
           )}

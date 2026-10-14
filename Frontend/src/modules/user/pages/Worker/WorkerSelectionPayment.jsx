@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import workerBookingService from '../../../../services/workerBookingService';
 import { walletService } from '../../../../services/walletService';
 import authStorage from '../../../../utils/authStorage';
+import usePaymentMethods from '../../../../hooks/usePaymentMethods';
 
 const WorkerSelectionPayment = () => {
   const { id } = useParams();
@@ -16,6 +17,12 @@ const WorkerSelectionPayment = () => {
   const [processing, setProcessing] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('online'); // 'wallet' | 'online' | 'cash'
   const [walletBalance, setWalletBalance] = useState(null);
+  const allowed = usePaymentMethods('worker'); // admin can switch cash / online off per area (server enforces it too)
+
+  useEffect(() => {
+    if (paymentMethod === 'cash' && !allowed.cash && allowed.online) setPaymentMethod('online');
+    else if ((paymentMethod === 'online' || paymentMethod === 'wallet') && !allowed.online && allowed.cash) setPaymentMethod('cash');
+  }, [allowed.cash, allowed.online, paymentMethod]);
 
   const handleWalletPay = async () => {
     try {
@@ -304,6 +311,12 @@ const WorkerSelectionPayment = () => {
         {/* Payment Method Selector */}
         <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5 space-y-3">
           <h3 className="font-black text-sm text-slate-800">Choose Payment Method</h3>
+          {(!allowed.cash || !allowed.online) && (
+            <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+              {!allowed.cash ? 'Cash on service is not available in your area. Please pay online.' : 'Online payment is not available in your area. Please pay cash on service.'}
+            </p>
+          )}
+          {allowed.online && (
           <button
             type="button"
             onClick={() => canPayWallet && setPaymentMethod('wallet')}
@@ -329,7 +342,9 @@ const WorkerSelectionPayment = () => {
             </div>
             {paymentMethod === 'wallet' && <FiCheckCircle className="text-emerald-600" size={16} />}
           </button>
-          <div className="grid grid-cols-2 gap-3">
+          )}
+          <div className={`grid ${allowed.online && allowed.cash ? 'grid-cols-2' : 'grid-cols-1'} gap-3`}>
+            {allowed.online && (
             <button
               type="button"
               onClick={() => setPaymentMethod('online')}
@@ -346,7 +361,9 @@ const WorkerSelectionPayment = () => {
               <p className="font-bold text-xs text-slate-900">Pay Online</p>
               <p className="text-[10px] text-slate-500 mt-0.5">UPI / Card / Netbanking with Auto-Refund</p>
             </button>
+            )}
 
+            {allowed.cash && (
             <button
               type="button"
               onClick={() => setPaymentMethod('cash')}
@@ -363,6 +380,7 @@ const WorkerSelectionPayment = () => {
               <p className="font-bold text-xs text-slate-900">Cash on Service</p>
               <p className="text-[10px] text-slate-500 mt-0.5">Pay worker directly upon work completion</p>
             </button>
+            )}
           </div>
         </div>
 

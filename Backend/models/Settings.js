@@ -306,6 +306,15 @@ const settingsSchema = new mongoose.Schema({
   travelCharge: {
     worker: { type: travelRuleSchema, default: () => ({}) },
     vendor: { type: travelRuleSchema, default: () => ({}) }
+  },
+
+  // ==========================================
+  // PAYMENT METHODS: global default (area rules in PaymentMethodRule can only restrict these)
+  // Worker cash keeps using `workerCashPaymentEnabled` above.
+  // ==========================================
+  paymentMethods: {
+    worker:    { online: { type: Boolean, default: true } },
+    machinery: { cash: { type: Boolean, default: true }, online: { type: Boolean, default: true } }
   }
 }, { timestamps: true });
 

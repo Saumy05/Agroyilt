@@ -679,6 +679,16 @@ const createBooking = async (req, res) => {
     visitingCharges = Number(visitingCharges) || 0;
     finalAmount = Number(finalAmount) || 0;
 
+    // Admin-controlled: is this payment method allowed in the farmer's area? (Settings > Payment Methods)
+    {
+      const gate = await require('../../services/paymentMethodService').checkMethod({
+        type: providerType === 'WORKER' ? 'worker' : 'machinery', method: paymentMethod, userId, address
+      });
+      if (!gate.ok) {
+        return res.status(403).json({ success: false, code: 'PAYMENT_METHOD_UNAVAILABLE', message: gate.message, allowed: gate.allowed });
+      }
+    }
+
     // Create booking
     const bookingNumber = `BK${Date.now()}${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
@@ -2744,6 +2754,14 @@ const farmerSelectOfflinePayment = async (req, res) => {
 
     if (booking.finalAmount == null) {
       return res.status(400).json({ success: false, message: 'Final amount not confirmed yet' });
+    }
+
+    {
+      const gate = await require('../../services/paymentMethodService').checkMethod({
+        type: booking.providerType === 'WORKER' ? 'worker' : 'machinery', method: 'cash', userId,
+        geo: { districtId: booking.districtId, subDistrictId: booking.subDistrictId }
+      });
+      if (!gate.ok) return res.status(403).json({ success: false, code: 'PAYMENT_METHOD_UNAVAILABLE', message: gate.message, allowed: gate.allowed });
     }
 
     // Set payment method to cash (keep online advance, if any, as it is)

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiSettings, FiGrid, FiDollarSign, FiSave, FiUser, FiMail, FiTrash2, FiPlus, FiUsers, FiShield, FiFileText, FiMapPin, FiPhone, FiHeadphones, FiMessageCircle, FiEdit, FiLock, FiUnlock, FiX, FiGlobe, FiUpload, FiCamera } from 'react-icons/fi';
+import { FiSettings, FiGrid, FiDollarSign, FiSave, FiUser, FiMail, FiTrash2, FiPlus, FiUsers, FiShield, FiFileText, FiMapPin, FiPhone, FiHeadphones, FiMessageCircle, FiEdit, FiLock, FiUnlock, FiX, FiGlobe, FiUpload, FiCamera, FiCreditCard } from 'react-icons/fi';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { getSettings, updateSettings, updateAdminProfile, getAdminProfile, getAllAdmins, createAdmin, deleteAdmin, updateAdminDetails, toggleAdminStatus, getRegistrationFees, updateRegistrationFee } from '../../services/settingsService';
 import { toastManager } from '../../../../utils/toastManager';
@@ -9,6 +9,7 @@ import api from '../../../../services/api';
 import authStorage from '../../../../utils/authStorage';
 import Policies from './Policies';
 import TravelCharges from './TravelCharges';
+import PaymentMethods from './PaymentMethods';
 
 const AdminSettings = () => {
   const navigate = useNavigate();
@@ -267,7 +268,7 @@ const AdminSettings = () => {
 
   const [loading, setLoading] = useState(false);
   const [profileLoading, setProfileLoading] = useState(false);
-  const [activeView, setActiveView] = useState('main'); // 'main', 'profile', 'financial', 'system', 'branding', 'travel', 'policies', 'admins'
+  const [activeView, setActiveView] = useState('main'); // 'main', 'profile', 'financial', 'system', 'branding', 'travel', 'paymentMethods', 'policies', 'admins'
 
   // Deep link from the admin search: ?view=financial&field=<input name>
   useEffect(() => {
@@ -868,6 +869,18 @@ const AdminSettings = () => {
           </div>
           <h3 className="text-lg font-bold text-gray-800 mb-2">Travel Charges</h3>
           <p className="text-sm text-gray-500">Per-km charge for vendors and workers travelling to the farm, with return trip</p>
+        </div>
+      )}
+
+      {/* Payment Methods by area Card - Super Admin Only */}
+      {isSuperAdmin && (
+        <div onClick={() => setActiveView('paymentMethods')}
+          className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer group">
+          <div className="w-12 h-12 bg-indigo-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-indigo-100 transition-colors">
+            <FiCreditCard className="w-6 h-6 text-indigo-600" />
+          </div>
+          <h3 className="text-lg font-bold text-gray-800 mb-2">Payment Methods</h3>
+          <p className="text-sm text-gray-500">Switch cash or online payment on or off by state, district and sub-district</p>
         </div>
       )}
 
@@ -1874,6 +1887,13 @@ const AdminSettings = () => {
           )
         }
 
+
+        {/* Payment Methods View - Super Admin Only */}
+        {activeView === 'paymentMethods' && isSuperAdmin && (
+          <motion.div key="paymentMethods" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
+            <PaymentMethods />
+          </motion.div>
+        )}
 
         {/* Travel Charges View - Super Admin Only */}
         {activeView === 'travel' && isSuperAdmin && (

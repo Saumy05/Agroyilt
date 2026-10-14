@@ -209,6 +209,7 @@ app.use('/api/fees', require('./routes/shared/registrationFeeRoutes.js'));
 
 // User routes
 app.use('/api/users/auth', require('./routes/user-routes/auth.routes'));
+app.use('/api/users/payment-methods', require('./routes/user-routes/paymentMethods.routes'));
 app.use('/api/users', require('./routes/user-routes/profile.routes'));
 app.use('/api/user/wallet', require('./routes/user-routes/userWallet.routes'));
 app.use('/api/users/bookings', require('./routes/user-routes/booking.routes'));
@@ -281,6 +282,7 @@ app.use('/api/admin/soil-tests', soilTestingGate);
 app.use('/api/admin', require('./routes/admin-routes/soilTest.routes'));
 app.use('/api/admin', require('./routes/admin-routes/landLeaseManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/reportManagement.routes'));
+app.use('/api/admin/payment-rules', require('./routes/admin-routes/paymentRules.routes'));
 app.use('/api/admin/disputes', require('./routes/admin-routes/disputeManagement.routes'));
 app.use('/api/admin/settlements', require('./routes/admin-routes/settlementManagement.routes'));
 app.use('/api/admin/website', require('./routes/admin-routes/websiteManagement.routes'));
