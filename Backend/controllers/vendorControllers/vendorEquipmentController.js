@@ -120,8 +120,9 @@ exports.addEquipment = async (req, res) => {
     if (priceError) return res.status(400).json({ success: false, message: priceError });
 
     // 1. Verify Category exists and is a "Main Category" (if categoryId is provided)
+    let mainCategory = null;
     if (categoryId) {
-      const mainCategory = await Category.findById(categoryId);
+      mainCategory = await Category.findById(categoryId);
       if (!mainCategory || mainCategory.parentCategory) {
         return res.status(400).json({
           success: false,
