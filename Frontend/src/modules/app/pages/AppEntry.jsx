@@ -226,8 +226,8 @@ const AppEntry = () => {
           <span
             role="link"
             tabIndex={0}
-            onClick={() => navigate('/terms/farmer?doc=privacy')}
-            onKeyDown={e => { if (e.key === 'Enter') navigate('/terms/farmer?doc=privacy'); }}
+            onClick={() => navigate('/privacy/farmer')}
+            onKeyDown={e => { if (e.key === 'Enter') navigate('/privacy/farmer'); }}
             style={{ textDecoration: 'underline', textUnderlineOffset: '2px', color: 'rgba(255,255,255,0.8)', cursor: 'pointer', padding: '6px 0' }}
           >
             Privacy Policy

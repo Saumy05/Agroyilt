@@ -58,7 +58,6 @@ const Login = lazyLoad(() => import('../pages/login'));
 const Signup = lazyLoad(() => import('../pages/signup'));
 const MpinSetup = lazyLoad(() => import('../pages/MpinSetup'));
 const ForgotMpin = lazyLoad(() => import('../pages/ForgotMpin'));
-const Privacy = lazyLoad(() => import('../pages/Privacy'));
 
 const Notifications = lazyLoad(() => import('../pages/Notifications'));
 const FAQ = lazyLoad(() => import('../pages/FAQ'));
@@ -159,7 +158,7 @@ const UserRoutes = () => {
               <Route path="/about-groo" element={<ProtectedRoute userType="user"><AboutGroo /></ProtectedRoute>} />
               <Route path="/how-to-use" element={<ProtectedRoute userType="user"><HowToUse /></ProtectedRoute>} />
               <Route path="/update-profile" element={<ProtectedRoute userType="user"><UpdateProfile /></ProtectedRoute>} />
-              <Route path="/privacy" element={<Privacy />} />
+              <Route path="/privacy" element={<Navigate to="/privacy/farmer" replace />} />
 
               <Route path="/notifications" element={<ProtectedRoute userType="user"><Notifications /></ProtectedRoute>} />
               <Route path="/faq" element={<FAQ />} />

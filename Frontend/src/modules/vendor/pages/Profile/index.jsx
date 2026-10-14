@@ -550,7 +550,23 @@ const Profile = () => {
                 </div>
                 <div className="min-w-0 flex-1">
                   <span className="font-bold text-xs sm:text-sm text-slate-800 block truncate">Terms & Conditions</span>
-                  <span className="text-[11px] text-slate-400 font-medium block truncate">Terms of use & privacy policy</span>
+                  <span className="text-[11px] text-slate-400 font-medium block truncate">Rules for using AgroYilt</span>
+                </div>
+              </div>
+              <FiChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
+            </button>
+
+            <button
+              onClick={() => navigate('/privacy/vendor')}
+              className="w-full p-3.5 sm:p-4 flex items-center justify-between hover:bg-slate-50 transition-colors text-left group"
+            >
+              <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                <div className="w-9 h-9 rounded-xl bg-sky-50 text-sky-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <FiShield className="w-4.5 h-4.5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="font-bold text-xs sm:text-sm text-slate-800 block truncate">Privacy Policy</span>
+                  <span className="text-[11px] text-slate-400 font-medium block truncate">How we use and protect your data</span>
                 </div>
               </div>
               <FiChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />

@@ -16,7 +16,7 @@ import AboutPage from '../modules/landing/pages/AboutPage';
 import ServicesPage from '../modules/landing/pages/ServicesPage';
 import WorkflowPage from '../modules/landing/pages/WorkflowPage';
 import FAQPage from '../modules/landing/pages/FAQPage';
-import TermsPage from '../modules/legal/TermsPage';
+import { TermsPage, PrivacyPage } from '../modules/legal/LegalPage';
 import { LocationPermissionChecker } from '../components/common';
 import { isMobileApp } from '../utils/platformUtils';
 import authStorage from '../utils/authStorage';
@@ -53,11 +53,10 @@ const AppRoutes = () => {
     isWorkerRoute ||
     isAppRoute ||
     location.pathname.startsWith('/terms') ||
+    location.pathname.startsWith('/privacy') ||
     [
-      '/user/privacy',
       '/user/help-support',
       '/user/cancellation-policy',
-      '/privacy',
       '/terms',
       '/support'
     ].includes(location.pathname);
@@ -98,10 +97,11 @@ const AppRoutes = () => {
         <Route path="/articles/:id" element={<ArticleDetail />} />
 
         {/* Public utility URLs (Great for iOS/App Store) */}
-        <Route path="/privacy" element={<Navigate to="/user/privacy" replace />} />
         <Route path="/support" element={<Navigate to="/user/help-support" replace />} />
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/terms/:role" element={<TermsPage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
+        <Route path="/privacy/:role" element={<PrivacyPage />} />
 
         {/* Referral / Universal Registration Entry */}
         <Route

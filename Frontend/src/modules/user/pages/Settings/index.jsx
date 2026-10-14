@@ -92,7 +92,7 @@ const Settings = () => {
   };
 
   const handlePrivacyClick = () => {
-    navigate('/user/privacy');
+    navigate('/privacy/farmer');
   };
 
   return (

@@ -61,7 +61,15 @@ const Footer = () => {
                                     href="/terms"
                                     className="hover:text-yellow-500 transition-colors underline decoration-gray-800 underline-offset-4"
                                 >
-                                    Privacy & Terms
+                                    Terms & Conditions
+                                </a>
+                            </li>
+                            <li>
+                                <a
+                                    href="/privacy"
+                                    className="hover:text-yellow-500 transition-colors underline decoration-gray-800 underline-offset-4"
+                                >
+                                    Privacy Policy
                                 </a>
                             </li>
                         </ul>

@@ -42,9 +42,11 @@ const Signup = () => {
   const [showPolicyModal, setShowPolicyModal] = useState(false);
   const [policyContent, setPolicyContent] = useState('');
   const [policyTitle, setPolicyTitle] = useState('');
+  const [policyType, setPolicyType] = useState('terms');
 
   const handleOpenPolicy = async (type, title) => {
     setPolicyTitle(title);
+    setPolicyType(type);
     setShowPolicyModal(true);
     setPolicyContent('Loading...');
     try {
@@ -564,7 +566,10 @@ const Signup = () => {
             <div className="p-6 overflow-y-auto flex-1 whitespace-pre-wrap text-sm text-gray-700">
               {policyContent}
             </div>
-            <div className="p-4 border-t bg-gray-50 flex justify-end">
+            <div className="p-4 border-t bg-gray-50 flex items-center justify-between gap-3">
+              <a href={`/${policyType}/farmer`} target="_blank" rel="noopener noreferrer" className="text-sm font-bold hover:underline" style={{ color: '#426B4F' }}>
+                Open full page ↗
+              </a>
               <button type="button" onClick={() => setShowPolicyModal(false)} className="px-6 py-2 bg-[#426B4F] text-white rounded-lg font-bold hover:bg-[#34533e] transition-colors">
                 Close
               </button>

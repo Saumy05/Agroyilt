@@ -482,8 +482,15 @@ const Account = () => {
                 icon={FiFileText}
                 iconBg="bg-amber-50 text-amber-700"
                 label="Terms & Conditions"
-                subtitle="Terms of use & privacy policy"
+                subtitle="Rules for using AgroYilt"
                 onClick={() => navigate('/terms/farmer')}
+              />
+              <MenuItem
+                icon={FiShield}
+                iconBg="bg-sky-50 text-sky-700"
+                label="Privacy Policy"
+                subtitle="How we use and protect your data"
+                onClick={() => navigate('/privacy/farmer')}
               />
               <MenuItem
                 icon={FiShield}

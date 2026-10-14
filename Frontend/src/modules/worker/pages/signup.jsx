@@ -768,7 +768,10 @@ const WorkerSignup = () => {
             <div className="p-6 overflow-y-auto flex-1 whitespace-pre-wrap text-sm text-gray-700">
               {policies[openPolicy]}
             </div>
-            <div className="p-4 border-t bg-gray-50 flex justify-end">
+            <div className="p-4 border-t bg-gray-50 flex items-center justify-between gap-3">
+              <a href={`/${openPolicy}/worker`} target="_blank" rel="noopener noreferrer" className="text-sm font-bold hover:underline" style={{ color: brandColor }}>
+                Open full page ↗
+              </a>
               <button type="button" onClick={() => setOpenPolicy(null)} className="px-6 py-2 text-white rounded-lg font-bold transition-opacity hover:opacity-90" style={{ backgroundColor: brandColor }}>
                 Close
               </button>
