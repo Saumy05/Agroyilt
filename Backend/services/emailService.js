@@ -200,6 +200,41 @@ const sendWelcomeEmail = async (email, name) => {
 };
 
 /**
+ * Send "account approved" email to a farmer, vendor or worker
+ * @param {string} email
+ * @param {string} name
+ * @param {string} roleLabel - Farmer | Vendor | Worker
+ */
+const sendAccountApprovedEmail = async (email, name, roleLabel) => {
+  try {
+    if (!email) return { success: true, skipped: true };
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) return { success: true };
+    const transporter = createTransporter();
+
+    const content = `
+      <div style="text-align: center;">
+        <div class="badge badge-success">Approved</div>
+        <h2>Congratulations, ${name}! 🎉</h2>
+        <p>Your Agroyilt <strong>${roleLabel}</strong> account has been reviewed and approved by our team.</p>
+        <p>You can now open the Agroyilt app and log in with your mobile number and 4-digit MPIN.</p>
+        <p style="font-size: 14px;">If you have any questions, reply to this email or contact customer support from the app's welcome screen.</p>
+      </div>
+    `;
+
+    await transporter.sendMail({
+      from: process.env.EMAIL_FROM || 'Agroyilt <noreply@agroyilt.com>',
+      to: email,
+      subject: `Your Agroyilt ${roleLabel} account is approved`,
+      html: emailWrapper(content, 'Account Approved', `Your ${roleLabel} account has been approved`)
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('Account approved email error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
  * Send Booking Email - Detailed App Style
  */
 const sendBookingEmails = async (booking, user, vendor, service) => {
@@ -391,6 +426,7 @@ const sendDuesPaymentApprovedEmail = async (vendor, amount, balanceAfter) => {
 module.exports = {
   sendOTPEmail,
   sendWelcomeEmail,
+  sendAccountApprovedEmail,
   sendBookingEmails,
   sendBookingCompletionEmails,
   sendWithdrawalApprovedEmail,

@@ -1,4 +1,5 @@
 const Worker = require('../../models/Worker');
+const { notifyAccountApproved } = require('../../services/approvalNotifier');
 const User = require('../../models/User');
 const Admin = require('../../models/Admin');
 const Review = require('../../models/Review');
@@ -289,6 +290,7 @@ const approveWorker = async (req, res) => {
       });
     }
 
+    const wasApproved = worker.approvalStatus === 'approved';
     worker.approvalStatus = 'approved';
     worker.isActive = true;
     worker.approvalDate = new Date();
@@ -329,6 +331,11 @@ const approveWorker = async (req, res) => {
       });
     } catch (notifErr) {
       console.error('Failed to send worker approval notification:', notifErr);
+    }
+
+    // SMS + email, only when the status really changes (not on a repeated click)
+    if (!wasApproved) {
+      notifyAccountApproved({ roleLabel: 'Worker', name: worker.name, phone: worker.phone, email: worker.email });
     }
 
     res.status(200).json({
@@ -962,7 +969,7 @@ const deleteWorker = async (req, res) => {
  */
 const addWorker = async (req, res) => {
   try {
-    const { name, email, phone, workerType, serviceCategory, skills, hourlyRate, dailyRate } = req.body;
+    const { name, email, phone, workerType, serviceCategory, skills, hourlyRate, dailyRate, gender } = req.body;
 
     if (!name || !phone) {
       return res.status(400).json({ success: false, message: 'Name and phone are required' });
@@ -990,8 +997,10 @@ const addWorker = async (req, res) => {
       name: name.trim(),
       email: email || null,
       phone: cleanPhone,
-      workerType: workerType || 'WORKER',
-      serviceCategory: serviceCategory || '',
+      workerType: ['WORKER', 'TEAM_LEADER'].includes(workerType) ? workerType : 'WORKER',
+      gender: ['male', 'female', 'other'].includes(String(gender || '').toLowerCase()) ? String(gender).toLowerCase() : 'male',
+      // The model stores a list (serviceCategories); the old single `serviceCategory` field was silently dropped
+      serviceCategories: Array.isArray(req.body.serviceCategories) ? req.body.serviceCategories : (serviceCategory ? [serviceCategory] : []),
       skills: Array.isArray(skills) ? skills : (skills ? [skills] : []),
       hourlyRate: hourlyRate || 0,
       dailyRate: dailyRate || 0,

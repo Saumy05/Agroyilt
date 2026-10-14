@@ -21,7 +21,8 @@ import {
   FiBriefcase,
   FiShield,
   FiFilter,
-  FiUserCheck
+  FiUserCheck,
+  FiPlus
 } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import workerService from '../../services/workerService';
@@ -54,6 +55,12 @@ const AllWorkers = () => {
   const [createdByMe, setCreatedByMe] = useState(false);
   const [typeCounts, setTypeCounts] = useState({ total: 0, independent: 0, teamMember: 0, teamLeader: 0, myRegistrations: 0 });
   const [actionLoading, setActionLoading] = useState(null);
+
+  // Add Worker (admin creates the account directly)
+  const EMPTY_NEW_WORKER = { name: '', phone: '', email: '', gender: 'male', workerType: 'WORKER', hourlyRate: '', dailyRate: '', skills: '' };
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [newWorker, setNewWorker] = useState(EMPTY_NEW_WORKER);
+  const [isAdding, setIsAdding] = useState(false);
 
   // Worker Details & Document Modal State
   const [selectedWorker, setSelectedWorker] = useState(null);
@@ -165,6 +172,39 @@ const AllWorkers = () => {
     }
   };
 
+  const handleAddWorker = async (e) => {
+    e.preventDefault();
+    if (!newWorker.name.trim()) return toast.error('Worker full name is required');
+
+    const cleanPhone = newWorker.phone.replace(/\D/g, '').slice(-10);
+    if (cleanPhone.length !== 10) return toast.error('Please enter a complete 10-digit mobile number');
+    if (!/^[6-9]\d{9}$/.test(cleanPhone)) return toast.error('Mobile number must start with 6, 7, 8, or 9');
+
+    try {
+      setIsAdding(true);
+      const res = await workerService.addWorker({
+        name: newWorker.name.trim(),
+        phone: cleanPhone,
+        email: newWorker.email.trim() || undefined,
+        gender: newWorker.gender,
+        workerType: newWorker.workerType,
+        hourlyRate: Number(newWorker.hourlyRate) || 0,
+        dailyRate: Number(newWorker.dailyRate) || 0,
+        skills: newWorker.skills.split(',').map((x) => x.trim()).filter(Boolean)
+      });
+      if (res.success) {
+        toast.success(res.message || 'Worker added successfully');
+        setIsAddModalOpen(false);
+        setNewWorker(EMPTY_NEW_WORKER);
+        fetchWorkers();
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to add worker');
+    } finally {
+      setIsAdding(false);
+    }
+  };
+
   return (
     <div className="bg-white rounded-3xl border border-slate-200 p-6 space-y-4">
       {/* Search and Worker Type Filter */}
@@ -189,6 +229,15 @@ const AllWorkers = () => {
             </button>
           )}
         </div>
+
+        <button
+          type="button"
+          onClick={() => setIsAddModalOpen(true)}
+          className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-sm shadow-blue-500/20 transition-all cursor-pointer shrink-0"
+        >
+          <FiPlus size={16} />
+          <span>Add Worker</span>
+        </button>
 
         {/* Worker Type Filter (Where admin filters by Independent Worker vs Team Leader) */}
         <div className="flex items-center gap-1.5 p-1 bg-slate-100/90 rounded-2xl border border-slate-200 shrink-0 self-start lg:self-auto shadow-xs">
@@ -1062,6 +1111,167 @@ const AllWorkers = () => {
                 alt="Document Preview"
                 className="max-h-[80vh] w-auto max-w-full rounded-lg object-contain mx-auto"
               />
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Add Worker Modal */}
+      <AnimatePresence>
+        {isAddModalOpen && (
+          <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-[100000] flex items-center justify-center p-3 sm:p-4 pb-20 sm:pb-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto"
+            >
+              <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 sticky top-0">
+                <h3 className="font-bold text-gray-800">Add New Worker</h3>
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 cursor-pointer"
+                >
+                  <FiX className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleAddWorker} className="p-4 space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Full Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newWorker.name}
+                    onChange={(e) => setNewWorker({ ...newWorker, name: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    placeholder="Enter worker's name"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-xs font-medium text-gray-700">Phone Number *</label>
+                    <span className="text-[10px] text-gray-400 font-mono">{newWorker.phone.length}/10 digits</span>
+                  </div>
+                  <div className="flex rounded-lg shadow-xs">
+                    <span className="inline-flex items-center px-3 rounded-l-lg border border-r-0 border-gray-200 bg-gray-50 text-gray-600 text-xs font-semibold select-none">
+                      🇮🇳 +91
+                    </span>
+                    <input
+                      type="tel"
+                      required
+                      maxLength={10}
+                      value={newWorker.phone}
+                      onChange={(e) => setNewWorker({ ...newWorker, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                      className={`w-full px-3 py-2 border rounded-r-lg text-sm focus:outline-none font-medium ${
+                        newWorker.phone.length === 10 && !/^[6-9]/.test(newWorker.phone)
+                          ? 'border-red-400 bg-red-50/20'
+                          : 'border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500'
+                      }`}
+                      placeholder="Enter 10-digit mobile number"
+                    />
+                  </div>
+                  {newWorker.phone.length === 10 && !/^[6-9]/.test(newWorker.phone) && (
+                    <p className="mt-1 text-[11px] text-red-600 font-medium">Indian mobile numbers must start with 6, 7, 8, or 9</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Email Address (Optional)</label>
+                  <input
+                    type="email"
+                    value={newWorker.email}
+                    onChange={(e) => setNewWorker({ ...newWorker, email: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    placeholder="Enter email address"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Worker Type</label>
+                    <select
+                      value={newWorker.workerType}
+                      onChange={(e) => setNewWorker({ ...newWorker, workerType: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:border-blue-500"
+                    >
+                      <option value="WORKER">Independent Worker</option>
+                      <option value="TEAM_LEADER">Team Leader</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Gender</label>
+                    <select
+                      value={newWorker.gender}
+                      onChange={(e) => setNewWorker({ ...newWorker, gender: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:border-blue-500"
+                    >
+                      <option value="male">Male</option>
+                      <option value="female">Female</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Hourly Rate (₹)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={newWorker.hourlyRate}
+                      onChange={(e) => setNewWorker({ ...newWorker, hourlyRate: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+                      placeholder="e.g. 100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Daily Rate (₹)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={newWorker.dailyRate}
+                      onChange={(e) => setNewWorker({ ...newWorker, dailyRate: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+                      placeholder="e.g. 700"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Skills (Optional, comma separated)</label>
+                  <input
+                    type="text"
+                    value={newWorker.skills}
+                    onChange={(e) => setNewWorker({ ...newWorker, skills: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+                    placeholder="e.g. Harvesting, Spraying, Tractor driving"
+                  />
+                </div>
+
+                <p className="text-[11px] text-gray-500 bg-blue-50 border border-blue-100 rounded-lg p-2.5">
+                  The worker is approved right away. They log in with their mobile number and an OTP, then set their own MPIN.
+                </p>
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setIsAddModalOpen(false)}
+                    className="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-50 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isAdding}
+                    className="flex-1 px-4 py-2.5 rounded-lg text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-60 cursor-pointer"
+                  >
+                    {isAdding ? 'Adding...' : 'Add Worker'}
+                  </button>
+                </div>
+              </form>
             </motion.div>
           </div>
         )}

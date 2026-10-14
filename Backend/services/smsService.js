@@ -4,9 +4,11 @@ const axios = require('axios');
  * Send SMS via SMS India Hub
  * @param {string} phone - Phone number
  * @param {string} message - Message content
+ * @param {Object} [options]
+ * @param {string} [options.templateId] - DLT template ID for this message (defaults to the OTP template)
  * @returns {Promise<Object>} - Response data
  */
-const sendSMS = async (phone, message) => {
+const sendSMS = async (phone, message, options = {}) => {
   try {
     // Check for Test Mode or Specific Test Number
     const TEST_NUMBERS = ['6268455485', '6260491554', '6260491555'];
@@ -38,8 +40,9 @@ const sendSMS = async (phone, message) => {
     }
 
     // Add DLT Template ID if available
-    if (process.env.SMS_INDIA_HUB_DLT_TEMPLATE_ID) {
-      params.TemplateId = process.env.SMS_INDIA_HUB_DLT_TEMPLATE_ID;
+    const templateId = options.templateId || process.env.SMS_INDIA_HUB_DLT_TEMPLATE_ID;
+    if (templateId) {
+      params.TemplateId = templateId;
     }
 
     // Use HTTPS for secure transmission
@@ -113,7 +116,27 @@ const sendOTP = async (phone, otp) => {
   return result;
 };
 
+/**
+ * Account-approved SMS. The text must match the DLT template registered for it
+ * (SMS_APPROVAL_DLT_TEMPLATE_ID); without that ID the provider would reject it, so it is skipped.
+ * Template: "Dear {#var#}, your AgroYilt {#var#} account has been approved. You can now log in to the app with your MPIN. - AgroYilt"
+ * @param {string} phone
+ * @param {string} name
+ * @param {string} roleLabel - Farmer | Vendor | Worker
+ */
+const sendAccountApprovedSMS = async (phone, name, roleLabel) => {
+  const templateId = process.env.SMS_APPROVAL_DLT_TEMPLATE_ID;
+  if (!templateId) {
+    console.warn('[SMS] SMS_APPROVAL_DLT_TEMPLATE_ID not set; approval SMS skipped.');
+    return { success: false, skipped: true };
+  }
+  const firstName = String(name || '').trim().split(/\s+/)[0] || 'User';
+  const message = `Dear ${firstName}, your AgroYilt ${roleLabel} account has been approved. You can now log in to the app with your MPIN. - AgroYilt`;
+  return sendSMS(phone, message, { templateId });
+};
+
 module.exports = {
   sendSMS,
-  sendOTP
+  sendOTP,
+  sendAccountApprovedSMS
 };

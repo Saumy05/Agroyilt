@@ -1,4 +1,5 @@
 const User = require('../../models/User');
+const { notifyAccountApproved } = require('../../services/approvalNotifier');
 const Admin = require('../../models/Admin');
 const Booking = require('../../models/Booking');
 const { validationResult } = require('express-validator');
@@ -553,6 +554,7 @@ const updateApprovalStatus = async (req, res) => {
       });
     }
 
+    const wasApproved = user.approvalStatus === 'approved';
     user.approvalStatus = approvalStatus;
     if (approvalStatus === 'approved') {
       user.approvalDate = new Date();
@@ -598,6 +600,10 @@ const updateApprovalStatus = async (req, res) => {
           relatedId: user._id,
           relatedType: 'user'
         });
+        // SMS + email, only when the status really changes (not on a repeated click)
+        if (!wasApproved) {
+          notifyAccountApproved({ roleLabel: 'Farmer', name: user.name, phone: user.phone, email: user.email });
+        }
       } else if (approvalStatus === 'rejected') {
         await createNotification({
           userId: user._id,

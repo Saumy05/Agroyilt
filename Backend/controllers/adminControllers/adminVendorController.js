@@ -1,4 +1,5 @@
 const Vendor = require('../../models/Vendor');
+const { notifyAccountApproved } = require('../../services/approvalNotifier');
 const { resolveVendorServices } = require('../../utils/vendorCategories');
 const Admin = require('../../models/Admin');
 const City = require('../../models/City');
@@ -188,6 +189,7 @@ const approveVendor = async (req, res) => {
       });
     }
 
+    const wasApproved = vendor.approvalStatus === VENDOR_STATUS.APPROVED;
     vendor.approvalStatus = VENDOR_STATUS.APPROVED;
     vendor.approvalDate = new Date();
     await vendor.save();
@@ -222,6 +224,11 @@ const approveVendor = async (req, res) => {
       relatedId: vendor._id,
       relatedType: 'vendor'
     });
+
+    // SMS + email, only when the status really changes (not on a repeated click)
+    if (!wasApproved) {
+      notifyAccountApproved({ roleLabel: 'Vendor', name: vendor.name, phone: vendor.phone, email: vendor.email });
+    }
 
     res.status(200).json({
       success: true,

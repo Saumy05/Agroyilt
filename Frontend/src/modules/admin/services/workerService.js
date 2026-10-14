@@ -5,6 +5,14 @@ import api from '../../../services/api';
  */
 export const workerService = {
   /**
+   * Add a worker directly (admin-created, approved immediately)
+   */
+  addWorker: async (data) => {
+    const response = await api.post('/admin/workers', data);
+    return response.data;
+  },
+
+  /**
    * Get all workers/team leaders with pagination and filters
    */
   getAllWorkers: async (params = {}) => {
