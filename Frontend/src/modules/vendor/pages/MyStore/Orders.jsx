@@ -71,7 +71,7 @@ const ShippingDetailsModal = ({ onConfirm }) => {
                                 
                                 <div className="space-y-4">
                                     <div className="space-y-1">
-                                        <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Courier Partner (Optional)</label>
+                                        <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Courier Service (Optional)</label>
                                         <input 
                                             type="text" 
                                             disabled={isSubmitting}

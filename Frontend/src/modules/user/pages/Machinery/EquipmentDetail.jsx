@@ -999,7 +999,7 @@ const EquipmentDetail = () => {
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <h4 className="text-xs font-black text-slate-900 truncate">
-                    {equipment.vendorId?.name || 'Agroyilt Certified Partner'}
+                    {equipment.vendorId?.name || 'Agroyilt Certified Vendor'}
                   </h4>
                   <span className="px-1.5 py-0.2 rounded text-[8.5px] font-black bg-emerald-100 text-emerald-800">
                     Verified Vendor

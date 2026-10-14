@@ -88,7 +88,7 @@ const AboutAgroyilt = () => {
 
   const stats = [
     { number: dynamicStats.farmers, label: 'Happy Farmers' },
-    { number: dynamicStats.owners, label: 'Service Partners' },
+    { number: dynamicStats.owners, label: 'Vendors' },
     { number: '4.8', label: 'App Rating' },
   ];
 
@@ -169,7 +169,7 @@ const AboutAgroyilt = () => {
             Welcome to <span style={grooTextGradient}>Agroyilt</span>
           </h1>
           <p className="text-gray-500 max-w-xs mx-auto leading-relaxed">
-            Your trusted partner for premium agriculture and farm care services.
+            Your trusted platform for premium agriculture and farm care services.
           </p>
         </div>
 

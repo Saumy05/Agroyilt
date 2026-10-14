@@ -89,7 +89,7 @@ const ArticleDetail = () => {
                             <FiShare2 /> Share Resource
                         </button>
                         <Link to="/vendor/login" className="flex items-center gap-2 bg-orange-600 text-white font-black px-8 py-3 rounded-2xl hover:bg-orange-700 transition-all shadow-xl shadow-orange-950/20">
-                            Partner with us
+                            Become a vendor
                         </Link>
                     </div>
                 </div>

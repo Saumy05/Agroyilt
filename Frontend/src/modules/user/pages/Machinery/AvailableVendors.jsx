@@ -493,7 +493,7 @@ const AvailableVendors = () => {
                         <h3 className="font-black text-xs text-slate-900 leading-tight truncate">
                           {group.vendor.businessName || group.vendor.name}
                         </h3>
-                        <span className="w-3.5 h-3.5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[8px] shrink-0" title="Verified Partner">
+                        <span className="w-3.5 h-3.5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[8px] shrink-0" title="Verified Vendor">
                           ✓
                         </span>
                       </div>

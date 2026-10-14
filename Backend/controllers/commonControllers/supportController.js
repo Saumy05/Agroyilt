@@ -51,7 +51,7 @@ const resolveSenderInfo = (req) => {
     model = 'User';
   }
 
-  const name = req.user?.name || req.body?.name || (role === 'VENDOR' ? 'Vendor Partner' : role === 'WORKER' ? 'Field Worker' : 'Farmer');
+  const name = req.user?.name || req.body?.name || (role === 'VENDOR' ? 'Vendor' : role === 'WORKER' ? 'Field Worker' : 'Farmer');
   const email = req.user?.email || req.body?.email || '';
   const phone = req.user?.phone || req.body?.phone || '';
 
@@ -59,7 +59,7 @@ const resolveSenderInfo = (req) => {
 };
 
 /**
- * Customer / Partner: Create a new support ticket
+ * Farmer / Vendor / Worker: Create a new support ticket
  * POST /api/support/tickets
  */
 const createTicket = async (req, res) => {
@@ -162,7 +162,7 @@ const createTicket = async (req, res) => {
 };
 
 /**
- * Customer / Partner: Get my support tickets (paginated)
+ * Farmer / Vendor / Worker: Get my support tickets (paginated)
  * GET /api/support/tickets/my
  */
 const getMyTickets = async (req, res) => {
@@ -221,7 +221,7 @@ const getMyTickets = async (req, res) => {
 };
 
 /**
- * Customer / Partner: Get single ticket detail + conversation
+ * Farmer / Vendor / Worker: Get single ticket detail + conversation
  * GET /api/support/tickets/:ticketId
  */
 const getTicketById = async (req, res) => {
@@ -281,7 +281,7 @@ const getTicketById = async (req, res) => {
 };
 
 /**
- * Customer / Partner: Reply to an existing ticket
+ * Farmer / Vendor / Worker: Reply to an existing ticket
  * POST /api/support/tickets/:ticketId/messages
  */
 const addTicketMessage = async (req, res) => {
@@ -365,7 +365,7 @@ const addTicketMessage = async (req, res) => {
 };
 
 /**
- * Customer / Partner: Reopen a resolved ticket
+ * Farmer / Vendor / Worker: Reopen a resolved ticket
  * POST /api/support/tickets/:ticketId/reopen
  */
 const reopenTicket = async (req, res) => {
@@ -433,7 +433,7 @@ const reopenTicket = async (req, res) => {
 };
 
 /**
- * Customer / Partner: Get unread support count
+ * Farmer / Vendor / Worker: Get unread support count
  * GET /api/support/unread-count
  */
 const getUnreadSupportCount = async (req, res) => {
@@ -1370,7 +1370,7 @@ const respondToQuery = async (req, res) => {
 };
 
 module.exports = {
-  // Customer & Partner endpoints
+  // Farmer, Vendor & Worker endpoints
   createTicket,
   getMyTickets,
   getTicketById,

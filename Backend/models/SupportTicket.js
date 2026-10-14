@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 /**
  * SupportTicket Model
- * Production-ready customer & partner support tickets for AgroYilt
+ * Production-ready farmer, vendor & worker support tickets for AgroYilt
  */
 const supportTicketSchema = new mongoose.Schema({
   // Unique human-readable ticket number (e.g. AGY-2026-10245)

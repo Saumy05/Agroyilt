@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { FiUser, FiMail, FiPhone, FiFileText, FiUpload, FiX, FiArrowRight, FiChevronLeft, FiCheckCircle, FiCamera, FiBriefcase, FiChevronDown } from 'react-icons/fi';
 import { toastManager } from '../../../utils/toastManager';
@@ -8,7 +7,6 @@ import { register, sendOTP as sendVendorOTP } from '../services/authService';
 import LogoLoader from '../../../components/common/LogoLoader';
 import Logo from '../../../components/common/Logo';
 import { compressImage } from '../../../utils/imageCompression';
-import API from '../../../services/api';
 import ReferralInput from '../../../components/common/ReferralInput';
 
 import { z } from "zod";
@@ -67,27 +65,6 @@ const VendorSignup = () => {
   const isSubmittingRef = useRef(false);
 
   const [acceptedTerms, setAcceptedTerms] = useState(false);
-  const [showPolicyModal, setShowPolicyModal] = useState(false);
-  const [policyContent, setPolicyContent] = useState('');
-  const [policyTitle, setPolicyTitle] = useState('');
-  const [policyType, setPolicyType] = useState('terms');
-
-  const handleOpenPolicy = async (type, title) => {
-    setPolicyTitle(title);
-    setPolicyType(type);
-    setShowPolicyModal(true);
-    setPolicyContent('Loading...');
-    try {
-      const res = await API.get(`/content/policy/vendor/${type}`);
-      if (res.data.success && res.data.data) {
-        setPolicyContent(res.data.data.content || 'No content available.');
-      } else {
-        setPolicyContent('No content available.');
-      }
-    } catch (e) {
-      setPolicyContent('Failed to load policy content.');
-    }
-  };
 
   // Timer countdown effect
   useEffect(() => {
@@ -530,10 +507,10 @@ const VendorSignup = () => {
       <div className="w-full max-w-2xl text-center mb-8 relative z-10 animate-fade-in">
         <Logo className="h-16 w-auto mx-auto transform hover:scale-110 transition-transform duration-500" />
         <h2 className="mt-4 text-3xl font-extrabold text-gray-900 tracking-tight">
-          {step === 'details' ? 'Partner Registration' : 'Verify Identity'}
+          {step === 'details' ? 'Vendor Registration' : 'Verify Identity'}
         </h2>
         <p className="mt-2 text-sm text-gray-600 animate-stagger-1 animate-fade-in">
-          Partner with Agroyilt and grow your business
+          Register as a vendor and grow your business with Agroyilt
         </p>
       </div>
 
@@ -1005,9 +982,9 @@ const VendorSignup = () => {
                   />
                   <label htmlFor="terms" className="ml-3 block text-sm text-gray-700">
                     I agree to the{' '}
-                    <button type="button" onClick={() => handleOpenPolicy('terms', 'Terms and Conditions')} className="text-[#347989] hover:underline font-bold">Terms and Conditions</button>
+                    <a href="/terms/vendor" target="_blank" rel="noopener noreferrer" className="text-[#347989] hover:underline font-bold">Terms and Conditions</a>
                     {' '}and{' '}
-                    <button type="button" onClick={() => handleOpenPolicy('privacy', 'Privacy Policy')} className="text-[#347989] hover:underline font-bold">Privacy Policy</button>.
+                    <a href="/privacy/vendor" target="_blank" rel="noopener noreferrer" className="text-[#347989] hover:underline font-bold">Privacy Policy</a>.
                   </label>
                 </div>
 
@@ -1114,36 +1091,12 @@ const VendorSignup = () => {
         </div>
 
         <p className="mt-8 mb-6 text-center text-sm text-gray-600 animate-fade-in animate-stagger-4">
-          Already a partner?{' '}
+          Already registered as a vendor?{' '}
           <Link to="/vendor/login" className="font-bold hover:text-[#D68F35] transition-colors" style={{ color: brandColor }}>
             Login here
           </Link>
         </p>
       </div >
-      {showPolicyModal && createPortal(
-        <div className="fixed inset-0 bg-black/60 z-[99999] flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden animate-fade-in m-auto relative">
-            <div className="flex justify-between items-center p-4 border-b">
-              <h3 className="text-xl font-bold text-gray-900">{policyTitle}</h3>
-              <button onClick={() => setShowPolicyModal(false)} className="text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-full p-2 transition-colors">
-                <FiX size={20} />
-              </button>
-            </div>
-            <div className="p-6 overflow-y-auto flex-1 whitespace-pre-wrap text-sm text-gray-700">
-              {policyContent}
-            </div>
-            <div className="p-4 border-t bg-gray-50 flex items-center justify-between gap-3">
-              <a href={`/${policyType}/vendor`} target="_blank" rel="noopener noreferrer" className="text-sm font-bold hover:underline" style={{ color: '#347989' }}>
-                Open full page ↗
-              </a>
-              <button onClick={() => setShowPolicyModal(false)} className="px-6 py-2 bg-[#347989] text-white rounded-lg font-bold hover:bg-[#2a626f] transition-colors">
-                Close
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
     </div >
   );
 };

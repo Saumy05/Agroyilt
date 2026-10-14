@@ -143,7 +143,7 @@ const VendorReferrals = () => {
               <FiAward className="w-3.5 h-3.5" /> Vendor Rewards
             </span>
             <h2 className="text-2xl sm:text-3xl font-black mb-2">
-              Refer Agri Partners & Earn
+              Refer Vendors, Farmers & Workers
             </h2>
             <p className="text-xs sm:text-sm text-blue-100/90 leading-relaxed mb-5 max-w-md">
               Invite fellow vendors, farmers, or independent workers to AgroYilt. Earn direct wallet credits for each qualified referral!

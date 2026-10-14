@@ -40,7 +40,7 @@ const RegisteredShops = () => {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 bg-white p-6 rounded-[32px] shadow-sm border border-gray-100">
                 <div>
                     <h1 className="text-2xl font-black text-gray-800 tracking-tight">Agri Marketplace Stores</h1>
-                    <p className="text-gray-400 text-[11px] font-bold uppercase tracking-widest mt-1">Verified Partners Registry</p>
+                    <p className="text-gray-400 text-[11px] font-bold uppercase tracking-widest mt-1">Verified Vendors Registry</p>
                 </div>
                 
                 <div className="relative">

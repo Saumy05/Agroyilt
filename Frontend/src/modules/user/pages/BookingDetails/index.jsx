@@ -1368,7 +1368,7 @@ const BookingDetails = () => {
             />
           )}
 
-          {/* Service Partner Card (Only for non-rental bookings) */}
+          {/* Service Provider Card (Only for non-rental bookings) */}
           {!isRental && (booking.workerId || booking.assignedTo || booking.vendorId) && ['accepted', 'confirmed', 'assigned', 'journey_started', 'visited', 'in_progress', 'work_done'].includes(booking.status?.toLowerCase()) && (
             <div className="bg-white rounded-2xl p-3.5 shadow-[0_4px_16px_rgb(0,0,0,0.04)] border border-gray-100 transition-all hover:shadow-[0_4px_16px_rgb(0,0,0,0.08)]">
               <div className="flex justify-between items-center mb-3">
@@ -1381,7 +1381,7 @@ const BookingDetails = () => {
                     <p className="text-[10px] font-bold text-green-600 tracking-wider uppercase">TRACKING LIVE</p>
                   </div>
                 ) : (
-                  <p className="text-[10px] font-bold text-gray-400 tracking-wider uppercase">Your Partner</p>
+                  <p className="text-[10px] font-bold text-gray-400 tracking-wider uppercase">{booking.workerId ? 'Your Worker' : booking.vendorId ? 'Your Vendor' : 'Your Service Provider'}</p>
                 )}
 
                 <button
@@ -1413,7 +1413,7 @@ const BookingDetails = () => {
 
                 <div className="flex-1 min-w-0">
                   <h3 className="font-bold text-gray-900 text-sm truncate">
-                    {booking.workerId?.name || booking.assignedTo?.name || booking.vendorId?.name || 'Service Partner'}
+                    {booking.workerId?.name || booking.assignedTo?.name || booking.vendorId?.name || 'Service Provider'}
                   </h3>
                   <div className="flex items-center gap-1 mt-0.5">
                     <div className="flex items-center gap-0.5 bg-yellow-50 px-1.5 py-0.5 rounded border border-yellow-100">

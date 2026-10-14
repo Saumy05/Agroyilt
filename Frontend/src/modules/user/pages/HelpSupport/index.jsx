@@ -22,7 +22,7 @@ const TICKET_CATEGORIES = [
   { id: 'WALLET', label: 'Wallet & Balance' },
   { id: 'WITHDRAWAL', label: 'Payout / Withdrawal' },
   { id: 'WORKER', label: 'Worker Issue' },
-  { id: 'VENDOR', label: 'Vendor / Partner Issue' },
+  { id: 'VENDOR', label: 'Vendor Issue' },
   { id: 'EQUIPMENT', label: 'Machinery / Equipment' },
   { id: 'ACCOUNT', label: 'Account & Profile' },
   { id: 'LOGIN', label: 'Login & Verification' },

@@ -125,12 +125,12 @@ const CancellationPolicy = () => {
             </div>
             <div>
               <h2 className="text-lg font-bold text-gray-900">Why do we charge a fee?</h2>
-              <p className="text-xs text-gray-500">To support our service partners' time & effort</p>
+              <p className="text-xs text-gray-500">To support our vendors' and workers' time & effort</p>
             </div>
           </div>
 
           <div className="bg-gray-50 p-4 rounded-xl text-sm text-gray-600 leading-relaxed border border-gray-100">
-            Our agricultural service partners reserve their machinery and time exclusively for your booking and often travel significant distances to reach your farm. The cancellation fee compensates them for their lost time and travel expenses if a confirmed booking is cancelled last minute.
+            Our vendors and workers reserve their machinery and time exclusively for your booking and often travel significant distances to reach your farm. The cancellation fee compensates them for their lost time and travel expenses if a confirmed booking is cancelled last minute.
           </div>
         </div>
 

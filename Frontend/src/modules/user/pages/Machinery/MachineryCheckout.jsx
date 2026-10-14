@@ -462,7 +462,7 @@ const MachineryCheckout = () => {
                              </div>
                              <h4 className="text-xs font-black text-slate-900 truncate leading-snug mt-0.5">{equipment.name}</h4>
                              <p className="text-[10px] font-semibold text-slate-500 mt-0.5">
-                               Vendor: <span className="text-slate-800 font-bold">{equipment.vendorId?.businessName || equipment.vendorId?.name || 'Verified Partner'}</span>
+                               Vendor: <span className="text-slate-800 font-bold">{equipment.vendorId?.businessName || equipment.vendorId?.name || 'Verified Vendor'}</span>
                              </p>
                         </div>
                     </div>

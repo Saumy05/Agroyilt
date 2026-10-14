@@ -15,7 +15,7 @@ const problems = [
 const solutions = [
   { title: "On-Demand Rentals", desc: "Rent nearby machinery via app", icon: <HiOutlineSearch /> },
   { title: "Pay-As-You-Go", desc: "Pay for actual usage hours", icon: <HiOutlineCurrencyDollar /> },
-  { title: "Verified Partners", desc: "100% verified owners", icon: <HiOutlineShieldCheck /> },
+  { title: "Verified Vendors", desc: "100% verified owners", icon: <HiOutlineShieldCheck /> },
   { title: "AI-Advised Farming", desc: "Weather & crop advisory", icon: <HiOutlineClock /> },
 ];
 

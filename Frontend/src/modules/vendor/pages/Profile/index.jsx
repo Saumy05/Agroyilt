@@ -464,7 +464,7 @@ const Profile = () => {
                 </div>
                 <div className="min-w-0 flex-1">
                   <span className="font-bold text-xs sm:text-sm text-slate-800 block truncate">Legal Compliance</span>
-                  <span className="text-[11px] text-slate-400 font-medium block truncate">Platform partner verification & legal checks</span>
+                  <span className="text-[11px] text-slate-400 font-medium block truncate">Vendor verification & legal checks</span>
                 </div>
               </div>
               <FiChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
@@ -534,7 +534,7 @@ const Profile = () => {
                 </div>
                 <div className="min-w-0 flex-1">
                   <span className="font-bold text-xs sm:text-sm text-slate-800 block truncate">Help & Support</span>
-                  <span className="text-[11px] text-slate-400 font-medium block truncate">Dedicated 24/7 AgroYilt partner helpline</span>
+                  <span className="text-[11px] text-slate-400 font-medium block truncate">Dedicated 24/7 AgroYilt vendor helpline</span>
                 </div>
               </div>
               <FiChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
@@ -582,7 +582,7 @@ const Profile = () => {
                 </div>
                 <div className="min-w-0 flex-1">
                   <span className="font-bold text-xs sm:text-sm text-slate-800 block truncate">About AgroYilt</span>
-                  <span className="text-[11px] text-slate-400 font-medium block truncate">Platform terms, privacy & partner guidelines</span>
+                  <span className="text-[11px] text-slate-400 font-medium block truncate">Platform terms, privacy & vendor guidelines</span>
                 </div>
               </div>
               <FiChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />

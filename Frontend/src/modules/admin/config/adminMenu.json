@@ -10,7 +10,7 @@
     "children": []
   },
   {
-    "category": "USERS & PARTNERS",
+    "category": "USERS",
     "title": "Farmers",
     "route": "/admin/users",
     "allowedRoles": [
@@ -25,7 +25,7 @@
     ]
   },
   {
-    "category": "USERS & PARTNERS",
+    "category": "USERS",
     "title": "Workers",
     "route": "/admin/workers",
     "allowedRoles": [
@@ -40,7 +40,7 @@
     ]
   },
   {
-    "category": "USERS & PARTNERS",
+    "category": "USERS",
     "title": "Vendors",
     "route": "/admin/vendors",
     "allowedRoles": [

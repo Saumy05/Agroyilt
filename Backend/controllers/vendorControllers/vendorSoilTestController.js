@@ -110,7 +110,7 @@ exports.uploadReport = async (req, res) => {
                 adminId: admin._id,
                 type: 'soil_test_report_uploaded',
                 title: 'Soil Report Uploaded',
-                message: `Vendor ${req.user.name || 'A partner'} has uploaded a soil report for request #${request._id.toString().slice(-6)}.`,
+                message: `Vendor ${req.user.name || 'A vendor'} has uploaded a soil report for request #${request._id.toString().slice(-6)}.`,
                 relatedId: request._id,
                 relatedType: 'service',
                 pushData: {
@@ -187,7 +187,7 @@ exports.rejectRequest = async (req, res) => {
                 adminId: admin._id,
                 type: 'soil_test_rejected_by_vendor',
                 title: '🚫 Soil Test Rejected',
-                message: `Vendor ${req.user.name || 'A partner'} has rejected task #${request._id.toString().slice(-6)}. Reason: ${reason || 'Not specified'}`,
+                message: `Vendor ${req.user.name || 'A vendor'} has rejected task #${request._id.toString().slice(-6)}. Reason: ${reason || 'Not specified'}`,
                 relatedId: request._id,
                 relatedType: 'service',
                 pushData: {

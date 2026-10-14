@@ -142,7 +142,7 @@ const MyRating = () => {
           <div className="space-y-4">
             {ratings.map((item, idx) => {
               const targetRole = item.targetRole || (item.workerId ? 'Worker' : item.vendorId ? 'Vendor' : 'Service Provider');
-              const targetName = item.targetName || item.workerId?.name || item.vendorId?.businessName || item.vendorId?.name || 'AgroYilt Partner';
+              const targetName = item.targetName || item.workerId?.name || item.vendorId?.businessName || item.vendorId?.name || `AgroYilt ${targetRole}`;
               const targetPhoto = item.targetPhoto || item.workerId?.profilePhoto || item.vendorId?.profilePhoto || null;
               const numericRating = Number(item.rating || 0);
 

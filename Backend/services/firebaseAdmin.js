@@ -309,7 +309,7 @@ async function sendNotificationToVendor(vendorId, payload, includeMobile = true)
 
     const finalPayload = {
       ...payload,
-      title: `🏢 [Partner] ${payload.title}`, // Add identification
+      title: `🏢 [Vendor] ${payload.title}`, // Add identification
       highPriority: true,
       dataOnly: payload.dataOnly === true ? true : false
     };

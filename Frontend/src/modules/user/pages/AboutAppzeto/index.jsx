@@ -77,7 +77,7 @@ const AboutAppzeto = () => {
           </div>
           <h2 className="text-2xl font-bold text-black mb-2">Welcome to Appzeto</h2>
           <p className="text-sm text-gray-600 leading-relaxed">
-            Your trusted partner for all agriculture equipment and farm services
+            Your trusted platform for all agriculture equipment and farm services
           </p>
         </div>
 
