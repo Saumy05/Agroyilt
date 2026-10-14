@@ -628,9 +628,10 @@ const WorkerSignup = () => {
                         name="drivingLicenseNumber"
                         value={formData.drivingLicenseNumber}
                         onChange={(e) => setFormData(p => ({ ...p, drivingLicenseNumber: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 20) }))}
-                        className="block w-full px-3.5 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-offset-2 outline-none uppercase font-mono tracking-wider transition-all hover:border-gray-400 bg-white"
-                        style={{ '--tw-ring-color': brandColor }}
+                        className="block w-full px-3.5 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-offset-2 outline-none font-mono tracking-wider transition-all hover:border-gray-400 bg-white"
+                        style={{ '--tw-ring-color': brandColor, textTransform: 'uppercase' }}
                         placeholder="e.g. DL1420210012345"
+                        inputMode="text"
                       />
                     </div>
 
