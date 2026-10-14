@@ -5,6 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { FiSearch, FiArrowLeft, FiClock, FiTrendingUp, FiX, FiLayers, FiChevronRight } from 'react-icons/fi';
 import { publicCatalogService } from '../../../../../services/catalogService';
 import { themeColors } from '../../../../../theme';
+import { toastManager } from '../../../../../utils/toastManager';
+import { SOIL_TESTING_ENABLED } from '../../../../../utils/featureFlags';
 
 const toAssetUrl = (url) => {
   if (!url) return '';
@@ -147,7 +149,8 @@ const SearchOverlay = ({ isOpen, onClose, categories = [], onCategoryClick }) =>
     const titleLower = (item.title || '').toLowerCase();
     const slugLower = (item.slug || '').toLowerCase();
     if (titleLower.includes('soil') || slugLower.includes('soil')) {
-      navigate('/user/soil-testing');
+      if (SOIL_TESTING_ENABLED) navigate('/user/soil-testing');
+      else toastManager.info('Soil testing service is currently unavailable.');
       return;
     }
     if (titleLower.includes('lease') || titleLower.includes('theka') || titleLower.includes('batai') || titleLower.includes('patta') || titleLower.includes('land') || slugLower.includes('lease')) {

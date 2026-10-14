@@ -35,6 +35,7 @@ const EcommerceOrders = lazy(() => import('../pages/Products/Orders'));
 const Marketplace = lazy(() => import('../pages/Products/EcommerceManager'));
 const StoreApprovals = lazy(() => import('../pages/Products/StoreApprovals'));
 const RegisteredShops = lazy(() => import('../pages/Products/RegisteredShops'));
+import { SOIL_TESTING_ENABLED } from '../../../utils/featureFlags';
 const SoilTesting = lazy(() => import('../pages/SoilTesting'));
 const LandLeases = lazy(() => import('../pages/LandLeases'));
 const Disputes = lazy(() => import('../pages/Disputes'));
@@ -99,7 +100,7 @@ const AdminRoutes = () => {
             <Route path="marketplace" element={<Marketplace />} />
             <Route path="marketplace/store-approvals" element={<StoreApprovals />} />
             <Route path="marketplace/registered-shops" element={<RegisteredShops />} />
-            <Route path="soil-tests" element={<SoilTesting />} />
+            <Route path="soil-tests" element={SOIL_TESTING_ENABLED ? <SoilTesting /> : <Navigate to="/admin/dashboard" replace />} />
             <Route path="land-leases" element={<LandLeases />} />
             <Route path="disputes" element={<Disputes />} />
             <Route path="withdrawals" element={<Withdrawals />} />

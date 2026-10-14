@@ -1,5 +1,6 @@
 // Server Entry Point
 const express = require('express');
+const { soilTestingGate } = require('./utils/featureFlags');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const helmet = require('helmet');
@@ -276,6 +277,7 @@ app.use('/api/admin', require('./routes/admin-routes/planManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/settings.routes'));
 app.use('/api/admin', require('./routes/admin-routes/reviewManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/productManagement.routes'));
+app.use('/api/admin/soil-tests', soilTestingGate);
 app.use('/api/admin', require('./routes/admin-routes/soilTest.routes'));
 app.use('/api/admin', require('./routes/admin-routes/landLeaseManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/reportManagement.routes'));
@@ -291,6 +293,7 @@ app.use('/api/image', require('./routes/admin-routes/image.routes'));
 app.use('/api', require('./routes/admin-routes/upload.routes')); // Generic upload access
 
 // User routes additions
+app.use('/api/user/soil-test', soilTestingGate);
 app.use('/api/user/soil-test', require('./routes/user-routes/soilTest.routes'));
 app.use('/api/user/ecommerce', require('./routes/user-routes/product.routes.js'));
 app.use('/api/user/ecommerce-cart', require('./routes/user-routes/ecommerceCart.routes'));
@@ -302,6 +305,7 @@ app.use('/api/user/ecommerce-cart', require('./routes/user-routes/ecommerceCart.
 app.use('/api/vendors', require('./routes/vendor-routes/vendorWallet.routes'));
 app.use('/api/vendors/store', require('./routes/vendor-routes/productManagement.routes'));
 app.use('/api/vendors/shop', require('./routes/vendor-routes/shop.routes'));
+app.use('/api/vendors/soil-test', soilTestingGate);
 app.use('/api/vendors/soil-test', require('./routes/vendor-routes/soilTest.routes'));
 
 // Booking routes

@@ -35,25 +35,20 @@ const AllOwners = () => {
     aadharBackDocument: '',
     panDocument: '',
     otherDocuments: [],
-    isLabRegistration: false,
     isShopRegistration: false,
-    labDetails: { labName: '', licenseNumber: '' },
     shopDetails: { shopName: '', shopAddress: '', shopLicense: '' },
-    labCertDocument: '',
     shopLicenseDocument: ''
   });
   const [documentPreviews, setDocumentPreviews] = useState({
     aadhar: '',
     aadharBack: '',
     pan: '',
-    labCert: '',
     shopLicense: ''
   });
   const [uploadingDocs, setUploadingDocs] = useState({
     aadhar: false,
     aadharBack: false,
     pan: false,
-    labCert: false,
     shopLicense: false
   });
   
@@ -120,7 +115,6 @@ const AllOwners = () => {
           phone: owner.phone,
           businessName: owner.businessName,
           service: owner.service,
-          labDetails: owner.labDetails,
           shopDetails: owner.shopDetails,
           approvalStatus: owner.approvalStatus,
           aadhar: owner.aadhar?.number,
@@ -220,35 +214,6 @@ const AllOwners = () => {
     } catch (error) {
       console.error('Error toggling owner status:', error);
       toastManager.error('Failed to update status');
-    }
-  };
-
-  const handleToggleSoilLab = async (ownerId, currentServices) => {
-    try {
-      const isCurrentlyLab = Array.isArray(currentServices) && currentServices.includes('soil_testing');
-      let newServices = Array.isArray(currentServices) ? [...currentServices] : [];
-      
-      if (isCurrentlyLab) {
-        newServices = newServices.filter(s => s !== 'soil_testing');
-      } else {
-        newServices.push('soil_testing');
-      }
-
-      const response = await adminVendorService.updateServices(ownerId, newServices);
-      if (response.success) {
-        setOwners(prev => prev.map(o =>
-          o.id === ownerId ? { ...o, service: newServices } : o
-        ));
-        if (selectedOwner && selectedOwner.id === ownerId) {
-          setSelectedOwner({ ...selectedOwner, service: newServices });
-        }
-        toastManager.success(`Vendor marked as ${!isCurrentlyLab ? 'Soil Lab' : 'Standard Vendor'}`);
-      } else {
-        toastManager.error(response.message || 'Failed to update services');
-      }
-    } catch (error) {
-      console.error('Error toggling soil lab status:', error);
-      toastManager.error('Failed to update services');
     }
   };
 
@@ -397,7 +362,7 @@ const AllOwners = () => {
     // Validations
     if (!formData.name.trim()) return toastManager.error('Please enter owner name');
     if (!formData.businessName.trim()) return toastManager.error('Please enter business name');
-    if (formData.service.length === 0 && !formData.isLabRegistration && !formData.isShopRegistration) {
+    if (formData.service.length === 0 && !formData.isShopRegistration) {
       return toastManager.error('Please select at least one service category or additional service');
     }
     if (formData.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
@@ -415,10 +380,6 @@ const AllOwners = () => {
     if (!formData.aadharBackDocument) return toastManager.error('Please upload Aadhar card back');
 
     // Additional Services Validations
-    if (formData.isLabRegistration) {
-      if (!formData.labDetails.labName.trim()) return toastManager.error('Please enter Lab Name');
-      if (!formData.labCertDocument) return toastManager.error('Please upload Lab Certification Document');
-    }
     if (formData.isShopRegistration) {
       if (!formData.shopDetails.shopName.trim()) return toastManager.error('Please enter Shop Name');
       if (!formData.shopDetails.shopAddress.trim()) return toastManager.error('Please enter Shop Address');
@@ -439,11 +400,6 @@ const AllOwners = () => {
         aadharBackDocument: formData.aadharBackDocument,
         panDocument: formData.panDocument,
         otherDocuments: formData.otherDocuments,
-        labDetails: formData.isLabRegistration ? {
-          labName: formData.labDetails.labName,
-          licenseNumber: formData.labDetails.licenseNumber,
-          certificationDocument: formData.labCertDocument
-        } : null,
         shopDetails: formData.isShopRegistration ? {
           shopName: formData.shopDetails.shopName,
           shopAddress: formData.shopDetails.shopAddress,
@@ -469,18 +425,14 @@ const AllOwners = () => {
           aadharBackDocument: '',
           panDocument: '',
           otherDocuments: [],
-          isLabRegistration: false,
           isShopRegistration: false,
-          labDetails: { labName: '', licenseNumber: '' },
           shopDetails: { shopName: '', shopAddress: '', shopLicense: '' },
-          labCertDocument: '',
           shopLicenseDocument: ''
         });
         setDocumentPreviews({
           aadhar: '',
           aadharBack: '',
           pan: '',
-          labCert: '',
           shopLicense: ''
         });
         loadOwners();
@@ -965,18 +917,14 @@ const AllOwners = () => {
             aadharBackDocument: '',
             panDocument: '',
             otherDocuments: [],
-            isLabRegistration: false,
             isShopRegistration: false,
-            labDetails: { labName: '', licenseNumber: '' },
             shopDetails: { shopName: '', shopAddress: '', shopLicense: '' },
-            labCertDocument: '',
             shopLicenseDocument: ''
           });
           setDocumentPreviews({
             aadhar: '',
             aadharBack: '',
             pan: '',
-            labCert: '',
             shopLicense: ''
           });
         }}
@@ -1106,78 +1054,6 @@ const AllOwners = () => {
                 </h3>
                 <div className="flex flex-col gap-3">
                   
-                  {/* Lab Services Checkbox & Fields */}
-                  <div className="border border-gray-200 rounded-xl p-3 bg-white shadow-sm">
-                    <label className="flex items-center space-x-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={formData.isLabRegistration}
-                        onChange={(e) => setFormData(prev => ({ ...prev, isLabRegistration: e.target.checked }))}
-                        className="h-4 w-4 text-[#347989] border-gray-300 rounded focus:ring-[#347989]"
-                      />
-                      <span className="text-xs text-gray-700 font-bold">Register for Soil Testing Lab</span>
-                    </label>
-                    {formData.isLabRegistration && (
-                      <div className="mt-3 pl-7 space-y-3 border-t pt-3">
-                        <div>
-                          <label className="block text-[10px] font-semibold text-gray-600 mb-1">Lab Name *</label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="Lab Name"
-                            value={formData.labDetails.labName}
-                            onChange={(e) => setFormData(prev => ({
-                              ...prev,
-                              labDetails: { ...prev.labDetails, labName: e.target.value }
-                            }))}
-                            className="w-full px-3 py-1.5 border border-gray-300 rounded-xl outline-none text-xs focus:ring-2 focus:ring-[#347989]/20 focus:border-[#347989]"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-semibold text-gray-600 mb-1">License Number</label>
-                          <input
-                            type="text"
-                            placeholder="License Number"
-                            value={formData.labDetails.licenseNumber}
-                            onChange={(e) => setFormData(prev => ({
-                              ...prev,
-                              labDetails: { ...prev.labDetails, licenseNumber: e.target.value }
-                            }))}
-                            className="w-full px-3 py-1.5 border border-gray-300 rounded-xl outline-none text-xs focus:ring-2 focus:ring-[#347989]/20 focus:border-[#347989]"
-                          />
-                        </div>
-                        
-                        {/* Lab Cert Document Upload */}
-                        <div className="space-y-1">
-                          <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Lab Certificate *</p>
-                          {documentPreviews.labCert ? (
-                            <div className="relative group overflow-hidden rounded-xl border border-gray-200 max-w-[200px]">
-                              <img src={documentPreviews.labCert} className="w-full h-20 object-cover" />
-                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                <button type="button" onClick={() => removeDocument('labCert')} className="bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors shadow-lg">
-                                  <FiX size={12} />
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="flex flex-col items-center justify-center w-full h-20 border-2 border-dashed border-gray-200 rounded-xl hover:bg-gray-50 transition-all hover:border-[#347989] bg-white relative max-w-[200px]">
-                              {uploadingDocs.labCert && (
-                                <div className="absolute inset-0 flex items-center justify-center bg-white/80 z-10 rounded-xl">
-                                  <FiLoader className="animate-spin h-4 w-4 text-[#347989]" />
-                                </div>
-                              )}
-                              <label className="flex flex-col items-center cursor-pointer w-full h-full justify-center">
-                                <FiUpload className="w-4 h-4 text-gray-400 mb-0.5" />
-                                <span className="text-[9px] text-gray-500 font-bold">Upload Lab Cert</span>
-                                <input type="file" className="hidden" accept="image/*,application/pdf" onChange={(e) => handleDocumentUpload(e, 'labCert')} disabled={uploadingDocs.labCert} />
-                              </label>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
                   {/* Shop Services Checkbox & Fields */}
                   <div className="border border-gray-200 rounded-xl p-3 bg-white shadow-sm">
                     <label className="flex items-center space-x-3 cursor-pointer">
@@ -1391,18 +1267,14 @@ const AllOwners = () => {
                   aadharBackDocument: '',
                   panDocument: '',
                   otherDocuments: [],
-                  isLabRegistration: false,
                   isShopRegistration: false,
-                  labDetails: { labName: '', licenseNumber: '' },
                   shopDetails: { shopName: '', shopAddress: '', shopLicense: '' },
-                  labCertDocument: '',
                   shopLicenseDocument: ''
                 });
                 setDocumentPreviews({
                   aadhar: '',
                   aadharBack: '',
                   pan: '',
-                  labCert: '',
                   shopLicense: ''
                 });
               }}
@@ -1412,7 +1284,7 @@ const AllOwners = () => {
             </button>
             <button
               type="submit"
-              disabled={isAdding || uploadingDocs.aadhar || uploadingDocs.aadharBack || uploadingDocs.pan || uploadingDocs.labCert || uploadingDocs.shopLicense}
+              disabled={isAdding || uploadingDocs.aadhar || uploadingDocs.aadharBack || uploadingDocs.pan || uploadingDocs.shopLicense}
               className="px-5 py-2 bg-[#347989] text-white rounded-xl text-xs font-bold hover:bg-[#28606c] disabled:opacity-50 transition-all flex items-center gap-1.5 shadow-sm shadow-[#347989]/10"
             >
               {isAdding ? (

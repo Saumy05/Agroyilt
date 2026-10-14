@@ -46,9 +46,7 @@ const VendorSignup = () => {
       aadhar: '',
       pan: '',
       documents: [],
-      isLabRegistration: false,
       isShopRegistration: false,
-      labDetails: { labName: '', licenseNumber: '' },
       shopDetails: { shopName: '', shopAddress: '', shopLicense: '' }
     };
   });
@@ -288,11 +286,7 @@ const VendorSignup = () => {
     if (!hasAadharDoc) { toastManager.error('Please upload Aadhar Front document'); return; }
     if (!hasAadharBackDoc) { toastManager.error('Please upload Aadhar Back document'); return; }
 
-    // Lab & Shop Validation
-    if (formData.isLabRegistration) {
-      if (!formData.labDetails.labName) { toastManager.error('Please enter Lab Name'); return; }
-      if (!formData.documents.some(d => d.type === 'labCert')) { toastManager.error('Please upload Lab Certification Document'); return; }
-    }
+    // Shop Validation
     if (formData.isShopRegistration) {
       if (!formData.shopDetails.shopName) { toastManager.error('Please enter Shop Name'); return; }
       if (!formData.shopDetails.shopAddress) { toastManager.error('Please enter Shop Address'); return; }
@@ -308,14 +302,6 @@ const VendorSignup = () => {
         const panDoc = formData.documents.find(d => d.type === 'pan') ?.url || null;
         const otherDocs = formData.documents.filter(d => d.type === 'other').map(d => d.url);
         
-        let labDetailsPayload = null;
-        if (formData.isLabRegistration) {
-          labDetailsPayload = {
-            ...formData.labDetails,
-            certificationDocument: formData.documents.find(d => d.type === 'labCert') ?.url || null
-          };
-        }
-
         let shopDetailsPayload = null;
         if (formData.isShopRegistration) {
           shopDetailsPayload = {
@@ -337,7 +323,6 @@ const VendorSignup = () => {
           aadharBackDocument: aadharBackDoc,
           panDocument: panDoc,
           otherDocuments: otherDocs,
-          labDetails: labDetailsPayload ? JSON.stringify(labDetailsPayload) : null,
           shopDetails: shopDetailsPayload ? JSON.stringify(shopDetailsPayload) : null,
           verificationToken,
           referralCode: referralCode || undefined
@@ -441,14 +426,6 @@ const VendorSignup = () => {
       const panDoc = formData.documents.find(d => d.type === 'pan') ?.url || null;
       const otherDocs = formData.documents.filter(d => d.type === 'other').map(d => d.url);
 
-      let labDetailsPayload = null;
-      if (formData.isLabRegistration) {
-        labDetailsPayload = {
-          ...formData.labDetails,
-          certificationDocument: formData.documents.find(d => d.type === 'labCert') ?.url || null
-        };
-      }
-
       let shopDetailsPayload = null;
       if (formData.isShopRegistration) {
         shopDetailsPayload = {
@@ -469,7 +446,6 @@ const VendorSignup = () => {
         aadharBackDocument: aadharBackDoc,
         panDocument: panDoc,
         otherDocuments: otherDocs,
-        labDetails: labDetailsPayload ? JSON.stringify(labDetailsPayload) : null,
         shopDetails: shopDetailsPayload ? JSON.stringify(shopDetailsPayload) : null,
         otp: otpValue,
         token: otpToken,
@@ -610,81 +586,10 @@ const VendorSignup = () => {
                     </div>
                   </div>
 
-                  {/* Lab & Shop Checkboxes */}
+                  {/* Shop Checkbox */}
                   <div className="animate-fade-in" style={{ animationDelay: '0.25s' }}>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Additional Services</label>
                     <div className="flex flex-col gap-4">
-                      <div className="border border-gray-200 rounded-xl p-3 bg-white">
-                        <label className="flex items-center space-x-3 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={formData.isLabRegistration}
-                            onChange={(e) => setFormData(prev => ({ ...prev, isLabRegistration: e.target.checked }))}
-                            className="h-4 w-4 text-[#347989] border-gray-300 rounded focus:ring-[#347989]"
-                          />
-                          <span className="text-sm text-gray-700 font-bold">Register for Lab Services</span>
-                        </label>
-                        {formData.isLabRegistration && (
-                          <div className="mt-3 pl-7 space-y-3 border-t pt-3">
-                            <div className="relative group">
-                              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none group-focus-within:text-[#347989] transition-colors">
-                                <FiBriefcase className="text-gray-400" />
-                              </div>
-                              <input autoComplete="off"
-                                type="text"
-                                required
-                                placeholder="Lab Name * (e.g. Kisan Soil Testing Lab)"
-                                value={formData.labDetails.labName}
-                                onChange={(e) => handleLabShopChange('labDetails', 'labName', e.target.value)}
-                                className={`block w-full pl-10 pr-4 py-2.5 border rounded-xl text-sm focus:ring-2 focus:ring-offset-2 transition-all duration-300 outline-none hover:border-gray-400 ${!formData.labDetails.labName ? 'border-red-300 focus:border-red-500 bg-red-50/30' : 'border-gray-300 focus:border-[#347989]'}`}
-                                style={{ '--tw-ring-color': !formData.labDetails.labName ? '#ef4444' : brandColor }}
-                              />
-                            </div>
-                            <div className="relative group">
-                              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none group-focus-within:text-[#347989] transition-colors">
-                                <FiFileText className="text-gray-400" />
-                              </div>
-                              <input autoComplete="off"
-                                type="text"
-                                placeholder="License Number (e.g. STL12345678)"
-                                value={formData.labDetails.licenseNumber}
-                                onChange={(e) => handleLabShopChange('labDetails', 'licenseNumber', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 20))}
-                                className="block w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-offset-2 transition-all duration-300 outline-none hover:border-gray-400 focus:border-[#347989]"
-                                style={{ '--tw-ring-color': brandColor }}
-                              />
-                            </div>
-                            <div className="space-y-2 mt-2">
-                              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Lab Certificate</p>
-                              {documentPreview.labCert ? (
-                                <div className="relative group overflow-hidden rounded-xl">
-                                  <img src={documentPreview.labCert} className="w-full h-28 object-cover border transform group-hover:scale-110 transition-transform duration-500" />
-                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                    <button type="button" onClick={() => removeDocument('labCert')} className="bg-red-500 text-white rounded-full p-2 shadow-xl hover:bg-red-600 transition-colors">
-                                      <FiX size={16} />
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-red-300 rounded-xl hover:bg-red-50 transition-all duration-300 hover:border-red-400 group bg-red-50/20 relative">
-                                  {uploadingDocs.labCert ? (
-                                    <div className="absolute inset-0 flex items-center justify-center bg-white/80 z-10 rounded-xl">
-                                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#347989]"></div>
-                                    </div>
-                                  ) : null}
-                                  <label className="flex flex-col items-center cursor-pointer w-full h-full justify-center">
-                                    <div className="p-2.5 bg-blue-50 text-blue-600 rounded-full mb-1 hover:bg-blue-100">
-                                      <FiUpload className="w-5 h-5" />
-                                    </div>
-                                    <span className="text-[10px] text-gray-500 font-bold">Upload Lab Cert</span>
-                                    <input type="file" className="hidden" accept="image/*,application/pdf" onChange={(e) => handleDocumentUpload(e, 'labCert')} disabled={uploadingDocs.labCert} />
-                                  </label>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
                       <div className="border border-gray-200 rounded-xl p-3 bg-white">
                         <label className="flex items-center space-x-3 cursor-pointer">
                           <input

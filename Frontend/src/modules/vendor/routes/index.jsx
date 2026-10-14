@@ -45,6 +45,7 @@ const Analytics = lazy(() => import('../pages/Analytics'));
 const MyStore = lazy(() => import('../pages/MyStore'));
 const StoreRegistration = lazy(() => import('../pages/MyStore/StoreRegistration'));
 const StoreOrders = lazy(() => import('../pages/MyStore/Orders'));
+import { SOIL_TESTING_ENABLED } from '../../../utils/featureFlags';
 const SoilTesting = lazy(() => import('../pages/SoilTesting'));
 const BusinessDetails = lazy(() => import('../pages/BusinessDetails'));
 const EquipmentInventory = lazy(() => import('../pages/Equipment/EquipmentInventory'));
@@ -150,7 +151,7 @@ const VendorRoutes = () => {
                 <Route path="/store" element={<ProtectedRoute userType="vendor"><MyStore /></ProtectedRoute>} />
                 <Route path="/store/registration" element={<ProtectedRoute userType="vendor"><StoreRegistration /></ProtectedRoute>} />
                 <Route path="/store/orders" element={<ProtectedRoute userType="vendor"><StoreOrders /></ProtectedRoute>} />
-                <Route path="/soil-tests" element={<ProtectedRoute userType="vendor"><SoilTesting /></ProtectedRoute>} />
+                <Route path="/soil-tests" element={SOIL_TESTING_ENABLED ? <ProtectedRoute userType="vendor"><SoilTesting /></ProtectedRoute> : <Navigate to="/vendor" replace />} />
                 <Route path="/business-details" element={<ProtectedRoute userType="vendor"><BusinessDetails /></ProtectedRoute>} />
                 <Route path="/equipment" element={<ProtectedRoute userType="vendor"><EquipmentInventory /></ProtectedRoute>} />
                 <Route path="/equipment/add" element={<ProtectedRoute userType="vendor"><AddEquipment /></ProtectedRoute>} />

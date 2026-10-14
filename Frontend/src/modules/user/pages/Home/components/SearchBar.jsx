@@ -2,13 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { FiSearch } from 'react-icons/fi';
 import NotificationBell from '../../../components/common/NotificationBell';
 import { themeColors } from '../../../../../theme';
+import { SOIL_TESTING_ENABLED } from '../../../../../utils/featureFlags';
 
 const SearchBar = ({ onInputClick, categories = [] }) => {
   const [displayedText, setDisplayedText] = useState('');
   const [isTyping, setIsTyping] = useState(true);
   const [currentServiceIndex, setCurrentServiceIndex] = useState(0);
 
-  const defaultServices = ['soil testing', 'rotavator', 'tractor rental', 'harvester', 'drone spraying', 'cultivator'];
+  const defaultServices = [...(SOIL_TESTING_ENABLED ? ['soil testing'] : []), 'rotavator', 'tractor rental', 'harvester', 'drone spraying', 'cultivator'];
   const serviceNames = categories.length > 0
     ? categories.slice(0, 8).map(c => c.title.toLowerCase())
     : defaultServices;
