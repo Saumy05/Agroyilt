@@ -4,7 +4,7 @@ import { FiUser, FiMail, FiPhone, FiFileText, FiUpload, FiCamera, FiX, FiArrowRi
 import { toastManager } from '../../../utils/toastManager';
 import { themeColors } from '../../../theme';
 import { workerAuthService } from '../../../services/authService';
-import { uploadSignupDocument } from '../../../services/signupUploadService';
+import { uploadSignupDocument, isRemoteUrl } from '../../../services/signupUploadService';
 import Logo from '../../../components/common/Logo';
 import ReferralInput from '../../../components/common/ReferralInput';
 
@@ -53,7 +53,10 @@ const WorkerSignup = () => {
   const [uploadedUrls, setUploadedUrls] = useState(() => {
     try {
       const saved = sessionStorage.getItem('worker_signup_uploaded_urls');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const urls = JSON.parse(saved);
+        return Object.fromEntries(Object.entries(urls).filter(([, url]) => isRemoteUrl(url)));
+      }
     } catch (e) { /* ignore */ }
     return {};
   });
@@ -61,7 +64,10 @@ const WorkerSignup = () => {
   const [documentPreview, setDocumentPreview] = useState(() => {
     try {
       const saved = sessionStorage.getItem('worker_signup_uploaded_urls');
-      if (saved) return JSON.parse(saved); // use remote URLs as preview src
+      if (saved) {
+        const urls = JSON.parse(saved); // use remote URLs as preview src
+        return Object.fromEntries(Object.entries(urls).filter(([, url]) => isRemoteUrl(url)));
+      }
     } catch (e) { /* ignore */ }
     return {};
   });
@@ -156,7 +162,7 @@ const WorkerSignup = () => {
     const file = e.target.files[0];
     if (!file) return;
 
-    const validTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp', 'image/gif', 'application/pdf'];
+    const validTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp', 'application/pdf'];
     if (!validTypes.includes(file.type)) {
       toastManager.error('Please upload a valid image or PDF');
       return;
@@ -173,7 +179,7 @@ const WorkerSignup = () => {
       remoteUrl = await uploadSignupDocument(file);
     } catch (uploadError) {
       console.error('Document upload failed', uploadError);
-      toastManager.error(uploadError.response?.data?.message || 'Failed to upload file. Please try again.');
+      toastManager.error(uploadError.response?.data?.message || uploadError.message || 'Failed to upload file. Please try again.');
       return;
     }
 

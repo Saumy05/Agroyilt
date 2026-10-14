@@ -5,13 +5,16 @@
  * @param {number} options.maxWidth - Maximum width of the output image.
  * @param {number} options.maxHeight - Maximum height of the output image.
  * @param {number} options.quality - Quality of the output image (0 to 1).
+ * @param {string} [options.outputType] - Force an output MIME type (e.g. 'image/jpeg'); defaults to the input type.
  * @returns {Promise<File>} - A promise that resolves with the compressed File.
  */
 export const compressImage = (file, options = { maxWidth: 1920, maxHeight: 1920, quality: 0.7 }) => {
   return new Promise((resolve, reject) => {
-    const { maxWidth, maxHeight, quality } = options;
-    const fileName = file.name;
-    const fileType = file.type;
+    const { maxWidth, maxHeight, quality, outputType } = options;
+    const fileName = outputType && outputType !== file.type
+      ? file.name.replace(/\.[^.]+$/, '') + '.jpg'
+      : file.name;
+    const fileType = outputType || file.type;
 
     // Use createObjectURL for better memory efficiency than FileReader
     const src = URL.createObjectURL(file);
@@ -42,6 +45,11 @@ export const compressImage = (file, options = { maxWidth: 1920, maxHeight: 1920,
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext('2d');
+      if (fileType === 'image/jpeg') {
+        // JPEG has no alpha; transparent PNG pixels would otherwise turn black
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
+      }
       ctx.drawImage(img, 0, 0, width, height);
 
       // Convert to blob

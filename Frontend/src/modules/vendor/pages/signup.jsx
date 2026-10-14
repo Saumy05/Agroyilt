@@ -7,7 +7,7 @@ import { register, sendOTP as sendVendorOTP } from '../services/authService';
 import LogoLoader from '../../../components/common/LogoLoader';
 import Logo from '../../../components/common/Logo';
 import { compressImage } from '../../../utils/imageCompression';
-import { uploadSignupDocument } from '../../../services/signupUploadService';
+import { uploadSignupDocument, isRemoteUrl } from '../../../services/signupUploadService';
 import ReferralInput from '../../../components/common/ReferralInput';
 
 import { z } from "zod";
@@ -34,7 +34,9 @@ const VendorSignup = () => {
     const saved = localStorage.getItem('vendor_signup_form_data');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const draft = JSON.parse(saved);
+        // Drop documents an older build stored as base64; they must be uploaded again
+        return { ...draft, documents: (draft.documents || []).filter(d => isRemoteUrl(d.url)) };
       } catch (e) {
         console.error('Error parsing saved signup form data:', e);
       }
@@ -181,7 +183,7 @@ const VendorSignup = () => {
     const file = e.target.files[0];
     if (!file) return;
 
-    const validTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp', 'image/gif', 'application/pdf'];
+    const validTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp', 'application/pdf'];
     if (!validTypes.includes(file.type)) {
       toastManager.error('Please upload a valid image or PDF');
       return;
@@ -223,7 +225,7 @@ const VendorSignup = () => {
       } catch (uploadError) {
         console.error("Document upload failed", uploadError);
         toastManager.dismiss(loadingToast);
-        toastManager.error(uploadError.response?.data?.message || 'Failed to upload file. Please try again.');
+        toastManager.error(uploadError.response?.data?.message || uploadError.message || 'Failed to upload file. Please try again.');
         setUploadingDocs(prev => ({ ...prev, [type]: false }));
         return;
       }
