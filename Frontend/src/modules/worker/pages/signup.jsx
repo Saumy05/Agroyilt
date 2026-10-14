@@ -43,25 +43,50 @@ const WorkerSignup = () => {
     } catch (e) { /* storage unavailable */ }
     return blank;
   });
-  // Keep typed text while the person reads the Terms; uploaded documents are too large to keep
+
+  const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [otpToken, setOtpToken] = useState('');
+  const [verificationToken, setVerificationToken] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Restore uploadedUrls from sessionStorage so previews survive Terms/Privacy navigation
+  const [uploadedUrls, setUploadedUrls] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('worker_signup_uploaded_urls');
+      if (saved) return JSON.parse(saved);
+    } catch (e) { /* ignore */ }
+    return {};
+  });
+  // Derive documentPreview from uploadedUrls on first render (remote URLs work fine as <img src>)
+  const [documentPreview, setDocumentPreview] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('worker_signup_uploaded_urls');
+      if (saved) return JSON.parse(saved); // use remote URLs as preview src
+    } catch (e) { /* ignore */ }
+    return {};
+  });
+
+  const [resendTimer, setResendTimer] = useState(0);
+  const [errors, setErrors] = useState({});
+  const [referralCode, setReferralCode] = useState('');
+  const [isReferralVerified, setIsReferralVerified] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+
+  // Keep typed text while the person reads the Terms; File objects can't be serialised but remote URLs can
   useEffect(() => {
     try {
       const { aadharDocument, aadharBackDocument, drivingLicenseDocument, ...text } = formData;
       sessionStorage.setItem('worker_signup_form_data', JSON.stringify(text));
     } catch (e) { /* ignore */ }
   }, [formData]);
-  const [otp, setOtp] = useState(['', '', '', '', '', '']);
-  const [otpToken, setOtpToken] = useState('');
-  const [verificationToken, setVerificationToken] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [documentPreview, setDocumentPreview] = useState({});
-  const [uploadedUrls, setUploadedUrls] = useState({}); // type -> uploaded file URL sent on register
-  const [resendTimer, setResendTimer] = useState(0);
-  const [errors, setErrors] = useState({});
-  const [referralCode, setReferralCode] = useState('');
-  const [isReferralVerified, setIsReferralVerified] = useState(false);
 
-  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  // Persist uploadedUrls (just URL strings) so they survive Terms/Privacy navigation
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('worker_signup_uploaded_urls', JSON.stringify(uploadedUrls));
+    } catch (e) { /* ignore */ }
+  }, [uploadedUrls]);
+
 
 
   // Timer countdown effect
@@ -247,7 +272,7 @@ const WorkerSignup = () => {
         const response = await workerAuthService.register(registerData);
         if (response.success) {
           toastManager.success('Registration details saved! Please set your MPIN to complete your profile.');
-          try { sessionStorage.removeItem('worker_signup_form_data'); } catch (e) { /* ignore */ }
+          try { sessionStorage.removeItem('worker_signup_form_data'); sessionStorage.removeItem('worker_signup_uploaded_urls'); } catch (e) { /* ignore */ }
           navigate('/worker/settings/mpin-setup', {
             state: {
               isFirstTime: true,
@@ -346,7 +371,7 @@ const WorkerSignup = () => {
       const response = await workerAuthService.register(registerData);
       if (response.success) {
         toastManager.success('Registration details saved! Please set your MPIN to complete your profile.');
-        try { sessionStorage.removeItem('worker_signup_form_data'); } catch (e) { /* ignore */ }
+        try { sessionStorage.removeItem('worker_signup_form_data'); sessionStorage.removeItem('worker_signup_uploaded_urls'); } catch (e) { /* ignore */ }
         navigate('/worker/settings/mpin-setup', {
           state: {
             isFirstTime: true,
