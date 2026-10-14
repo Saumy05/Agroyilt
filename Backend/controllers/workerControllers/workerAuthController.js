@@ -683,11 +683,7 @@ const setMpin = async (req, res) => {
       }
     }
 
-    worker.mpin = await mpinService.hashMpin(mpin);
-    worker.isMpinSet = true;
-    worker.mpinAttempts = 0;
-    worker.mpinLockedUntil = null;
-    await worker.save();
+    await mpinService.setMpin(worker, mpin);
 
     res.status(200).json({ success: true, message: 'MPIN set successfully' });
   } catch (error) {
@@ -727,11 +723,7 @@ const resetMpin = async (req, res) => {
 
     if (worker.isOfflineMember) return offlineMemberLoginBlocked(res);
 
-    worker.mpin = await mpinService.hashMpin(mpin);
-    worker.isMpinSet = true;
-    worker.mpinAttempts = 0;
-    worker.mpinLockedUntil = null;
-    await worker.save();
+    await mpinService.setMpin(worker, mpin);
 
     res.status(200).json({ success: true, message: 'MPIN reset successfully. You can now login.' });
   } catch (error) {

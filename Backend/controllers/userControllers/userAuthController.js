@@ -576,11 +576,7 @@ const setMpin = async (req, res) => {
       }
     }
 
-    user.mpin = await mpinService.hashMpin(mpin);
-    user.isMpinSet = true;
-    user.mpinAttempts = 0;
-    user.mpinLockedUntil = null;
-    await user.save();
+    await mpinService.setMpin(user, mpin);
 
     res.status(200).json({ success: true, message: 'MPIN set successfully' });
   } catch (error) {
@@ -618,11 +614,7 @@ const resetMpin = async (req, res) => {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    user.mpin = await mpinService.hashMpin(mpin);
-    user.isMpinSet = true;
-    user.mpinAttempts = 0;
-    user.mpinLockedUntil = null;
-    await user.save();
+    await mpinService.setMpin(user, mpin);
 
     res.status(200).json({ success: true, message: 'MPIN reset successfully. You can now login.' });
   } catch (error) {

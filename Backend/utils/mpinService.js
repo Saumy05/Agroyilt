@@ -38,29 +38,49 @@ const compareMpin = async (plainMpin, hashedMpin) => {
 };
 
 /**
+ * Writes only the given MPIN fields. entity.save() would re-validate the whole record, so any
+ * account with an incomplete profile (e.g. a vendor with no Aadhar on file) could never set,
+ * reset or even use an MPIN. Keeps the in-memory entity in sync with what was stored.
+ * @param {Object} entity - User, Vendor, or Worker document
+ * @param {Object} fields - MPIN fields to $set
+ */
+const persistMpinFields = async (entity, fields) => {
+  Object.assign(entity, fields);
+  await entity.constructor.updateOne({ _id: entity._id }, { $set: fields });
+};
+
+/**
+ * Stores a new MPIN for the account and clears any failed-attempt lockout.
+ * @param {Object} entity - User, Vendor, or Worker document
+ * @param {string} plainMpin - Already format-validated 4-digit MPIN
+ */
+const setMpin = async (entity, plainMpin) => {
+  await persistMpinFields(entity, {
+    mpin: await hashMpin(plainMpin),
+    isMpinSet: true,
+    mpinAttempts: 0,
+    mpinLockedUntil: null
+  });
+};
+
+/**
  * Handles failed MPIN attempt logic (increments attempts, applies lockout if needed)
  * @param {Object} entity - User, Vendor, or Worker instance
  * @returns {Object} - Result object { locked: boolean, remainingAttempts: number, lockUntil: Date|null }
  */
 const incrementMpinAttempts = async (entity) => {
-  // If previous lockout window has expired, reset attempts counter first
-  if (entity.mpinLockedUntil && entity.mpinLockedUntil <= new Date()) {
-    entity.mpinAttempts = 0;
-    entity.mpinLockedUntil = null;
-  }
-
-  let attempts = (entity.mpinAttempts || 0) + 1;
+  // If previous lockout window has expired, start counting from zero again
+  const lockExpired = entity.mpinLockedUntil && entity.mpinLockedUntil <= new Date();
+  const attempts = (lockExpired ? 0 : (entity.mpinAttempts || 0)) + 1;
   let locked = false;
-  let lockUntil = null;
+  let lockUntil = lockExpired ? null : (entity.mpinLockedUntil || null);
 
   if (attempts >= MPIN_MAX_ATTEMPTS) {
     locked = true;
     lockUntil = new Date(Date.now() + MPIN_LOCKOUT_MINUTES * 60 * 1000);
-    entity.mpinLockedUntil = lockUntil;
   }
 
-  entity.mpinAttempts = attempts;
-  await entity.save();
+  await persistMpinFields(entity, { mpinAttempts: attempts, mpinLockedUntil: lockUntil });
 
   return {
     locked,
@@ -75,9 +95,7 @@ const incrementMpinAttempts = async (entity) => {
  */
 const resetMpinAttempts = async (entity) => {
   if (entity.mpinAttempts > 0 || entity.mpinLockedUntil !== null) {
-    entity.mpinAttempts = 0;
-    entity.mpinLockedUntil = null;
-    await entity.save();
+    await persistMpinFields(entity, { mpinAttempts: 0, mpinLockedUntil: null });
   }
 };
 
@@ -92,9 +110,7 @@ const isMpinLocked = (entity) => {
       return true;
     }
     // Lockout has expired -> clear fields
-    entity.mpinLockedUntil = null;
-    entity.mpinAttempts = 0;
-    entity.save().catch(() => {});
+    persistMpinFields(entity, { mpinLockedUntil: null, mpinAttempts: 0 }).catch(() => {});
   }
   return false;
 };
@@ -104,6 +120,7 @@ module.exports = {
   MPIN_LOCKOUT_MINUTES,
   validateMpinFormat,
   hashMpin,
+  setMpin,
   compareMpin,
   incrementMpinAttempts,
   resetMpinAttempts,

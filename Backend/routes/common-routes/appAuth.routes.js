@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { body } = require('express-validator');
-const { identifyRole } = require('../../controllers/commonControllers/appAuthController');
+const { identifyRole, verifyMpin } = require('../../controllers/commonControllers/appAuthController');
 
 /**
  * POST /api/app/identify-role
@@ -18,5 +18,11 @@ router.post(
   ],
   identifyRole
 );
+
+/**
+ * POST /api/app/verify-mpin
+ * Public — no auth required. Reports which account(s) on this phone the MPIN belongs to.
+ */
+router.post('/verify-mpin', verifyMpin);
 
 module.exports = router;

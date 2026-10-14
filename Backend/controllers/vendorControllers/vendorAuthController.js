@@ -652,11 +652,7 @@ const setMpin = async (req, res) => {
       }
     }
 
-    vendor.mpin = await mpinService.hashMpin(mpin);
-    vendor.isMpinSet = true;
-    vendor.mpinAttempts = 0;
-    vendor.mpinLockedUntil = null;
-    await vendor.save();
+    await mpinService.setMpin(vendor, mpin);
 
     res.status(200).json({ success: true, message: 'MPIN set successfully' });
   } catch (error) {
@@ -694,11 +690,7 @@ const resetMpin = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Vendor not found' });
     }
 
-    vendor.mpin = await mpinService.hashMpin(mpin);
-    vendor.isMpinSet = true;
-    vendor.mpinAttempts = 0;
-    vendor.mpinLockedUntil = null;
-    await vendor.save();
+    await mpinService.setMpin(vendor, mpin);
 
     res.status(200).json({ success: true, message: 'MPIN reset successfully. You can now login.' });
   } catch (error) {
