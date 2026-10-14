@@ -6,9 +6,10 @@ const referralRewardConfigSchema = new mongoose.Schema({
     default: 'global',
     unique: true
   },
+  // Referral program is off until an admin turns it on
   systemEnabled: {
     type: Boolean,
-    default: true
+    default: false
   },
   registrationUrl: {
     type: String,
@@ -17,15 +18,15 @@ const referralRewardConfigSchema = new mongoose.Schema({
   },
   roles: {
     farmer: {
-      enabled: { type: Boolean, default: true },
+      enabled: { type: Boolean, default: false },
       rewardAmountPaise: { type: Number, default: 5000, min: 0 } // ₹50
     },
     vendor: {
-      enabled: { type: Boolean, default: true },
+      enabled: { type: Boolean, default: false },
       rewardAmountPaise: { type: Number, default: 4000, min: 0 } // ₹40
     },
     worker: {
-      enabled: { type: Boolean, default: true },
+      enabled: { type: Boolean, default: false },
       rewardAmountPaise: { type: Number, default: 5000, min: 0 } // ₹50
     }
   },

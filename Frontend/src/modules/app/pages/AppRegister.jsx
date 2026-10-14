@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { FiChevronRight, FiChevronLeft, FiUser, FiTruck, FiTool, FiUsers, FiX, FiGift } from 'react-icons/fi';
 import { useBrand } from '../../../context/BrandContext';
+import useReferralEnabled from '../../../hooks/useReferralEnabled';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const roles = [
@@ -42,6 +43,7 @@ const AppRegister = () => {
   const [selected, setSelected] = useState(null);
   const [showWorkerTypeModal, setShowWorkerTypeModal] = useState(false);
 
+  const { enabled: referralOn } = useReferralEnabled();
   const refCode = (searchParams.get('ref') || searchParams.get('referralCode') || '').trim().toUpperCase();
 
   const handleProceed = () => {
@@ -122,7 +124,7 @@ const AppRegister = () => {
           Select your role to get started
         </p>
 
-        {refCode && (
+        {refCode && referralOn && (
           <div style={{
             display: 'flex', alignItems: 'center', gap: '8px',
             background: '#E8F5E9', border: '1px solid #A5D6A7',

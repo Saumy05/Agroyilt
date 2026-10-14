@@ -52,12 +52,12 @@ const getOrCreateConfig = async () => {
   if (!config) {
     config = await ReferralRewardConfig.create({
       type: 'global',
-      systemEnabled: true,
+      systemEnabled: false,
       registrationUrl: 'https://agroyilt.com/app/register',
       roles: {
-        farmer: { enabled: true, rewardAmountPaise: 5000 },  // ₹50
-        vendor: { enabled: true, rewardAmountPaise: 4000 },  // ₹40
-        worker: { enabled: true, rewardAmountPaise: 5000 }   // ₹50
+        farmer: { enabled: false, rewardAmountPaise: 5000 },  // ₹50
+        vendor: { enabled: false, rewardAmountPaise: 4000 },  // ₹40
+        worker: { enabled: false, rewardAmountPaise: 5000 }   // ₹50
       },
       qualificationEvent: QUALIFICATION_RULES.ADMIN_APPROVAL,
       version: 1,

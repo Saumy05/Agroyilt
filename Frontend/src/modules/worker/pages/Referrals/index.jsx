@@ -14,9 +14,16 @@ import {
 import { FaWhatsapp } from 'react-icons/fa';
 import referralService from '../../../../services/referralService';
 import LogoLoader from '../../../../components/common/LogoLoader';
+import useReferralEnabled from '../../../../hooks/useReferralEnabled';
 
 const WorkerReferrals = () => {
   const navigate = useNavigate();
+  const { enabled: referralOn, loaded: referralLoaded } = useReferralEnabled('worker');
+
+  // Page is unreachable while the admin has referrals off
+  useEffect(() => {
+    if (referralLoaded && !referralOn) navigate('/worker/profile', { replace: true });
+  }, [referralLoaded, referralOn]);
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState({
     referralCode: '...',

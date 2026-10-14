@@ -12,8 +12,10 @@ import vendorProductService from '../../services/vendorProductService';
 import BankDetailsSection from '../../../../components/common/BankDetailsSection';
 import LogoutModal from '../../../../components/common/LogoutModal';
 import authStorage from '../../../../utils/authStorage';
+import useReferralEnabled from '../../../../hooks/useReferralEnabled';
 
 const Profile = () => {
+  const { enabled: referralOn } = useReferralEnabled('vendor');
   const navigate = useNavigate();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -38,7 +40,7 @@ const Profile = () => {
     { id: 'bank_details', label: 'Bank Account & Payout Details', icon: FiCreditCard, path: '/vendor/bank-details' },
     { id: 'equipment', label: 'Machinery & Equipment Fleet', icon: FaTractor, path: '/vendor/equipment' },
     { id: 12, label: 'My Agri-Store (Supplies)', icon: FiPackage, path: '/vendor/store' },
-    { id: 'referrals', label: 'Refer & Earn', icon: FiGift, path: '/vendor/referrals' },
+    ...(referralOn ? [{ id: 'referrals', label: 'Refer & Earn', icon: FiGift, path: '/vendor/referrals' }] : []),
     { id: 14, label: 'Business Profile & Registrations', icon: FiBriefcase, path: '/vendor/business-details' },
     { id: 5, label: 'My Ratings', icon: FiStar, path: '/vendor/my-ratings' },
     { id: 7, label: 'Manage Address', icon: FiMapPin, path: '/vendor/address-management' },
@@ -47,7 +49,7 @@ const Profile = () => {
     { id: 11, label: 'Legal Compliance', icon: FiCheckCircle, path: '/vendor/compliance' },
     { id: 'help_support', label: 'Help & Support', icon: FiHelpCircle, path: '/vendor/help-support' },
     { id: 9, label: 'About Agroyilt', icon: null, customIcon: 'G', path: '/vendor/about-groo' },
-  ], [profile, hasOutOfStockProducts]);
+  ], [profile, hasOutOfStockProducts, referralOn]);
 
   useLayoutEffect(() => {
     const html = document.documentElement;
@@ -409,6 +411,7 @@ const Profile = () => {
               <FiChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
             </button>
 
+            {referralOn && (
             <button
               onClick={() => navigate('/vendor/referrals')}
               className="w-full p-3.5 sm:p-4 flex items-center justify-between hover:bg-slate-50 transition-colors text-left group"
@@ -427,6 +430,7 @@ const Profile = () => {
               </div>
               <FiChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
             </button>
+            )}
           </div>
         </div>
 

@@ -12,8 +12,10 @@ import authStorage from '../../../../utils/authStorage';
 import { useSocket } from '../../../../context/SocketContext';
 import BankDetailsSection from '../../../../components/common/BankDetailsSection';
 import LogoutModal from '../../../../components/common/LogoutModal';
+import useReferralEnabled from '../../../../hooks/useReferralEnabled';
 
 const Profile = () => {
+  const { enabled: referralOn } = useReferralEnabled('worker');
   const navigate = useNavigate();
   const socket = useSocket();
   // Initialize with empty/default values - will be loaded from localStorage
@@ -509,6 +511,7 @@ const Profile = () => {
           </button>
 
           {/* Refer & Earn */}
+          {referralOn && (
           <button
             onClick={() => navigate('/worker/referrals')}
             className="w-full p-3.5 flex items-center justify-between hover:bg-slate-50 transition-colors text-left"
@@ -529,6 +532,7 @@ const Profile = () => {
             </div>
             <FiChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
           </button>
+          )}
 
           {/* Settings */}
           <button

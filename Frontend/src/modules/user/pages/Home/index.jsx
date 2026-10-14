@@ -33,6 +33,7 @@ import MachineryDiscoverySection from './components/MachineryDiscoverySection';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import AddressSelectionModal from '../Checkout/components/AddressSelectionModal';
 import { FiChevronRight } from 'react-icons/fi';
+import useReferralEnabled from '../../../../hooks/useReferralEnabled';
 
 
 
@@ -47,6 +48,7 @@ const toAssetUrl = (url) => {
 };
 
 const Home = () => {
+  const { enabled: referralOn } = useReferralEnabled('farmer');
   const navigate = useNavigate();
   const location = useLocation();
   const [address, setAddress] = useState(localStorage.getItem('currentAddress') || 'Select Location');
@@ -787,12 +789,14 @@ const Home = () => {
               <MandiAndSchemesSection />
             </motion.section>
 
-            {/* Refer & Earn Section (Always shown at bottom) */}
-            <motion.div variants={itemVariants}>
-              <Suspense fallback={<div className="h-32 bg-gray-50 animate-pulse rounded-xl mx-4" />}>
-                <ReferEarnSection onReferClick={handleReferClick} />
-              </Suspense>
-            </motion.div>
+            {/* Refer & Earn Section (shown at bottom only while the admin has referrals on) */}
+            {referralOn && (
+              <motion.div variants={itemVariants}>
+                <Suspense fallback={<div className="h-32 bg-gray-50 animate-pulse rounded-xl mx-4" />}>
+                  <ReferEarnSection onReferClick={handleReferClick} />
+                </Suspense>
+              </motion.div>
+            )}
           </>
         </main>
       </motion.div>

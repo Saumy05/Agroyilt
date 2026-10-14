@@ -16,9 +16,16 @@ import { FaWhatsapp, FaFacebookMessenger } from 'react-icons/fa';
 import { themeColors } from '../../../../theme';
 import referralService from '../../../../services/referralService';
 import LogoLoader from '../../../../components/common/LogoLoader';
+import useReferralEnabled from '../../../../hooks/useReferralEnabled';
 
 const Rewards = () => {
   const navigate = useNavigate();
+  const { enabled: referralOn, loaded: referralLoaded } = useReferralEnabled('farmer');
+
+  // Page is unreachable while the admin has referrals off
+  useEffect(() => {
+    if (referralLoaded && !referralOn) navigate('/user/account', { replace: true });
+  }, [referralLoaded, referralOn]);
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState({
     referralCode: '...',

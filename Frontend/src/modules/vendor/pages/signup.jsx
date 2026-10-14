@@ -540,7 +540,7 @@ const VendorSignup = () => {
           <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#347989] via-[#D68F35] to-[#BB5F36]" />
 
           {step === 'details' ? (
-            <form onSubmit={handleDetailsSubmit} className="space-y-8">
+            <form autoComplete="off" onSubmit={handleDetailsSubmit} className="space-y-8">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 {/* Basic Details */}
                 <div className="space-y-4 animate-stagger-1 animate-fade-in">
@@ -552,7 +552,7 @@ const VendorSignup = () => {
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none group-focus-within:text-[#347989] transition-colors">
                         <FiUser className="text-gray-400" />
                       </div>
-                      <input
+                      <input autoComplete="off"
                         ref={nameInputRef}
                         type="text"
                         name="name"
@@ -592,7 +592,7 @@ const VendorSignup = () => {
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none group-focus-within:text-[#347989] transition-colors">
                         <FiBriefcase className="text-gray-400" />
                       </div>
-                      <input
+                      <input autoComplete="off"
                         type="text"
                         name="businessName"
                         required
@@ -651,7 +651,7 @@ const VendorSignup = () => {
                               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none group-focus-within:text-[#347989] transition-colors">
                                 <FiBriefcase className="text-gray-400" />
                               </div>
-                              <input
+                              <input autoComplete="off"
                                 type="text"
                                 required
                                 placeholder="Lab Name * (e.g. Kisan Soil Testing Lab)"
@@ -665,7 +665,7 @@ const VendorSignup = () => {
                               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none group-focus-within:text-[#347989] transition-colors">
                                 <FiFileText className="text-gray-400" />
                               </div>
-                              <input
+                              <input autoComplete="off"
                                 type="text"
                                 placeholder="License Number (e.g. STL12345678)"
                                 value={formData.labDetails.licenseNumber}
@@ -722,7 +722,7 @@ const VendorSignup = () => {
                               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none group-focus-within:text-[#347989] transition-colors">
                                 <FiBriefcase className="text-gray-400" />
                               </div>
-                              <input
+                              <input autoComplete="off"
                                 type="text"
                                 required
                                 placeholder="Shop Name * (e.g. Shree Ram Krishi Kendra)"
@@ -736,7 +736,7 @@ const VendorSignup = () => {
                               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none group-focus-within:text-[#347989] transition-colors">
                                 <FiBriefcase className="text-gray-400" />
                               </div>
-                              <input
+                              <input autoComplete="off"
                                 type="text"
                                 required
                                 placeholder="Shop Address * (e.g. Krishi Mandi Road, Indore)"
@@ -750,7 +750,7 @@ const VendorSignup = () => {
                               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none group-focus-within:text-[#347989] transition-colors">
                                 <FiFileText className="text-gray-400" />
                               </div>
-                              <input
+                              <input autoComplete="off"
                                 type="text"
                                 placeholder="Shop License (e.g. MPSEED7890)"
                                 value={formData.shopDetails.shopLicense}
@@ -799,7 +799,7 @@ const VendorSignup = () => {
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none group-focus-within:text-[#347989] transition-colors">
                         <FiMail className="text-gray-400" />
                       </div>
-                      <input
+                      <input autoComplete="off"
                         type="email"
                         name="email"
                         value={formData.email}
@@ -830,7 +830,7 @@ const VendorSignup = () => {
                         <div className="absolute inset-y-0 left-0 pl-3 border-r pr-2 flex items-center pointer-events-none">
                           <span className="text-gray-500 text-sm font-bold">+91</span>
                         </div>
-                        <input
+                        <input autoComplete="off"
                           type="tel"
                           required
                           value={formData.phoneNumber}
@@ -849,7 +849,7 @@ const VendorSignup = () => {
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none group-focus-within:text-[#347989] transition-colors">
                         <FiFileText className="text-gray-400" />
                       </div>
-                      <input
+                      <input autoComplete="off"
                         type="text"
                         required
                         value={formData.aadhar}
@@ -867,7 +867,7 @@ const VendorSignup = () => {
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none group-focus-within:text-[#347989] transition-colors">
                         <FiFileText className="text-gray-400" />
                       </div>
-                      <input
+                      <input autoComplete="off"
                         type="text"
                         value={formData.pan}
                         onChange={(e) => setFormData(p => ({ ...p, pan: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10) }))}
@@ -986,6 +986,7 @@ const VendorSignup = () => {
 
               <div className="animate-stagger-3 animate-fade-in space-y-4">
                 <ReferralInput
+                  role="vendor"
                   referralCode={referralCode}
                   setReferralCode={setReferralCode}
                   isVerified={isReferralVerified}
@@ -1043,7 +1044,7 @@ const VendorSignup = () => {
                 <p className="text-sm text-gray-500">Enter the 6-digit code sent to your phone</p>
               </div>
 
-              <form onSubmit={handleOtpSubmit} className="space-y-8">
+              <form autoComplete="off" onSubmit={handleOtpSubmit} className="space-y-8">
                 <div className="flex justify-between gap-3 px-4 sm:px-12 animate-stagger-1 animate-fade-in">
                   {otp.map((digit, index) => (
                     <input

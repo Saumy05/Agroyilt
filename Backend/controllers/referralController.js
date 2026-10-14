@@ -65,6 +65,24 @@ exports.getMyReferral = async (req, res) => {
 };
 
 /**
+ * Public: which roles currently have the referral program on (apps hide all referral UI when off)
+ */
+exports.getPublicStatus = async (req, res) => {
+  try {
+    const config = await referralService.getOrCreateConfig();
+    const on = (role) => !!config.systemEnabled && !!config.roles?.[role]?.enabled;
+    return res.status(200).json({
+      success: true,
+      data: { farmer: on('farmer'), vendor: on('vendor'), worker: on('worker') }
+    });
+  } catch (error) {
+    console.error('[getPublicStatus error]:', error);
+    // Fail closed: if we can't tell, treat the program as off
+    return res.status(200).json({ success: true, data: { farmer: false, vendor: false, worker: false } });
+  }
+};
+
+/**
  * Admin: Get referral system configuration & audit history
  */
 exports.getAdminSettings = async (req, res) => {

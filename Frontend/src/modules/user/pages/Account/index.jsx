@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import useReferralEnabled from '../../../../hooks/useReferralEnabled';
 import { useNavigate } from 'react-router-dom';
 import { toastManager } from '../../../../utils/toastManager';
 import { themeColors } from '../../../../theme';
@@ -37,6 +38,7 @@ import { LogoutModal } from '../../../../components/common';
 import api from '../../../../services/api';
 
 const Account = () => {
+  const { enabled: referralOn } = useReferralEnabled('farmer');
   const navigate = useNavigate();
   const socket = useSocket();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -342,7 +344,7 @@ const Account = () => {
           </motion.div>
 
           {/* Quick Actions Grid (Harmonious Dual Cards) */}
-          <motion.div variants={itemVariants} className="grid grid-cols-2 gap-3 mb-4">
+          <motion.div variants={itemVariants} className={`grid ${referralOn ? 'grid-cols-2' : 'grid-cols-1'} gap-3 mb-4`}>
             {/* Wallet Balance Card */}
             <button
               onClick={() => navigate('/user/wallet')}
@@ -369,6 +371,7 @@ const Account = () => {
             </button>
 
             {/* Refer & Earn Card */}
+            {referralOn && (
             <button
               onClick={() => navigate('/user/rewards')}
               className="bg-gradient-to-br from-amber-50 to-orange-50/60 p-3.5 rounded-2xl border border-amber-200/60 shadow-xs hover:border-amber-300 hover:shadow-sm transition-all text-left group"
@@ -390,6 +393,7 @@ const Account = () => {
                 <FiChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
               </span>
             </button>
+            )}
           </motion.div>
 
           {/* Group 1: Bookings & Activity */}

@@ -20,6 +20,14 @@ export const referralService = {
   },
 
   /**
+   * Public: which roles currently have the referral program on
+   */
+  getPublicStatus: async () => {
+    const response = await api.get('/referrals/status');
+    return response.data;
+  },
+
+  /**
    * Get authenticated user's referral code, link, and statistics
    */
   getMyReferralStats: async () => {

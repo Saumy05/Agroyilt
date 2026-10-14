@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import useReferralEnabled from '../../../../hooks/useReferralEnabled';
 import { useNavigate } from 'react-router-dom';
 import { 
   FiArrowLeft, 
@@ -24,6 +25,7 @@ import WithdrawalModal from '../../../../components/common/WithdrawalModal';
 import WithdrawalHistoryList from '../../../../components/common/WithdrawalHistoryList';
 
 const Wallet = () => {
+  const { enabled: referralOn } = useReferralEnabled('farmer');
   const navigate = useNavigate();
   const socket = useSocket();
   const [walletBalance, setWalletBalance] = useState(0);
@@ -225,6 +227,7 @@ const Wallet = () => {
 
         <main className="px-3.5 py-3">
           {/* Referral Banner */}
+          {referralOn && (
           <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-green-50 border border-emerald-200/60 rounded-2xl p-3 mb-2.5 flex items-center justify-between shadow-xs">
             <div>
               <div className="flex items-center gap-1.5 mb-0.5">
@@ -239,6 +242,7 @@ const Wallet = () => {
               🎁
             </div>
           </div>
+          )}
 
           {/* Main Balance Card */}
           <div className="bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 rounded-2xl p-3.5 sm:p-4 mb-2.5 text-white shadow-lg relative overflow-hidden border border-emerald-500/30">

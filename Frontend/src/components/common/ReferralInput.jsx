@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { FiCheckCircle, FiAlertCircle, FiLoader, FiGift } from 'react-icons/fi';
 import referralService from '../../services/referralService';
+import useReferralEnabled from '../../hooks/useReferralEnabled';
 
-const ReferralInput = ({
+const ReferralInputField = ({
   referralCode,
   setReferralCode,
   isVerified,
@@ -116,7 +117,7 @@ const ReferralInput = ({
             Referral Code
           </label>
           <div className="flex gap-2">
-            <input
+            <input autoComplete="off"
               type="text"
               id="referral-code-input"
               value={inputCode}
@@ -190,6 +191,13 @@ const ReferralInput = ({
       )}
     </div>
   );
+};
+
+// Hidden entirely unless the admin has the referral program on for this role (off by default)
+const ReferralInput = ({ role, ...props }) => {
+  const { enabled } = useReferralEnabled(role);
+  if (!enabled) return null;
+  return <ReferralInputField {...props} />;
 };
 
 export default ReferralInput;

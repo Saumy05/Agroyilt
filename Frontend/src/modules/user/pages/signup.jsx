@@ -297,7 +297,7 @@ const Signup = () => {
         style={{ backgroundImage: "url('/auth-bg.jpg')", filter: 'brightness(0.95)' }}
       >
         <svg className="absolute bottom-0 w-full text-white" viewBox="0 0 1440 320" preserveAspectRatio="none" style={{ height: '50px', transform: 'translateY(1px)' }}>
-          <path fill="currentColor" fillOpacity="1" d="M0,224L80₹97.3C160₹71,320₹17,480₹22.7C640₹28,800₹92,960,208C1120,224₹280₹92₹360₹76L1440₹60L1440,320L1360,320C1280,320₹120,320,960,320C800,320,640,320,480,320C320,320₹60,320,80,320L0,320Z"></path>
+          <path fill="currentColor" fillOpacity="1" d="M0,224C240,288 480,160 720,200C960,240 1200,300 1440,220L1440,320L0,320Z"></path>
         </svg>
       </div>
 
@@ -317,13 +317,13 @@ const Signup = () => {
               </h2>
             )}
           </div>
-          <p className="text-sm font-medium text-gray-500">
+          <p className={`text-sm font-medium ${step === 'details' ? 'text-white [text-shadow:0_1px_6px_rgba(0,0,0,0.6)] sm:text-gray-500 sm:[text-shadow:none]' : 'text-gray-500'}`}>
             {step === 'details' ? 'Create your new account' : `Code sent to ${formData.phoneNumber}`}
           </p>
         </div>
 
         {step === 'details' ? (
-          <form onSubmit={handleDetailsSubmit} className="space-y-5">
+          <form autoComplete="off" onSubmit={handleDetailsSubmit} className="space-y-5">
             {verificationToken && (
               <button
                 type="button"
@@ -342,7 +342,7 @@ const Signup = () => {
                 <div className="flex items-center text-[#426B4F] mr-3">
                   <FiUser className="h-5 w-5" />
                 </div>
-                <input
+                <input autoComplete="off"
                   ref={nameInputRef}
                   id="name"
                   name="name"
@@ -366,7 +366,7 @@ const Signup = () => {
                 <div className="flex items-center text-[#426B4F] mr-3">
                   <FiMail className="h-5 w-5" />
                 </div>
-                <input
+                <input autoComplete="off"
                   id="email"
                   name="email"
                   type="email"
@@ -375,7 +375,7 @@ const Signup = () => {
                   className={`block w-full py-4 bg-transparent border-none focus:ring-0 font-bold placeholder-[#426B4F]/60 sm:text-sm ${
                     errors.email ? 'text-red-500' : 'text-[#426B4F]'
                   }`}
-                  placeholder="farmer@agri.com"
+                  placeholder="Email Address"
                 />
                 {(formData.email && !errors.email) && (
                   <FiCheckCircle className="text-green-500 absolute right-4 h-5 w-5" />
@@ -420,7 +420,7 @@ const Signup = () => {
                     <FiPhone className="h-5 w-5" />
                     <span className="font-semibold ml-2 border-r border-[#426B4F]/20 pr-3">+91</span>
                   </div>
-                  <input
+                  <input autoComplete="off"
                     id="phoneNumber"
                     name="phoneNumber"
                     type="tel"
@@ -435,6 +435,7 @@ const Signup = () => {
             )}
 
             <ReferralInput
+              role="farmer"
               referralCode={referralCode}
               setReferralCode={setReferralCode}
               isVerified={isReferralVerified}

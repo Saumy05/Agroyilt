@@ -379,14 +379,14 @@ const WorkerSignup = () => {
           <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#347989] via-[#D68F35] to-[#BB5F36]" />
 
           {step === 'details' ? (
-            <form onSubmit={handleDetailsSubmit} className="space-y-6">
+            <form autoComplete="off" onSubmit={handleDetailsSubmit} className="space-y-6">
               <div className="animate-stagger-1 animate-fade-in">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
                 <div className="relative rounded-xl shadow-sm group">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none group-focus-within:text-[#347989] transition-colors">
                     <FiUser className="text-gray-400" />
                   </div>
-                  <input
+                  <input autoComplete="off"
                     ref={nameInputRef}
                     type="text"
                     name="name"
@@ -406,7 +406,7 @@ const WorkerSignup = () => {
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none group-focus-within:text-[#347989] transition-colors">
                     <FiMail className="text-gray-400" />
                   </div>
-                  <input
+                  <input autoComplete="off"
                     type="email"
                     name="email"
                     required
@@ -453,7 +453,7 @@ const WorkerSignup = () => {
                     <div className="absolute inset-y-0 left-0 pl-3 border-r pr-2 flex items-center pointer-events-none group-focus-within:text-[#347989] transition-colors">
                       <span className="text-gray-500 font-bold text-sm">+91</span>
                     </div>
-                    <input
+                    <input autoComplete="off"
                       type="tel"
                       required
                       value={formData.phoneNumber}
@@ -472,7 +472,7 @@ const WorkerSignup = () => {
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none group-focus-within:text-[#347989] transition-colors">
                     <FiFileText className="text-gray-400" />
                   </div>
-                  <input
+                  <input autoComplete="off"
                     type="text"
                     required
                     value={formData.aadhar}
@@ -591,7 +591,7 @@ const WorkerSignup = () => {
                       <label className="block text-xs font-bold text-gray-700 mb-1">
                         Driving License (DL) Number <span className="text-gray-400 font-normal">(Optional)</span>
                       </label>
-                      <input
+                      <input autoComplete="off"
                         type="text"
                         name="drivingLicenseNumber"
                         value={formData.drivingLicenseNumber}
@@ -633,6 +633,7 @@ const WorkerSignup = () => {
               </div>
 
               <ReferralInput
+                role="worker"
                 referralCode={referralCode}
                 setReferralCode={setReferralCode}
                 isVerified={isReferralVerified}
@@ -687,10 +688,10 @@ const WorkerSignup = () => {
                 <p className="text-sm text-gray-600">Waiting for 6-digit code...</p>
               </div>
 
-              <form onSubmit={handleOtpSubmit} className="space-y-8">
+              <form autoComplete="off" onSubmit={handleOtpSubmit} className="space-y-8">
                 <div className="flex justify-between gap-2 animate-stagger-1 animate-fade-in">
                   {otp.map((digit, index) => (
-                    <input
+                    <input autoComplete="off"
                       key={index}
                       ref={(el) => (otpInputRefs.current[index] = el)}
                       type="text"
