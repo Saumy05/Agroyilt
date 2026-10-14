@@ -7,6 +7,7 @@ import { toastManager } from '../../../../utils/toastManager';
 import { useBrand } from '../../../../context/BrandContext';
 import api from '../../../../services/api';
 import authStorage from '../../../../utils/authStorage';
+import Policies from './Policies';
 
 const AdminSettings = () => {
   const navigate = useNavigate();
@@ -265,7 +266,7 @@ const AdminSettings = () => {
 
   const [loading, setLoading] = useState(false);
   const [profileLoading, setProfileLoading] = useState(false);
-  const [activeView, setActiveView] = useState('main'); // 'main', 'profile', 'financial', 'system', 'admins'
+  const [activeView, setActiveView] = useState('main'); // 'main', 'profile', 'financial', 'system', 'branding', 'policies', 'admins'
 
   // Deep link from the admin search: ?view=financial&field=<input name>
   useEffect(() => {
@@ -854,6 +855,18 @@ const AdminSettings = () => {
           </div>
           <h3 className="text-lg font-bold text-gray-800 mb-2">Branding & App Identity</h3>
           <p className="text-sm text-gray-500">Change App Name, Logo, Tagline & Browser Favicon</p>
+        </div>
+      )}
+
+      {/* Policies Card - Super Admin Only */}
+      {isSuperAdmin && (
+        <div onClick={() => setActiveView('policies')}
+          className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer group">
+          <div className="w-12 h-12 bg-rose-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-rose-100 transition-colors">
+            <FiFileText className="w-6 h-6 text-rose-600" />
+          </div>
+          <h3 className="text-lg font-bold text-gray-800 mb-2">Policies & Terms</h3>
+          <p className="text-sm text-gray-500">Terms & Conditions and Privacy Policy for farmers, vendors and workers</p>
         </div>
       )}
 
@@ -1848,6 +1861,13 @@ const AdminSettings = () => {
           )
         }
 
+
+        {/* Policies View - Super Admin Only */}
+        {activeView === 'policies' && isSuperAdmin && (
+          <motion.div key="policies" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
+            <Policies />
+          </motion.div>
+        )}
 
         {/* Admin Management View - Super Admin Only */}
         {

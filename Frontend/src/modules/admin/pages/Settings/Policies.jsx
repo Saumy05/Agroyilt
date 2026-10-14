@@ -60,7 +60,7 @@ const Policies = () => {
         <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-6">
           <div className="bg-blue-50 p-4 rounded-lg text-blue-800 text-sm flex gap-3 border border-blue-100">
              <FiInfo className="shrink-0 mt-0.5 text-blue-600" size={18} />
-             <p>Manage Terms & Conditions and Privacy Policies for Users, Vendors and Workers.  Until you save your own version, the starter text is shown to people, so a document is never blank. Select the role and document type, then update the content below.</p>
+             <p>Manage Terms & Conditions and Privacy Policies for Users, Vendors and Workers. Only Super Admins can change these.  Until you save your own version, the starter text is shown to people, so a document is never blank. Select the role and document type, then update the content below.</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -97,6 +97,7 @@ const Policies = () => {
               </p>
             )}
             <textarea 
+              name="policyContent"
               required 
               rows="15" 
               className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none leading-relaxed" 

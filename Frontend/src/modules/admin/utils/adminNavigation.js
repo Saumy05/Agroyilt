@@ -70,7 +70,6 @@ export const getChildRoute = (parentRoute, childName) => {
       "FAQ": "/admin/manage-website/faq",
       "About Us": "/admin/manage-website/about-us",
       "App Guide": "/admin/manage-website/app-guide",
-      "Policies": "/admin/manage-website/policies",
     },
     "/admin/geographic-management": {
       "States": "/admin/geographic-management?tab=states",

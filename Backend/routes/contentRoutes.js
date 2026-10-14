@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const contentController = require('../controllers/adminControllers/contentController');
 const { authenticate } = require('../middleware/authMiddleware');
-const { isAdmin } = require('../middleware/roleMiddleware');
+const { isAdmin, isSuperAdmin } = require('../middleware/roleMiddleware');
 
 // Public routes
 router.get('/faq', contentController.getFAQs);
@@ -17,6 +17,7 @@ router.delete('/faq/:id', authenticate, isAdmin, contentController.deleteFAQ);
 
 router.put('/about', authenticate, isAdmin, contentController.updateAbout);
 router.put('/app-guide', authenticate, isAdmin, contentController.updateAppGuide);
-router.put('/policy', authenticate, isAdmin, contentController.updatePolicy);
+// Legal text: Super Admin only
+router.put('/policy', authenticate, isSuperAdmin, contentController.updatePolicy);
 
 module.exports = router;
