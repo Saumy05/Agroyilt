@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const policySchema = new mongoose.Schema({
     role: {
         type: String,
-        enum: ['user', 'vendor'],
+        enum: ['user', 'vendor', 'worker'],
         required: true
     },
     type: {

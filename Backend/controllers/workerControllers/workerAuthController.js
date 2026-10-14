@@ -139,9 +139,18 @@ const register = async (req, res) => {
       hasBike,
       drivingLicenseNumber,
       drivingLicenseDocument,
-      gender
+      gender,
+      termsAccepted
     } = req.body;
     let phone = req.body.phone;
+
+    // Workers must accept the Terms and Privacy Policy (text is admin-managed and never blank)
+    if (!(termsAccepted === true || termsAccepted === 'true')) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please accept the Terms and Conditions and Privacy Policy to continue.'
+      });
+    }
 
     if (verificationToken) {
       const verifiedPhone = verifyVerificationToken(verificationToken);
@@ -213,6 +222,7 @@ const register = async (req, res) => {
       },
       status: WORKER_STATUS.OFFLINE,
       workerType: validWorkerType,
+      termsAcceptedAt: new Date(),
       isMpinSet: false,
       approvalStatus: 'pending'
     });

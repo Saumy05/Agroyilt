@@ -95,6 +95,11 @@ const workerSchema = new mongoose.Schema({
       default: null
     }
   },
+  // When the worker agreed to the admin-configured Terms / Privacy Policy at signup
+  termsAcceptedAt: {
+    type: Date,
+    default: null
+  },
   // Commute & Transport Details
   hasBike: {
     type: Boolean,

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiUser, FiEdit2, FiMapPin, FiPhone, FiMail, FiBriefcase, FiStar, FiArrowRight, FiSettings, FiChevronRight, FiCreditCard, FiLogOut, FiTrash2, FiClock, FiCheckCircle, FiPackage, FiActivity, FiGift, FiX, FiHelpCircle, FiShield } from 'react-icons/fi';
+import { FiUser, FiEdit2, FiMapPin, FiPhone, FiMail, FiBriefcase, FiStar, FiArrowRight, FiSettings, FiChevronRight, FiCreditCard, FiLogOut, FiTrash2, FiClock, FiCheckCircle, FiPackage, FiActivity, FiGift, FiX, FiHelpCircle, FiShield, FiFileText } from 'react-icons/fi';
 import { FaWallet, FaTractor } from 'react-icons/fa';
 import { toastManager } from '../../../../utils/toastManager';
 import { vendorTheme as themeColors } from '../../../../theme';
@@ -531,6 +531,22 @@ const Profile = () => {
                 <div className="min-w-0 flex-1">
                   <span className="font-bold text-xs sm:text-sm text-slate-800 block truncate">Help & Support</span>
                   <span className="text-[11px] text-slate-400 font-medium block truncate">Dedicated 24/7 AgroYilt partner helpline</span>
+                </div>
+              </div>
+              <FiChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
+            </button>
+
+            <button
+              onClick={() => navigate('/terms/vendor')}
+              className="w-full p-3.5 sm:p-4 flex items-center justify-between hover:bg-slate-50 transition-colors text-left group"
+            >
+              <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <FiFileText className="w-4.5 h-4.5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="font-bold text-xs sm:text-sm text-slate-800 block truncate">Terms & Conditions</span>
+                  <span className="text-[11px] text-slate-400 font-medium block truncate">Terms of use & privacy policy</span>
                 </div>
               </div>
               <FiChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />

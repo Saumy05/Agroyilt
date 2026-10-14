@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { FiUser, FiMail, FiPhone, FiFileText, FiUpload, FiCamera, FiX, FiArrowRight, FiChevronLeft, FiCheckCircle } from 'react-icons/fi';
 import { toastManager } from '../../../utils/toastManager';
@@ -6,6 +7,8 @@ import { themeColors } from '../../../theme';
 import { workerAuthService } from '../../../services/authService';
 import Logo from '../../../components/common/Logo';
 import ReferralInput from '../../../components/common/ReferralInput';
+import API from '../../../services/api';
+import useBodyScrollLock from '../../../hooks/useBodyScrollLock';
 
 import { z } from "zod";
 
@@ -44,6 +47,25 @@ const WorkerSignup = () => {
   const [errors, setErrors] = useState({});
   const [referralCode, setReferralCode] = useState('');
   const [isReferralVerified, setIsReferralVerified] = useState(false);
+
+  // Terms / Privacy text is managed by admin (Website Settings > Policies) and is never blank
+  const [policies, setPolicies] = useState({ terms: '', privacy: '' });
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [openPolicy, setOpenPolicy] = useState(null); // 'terms' | 'privacy' | null
+  const policyTitles = { terms: 'Terms and Conditions', privacy: 'Privacy Policy' };
+  useBodyScrollLock(!!openPolicy);
+
+  useEffect(() => {
+    ['terms', 'privacy'].forEach(async (type) => {
+      try {
+        const res = await API.get(`/content/policy/worker/${type}`);
+        const content = res.data?.data?.content || '';
+        setPolicies(prev => ({ ...prev, [type]: content }));
+      } catch (e) {
+        setPolicies(prev => ({ ...prev, [type]: 'Could not load this document. Please try again.' }));
+      }
+    });
+  }, []);
 
 
   // Timer countdown effect
@@ -176,6 +198,11 @@ const WorkerSignup = () => {
       return;
     }
 
+    if (!acceptedTerms) {
+      toastManager.error('Please accept the Terms and Conditions to continue');
+      return;
+    }
+
     // Manual Document Check
     if (!formData.aadharDocument && !documentPreview.aadhar) {
       toastManager.error('Please upload Aadhar Front document');
@@ -205,7 +232,8 @@ const WorkerSignup = () => {
           drivingLicenseDocument: formData.hasBike ? dlDoc : undefined,
           verificationToken,
           workerType: new URLSearchParams(location.search).get('type') || 'WORKER',
-          referralCode: referralCode || undefined
+          referralCode: referralCode || undefined,
+          termsAccepted: acceptedTerms
         };
 
         const response = await workerAuthService.register(registerData);
@@ -302,7 +330,8 @@ const WorkerSignup = () => {
         otp: otpValue,
         token: otpToken,
         workerType: new URLSearchParams(location.search).get('type') || 'WORKER',
-        referralCode: referralCode || undefined
+        referralCode: referralCode || undefined,
+        termsAccepted: acceptedTerms
       };
 
       const response = await workerAuthService.register(registerData);
@@ -610,11 +639,28 @@ const WorkerSignup = () => {
                 setIsVerified={setIsReferralVerified}
               />
 
+              <div className="flex items-start bg-gray-50 p-3 rounded-xl border border-gray-100 animate-fade-in">
+                <input
+                  type="checkbox"
+                  id="worker-terms"
+                  checked={acceptedTerms}
+                  onChange={(e) => setAcceptedTerms(e.target.checked)}
+                  className="mt-1 h-4 w-4 border-gray-300 rounded cursor-pointer"
+                  style={{ accentColor: brandColor }}
+                />
+                <label htmlFor="worker-terms" className="ml-3 block text-sm text-gray-700">
+                  I agree to the{' '}
+                  <button type="button" onClick={() => setOpenPolicy('terms')} className="hover:underline font-bold" style={{ color: brandColor }}>Terms and Conditions</button>
+                  {' '}and{' '}
+                  <button type="button" onClick={() => setOpenPolicy('privacy')} className="hover:underline font-bold" style={{ color: brandColor }}>Privacy Policy</button>.
+                </label>
+              </div>
+
               <div className="animate-stagger-[6] animate-fade-in">
                 <button
                   type="submit"
-                  disabled={isLoading}
-                  className="group relative w-full flex justify-center py-4 px-4 border border-transparent text-base font-bold rounded-xl text-white transition-all transform hover:-translate-y-1 shadow-lg disabled:opacity-50 overflow-hidden"
+                  disabled={isLoading || !acceptedTerms}
+                  className="group relative w-full flex justify-center py-4 px-4 border border-transparent text-base font-bold rounded-xl text-white transition-all transform hover:-translate-y-1 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 overflow-hidden"
                   style={{ backgroundColor: brandColor, boxShadow: `0 10px 15px -3px ${brandColor}4D` }}
                 >
                   <span className="absolute inset-0 w-full h-full bg-white/10 group-hover:translate-x-full transition-transform duration-700 -translate-x-full" />
@@ -708,6 +754,28 @@ const WorkerSignup = () => {
           </Link>
         </p>
       </div>
+
+      {openPolicy && createPortal(
+        <div className="fixed inset-0 bg-black/60 z-[99999] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden animate-fade-in m-auto relative">
+            <div className="flex justify-between items-center p-4 border-b">
+              <h3 className="text-xl font-bold text-gray-900">{policyTitles[openPolicy]}</h3>
+              <button type="button" onClick={() => setOpenPolicy(null)} className="text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-full p-2 transition-colors">
+                <FiX size={20} />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto flex-1 whitespace-pre-wrap text-sm text-gray-700">
+              {policies[openPolicy]}
+            </div>
+            <div className="p-4 border-t bg-gray-50 flex justify-end">
+              <button type="button" onClick={() => setOpenPolicy(null)} className="px-6 py-2 text-white rounded-lg font-bold transition-opacity hover:opacity-90" style={{ backgroundColor: brandColor }}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };

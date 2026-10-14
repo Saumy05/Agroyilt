@@ -112,6 +112,7 @@ exports.updateAppGuide = async (req, res) => {
 };
 
 const Policy = require('../../models/Policy');
+const DEFAULT_POLICIES = require('../../utils/defaultPolicies');
 
 // ==================== Policy Controllers ====================
 
@@ -119,11 +120,16 @@ const Policy = require('../../models/Policy');
 exports.getPolicy = async (req, res) => {
     try {
         const { role, type } = req.params;
-        let policy = await Policy.findOne({ role, type });
-        if (!policy) {
-            policy = { role, type, content: '' };
+        const fallback = DEFAULT_POLICIES[role]?.[type];
+        if (fallback === undefined) {
+            return res.status(404).json({ success: false, message: 'Unknown policy' });
         }
-        res.status(200).json({ success: true, data: policy });
+        // Never return a blank document: use the starter text until an admin saves their own
+        const policy = await Policy.findOne({ role, type });
+        if (policy && policy.content && policy.content.trim()) {
+            return res.status(200).json({ success: true, data: policy });
+        }
+        res.status(200).json({ success: true, data: { role, type, content: fallback, isDefault: true } });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Server Error' });
     }
@@ -135,6 +141,12 @@ exports.updatePolicy = async (req, res) => {
         const { role, type, content } = req.body;
         if (!role || !type) {
             return res.status(400).json({ success: false, message: 'Role and type are required' });
+        }
+        if (DEFAULT_POLICIES[role]?.[type] === undefined) {
+            return res.status(400).json({ success: false, message: 'Unknown role or document type' });
+        }
+        if (typeof content !== 'string' || !content.trim()) {
+            return res.status(400).json({ success: false, message: 'Policy content cannot be blank' });
         }
         let policy = await Policy.findOne({ role, type });
         if (policy) {

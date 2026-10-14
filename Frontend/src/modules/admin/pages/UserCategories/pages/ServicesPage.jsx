@@ -405,6 +405,7 @@ const ServicesPage = ({ catalog, setCatalog, selectedCity }) => {
                         </div>
 
                         {/* Guideline Rates Grid */}
+                        {!service.distance_pricing?.enabled && (
                         <div className="grid grid-cols-3 gap-2 mt-4 pt-4 border-t border-gray-50">
                           <div className="text-center px-1">
                             <div className="text-[9px] text-gray-400 font-bold uppercase mb-1">Hourly</div>
@@ -419,6 +420,7 @@ const ServicesPage = ({ catalog, setCatalog, selectedCity }) => {
                             <div className="text-sm font-black text-gray-900">₹{service.daily_price || 0}</div>
                           </div>
                         </div>
+                        )}
 
                         {service.distance_pricing?.enabled && (
                           <div className="mt-3 rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-[11px] font-bold text-emerald-700">
@@ -426,10 +428,12 @@ const ServicesPage = ({ catalog, setCatalog, selectedCity }) => {
                           </div>
                         )}
 
+                        {!service.distance_pricing?.enabled && (
                         <div className="mt-4 flex items-center justify-between text-[10px] text-gray-400 font-medium">
                           <span>Base Unit Highlight</span>
                           <span className="text-gray-900 font-bold">₹{service.basePrice || service.hourly_price || 0}</span>
                         </div>
+                        )}
 
                         {/* Action Buttons (Repositioned to avoid overlap) */}
                         <div className="absolute bottom-2 right-2 flex gap-1.5 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-200">

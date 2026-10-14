@@ -475,6 +475,13 @@ const Account = () => {
                 onClick={() => navigate('/user/help-support')}
               />
               <MenuItem
+                icon={FiFileText}
+                iconBg="bg-amber-50 text-amber-700"
+                label="Terms & Conditions"
+                subtitle="Terms of use & privacy policy"
+                onClick={() => navigate('/terms/farmer')}
+              />
+              <MenuItem
                 icon={FiShield}
                 iconBg="bg-emerald-50 text-emerald-700"
                 label="About AgroYilt"

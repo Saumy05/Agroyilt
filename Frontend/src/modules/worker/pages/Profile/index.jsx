@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiUser, FiEdit2, FiMapPin, FiPhone, FiMail, FiBriefcase, FiStar, FiChevronRight, FiTag, FiLogOut, FiGift, FiCreditCard, FiX, FiHelpCircle } from 'react-icons/fi';
+import { FiUser, FiEdit2, FiMapPin, FiPhone, FiMail, FiBriefcase, FiStar, FiChevronRight, FiTag, FiLogOut, FiGift, FiCreditCard, FiX, FiHelpCircle, FiFileText } from 'react-icons/fi';
 import { toastManager } from '../../../../utils/toastManager';
 import { workerTheme as themeColors, vendorTheme } from '../../../../theme';
 import { workerAuthService } from '../../../../services/authService';
@@ -554,6 +554,20 @@ const Profile = () => {
                 <FiHelpCircle className="w-4 h-4" />
               </div>
               <span className="font-bold text-slate-800 text-xs sm:text-sm">Help & Support</span>
+            </div>
+            <FiChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+          </button>
+
+          {/* Terms & Conditions */}
+          <button
+            onClick={() => navigate('/terms/worker')}
+            className="w-full p-3.5 flex items-center justify-between hover:bg-slate-50 transition-colors text-left"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
+                <FiFileText className="w-4 h-4" />
+              </div>
+              <span className="font-bold text-slate-800 text-xs sm:text-sm">Terms & Conditions</span>
             </div>
             <FiChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
           </button>
