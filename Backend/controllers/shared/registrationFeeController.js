@@ -142,7 +142,12 @@ const initiatePayment = async (req, res) => {
         amount: orderOptions.amount,
         currency: orderOptions.currency
       },
-      paymentRecordId: paymentRecord._id
+      paymentRecordId: paymentRecord._id,
+      customer: {
+        name: account.name || '',
+        phone: account.phone || '',
+        email: account.email || ''
+      }
     });
   } catch (error) {
     console.error('Initiate payment error:', error);
@@ -190,13 +195,15 @@ const verifyFeePayment = async (req, res) => {
     const Model = getModelForRole(paymentRecord.role);
     const account = await Model.findById(paymentRecord.accountId);
     
-    if (account) {
-      account.registrationFeeStatus = 'PAID';
-      account.registrationFeeAmount = paymentRecord.amount;
-      account.registrationFeeVersion = paymentRecord.feeVersion;
-      account.registrationFeePaymentId = paymentRecord._id;
-      await account.save();
+    if (!account) {
+      return res.status(404).json({ success: false, message: 'Account not found.' });
     }
+
+    account.registrationFeeStatus = 'PAID';
+    account.registrationFeeAmount = paymentRecord.amount;
+    account.registrationFeeVersion = paymentRecord.feeVersion;
+    account.registrationFeePaymentId = paymentRecord._id;
+    await account.save();
 
     // Trigger Referral Qualification if active rule is REGISTRATION_FEE_PAYMENT
     try {

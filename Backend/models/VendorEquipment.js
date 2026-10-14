@@ -48,10 +48,17 @@ const vendorEquipmentSchema = new mongoose.Schema({
       required: true
     },
     pricing: {
-      hourly:     { price: { type: Number, default: 0 }, isEnabled: { type: Boolean, default: false } },
-      per_minute: { price: { type: Number, default: 0 }, isEnabled: { type: Boolean, default: false } },
-      land_based: { price: { type: Number, default: 0 }, isEnabled: { type: Boolean, default: false } },
-      daily:      { price: { type: Number, default: 0 }, isEnabled: { type: Boolean, default: false } }
+      hourly:         { price: { type: Number, default: 0 }, isEnabled: { type: Boolean, default: false } },
+      per_minute:     { price: { type: Number, default: 0 }, isEnabled: { type: Boolean, default: false } },
+      land_based:     { price: { type: Number, default: 0 }, isEnabled: { type: Boolean, default: false } },
+      daily:          { price: { type: Number, default: 0 }, isEnabled: { type: Boolean, default: false } },
+      distance_based: { 
+        price:      { type: Number, default: 0 },
+        perKmRate:  { type: Number, default: 0 },
+        baseCharge: { type: Number, default: 0 },
+        baseKm:     { type: Number, default: 0 },
+        isEnabled:  { type: Boolean, default: false } 
+      }
     }
   }],
   // Legacy: kept for backward compat with older listings
@@ -109,6 +116,13 @@ const vendorEquipmentSchema = new mongoose.Schema({
     },
     daily: {
       price: { type: Number, default: 0 },
+      isEnabled: { type: Boolean, default: false }
+    },
+    distance_based: {
+      price: { type: Number, default: 0 },
+      perKmRate: { type: Number, default: 0 },
+      baseCharge: { type: Number, default: 0 },
+      baseKm: { type: Number, default: 0 },
       isEnabled: { type: Boolean, default: false }
     }
   },

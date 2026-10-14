@@ -345,11 +345,41 @@ exports.findQualifiedVendors = async (req, res) => {
       if (rental_type === 'monthly') multiplier *= 30;
     }
 
-    // Per-km (trolley) jobs: admin's tier for the chosen implement replaces vendor hourly/acre rates
+    // Per-km (trolley) jobs: admin's tier or implement distance pricing
     let distancePricing = null;
     if (rental_type === 'distance_based') {
       const distSvc = require('../../services/distanceTripService');
-      const found = await distSvc.resolveImplementDistancePricing(implementId, categoryId);
+      let found = await distSvc.resolveImplementDistancePricing(implementId, categoryId);
+      
+      // Fallback: check if any vendor has listed this implement with distance_based pricing
+      if (!found && implementId) {
+        const VendorEquipment = require('../../models/VendorEquipment');
+        const vendorEq = await VendorEquipment.findOne({
+          'implements.subCategoryId': implementId,
+          'implements.pricing.distance_based.isEnabled': true
+        }).select('implements').lean();
+        if (vendorEq) {
+          const imp = (vendorEq.implements || []).find(i => String(i.subCategoryId) === String(implementId));
+          const vdp = imp?.pricing?.distance_based;
+          if (vdp && (Number(vdp.perKmRate || vdp.price) > 0 || Number(vdp.baseCharge) > 0)) {
+            found = {
+              baseKm: Number(vdp.baseKm) || 0,
+              baseCharge: Number(vdp.baseCharge) || 0,
+              perKmRate: Number(vdp.perKmRate || vdp.price) || 0
+            };
+          }
+        }
+      }
+
+      // Default fallback for Trolley / Trailer implements
+      if (!found && implementId) {
+        const Category = require('../../models/Category');
+        const impl = await Category.findById(implementId).select('title').lean();
+        if (impl && (/trailer|trolley|ट्राली|ट्रॉली/i).test(impl.title)) {
+          found = { baseKm: 0, baseCharge: 0, perKmRate: 25 };
+        }
+      }
+
       if (!found) {
         return res.status(200).json({ success: true, data: [], message: 'Per-km pricing is not available for this attachment.' });
       }
@@ -470,13 +500,6 @@ exports.findQualifiedVendors = async (req, res) => {
       if (minHp && eqHp > 0 && eqHp < Number(minHp)) continue;
       if (maxHp && eqHp > 0 && eqHp > Number(maxHp)) continue;
 
-      // Pricing validation for requested rental_type (must be explicitly enabled and price > 0)
-      const pricingObj = eq.pricing?.[rental_type];
-      const tractorUnitRate = distancePricing
-        ? distancePricing.baseCharge
-        : ((pricingObj?.isEnabled && pricingObj.price > 0) ? pricingObj.price : 0);
-      if (tractorUnitRate <= 0) continue; // Not enabled or price <= 0
-
       // Implement validation & pricing
       let matchedImplement = null;
       let implementUnitRate = 0;
@@ -490,7 +513,8 @@ exports.findQualifiedVendors = async (req, res) => {
 
         if (foundImpl) {
           const implPriceObj = foundImpl.pricing?.[rental_type];
-          implementUnitRate = (!distancePricing && implPriceObj?.isEnabled && implPriceObj.price > 0) ? implPriceObj.price : 0;
+          implementUnitRate = (implPriceObj?.isEnabled && (implPriceObj.price > 0 || implPriceObj.perKmRate > 0))
+            ? (implPriceObj.price || implPriceObj.perKmRate) : 0;
           matchedImplement = {
             _id: foundImpl.subCategoryId?._id || foundImpl.subCategoryId,
             title: foundImpl.subCategoryId?.title || 'Selected Implement',
@@ -506,6 +530,21 @@ exports.findQualifiedVendors = async (req, res) => {
           continue; // Implement not compatible/attached
         }
       }
+
+      // Pricing validation for requested rental_type (must be explicitly enabled and price > 0)
+      const pricingObj = eq.pricing?.[rental_type];
+      let tractorUnitRate = 0;
+      if (rental_type === 'distance_based') {
+        const eqKmRate = (pricingObj?.isEnabled && (pricingObj.price > 0 || pricingObj.perKmRate > 0))
+          ? (pricingObj.price || pricingObj.perKmRate) : 0;
+        const totalDistanceRate = implementUnitRate + eqKmRate;
+        tractorUnitRate = totalDistanceRate > 0 
+          ? totalDistanceRate 
+          : (distancePricing ? (distancePricing.baseCharge > 0 ? distancePricing.baseCharge : distancePricing.perKmRate) : 0);
+      } else {
+        tractorUnitRate = (pricingObj?.isEnabled && pricingObj.price > 0) ? pricingObj.price : 0;
+      }
+      if (tractorUnitRate <= 0) continue; // Not enabled or price <= 0
 
       // Real-time availability check using normalized interval overlap
       const vendorBookings = vendorBookingMap.get(vId) || [];
@@ -607,7 +646,41 @@ exports.findQualifiedVendors = async (req, res) => {
 exports.getImplementDistancePricing = async (req, res) => {
   try {
     const { implementId, categoryId } = req.query;
-    const found = await require('../../services/distanceTripService').resolveImplementDistancePricing(implementId, categoryId);
+    let found = await require('../../services/distanceTripService').resolveImplementDistancePricing(implementId, categoryId);
+
+    // Check if any vendor has configured distance pricing for this implement
+    if (!found && implementId) {
+      const VendorEquipment = require('../../models/VendorEquipment');
+      const vendorEq = await VendorEquipment.findOne({
+        'implements.subCategoryId': implementId,
+        'implements.pricing.distance_based.isEnabled': true
+      }).select('implements').lean();
+      if (vendorEq) {
+        const imp = (vendorEq.implements || []).find(i => String(i.subCategoryId) === String(implementId));
+        const vdp = imp?.pricing?.distance_based;
+        if (vdp && (Number(vdp.perKmRate || vdp.price) > 0 || Number(vdp.baseCharge) > 0)) {
+          found = {
+            baseKm: Number(vdp.baseKm) || 0,
+            baseCharge: Number(vdp.baseCharge) || 0,
+            perKmRate: Number(vdp.perKmRate || vdp.price) || 0
+          };
+        }
+      }
+    }
+
+    // Default fallback for Trolley / Trailer implements
+    if (!found && implementId) {
+      const Category = require('../../models/Category');
+      const impl = await Category.findById(implementId).select('title').lean();
+      if (impl && (/trailer|trolley|ट्राली|ट्रॉली/i).test(impl.title)) {
+        found = {
+          baseKm: 0,
+          baseCharge: 0,
+          perKmRate: 25
+        };
+      }
+    }
+
     res.status(200).json({
       success: true,
       data: found ? { baseKm: found.baseKm, baseCharge: found.baseCharge, perKmRate: found.perKmRate } : null

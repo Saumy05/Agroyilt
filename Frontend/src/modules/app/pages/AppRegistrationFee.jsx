@@ -70,7 +70,12 @@ const AppRegistrationFee = () => {
       const initRes = await api.post(
         '/fees/initiate-payment',
         {},
-        { headers: { Authorization: `Bearer ${preAuthToken}` } }
+        { 
+          headers: { 
+            Authorization: `Bearer ${preAuthToken}`
+          },
+          role: pendingRole
+        }
       );
 
       if (initRes.data.autoApproved) {
@@ -79,7 +84,13 @@ const AppRegistrationFee = () => {
         return;
       }
 
-      const { order, paymentRecordId } = initRes.data;
+      const { order, paymentRecordId, customer } = initRes.data;
+
+      // Only include valid non-empty prefill fields (empty strings cause Razorpay 400 Bad Request)
+      const prefill = {};
+      if (customer?.name?.trim()) prefill.name = customer.name.trim();
+      if (customer?.phone?.trim()) prefill.contact = customer.phone.trim();
+      if (customer?.email?.trim()) prefill.email = customer.email.trim();
 
       const options = {
         key: import.meta.env.VITE_RAZORPAY_KEY_ID,
@@ -91,11 +102,7 @@ const AppRegistrationFee = () => {
         handler: async (response) => {
           await verifyPayment(response, paymentRecordId);
         },
-        prefill: {
-          name: '',
-          email: '',
-          contact: ''
-        },
+        ...(Object.keys(prefill).length > 0 ? { prefill } : {}),
         theme: {
           color: '#2E7D32'
         },
@@ -108,11 +115,22 @@ const AppRegistrationFee = () => {
       };
 
       const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', function (response) {
+        setIsProcessing(false);
+        const failMsg = response.error?.description || 'Payment failed. Please try another method.';
+        toastManager.error(failMsg);
+      });
       rzp.open();
     } catch (error) {
       console.error('Payment initiation error:', error);
-      toastManager.error(error.response?.data?.message || 'Failed to initiate payment.');
+      const errMsg = error.response?.data?.message || 'Failed to initiate payment.';
+      toastManager.error(errMsg);
       setIsProcessing(false);
+      if (error.response?.status === 401) {
+        setTimeout(() => {
+          navigate('/app/login', { replace: true });
+        }, 2500);
+      }
     }
   };
 
@@ -127,7 +145,12 @@ const AppRegistrationFee = () => {
           razorpay_signature: razorpayResponse.razorpay_signature,
           paymentRecordId
         },
-        { headers: { Authorization: `Bearer ${preAuthToken}` } }
+        { 
+          headers: { 
+            Authorization: `Bearer ${preAuthToken}`
+          },
+          role: pendingRole
+        }
       );
 
       toastManager.dismiss();
@@ -256,6 +279,25 @@ const AppRegistrationFee = () => {
               <span>Pay ₹{feeData?.amount || 0} Securely</span>
             )}
           </button>
+
+          {import.meta.env.VITE_RAZORPAY_KEY_ID?.startsWith('rzp_test_') && (
+            <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-left text-xs text-amber-800">
+              <p className="font-bold text-amber-900 mb-1 flex items-center gap-1">
+                <span>🧪</span> Razorpay Test Mode Active:
+              </p>
+              <ul className="list-disc list-inside space-y-1 text-amber-700">
+                <li>
+                  Use <strong>Cards</strong>: <code className="bg-amber-100 font-mono px-1 rounded">4111 1111 1111 1111</code> (Exp: 12/28, CVV: 123)
+                </li>
+                <li>
+                  Or use <strong>UPI</strong> ID: <code className="bg-amber-100 font-mono px-1 rounded">success@razorpay</code>
+                </li>
+                <li>
+                  Click <strong>Success</strong> on the Razorpay mock OTP/Auth popup.
+                </li>
+              </ul>
+            </div>
+          )}
           
           <p className="text-center text-xs text-gray-400 mt-4">
             Payments are securely processed via Razorpay

@@ -258,20 +258,72 @@ const createBooking = async (req, res) => {
       let unitRate = service.basePrice || 500;
 
       if (rental_type === 'distance_based') {
-        // Admin-controlled tier: the booking starts at the base charge; the final bill uses the km driven.
-        // Booked as a service ("Trolley" service) or as an implement attached to a machine.
         const distSvc = require('../../services/distanceTripService');
-        let dp = service.distance_pricing?.enabled ? service.distance_pricing : null;
-        if (!dp) {
-          const implId = Array.isArray(selectedImplements) && selectedImplements[0]
-            ? (selectedImplements[0].subCategoryId?._id || selectedImplements[0].subCategoryId) : null;
-          dp = await distSvc.resolveImplementDistancePricing(implId, categoryId || equipmentObj?.categoryId);
+        let dp = null;
+
+        const implId = Array.isArray(selectedImplements) && selectedImplements[0]
+          ? (selectedImplements[0].subCategoryId?._id || selectedImplements[0].subCategoryId) : null;
+
+        // 1. Check if vendor's equipment has custom distance pricing for this implement
+        if (equipmentObj && Array.isArray(equipmentObj.implements) && implId) {
+          const matchedImpl = equipmentObj.implements.find(i => 
+            String(i.subCategoryId?._id || i.subCategoryId) === String(implId)
+          );
+          const vdp = matchedImpl?.pricing?.distance_based;
+          const vRate = Number(vdp?.price || vdp?.perKmRate || 0);
+          const vBase = Number(vdp?.baseCharge || 0);
+          if (vdp?.isEnabled && (vRate > 0 || vBase > 0)) {
+            const tractorKmRate = equipmentObj.pricing?.distance_based?.isEnabled
+              ? Number(equipmentObj.pricing.distance_based.price || equipmentObj.pricing.distance_based.perKmRate || 0) : 0;
+            const tractorBase = equipmentObj.pricing?.distance_based?.isEnabled
+              ? Number(equipmentObj.pricing.distance_based.baseCharge || 0) : 0;
+            dp = {
+              enabled: true,
+              baseKm: Number(vdp.baseKm || equipmentObj.pricing?.distance_based?.baseKm) || 0,
+              baseCharge: vBase + tractorBase,
+              perKmRate: vRate + tractorKmRate
+            };
+          }
         }
+
+        // 2. Check if equipment itself has distance_based pricing
+        if (!dp && equipmentObj?.pricing?.distance_based?.isEnabled) {
+          const ep = equipmentObj.pricing.distance_based;
+          const eRate = Number(ep.price || ep.perKmRate || 0);
+          const eBase = Number(ep.baseCharge || 0);
+          if (eRate > 0 || eBase > 0) {
+            dp = {
+              enabled: true,
+              baseKm: Number(ep.baseKm) || 0,
+              baseCharge: eBase,
+              perKmRate: eRate
+            };
+          }
+        }
+
+        // 3. Fallback to Service / Admin template distance pricing
+        if (!dp) {
+          if (service.distance_pricing?.enabled) {
+            dp = service.distance_pricing;
+          } else if (implId) {
+            dp = await distSvc.resolveImplementDistancePricing(implId, categoryId || equipmentObj?.categoryId);
+          }
+        }
+
+        // 4. Default fallback for Trolley if still no tier found
+        if (!dp && implId) {
+          const Category = require('../../models/Category');
+          const impl = await Category.findById(implId).select('title').lean();
+          if (impl && (/trailer|trolley|ट्राली|ट्रॉली/i).test(impl.title)) {
+            dp = { enabled: true, baseKm: 0, baseCharge: 0, perKmRate: 25 };
+          }
+        }
+
         distancePricing = dp ? distSvc.pricingFromService({ distance_pricing: dp }) : null;
-        if (!dp || !(Number(dp.baseCharge) > 0)) {
+        if (!dp || !(Number(dp.perKmRate) > 0 || Number(dp.baseCharge) > 0)) {
           return res.status(400).json({ success: false, message: 'Distance-based booking is not available for this service' });
         }
-        unitRate = Number(dp.baseCharge);
+        unitRate = Number(dp.baseCharge) > 0 ? Number(dp.baseCharge) : Number(dp.perKmRate);
       } else if (equipmentObj && equipmentObj.pricing) {
         const ep = equipmentObj.pricing;
         if (rental_type === 'hourly' && ep.hourly?.isEnabled) unitRate = ep.hourly.price;
@@ -2219,7 +2271,8 @@ const calculatePrice = async (req, res) => {
       rental_type,
       landSize,
       estimatedDuration,
-      bookedItems
+      bookedItems,
+      selectedImplements
     } = req.body;
 
     let totalServiceValue = 0;
@@ -2254,12 +2307,70 @@ const calculatePrice = async (req, res) => {
       equipmentObj = await VendorEquipment.findById(equipmentId);
     }
 
+    let calculatedDistancePricing = null;
     if (rental_type === 'distance_based') {
-      const dp = service.distance_pricing || {};
-      if (!dp.enabled || !(Number(dp.baseCharge) > 0)) {
+      const distSvc = require('../../services/distanceTripService');
+      let dp = null;
+
+      const implId = Array.isArray(selectedImplements) && selectedImplements[0]
+        ? (selectedImplements[0].subCategoryId?._id || selectedImplements[0].subCategoryId) : null;
+
+      if (equipmentObj && Array.isArray(equipmentObj.implements) && implId) {
+        const matchedImpl = equipmentObj.implements.find(i => 
+          String(i.subCategoryId?._id || i.subCategoryId) === String(implId)
+        );
+        const vdp = matchedImpl?.pricing?.distance_based;
+        const vRate = Number(vdp?.price || vdp?.perKmRate || 0);
+        const vBase = Number(vdp?.baseCharge || 0);
+        if (vdp?.isEnabled && (vRate > 0 || vBase > 0)) {
+          const tractorKmRate = equipmentObj.pricing?.distance_based?.isEnabled
+            ? Number(equipmentObj.pricing.distance_based.price || equipmentObj.pricing.distance_based.perKmRate || 0) : 0;
+          const tractorBase = equipmentObj.pricing?.distance_based?.isEnabled
+            ? Number(equipmentObj.pricing.distance_based.baseCharge || 0) : 0;
+          dp = {
+            enabled: true,
+            baseKm: Number(vdp.baseKm || equipmentObj.pricing?.distance_based?.baseKm) || 0,
+            baseCharge: vBase + tractorBase,
+            perKmRate: vRate + tractorKmRate
+          };
+        }
+      }
+
+      if (!dp && equipmentObj?.pricing?.distance_based?.isEnabled) {
+        const ep = equipmentObj.pricing.distance_based;
+        const eRate = Number(ep.price || ep.perKmRate || 0);
+        const eBase = Number(ep.baseCharge || 0);
+        if (eRate > 0 || eBase > 0) {
+          dp = {
+            enabled: true,
+            baseKm: Number(ep.baseKm) || 0,
+            baseCharge: eBase,
+            perKmRate: eRate
+          };
+        }
+      }
+
+      if (!dp) {
+        if (service.distance_pricing?.enabled) {
+          dp = service.distance_pricing;
+        } else if (implId) {
+          dp = await distSvc.resolveImplementDistancePricing(implId, categoryId || equipmentObj?.categoryId);
+        }
+      }
+
+      if (!dp && implId) {
+        const Category = require('../../models/Category');
+        const impl = await Category.findById(implId).select('title').lean();
+        if (impl && (/trailer|trolley|ट्राली|ट्रॉली/i).test(impl.title)) {
+          dp = { enabled: true, baseKm: 0, baseCharge: 0, perKmRate: 25 };
+        }
+      }
+
+      calculatedDistancePricing = dp ? distSvc.pricingFromService({ distance_pricing: dp }) : null;
+      if (!dp || !(Number(dp.perKmRate) > 0 || Number(dp.baseCharge) > 0)) {
         return res.status(400).json({ success: false, message: 'Distance-based booking is not available for this service' });
       }
-      unitRate = Number(dp.baseCharge);
+      unitRate = Number(dp.baseCharge) > 0 ? Number(dp.baseCharge) : Number(dp.perKmRate);
     } else if (equipmentObj && equipmentObj.pricing) {
       const ep = equipmentObj.pricing;
       if (rental_type === 'hourly' && ep.hourly?.isEnabled) unitRate = ep.hourly.price;
@@ -2316,7 +2427,7 @@ const calculatePrice = async (req, res) => {
         finalAmount,
         unitRate,
         multiplier,
-        ...(rental_type === 'distance_based' ? { distancePricing: require('../../services/distanceTripService').pricingFromService(service), isEstimate: true } : {})
+        ...(rental_type === 'distance_based' ? { distancePricing: calculatedDistancePricing || require('../../services/distanceTripService').pricingFromService(service), isEstimate: true } : {})
       }
     });
   } catch (error) {

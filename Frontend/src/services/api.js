@@ -51,11 +51,22 @@ api.interceptors.request.use(
       }
     }
 
-    const role = getRoleForRequest(config.url, config);
-    const token = authStorage.getAccessToken(role);
+    // Check if an Authorization header was already explicitly provided by caller (e.g. preAuthToken)
+    const hasExplicitAuth = Boolean(
+      (typeof config.headers?.Authorization === 'string' && config.headers.Authorization.trim()) ||
+      (typeof config.headers?.authorization === 'string' && config.headers.authorization.trim()) ||
+      (typeof config.headers?.get === 'function' && (config.headers.get('Authorization') || config.headers.get('authorization')))
+    );
 
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    if (hasExplicitAuth) {
+      config._hasExplicitAuth = true;
+    } else {
+      const role = getRoleForRequest(config.url, config);
+      const token = authStorage.getAccessToken(role);
+
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
     }
     return config;
   },
@@ -87,7 +98,7 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    // Check if the request is an authentication/login endpoint
+    // Check if the request is an authentication/login endpoint or public/pre-auth endpoint
     const reqUrl = (originalRequest?.url || '').toLowerCase();
     const isAuthRequest = [
       '/auth/login',
@@ -102,12 +113,13 @@ api.interceptors.response.use(
       '/auth/reset-mpin',
       '/auth/forgot-mpin',
       '/auth/mpin-status',
-      '/app/identify-role'
+      '/app/identify-role',
+      '/fees/'
     ].some(pattern => reqUrl.includes(pattern));
 
-    // If an auth or login request returned 401 (e.g. wrong credentials/MPIN),
-    // NEVER attempt token refresh or trigger logout/redirect. Let the login form catch block handle it gracefully!
-    if (isAuthRequest) {
+    // If an auth, login, or fees request returned 401, or if request used an explicit caller auth token (like preAuthToken),
+    // NEVER attempt session token refresh or trigger logout. Let the caller catch block handle it gracefully!
+    if (isAuthRequest || originalRequest?._hasExplicitAuth) {
       return Promise.reject(error);
     }
 

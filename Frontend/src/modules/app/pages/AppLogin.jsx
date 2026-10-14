@@ -191,6 +191,8 @@ const AppLogin = () => {
         toastManager.error(msg);
         sessionStorage.setItem('preAuthToken', errorData.preAuthToken);
         sessionStorage.setItem('pendingRole', errorData.role);
+        localStorage.setItem('preAuthToken', errorData.preAuthToken);
+        localStorage.setItem('pendingRole', errorData.role);
         navigate('/app/registration-fee', { replace: true });
         return;
       }

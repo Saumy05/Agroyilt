@@ -20,22 +20,34 @@ const requirePreAuth = (req, res, next) => {
   }
   
   if (!token) {
-    return res.status(401).json({ success: false, message: 'Not authorized, no pre-auth token' });
+    return res.status(401).json({ success: false, message: 'Not authorized, no token provided' });
   }
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (!decoded.isPreAuth) {
-      return res.status(401).json({ success: false, message: 'Invalid token type' });
+    const userId = decoded.userId || decoded.id;
+    const role = (decoded.role || '').toUpperCase();
+
+    if (!userId || !role) {
+      return res.status(401).json({ success: false, message: 'Invalid token payload' });
+    }
+
+    if (!['USER', 'VENDOR', 'WORKER'].includes(role)) {
+      return res.status(403).json({ success: false, message: 'Invalid role for registration fee payment' });
     }
     
     req.user = {
-      accountId: decoded.userId,
-      role: decoded.role
+      accountId: userId,
+      role: role
     };
     next();
   } catch (error) {
-    return res.status(401).json({ success: false, message: 'Not authorized, token failed' });
+    console.error('requirePreAuth error:', error.message);
+    const isExpired = error.name === 'TokenExpiredError';
+    return res.status(401).json({ 
+      success: false, 
+      message: isExpired ? 'Registration session expired. Please log in again.' : 'Not authorized, token invalid' 
+    });
   }
 };
 

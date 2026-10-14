@@ -66,7 +66,27 @@ export const getCurrentPortalRole = () => {
   if (path.startsWith('/worker')) return 'worker';
   if (path.startsWith('/user')) return 'user';
 
-  // When on common routes (e.g. /app, /, modals): detect active session across storage
+  // Mobile App portal
+  if (path.startsWith('/app')) {
+    const pendingRole = sessionStorage.getItem('pendingRole') || localStorage.getItem('pendingRole');
+    if (pendingRole) return normalizeRole(pendingRole);
+
+    const appRoles = ['user', 'worker', 'vendor'];
+    for (const r of appRoles) {
+      const sKey = AUTH_KEYS[r];
+      const cKey = COMPAT_KEYS[r]?.access;
+      if (
+        sessionStorage.getItem(sKey) ||
+        localStorage.getItem(sKey) ||
+        (cKey && (sessionStorage.getItem(cKey) || localStorage.getItem(cKey)))
+      ) {
+        return r;
+      }
+    }
+    return 'user';
+  }
+
+  // When on common routes (e.g. /, modals): detect active session across storage
   try {
     const roles = ['user', 'worker', 'vendor', 'admin'];
     for (const r of roles) {

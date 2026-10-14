@@ -45,9 +45,10 @@ const AddEquipment = () => {
     description: '',
     images: [],
     pricing: {
-      hourly:     { price: 0, isEnabled: true },
-      land_based: { price: 0, isEnabled: false },
-      daily:      { price: 0, isEnabled: false }
+      hourly:         { price: 0, isEnabled: true },
+      land_based:     { price: 0, isEnabled: false },
+      daily:          { price: 0, isEnabled: false },
+      distance_based: { price: 0, perKmRate: 0, isEnabled: false }
     },
     includesDriver: true,
     driver: {
@@ -141,8 +142,20 @@ const AddEquipment = () => {
             subCategoryIds: item.subCategoryIds?.map(s => s._id || s) || [],
             implements: item.implements?.map(i => ({
               ...i,
-              subCategoryId: i.subCategoryId?._id || i.subCategoryId
+              subCategoryId: i.subCategoryId?._id || i.subCategoryId,
+              pricing: {
+                hourly: i.pricing?.hourly || { price: 0, isEnabled: false },
+                land_based: i.pricing?.land_based || { price: 0, isEnabled: false },
+                daily: i.pricing?.daily || { price: 0, isEnabled: false },
+                distance_based: i.pricing?.distance_based || { price: 0, perKmRate: 0, isEnabled: false }
+              }
             })) || [],
+            pricing: {
+              hourly: item.pricing?.hourly || { price: 0, isEnabled: false },
+              land_based: item.pricing?.land_based || { price: 0, isEnabled: false },
+              daily: item.pricing?.daily || { price: 0, isEnabled: false },
+              distance_based: item.pricing?.distance_based || { price: 0, perKmRate: 0, isEnabled: false }
+            },
             driver: item.driver || {
               name: '',
               phone: '',
@@ -321,12 +334,20 @@ const AddEquipment = () => {
       const hPrice = parseFloat(i.pricing?.hourly?.price) || 0;
       const lPrice = parseFloat(i.pricing?.land_based?.price) || 0;
       const dPrice = parseFloat(i.pricing?.daily?.price) || 0;
+      const kmPrice = parseFloat(i.pricing?.distance_based?.price) || 0;
       return {
         subCategoryId: i.subCategoryId?._id || i.subCategoryId,
         pricing: {
           hourly: { price: hPrice, isEnabled: hPrice > 0 || !!form.pricing?.hourly?.isEnabled },
           land_based: { price: lPrice, isEnabled: lPrice > 0 || !!form.pricing?.land_based?.isEnabled },
-          daily: { price: dPrice, isEnabled: dPrice > 0 || !!form.pricing?.daily?.isEnabled }
+          daily: { price: dPrice, isEnabled: dPrice > 0 || !!form.pricing?.daily?.isEnabled },
+          distance_based: {
+            price: kmPrice,
+            perKmRate: kmPrice,
+            isEnabled: kmPrice > 0 || !!form.pricing?.distance_based?.isEnabled,
+            baseCharge: parseFloat(i.pricing?.distance_based?.baseCharge) || 0,
+            baseKm: parseFloat(i.pricing?.distance_based?.baseKm) || 0
+          }
         }
       };
     });
@@ -347,11 +368,15 @@ const AddEquipment = () => {
     if (!submissionData.name || submissionData.name.length < 3) return toastManager.error('Please enter a valid machine name');
     
     // 2. Pricing Validation
-    const enabledModes = Object.keys(form.pricing).filter(k => form.pricing[k].isEnabled);
-    if (enabledModes.length === 0) return toastManager.error('Please enable at least one pricing mode (Hourly, Acre or Daily)');
+    const hasImplementDistancePrice = (form.implements || []).some(i => (i.pricing?.distance_based?.price || 0) > 0);
+    const enabledModes = Object.keys(form.pricing).filter(k => form.pricing[k]?.isEnabled);
+    if (enabledModes.length === 0 && !hasImplementDistancePrice) {
+      return toastManager.error('Please enable at least one pricing mode (Hourly, Acre, Daily or Per KM)');
+    }
     
     for (const mode of enabledModes) {
-      if (form.pricing[mode].price <= 0) {
+      if (mode === 'distance_based' && hasImplementDistancePrice) continue;
+      if ((form.pricing[mode]?.price || 0) <= 0) {
         return toastManager.error(`Please set a valid price for ${mode.replace('_', ' ')} mode`);
       }
     }
@@ -615,14 +640,21 @@ const AddEquipment = () => {
                                       subCategoryIds: p.subCategoryIds.filter(id => id !== implId)
                                     };
                                   } else {
+                                    const isTrolleyChip = (/trailer|trolley|ट्राली|ट्रॉली/i).test(cleanName);
+                                    const updatedPricing = isTrolleyChip && !p.pricing?.distance_based?.isEnabled
+                                      ? { ...p.pricing, distance_based: { price: p.pricing?.distance_based?.price || 0, perKmRate: 0, isEnabled: true } }
+                                      : p.pricing;
+
                                     return {
                                       ...p,
+                                      pricing: updatedPricing,
                                       implements: [...p.implements, {
                                         subCategoryId: implId,
                                         pricing: {
-                                          hourly: { price: 0, isEnabled: p.pricing.hourly.isEnabled },
-                                          land_based: { price: 0, isEnabled: p.pricing.land_based.isEnabled },
-                                          daily: { price: 0, isEnabled: p.pricing.daily.isEnabled }
+                                          hourly: { price: 0, isEnabled: p.pricing?.hourly?.isEnabled ?? true },
+                                          land_based: { price: 0, isEnabled: p.pricing?.land_based?.isEnabled ?? false },
+                                          daily: { price: 0, isEnabled: p.pricing?.daily?.isEnabled ?? false },
+                                          distance_based: { price: 0, perKmRate: 0, isEnabled: isTrolleyChip || !!p.pricing?.distance_based?.isEnabled }
                                         }
                                       }],
                                       subCategoryIds: [...p.subCategoryIds, implId]
@@ -737,10 +769,59 @@ const AddEquipment = () => {
                                         </div>
                                       </div>
                                     )}
+
+                                    {(() => {
+                                      const isTrolleyImpl = (/trailer|trolley|ट्राली|ट्रॉली/i).test(name);
+                                      if (!form.pricing.distance_based?.isEnabled && !isTrolleyImpl) return null;
+                                      return (
+                                        <div className="flex items-center justify-between bg-white border border-teal-200/80 rounded-lg px-2.5 py-1.5 focus-within:border-teal-500 transition-colors">
+                                          <div className="flex items-center gap-1">
+                                            <span className="text-[11px] text-teal-800 font-bold">Per KM Add-on</span>
+                                            {isTrolleyImpl && (
+                                              <span className="text-[8.5px] bg-teal-100 text-teal-800 px-1 py-0.2 rounded font-bold">Trolley</span>
+                                            )}
+                                          </div>
+                                          <div className="flex items-center gap-1 w-24">
+                                            <span className="text-xs text-teal-600 font-bold">₹</span>
+                                            <input
+                                              type="number"
+                                              placeholder="0"
+                                              className="w-full text-right text-xs font-bold text-slate-800 outline-none bg-transparent"
+                                              onFocus={(e) => e.target.select()}
+                                              value={implItem.pricing?.distance_based?.price === 0 ? '' : (implItem.pricing?.distance_based?.price ?? '')}
+                                              onChange={e => {
+                                                const val = parseFloat(e.target.value) || 0;
+                                                setForm(p => ({
+                                                  ...p,
+                                                  implements: p.implements.map(i => 
+                                                    (i.subCategoryId?._id || i.subCategoryId) === currentImplId
+                                                      ? { 
+                                                          ...i, 
+                                                          pricing: { 
+                                                            ...i.pricing, 
+                                                            distance_based: { 
+                                                              price: val, 
+                                                              perKmRate: val, 
+                                                              isEnabled: true,
+                                                              baseCharge: i.pricing?.distance_based?.baseCharge || 0,
+                                                              baseKm: i.pricing?.distance_based?.baseKm || 0 
+                                                            } 
+                                                          } 
+                                                        }
+                                                      : i
+                                                  )
+                                                }));
+                                              }}
+                                            />
+                                            <span className="text-[10px] text-slate-400">/km</span>
+                                          </div>
+                                        </div>
+                                      );
+                                    })()}
                                   </div>
 
                                   {/* Live Total Rate Preview */}
-                                  <div className="text-[11px] text-slate-500 font-medium flex items-center gap-1.5 pt-0.5">
+                                  <div className="text-[11px] text-slate-500 font-medium flex flex-wrap items-center gap-1.5 pt-0.5">
                                     <span className="text-slate-400">Farmer pays:</span>
                                     {form.pricing.hourly.isEnabled && (
                                       <span className="font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.5 rounded text-[10px]">
@@ -752,6 +833,16 @@ const AddEquipment = () => {
                                         ₹{(Number(form.pricing.land_based.price) || 0) + (Number(implItem.pricing?.land_based?.price) || 0)}/acre
                                       </span>
                                     )}
+                                    {(() => {
+                                      const isTrolleyImpl = (/trailer|trolley|ट्राली|ट्रॉली/i).test(name);
+                                      if (!form.pricing.distance_based?.isEnabled && !isTrolleyImpl) return null;
+                                      const totalKmRate = (Number(form.pricing.distance_based?.price) || 0) + (Number(implItem.pricing?.distance_based?.price) || 0);
+                                      return (
+                                        <span className="font-bold text-teal-800 bg-teal-50 border border-teal-200/60 px-1.5 py-0.5 rounded text-[10px]">
+                                          ₹{totalKmRate}/km
+                                        </span>
+                                      );
+                                    })()}
                                   </div>
                                 </div>
                               );
@@ -820,12 +911,13 @@ const AddEquipment = () => {
             <FormSection title="Rental Rates">
               <div className="space-y-2.5">
                 {[
-                  { key: 'hourly', label: 'Hourly Rate', unit: '/ hr' },
-                  { key: 'land_based', label: 'Per Acre Rate', unit: '/ acre' },
-                  { key: 'daily', label: 'Daily Rate', unit: '/ day' }
+                  { key: 'hourly', label: 'Hourly Rate', unit: '/ hr', sub: 'For standard agricultural operations' },
+                  { key: 'land_based', label: 'Per Acre Rate', unit: '/ acre', sub: 'Calculated per acre field work' },
+                  { key: 'daily', label: 'Daily Rate', unit: '/ day', sub: 'Flat full-day machine rent' },
+                  { key: 'distance_based', label: 'Per KM Rate (Trolley / Transport)', unit: '/ km', sub: 'Live GPS road distance tracking' }
                 ].map(({ key, label, unit }) => {
-                  const isEnabled = form.pricing[key].isEnabled;
-                  const price = form.pricing[key].price;
+                  const isEnabled = !!form.pricing[key]?.isEnabled;
+                  const price = form.pricing[key]?.price;
                   return (
                     <div 
                       key={key} 
@@ -836,15 +928,32 @@ const AddEquipment = () => {
                       <div className="flex items-center gap-3">
                         <button 
                           type="button" 
-                          onClick={() => setForm(p => ({ ...p, pricing: { ...p.pricing, [key]: { ...p.pricing[key], isEnabled: !p.pricing[key].isEnabled } } }))}
+                          onClick={() => setForm(p => ({ 
+                            ...p, 
+                            pricing: { 
+                              ...p.pricing, 
+                              [key]: { 
+                                ...(p.pricing[key] || { price: 0 }), 
+                                isEnabled: !p.pricing[key]?.isEnabled 
+                              } 
+                            } 
+                          }))}
                           className={`w-9 h-5 rounded-full relative transition-colors ${isEnabled ? 'bg-blue-600' : 'bg-slate-200'}`}
                         >
                           <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all shadow-xs ${isEnabled ? 'right-0.5' : 'left-0.5'}`} />
                         </button>
                         <div>
-                          <p className="text-xs font-semibold text-slate-800">{label}</p>
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-xs font-semibold text-slate-800">{label}</p>
+                            {key === 'distance_based' && (
+                              <span className="text-[9px] bg-teal-100 text-teal-800 font-bold px-1.5 py-0.2 rounded">Trolley / KM</span>
+                            )}
+                          </div>
                           {isEnabled && key === 'hourly' && price > 0 && (
                             <p className="text-[10px] text-emerald-600 font-medium">≈ ₹{(price / 60).toFixed(2)}/min</p>
+                          )}
+                          {isEnabled && key === 'distance_based' && (
+                            <p className="text-[10px] text-teal-600 font-medium">Billed via GPS road distance tracking</p>
                           )}
                         </div>
                       </div>
@@ -858,7 +967,17 @@ const AddEquipment = () => {
                             className="w-full bg-transparent border-none p-0 text-xs font-bold text-slate-800 outline-none text-right"
                             onFocus={(e) => e.target.select()}
                             value={price === 0 ? '' : price}
-                            onChange={e => setForm(p => ({ ...p, pricing: { ...p.pricing, [key]: { ...p.pricing[key], price: parseFloat(e.target.value) || 0 } } }))}
+                            onChange={e => setForm(p => ({ 
+                              ...p, 
+                              pricing: { 
+                                ...p.pricing, 
+                                [key]: { 
+                                  ...(p.pricing[key] || {}), 
+                                  price: parseFloat(e.target.value) || 0,
+                                  perKmRate: parseFloat(e.target.value) || 0
+                                } 
+                              } 
+                            }))}
                           />
                           <span className="text-[10px] text-slate-400 ml-1 whitespace-nowrap">{unit}</span>
                         </div>

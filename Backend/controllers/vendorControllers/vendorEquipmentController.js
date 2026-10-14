@@ -14,6 +14,7 @@ const validatePricing = (pricing) => {
   if (pricing.hourly?.isEnabled && !checkBounds(pricing.hourly.price)) return 'Invalid hourly price (must be 0-50000)';
   if (pricing.daily?.isEnabled && !checkBounds(pricing.daily.price)) return 'Invalid daily price (must be 0-50000)';
   if (pricing.land_based?.isEnabled && !checkBounds(pricing.land_based.price)) return 'Invalid land-based price (must be 0-50000)';
+  if (pricing.distance_based?.isEnabled && !checkBounds(pricing.distance_based.price ?? pricing.distance_based.perKmRate)) return 'Invalid distance-based price (must be 0-50000)';
   return null;
 };
 
@@ -151,7 +152,13 @@ exports.addEquipment = async (req, res) => {
          return res.status(404).json({ success: false, message: 'Selected Service template not found' });
       }
       
-      const submittedPrice = pricing?.hourly?.isEnabled ? pricing.hourly.price : (pricing?.land_based?.isEnabled ? pricing.land_based.price : pricing?.daily?.price);
+      const submittedPrice = pricing?.hourly?.isEnabled 
+        ? pricing.hourly.price 
+        : (pricing?.land_based?.isEnabled 
+          ? pricing.land_based.price 
+          : (pricing?.daily?.isEnabled 
+            ? pricing.daily.price 
+            : (pricing?.distance_based?.isEnabled ? (pricing.distance_based.price ?? pricing.distance_based.perKmRate) : null)));
       
       // Admin sets the cap via basePrice or hourly_price
       const maxAllowed = serviceTemplate.basePrice || serviceTemplate.hourly_price || 0;
@@ -251,7 +258,13 @@ exports.updateEquipment = async (req, res) => {
       if (sId) {
         const serviceTemplate = await Service.findById(sId);
         if (serviceTemplate) {
-          const submittedPrice = updateData.pricing.hourly?.isEnabled ? updateData.pricing.hourly.price : (updateData.pricing.land_based?.isEnabled ? updateData.pricing.land_based.price : updateData.pricing.daily?.price);
+          const submittedPrice = updateData.pricing.hourly?.isEnabled 
+            ? updateData.pricing.hourly.price 
+            : (updateData.pricing.land_based?.isEnabled 
+              ? updateData.pricing.land_based.price 
+              : (updateData.pricing.daily?.isEnabled 
+                ? updateData.pricing.daily.price 
+                : (updateData.pricing.distance_based?.isEnabled ? (updateData.pricing.distance_based.price ?? updateData.pricing.distance_based.perKmRate) : null)));
           const maxAllowed = serviceTemplate.basePrice || serviceTemplate.hourly_price || 0;
           if (maxAllowed > 0 && submittedPrice != null && submittedPrice > maxAllowed) {
             return res.status(400).json({
