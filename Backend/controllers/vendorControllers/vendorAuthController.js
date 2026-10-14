@@ -526,16 +526,6 @@ const loginWithMpin = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Vendor not found' });
     }
 
-    if (vendor.approvalStatus === VENDOR_STATUS.PENDING) {
-      return res.status(403).json({ success: false, message: 'Your account is pending admin approval.' });
-    }
-    if (vendor.approvalStatus === VENDOR_STATUS.REJECTED || vendor.approvalStatus === VENDOR_STATUS.SUSPENDED) {
-      return res.status(403).json({ success: false, message: 'Account restricted.' });
-    }
-    if (!vendor.isActive) {
-      return res.status(403).json({ success: false, message: 'Your account has been deactivated.' });
-    }
-
     if (!vendor.isMpinSet) {
       // Return a special flag to force MPIN setup
       return res.status(400).json({ 
@@ -567,7 +557,30 @@ const loginWithMpin = async (req, res) => {
     // Success - reset attempts
     await mpinService.resetMpinAttempts(vendor);
 
-    // GATEKEEPER: Check Registration Fee
+    // GATEKEEPER 1: Admin approval. Checked only after the MPIN is right (like farmer and worker) so the
+    // account status is not shown to someone who only knows the phone number. The codes let the app
+    // show "pending" / "rejected" instead of a generic "deactivated".
+    if (vendor.approvalStatus === VENDOR_STATUS.PENDING) {
+      return res.status(403).json({
+        success: false,
+        code: 'ACCOUNT_PENDING_APPROVAL',
+        message: 'Your Vendor account is registered and pending admin approval. Please wait for the admin to approve your account.'
+      });
+    }
+    if (vendor.approvalStatus === VENDOR_STATUS.REJECTED) {
+      return res.status(403).json({
+        success: false,
+        code: 'ACCOUNT_REJECTED',
+        message: vendor.rejectedReason
+          ? `Your Vendor application was rejected by admin. Reason: ${vendor.rejectedReason}`
+          : 'Your Vendor application was rejected by admin. Please contact support.'
+      });
+    }
+    if (vendor.approvalStatus === VENDOR_STATUS.SUSPENDED || !vendor.isActive) {
+      return res.status(403).json({ success: false, message: 'Your account has been deactivated. Please contact support.' });
+    }
+
+    // GATEKEEPER 2: Check Registration Fee
     if (vendor.registrationFeeStatus !== 'PAID') {
       const jwt = require('jsonwebtoken');
       const preAuthToken = jwt.sign(
