@@ -196,13 +196,15 @@ const ServicesPage = ({ catalog, setCatalog, selectedCity }) => {
 
     const data = {
       title: form.title,
-      basePrice: parseFloat(form.hourly_price) || parseFloat(form.daily_price) || parseFloat(form.land_price) || (form.distEnabled ? parseFloat(form.distBaseCharge) : 0) || 0,
+      basePrice: form.distEnabled
+        ? (parseFloat(form.distBaseCharge) || 0)
+        : (parseFloat(form.hourly_price) || parseFloat(form.daily_price) || parseFloat(form.land_price) || 0),
       gstPercentage: parseFloat(form.gstPercentage) || 18,
       categoryId: form.categoryId,
-      hourly_price: parseFloat(form.hourly_price) || 0,
-      land_price: parseFloat(form.land_price) || 0,
+      hourly_price: form.distEnabled ? 0 : (parseFloat(form.hourly_price) || 0),
+      land_price: form.distEnabled ? 0 : (parseFloat(form.land_price) || 0),
       land_unit: form.land_unit,
-      daily_price: parseFloat(form.daily_price) || 0,
+      daily_price: form.distEnabled ? 0 : (parseFloat(form.daily_price) || 0),
       pricing_context: form.pricing_context,
       parentSourceId: form.parentSourceId || null,
       distance_pricing: {
@@ -539,6 +541,7 @@ const ServicesPage = ({ catalog, setCatalog, selectedCity }) => {
           */}
 
 
+          {!form.distEnabled && (
           <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100 space-y-4">
             <div className="flex items-center gap-2 mb-1">
               <span className="text-xs font-black text-blue-600 uppercase tracking-wider">Equipment Rental Pricing (Guidelines)</span>
@@ -592,6 +595,7 @@ const ServicesPage = ({ catalog, setCatalog, selectedCity }) => {
             </div>
             <p className="text-[10px] text-blue-500 leading-tight"> These values will be used to show <strong>estimated totals</strong> to farmers based on their selected rental type (Daily rate x 30 for Monthly). </p>
           </div>
+          )}
 
           <div className="bg-emerald-50/60 p-4 rounded-xl border border-emerald-100 space-y-3 mt-4">
             <label className="flex items-center gap-2 cursor-pointer">
@@ -603,15 +607,15 @@ const ServicesPage = ({ catalog, setCatalog, selectedCity }) => {
                 <div className="grid grid-cols-3 gap-3">
                   <div>
                     <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">First (km)</label>
-                    <input type="number" min="0" value={form.distBaseKm} onChange={e => setForm({ ...form, distBaseKm: e.target.value })} placeholder="10" className="w-full px-3 py-2 border border-emerald-200 rounded-lg bg-white text-sm font-bold" />
+                    <input type="number" min="0" value={form.distBaseKm} onChange={e => setForm({ ...form, distBaseKm: e.target.value })} placeholder="e.g. 10" className="w-full px-3 py-2 border border-emerald-200 rounded-lg bg-white text-sm font-bold" />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Charge for first km (₹)</label>
-                    <input type="number" min="0" value={form.distBaseCharge} onChange={e => setForm({ ...form, distBaseCharge: e.target.value })} placeholder="100" className="w-full px-3 py-2 border border-emerald-200 rounded-lg bg-white text-sm font-bold" />
+                    <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Charge for first km (₹) *</label>
+                    <input type="number" min="0" value={form.distBaseCharge} onChange={e => setForm({ ...form, distBaseCharge: e.target.value })} placeholder="e.g. 100" required className="w-full px-3 py-2 border border-emerald-200 rounded-lg bg-white text-sm font-bold" />
                   </div>
                   <div>
                     <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Per extra km (₹)</label>
-                    <input type="number" min="0" value={form.distPerKm} onChange={e => setForm({ ...form, distPerKm: e.target.value })} placeholder="10" className="w-full px-3 py-2 border border-emerald-200 rounded-lg bg-white text-sm font-bold" />
+                    <input type="number" min="0" value={form.distPerKm} onChange={e => setForm({ ...form, distPerKm: e.target.value })} placeholder="e.g. 10" className="w-full px-3 py-2 border border-emerald-200 rounded-lg bg-white text-sm font-bold" />
                   </div>
                 </div>
                 <p className="text-[10px] text-emerald-700 leading-tight">
@@ -631,8 +635,8 @@ const ServicesPage = ({ catalog, setCatalog, selectedCity }) => {
             </button>
             <button
               type="submit"
-              disabled={saving}
-              className="px-6 py-2 bg-primary-600 text-white font-bold rounded-lg hover:bg-primary-700 transition-colors shadow-sm disabled:opacity-50"
+              disabled={saving || (form.distEnabled && !(parseFloat(form.distBaseCharge) > 0))}
+              className="px-6 py-2 bg-primary-600 text-white font-bold rounded-lg hover:bg-primary-700 transition-colors shadow-sm disabled:bg-gray-300 disabled:text-gray-500 disabled:hover:bg-gray-300 disabled:shadow-none disabled:cursor-not-allowed"
             >
               {saving ? "Saving..." : "Save Equipment"}
             </button>

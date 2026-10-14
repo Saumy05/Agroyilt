@@ -1,7 +1,10 @@
 import React from "react";
 import { FiX } from "react-icons/fi";
+import useBodyScrollLock from "../../../../../hooks/useBodyScrollLock";
 
 const Modal = ({ isOpen, onClose, title, children, size = "md" }) => {
+  useBodyScrollLock(isOpen);
+
   if (!isOpen) return null;
 
   const sizeClasses = {
@@ -12,7 +15,7 @@ const Modal = ({ isOpen, onClose, title, children, size = "md" }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-[100000] flex items-center justify-center p-3 sm:p-4 pb-20 sm:pb-4 bg-black bg-opacity-50 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[100000] flex items-center justify-center p-3 sm:p-4 pb-20 sm:pb-4 bg-black/40 backdrop-blur-sm">
       <div className={`bg-white rounded-2xl shadow-2xl w-full ${sizeClasses[size]} max-h-[90vh] overflow-hidden flex flex-col`}>
         <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-primary-50 to-white">
           <h2 className="text-2xl font-bold text-gray-900">{title}</h2>
