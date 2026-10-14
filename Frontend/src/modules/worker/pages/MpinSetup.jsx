@@ -5,6 +5,7 @@ import { toastManager } from '../../../utils/toastManager';
 // authService exports workerAuthService, let's import it
 import { workerAuthService } from '../../../services/authService';
 import authStorage from '../../../utils/authStorage';
+import { goToLoginAfterRegistration } from '../../../utils/navigation';
 import LogoLoader from '../../../components/common/LogoLoader';
 import { themeColors } from '../../../theme';
 
@@ -109,7 +110,7 @@ const WorkerMpinSetup = () => {
         if (isFirstTime && approval !== 'approved') {
           toastManager.info('Your Worker account is registered and pending admin approval. You can login with your MPIN once approved.', { duration: 6000 });
           authStorage.clearAuthSession('worker');
-          navigate('/app/login', { replace: true });
+          goToLoginAfterRegistration(navigate);
         } else {
           navigate('/worker', { replace: true });
         }
@@ -180,7 +181,7 @@ const WorkerMpinSetup = () => {
                   if (workerData.approvalStatus !== 'approved') {
                     toastManager.info('Your registration is complete and pending admin approval.');
                     authStorage.clearAuthSession('worker');
-                    navigate('/worker/login', { replace: true });
+                    goToLoginAfterRegistration(navigate);
                   } else {
                     navigate('/worker', { replace: true });
                   }
