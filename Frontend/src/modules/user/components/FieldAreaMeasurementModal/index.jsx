@@ -168,33 +168,54 @@ const FieldAreaMeasurementModal = ({
     );
   };
 
-  // Search village / location via OpenStreetMap Nominatim
+  // Search village / location via Google Maps Geocoding API / Geocoder
   const handleSearchLocation = async (e) => {
     if (e) e.preventDefault();
     if (!searchQuery.trim()) return;
 
     setSearchLoading(true);
-    try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
-          searchQuery
-        )}&countrycodes=in&limit=1`
-      );
-      const data = await response.json();
-      if (data && data.length > 0) {
-        const found = {
-          lat: parseFloat(data[0].lat),
-          lng: parseFloat(data[0].lon)
-        };
-        setCenter(found);
-        toastManager.success(`Navigated to: ${data[0].display_name.split(',')[0]}`);
-      } else {
-        toastManager.error('Location not found. Try searching village or district name.');
+    const query = searchQuery.trim();
+
+    if (window.google?.maps?.Geocoder) {
+      const geocoder = new window.google.maps.Geocoder();
+      geocoder.geocode({ address: query, componentRestrictions: { country: 'in' } }, (results, status) => {
+        setSearchLoading(false);
+        if (status === 'OK' && results && results[0]) {
+          const lat = results[0].geometry.location.lat();
+          const lng = results[0].geometry.location.lng();
+          setCenter({ lat, lng });
+          toastManager.success(`Navigated to: ${results[0].formatted_address.split(',')[0]}`);
+        } else {
+          toastManager.error('Location not found. Try searching village or district name.');
+        }
+      });
+      return;
+    }
+
+    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+    if (apiKey) {
+      try {
+        const response = await fetch(
+          `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&components=country:IN&key=${apiKey}`
+        );
+        const data = await response.json();
+        if (data.status === 'OK' && data.results && data.results[0]) {
+          const found = {
+            lat: data.results[0].geometry.location.lat,
+            lng: data.results[0].geometry.location.lng
+          };
+          setCenter(found);
+          toastManager.success(`Navigated to: ${data.results[0].formatted_address.split(',')[0]}`);
+        } else {
+          toastManager.error('Location not found. Try searching village or district name.');
+        }
+      } catch (error) {
+        console.error(error);
+        toastManager.error('Error searching location');
+      } finally {
+        setSearchLoading(false);
       }
-    } catch (error) {
-      console.error(error);
-      toastManager.error('Error searching location');
-    } finally {
+    } else {
       setSearchLoading(false);
     }
   };

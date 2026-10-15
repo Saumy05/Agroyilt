@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FiArrowLeft, FiMapPin, FiSave, FiSearch, FiHome, FiX } from 'react-icons/fi';
 import { toastManager } from '../../../../utils/toastManager';
@@ -67,6 +67,8 @@ const AddressManagement = () => {
     loadAddress();
   }, []);
 
+  const [flyToPosition, setFlyToPosition] = useState(null);
+
   const handleLocationSelect = (location) => {
     setSelectedLocation(location);
     setSearchQuery(location.address);
@@ -77,38 +79,56 @@ const AddressManagement = () => {
     if (e.key === 'Enter' && searchQuery.trim()) {
       e.preventDefault();
       setIsSearching(true);
-      
+      const query = searchQuery.trim();
+
+      const applyGeocodeResult = (lat, lng, formattedAddress, components) => {
+        const location = {
+          lat,
+          lng,
+          address: formattedAddress,
+          components: components || []
+        };
+        setSelectedLocation(location);
+        setAddress(formattedAddress);
+        setSearchQuery(formattedAddress);
+        setFlyToPosition({ lat, lng });
+        toastManager.success('Location found and pinned on map');
+      };
+
+      if (window.google?.maps?.Geocoder) {
+        const geocoder = new window.google.maps.Geocoder();
+        geocoder.geocode({ address: query, componentRestrictions: { country: 'in' } }, (results, status) => {
+          setIsSearching(false);
+          if (status === 'OK' && results && results[0]) {
+            const r = results[0];
+            applyGeocodeResult(
+              r.geometry.location.lat(),
+              r.geometry.location.lng(),
+              r.formatted_address,
+              r.address_components
+            );
+          } else {
+            toastManager.error('Address not found. Please try a different search.');
+          }
+        });
+        return;
+      }
+
+      // Fallback via Google Geocode REST API
+      const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
       try {
-        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&countrycodes=in&addressdetails=1`);
-        const results = await response.json();
-        
-        if (results && results.length > 0) {
-          const place = results[0];
-          
-          // Map OSM address structure to our expected structure
-          const components = Object.keys(place.address || {}).map(key => ({
-            long_name: place.address[key],
-            short_name: place.address[key],
-            types: [key]
-          }));
-
-          const mappedComponents = components.map(c => {
-             if(c.types.includes('postcode')) c.types.push('postal_code');
-             if(c.types.includes('city') || c.types.includes('town') || c.types.includes('county')) c.types.push('locality');
-             if(c.types.includes('state')) c.types.push('administrative_area_level_1');
-             return c;
-          });
-
-          const location = {
-            lat: parseFloat(place.lat),
-            lng: parseFloat(place.lon),
-            address: place.display_name,
-            components: mappedComponents,
-          };
-          
-          setSelectedLocation(location);
-          setAddress(place.display_name);
-          setSearchQuery(place.display_name);
+        const response = await fetch(
+          `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&components=country:IN&key=${apiKey}`
+        );
+        const data = await response.json();
+        if (data.status === 'OK' && data.results && data.results[0]) {
+          const r = data.results[0];
+          applyGeocodeResult(
+            r.geometry.location.lat,
+            r.geometry.location.lng,
+            r.formatted_address,
+            r.address_components
+          );
         } else {
           toastManager.error('Address not found. Please try a different search.');
         }
@@ -202,6 +222,7 @@ const AddressManagement = () => {
           <LocationPicker
             onLocationSelect={handleLocationSelect}
             initialPosition={selectedLocation}
+            flyToPosition={flyToPosition}
           />
         </div>
 

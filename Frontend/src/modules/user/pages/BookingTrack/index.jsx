@@ -9,8 +9,7 @@ import {
   FiCamera, FiCopy, FiX, FiEye, FiChevronDown, FiChevronUp
 } from 'react-icons/fi';
 import { FaRupeeSign } from 'react-icons/fa';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import { GoogleMap, useJsApiLoader, OverlayView, InfoWindow } from '@react-google-maps/api';
 import api from '../../../../services/api';
 import { toastManager } from '../../../../utils/toastManager';
 import { useSocket } from '../../../../context/SocketContext';
@@ -23,14 +22,6 @@ import ExtensionModal from './components/ExtensionModal';
 import AddWorkersModal from './components/AddWorkersModal';
 import workerBookingService from '../../../../services/workerBookingService';
 import { walletService } from '../../../../services/walletService';
-
-// Fix Leaflet default marker icon path broken by Vite/webpack bundling
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-});
 
 
 // Helper to format relative time
@@ -126,17 +117,19 @@ const BookingTrack = () => {
   const [regeneratingVisitOtpId, setRegeneratingVisitOtpId] = useState(null);
   const [breakActionLoadingId, setBreakActionLoadingId] = useState(null);
   const [isMapExpanded, setIsMapExpanded] = useState(false);
-  // leafletLoaded state removed — L is now imported directly from npm
+  const googleMapRef = useRef(null);
+  const [activeInfoWindowWorker, setActiveInfoWindowWorker] = useState(null);
+  const [showFarmInfoWindow, setShowFarmInfoWindow] = useState(false);
 
-  const mapContainerRef = useRef(null);
-  const mapInstanceRef = useRef(null);
-  const markersRef = useRef({});
+  const googleMapsLibraries = useMemo(() => ['places', 'geometry'], []);
+  const { isLoaded: isMapScriptLoaded } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '',
+    libraries: googleMapsLibraries
+  });
 
-  // ── CRITICAL: Reset all state & destroy map when booking ID changes ──
-  // This prevents stale data and Leaflet "Map container is already initialized" crashes
-  // when the user navigates from one booking track page to another.
+  // ── Reset state when booking ID changes ──
   useEffect(() => {
-    // Reset state for the new booking ID
     setTrackingData(null);
     setWorkersMap({});
     setLoading(true);
@@ -144,36 +137,9 @@ const BookingTrack = () => {
     setSelectedWorkerId(null);
     setIsFullScreen(false);
     setSelectedProofModal(null);
-
-    // Destroy previous Leaflet map instance fully
-    if (mapInstanceRef.current) {
-      try {
-        Object.values(markersRef.current).forEach(m => {
-          if (m && mapInstanceRef.current.hasLayer(m)) mapInstanceRef.current.removeLayer(m);
-        });
-        mapInstanceRef.current.remove();
-      } catch (e) {
-        // Non-fatal cleanup
-      }
-      mapInstanceRef.current = null;
-    }
-    markersRef.current = {};
-
-    // Also clear _leaflet_id on the container element if it persists
-    if (mapContainerRef.current && mapContainerRef.current._leaflet_id) {
-      delete mapContainerRef.current._leaflet_id;
-    }
+    setActiveInfoWindowWorker(null);
+    setShowFarmInfoWindow(false);
   }, [id]);
-
-  // Cleanup map instance on unmount
-  useEffect(() => {
-    return () => {
-      if (mapInstanceRef.current) {
-        try { mapInstanceRef.current.remove(); } catch (e) {}
-        mapInstanceRef.current = null;
-      }
-    };
-  }, []);
 
   // 1. Fetch Authoritative Tracking Snapshot from REST API
   const fetchSnapshot = useCallback(async (showLoader = false) => {
@@ -682,11 +648,13 @@ const BookingTrack = () => {
     }
   }, [isWorkInProgress, counters.onJourney]);
 
-  // Invalidate Leaflet map size on expand/collapse
+  // Invalidate Google Map size on expand/collapse
   useEffect(() => {
-    if (mapInstanceRef.current && isMapExpanded) {
+    if (googleMapRef.current && isMapExpanded && window.google?.maps?.event) {
       setTimeout(() => {
-        try { mapInstanceRef.current.invalidateSize(); } catch (e) {}
+        if (googleMapRef.current) {
+          window.google.maps.event.trigger(googleMapRef.current, 'resize');
+        }
       }, 200);
     }
   }, [isMapExpanded]);
@@ -694,11 +662,8 @@ const BookingTrack = () => {
   // Destination Farm location
   const destination = trackingData?.destination;
 
-  // Render Leaflet Map dynamically
-  useEffect(() => {
-    if (!mapContainerRef.current || loading) return;
-
-    // ── NaN Guard Helpers ──
+  // Safe default map center
+  const defaultMapCenter = useMemo(() => {
     const isValidCoord = (lat, lng) => {
       const la = Number(lat);
       const lo = Number(lng);
@@ -706,234 +671,58 @@ const BookingTrack = () => {
     };
     const safeNum = (v, fallback) => { const n = Number(v); return isFinite(n) ? n : fallback; };
 
-    // Determine default center: destination → first worker with GPS → central India fallback
     const firstWorkerWithLoc = workersList.find(w =>
       isValidCoord(w.currentLocation?.lat, w.currentLocation?.lng)
     );
-    const centerLat = safeNum(destination?.lat, null) ||
-      safeNum(firstWorkerWithLoc?.currentLocation?.lat, null) || 22.7196;
-    const centerLng = safeNum(destination?.lng, null) ||
-      safeNum(firstWorkerWithLoc?.currentLocation?.lng, null) || 75.8577;
+    return {
+      lat: safeNum(destination?.lat, null) || safeNum(firstWorkerWithLoc?.currentLocation?.lat, null) || 22.7196,
+      lng: safeNum(destination?.lng, null) || safeNum(firstWorkerWithLoc?.currentLocation?.lng, null) || 75.8577
+    };
+  }, [destination, workersList]);
 
-    // ── Initialize map only once (or reconnect if container DOM node changed) ──
-    const containerChanged = mapInstanceRef.current && (
-      typeof mapInstanceRef.current.getContainer === 'function' &&
-      mapInstanceRef.current.getContainer() !== mapContainerRef.current
-    );
-
-    if (!mapInstanceRef.current || containerChanged) {
-      if (mapInstanceRef.current) {
-        try { mapInstanceRef.current.remove(); } catch (e) {}
-        mapInstanceRef.current = null;
-      }
-      if (mapContainerRef.current._leaflet_id) {
-        delete mapContainerRef.current._leaflet_id;
-      }
-      try {
-        const map = L.map(mapContainerRef.current, {
-          zoomControl: false,
-          attributionControl: false
-        }).setView([centerLat, centerLng], 14);
-
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          maxZoom: 19,
-          attribution: '© OpenStreetMap contributors'
-        }).addTo(map);
-
-        L.control.zoom({ position: 'bottomright' }).addTo(map);
-        mapInstanceRef.current = map;
-
-        setTimeout(() => {
-          if (mapInstanceRef.current) mapInstanceRef.current.invalidateSize();
-        }, 200);
-      } catch (e) {
-        console.warn('[BookingTrack] Map init error:', e.message);
-        return;
-      }
-    }
-
-    const map = mapInstanceRef.current;
-    if (!map) return;
-
-    try { map.invalidateSize(); } catch (e) {}
-
-    // ── Clear old markers ──
-    Object.values(markersRef.current).forEach(m => {
-      try { if (m && map.hasLayer(m)) map.removeLayer(m); } catch (e) {}
-    });
-    markersRef.current = {};
-
-    const farmLat = safeNum(destination?.lat, null) || centerLat;
-    const farmLng = safeNum(destination?.lng, null) || centerLng;
-
-    // Pre-seed bounds with a valid point to prevent empty-bounds NaN crash
-    const bounds = L.latLngBounds([[farmLat, farmLng]]);
+  // Center & Fit bounds on all markers
+  const handleCenterMap = useCallback(() => {
+    if (!googleMapRef.current || !window.google) return;
+    const bounds = new window.google.maps.LatLngBounds();
     let hasPoints = false;
 
-    // ── 1. Destination Farm Marker ──
-    try {
-      const destIcon = L.divIcon({
-        className: 'custom-farm-marker',
-        html: `<div style="background:#059669;color:white;border-radius:9999px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(5,150,105,0.4);border:3px solid white;">
-          <svg stroke="currentColor" fill="none" stroke-width="2.5" viewBox="0 0 24 24" height="18" width="18" xmlns="http://www.w3.org/2000/svg"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-        </div>`,
-        iconSize: [38, 38],
-        iconAnchor: [19, 19]
-      });
-      const destMarker = L.marker([farmLat, farmLng], { icon: destIcon }).addTo(map);
-      destMarker.bindPopup(`<b>Farm Destination</b><br/>${destination?.addressLine1 || destination?.city || 'Farm Location'}`);
-      markersRef.current['destination'] = destMarker;
-      bounds.extend([farmLat, farmLng]);
+    const safeDLat = Number(destination?.lat);
+    const safeDLng = Number(destination?.lng);
+    if (isFinite(safeDLat) && isFinite(safeDLng) && safeDLat !== 0 && safeDLng !== 0) {
+      bounds.extend({ lat: safeDLat, lng: safeDLng });
       hasPoints = true;
-    } catch (e) {
-      console.warn('[BookingTrack] Destination marker error:', e.message);
     }
 
-    // ── 2. Worker Markers (no selection highlight — handled by separate effect) ──
-    workersList.forEach((w, idx) => {
-      let wLat = safeNum(w.currentLocation?.lat, null);
-      let wLng = safeNum(w.currentLocation?.lng, null);
-
-      if (!isValidCoord(wLat, wLng)) {
-        const angle = (idx * 2 * Math.PI) / Math.max(workersList.length, 1);
-        wLat = farmLat + 0.003 * Math.sin(angle);
-        wLng = farmLng + 0.003 * Math.cos(angle);
-      }
-      if (!isFinite(wLat) || !isFinite(wLng)) return;
-
-      const isLive = w.journeyStatus === 'JOURNEY_STARTED';
-      const isArrived = w.journeyStatus === 'ARRIVED';
-      const isCompleted = w.journeyStatus === 'COMPLETED';
-      const pinColor = isCompleted ? '#059669' : (isArrived ? '#10B981' : (isLive ? '#2563EB' : '#64748B'));
-      const initial = w.workerName ? w.workerName.charAt(0).toUpperCase() : `${idx + 1}`;
-      const wKey = w.assignmentId || w.bookingId || w.workerId;
-
-      try {
-        const workerIcon = L.divIcon({
-          className: 'custom-worker-marker',
-          html: `<div style="position:relative;display:flex;flex-direction:column;align-items:center;cursor:pointer;">
-            ${isLive ? `<div style="position:absolute;width:48px;height:48px;border-radius:9999px;background:rgba(37,99,235,0.25);animation:ping 2s cubic-bezier(0,0,0.2,1) infinite;top:-4px;"></div>` : ''}
-            <div class="wk-pin" data-wid="${wKey}" style="background:${pinColor};color:white;border-radius:9999px;width:40px;height:40px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px;box-shadow:0 4px 14px rgba(0,0,0,0.25);border:3px solid white;transition:transform 0.2s,border-color 0.2s;">${initial}</div>
-            <div style="background:white;color:#1E293B;font-weight:800;font-size:10px;padding:2px 6px;border-radius:6px;margin-top:3px;box-shadow:0 2px 6px rgba(0,0,0,0.15);border:1px solid #E2E8F0;white-space:nowrap;">${w.workerName?.split(' ')[0] || `Worker ${idx + 1}`}</div>
-          </div>`,
-          iconSize: [40, 56],
-          iconAnchor: [20, 20]
-        });
-
-        const marker = L.marker([wLat, wLng], { icon: workerIcon }).addTo(map);
-        marker.on('click', () => setSelectedWorkerId(wKey));
-        marker.bindPopup(`<div style="font-family:inherit;font-size:12px;line-height:1.4;">
-          <div style="font-weight:800;font-size:13px;color:#0F172A;">${w.workerName}</div>
-          <div style="color:#64748B;font-weight:600;margin-top:2px;">${STATUS_CONFIG[w.journeyStatus]?.label || w.journeyStatus}</div>
-          <div style="color:#059669;font-weight:700;margin-top:4px;">Rate: ₹${w.agreedRate}/${w.rateUnit || 'day'}</div>
-          ${w.distanceKm ? `<div style="color:#2563EB;font-weight:700;margin-top:2px;">Distance: ${w.distanceKm} km</div>` : ''}
-          ${!isValidCoord(w.currentLocation?.lat, w.currentLocation?.lng) ? `<div style="color:#F59E0B;font-weight:600;font-size:10px;margin-top:2px;">(Waiting for live GPS)</div>` : ''}
-        </div>`);
-
-        if (w.assignmentId) markersRef.current[w.assignmentId] = marker;
-        if (w.bookingId) markersRef.current[w.bookingId] = marker;
-        if (w.workerId) markersRef.current[w.workerId] = marker;
-        markersRef.current[wKey] = marker;
-        bounds.extend([wLat, wLng]);
+    workersList.forEach(w => {
+      const wLat = Number(w.currentLocation?.lat);
+      const wLng = Number(w.currentLocation?.lng);
+      if (isFinite(wLat) && isFinite(wLng) && wLat !== 0 && wLng !== 0) {
+        bounds.extend({ lat: wLat, lng: wLng });
         hasPoints = true;
-      } catch (e) {
-        console.warn('[BookingTrack] Worker marker error:', e.message);
       }
     });
 
     if (hasPoints) {
-      try {
-        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
-      } catch (e) {
-        try { map.setView([farmLat, farmLng], 14); } catch (e2) {}
-      }
+      googleMapRef.current.fitBounds(bounds, 60);
+    } else {
+      googleMapRef.current.panTo(defaultMapCenter);
+      googleMapRef.current.setZoom(14);
     }
-  // ⚠️ selectedWorkerId intentionally NOT in deps — selection is handled by the effect below
-  }, [destination, workersList, loading]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [destination, workersList, defaultMapCenter]);
 
-  // ── Selection highlight: update marker border/scale WITHOUT rebuilding the map ──
-  // This runs on card click and just mutates the marker's icon HTML in-place.
+  // Auto-pan to selected worker
   useEffect(() => {
-    if (!selectedWorkerId || !mapInstanceRef.current) return;
-
-    const raf = requestAnimationFrame(() => {
-      if (!mapInstanceRef.current) return;
-
-      try { mapInstanceRef.current.invalidateSize(); } catch (e) {}
-
-      // Update visual selection on all worker pins via DOM manipulation
-      Object.entries(markersRef.current).forEach(([wid, marker]) => {
-        if (wid === 'destination' || !marker) return;
-        try {
-          const el = marker.getElement();
-          if (!el) return;
-          const pin = el.querySelector('.wk-pin');
-          if (!pin) return;
-          const pinWid = pin.getAttribute('data-wid');
-          if (pinWid === selectedWorkerId || wid === selectedWorkerId) {
-            pin.style.border = '3px solid #F59E0B';
-            pin.style.transform = 'scale(1.2)';
-            pin.style.boxShadow = '0 0 16px rgba(245, 158, 11, 0.6)';
-            pin.style.zIndex = '999';
-          } else {
-            pin.style.border = '3px solid white';
-            pin.style.transform = 'scale(1)';
-            pin.style.boxShadow = '0 4px 14px rgba(0,0,0,0.25)';
-            pin.style.zIndex = '1';
-          }
-        } catch (e) {}
-      });
-
-      // Fly to selected marker
-      const marker = markersRef.current[selectedWorkerId];
-      if (marker) {
-        try {
-          const pos = marker.getLatLng();
-          if (isFinite(pos.lat) && isFinite(pos.lng)) {
-            mapInstanceRef.current.flyTo([pos.lat, pos.lng], 16, { animate: true, duration: 0.8 });
-            if (marker.openPopup) marker.openPopup();
-          }
-        } catch (e) {}
-      }
-    });
-    return () => cancelAnimationFrame(raf);
-  }, [selectedWorkerId]);
-
-  const handleCenterMap = () => {
-    if (!mapInstanceRef.current || !L) return;
-
-    const safeDLat = isFinite(Number(destination?.lat)) ? Number(destination.lat) : null;
-    const safeDLng = isFinite(Number(destination?.lng)) ? Number(destination.lng) : null;
-
-    // Pre-seed bounds with farm location (or India fallback) to avoid empty-bounds NaN crash
-    const seedLat = safeDLat || 22.7196;
-    const seedLng = safeDLng || 75.8577;
-    const bounds = L.latLngBounds([[seedLat, seedLng]]);
-    let hasPoints = !!(safeDLat && safeDLng);
-
-    workersList.forEach(w => {
-      const marker = markersRef.current[w.assignmentId || w.workerId];
-      if (marker) {
-        try {
-          const pos = marker.getLatLng();
-          if (isFinite(pos.lat) && isFinite(pos.lng)) {
-            bounds.extend([pos.lat, pos.lng]);
-            hasPoints = true;
-          }
-        } catch (e) {}
-      }
-    });
-
-    try {
-      if (hasPoints) {
-        mapInstanceRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
-      } else {
-        mapInstanceRef.current.setView([seedLat, seedLng], 14);
-      }
-    } catch (e) {
-      mapInstanceRef.current.setView([seedLat, seedLng], 14);
+    if (!selectedWorkerId || !googleMapRef.current) return;
+    const target = workersList.find(w =>
+      (w.assignmentId === selectedWorkerId || w.bookingId === selectedWorkerId || w.workerId === selectedWorkerId)
+    );
+    if (target?.currentLocation?.lat && target?.currentLocation?.lng) {
+      const pos = { lat: Number(target.currentLocation.lat), lng: Number(target.currentLocation.lng) };
+      googleMapRef.current.panTo(pos);
+      googleMapRef.current.setZoom(16);
+      setActiveInfoWindowWorker(target);
     }
-  };
+  }, [selectedWorkerId, workersList]);
 
   if (loading) {
     return (
@@ -1240,7 +1029,9 @@ const BookingTrack = () => {
                 onClick={() => {
                   setIsMapExpanded(prev => !prev);
                   setTimeout(() => {
-                    if (mapInstanceRef.current) mapInstanceRef.current.invalidateSize();
+                    if (googleMapRef.current && window.google?.maps?.event) {
+                      window.google.maps.event.trigger(googleMapRef.current, 'resize');
+                    }
                   }, 150);
                 }}
                 className="text-xs font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-3 py-1 rounded-xl transition-all flex items-center gap-1 border border-emerald-200 shadow-2xs cursor-pointer"
@@ -1273,7 +1064,9 @@ const BookingTrack = () => {
                 onClick={() => {
                   setIsMapExpanded(true);
                   setTimeout(() => {
-                    if (mapInstanceRef.current) mapInstanceRef.current.invalidateSize();
+                    if (googleMapRef.current && window.google?.maps?.event) {
+                      window.google.maps.event.trigger(googleMapRef.current, 'resize');
+                    }
                   }, 200);
                 }}
                 className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shrink-0 active:scale-95 cursor-pointer"
@@ -1291,7 +1084,178 @@ const BookingTrack = () => {
               ? 'h-0 opacity-0 pointer-events-none -m-0 p-0 border-0'
               : 'h-[320px] sm:h-[400px] opacity-100'
           }`}>
-            <div ref={mapContainerRef} className="w-full h-full min-h-[300px]" style={{ zIndex: 1 }} />
+            {isMapScriptLoaded ? (
+              <GoogleMap
+                mapContainerStyle={{ width: '100%', height: '100%', minHeight: '300px' }}
+                center={defaultMapCenter}
+                zoom={14}
+                onLoad={(map) => {
+                  googleMapRef.current = map;
+                  handleCenterMap();
+                }}
+                onUnmount={() => {
+                  googleMapRef.current = null;
+                }}
+                options={{
+                  disableDefaultUI: true,
+                  zoomControl: false,
+                  mapTypeId: 'roadmap',
+                  clickableIcons: false
+                }}
+              >
+                {/* 1. Destination Farm Marker */}
+                {destination?.lat && destination?.lng && isFinite(Number(destination.lat)) && isFinite(Number(destination.lng)) && (
+                  <OverlayView
+                    position={{ lat: Number(destination.lat), lng: Number(destination.lng) }}
+                    mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+                  >
+                    <div
+                      onClick={() => setShowFarmInfoWindow(prev => !prev)}
+                      style={{ position: 'absolute', transform: 'translate(-50%, -50%)', cursor: 'pointer', zIndex: 20 }}
+                      title="Farm Destination"
+                    >
+                      <div style={{
+                        background: '#059669',
+                        color: 'white',
+                        borderRadius: 9999,
+                        width: 38,
+                        height: 38,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 4px 12px rgba(5,150,105,0.4)',
+                        border: '3px solid white'
+                      }}>
+                        <FiMapPin size={18} />
+                      </div>
+                    </div>
+                  </OverlayView>
+                )}
+
+                {showFarmInfoWindow && destination?.lat && destination?.lng && (
+                  <InfoWindow
+                    position={{ lat: Number(destination.lat), lng: Number(destination.lng) }}
+                    onCloseClick={() => setShowFarmInfoWindow(false)}
+                  >
+                    <div style={{ padding: 4, fontSize: 12, color: '#0f172a' }}>
+                      <div style={{ fontWeight: 800 }}>Farm Destination</div>
+                      <div style={{ color: '#64748b', marginTop: 2 }}>
+                        {destination?.addressLine1 || destination?.city || 'Farm Location'}
+                      </div>
+                    </div>
+                  </InfoWindow>
+                )}
+
+                {/* 2. Worker Markers */}
+                {workersList.map((w, idx) => {
+                  const farmLat = Number(destination?.lat) || defaultMapCenter.lat;
+                  const farmLng = Number(destination?.lng) || defaultMapCenter.lng;
+                  let wLat = Number(w.currentLocation?.lat);
+                  let wLng = Number(w.currentLocation?.lng);
+
+                  if (!isFinite(wLat) || !isFinite(wLng) || wLat === 0 || wLng === 0) {
+                    const angle = (idx * 2 * Math.PI) / Math.max(workersList.length, 1);
+                    wLat = farmLat + 0.003 * Math.sin(angle);
+                    wLng = farmLng + 0.003 * Math.cos(angle);
+                  }
+
+                  const isLive = w.journeyStatus === 'JOURNEY_STARTED';
+                  const isArrived = w.journeyStatus === 'ARRIVED';
+                  const isCompleted = w.journeyStatus === 'COMPLETED';
+                  const pinColor = isCompleted ? '#059669' : (isArrived ? '#10B981' : (isLive ? '#2563EB' : '#64748B'));
+                  const initial = w.workerName ? w.workerName.charAt(0).toUpperCase() : `${idx + 1}`;
+                  const wKey = w.assignmentId || w.bookingId || w.workerId;
+                  const isSelected = selectedWorkerId === wKey;
+
+                  return (
+                    <React.Fragment key={wKey || idx}>
+                      <OverlayView
+                        position={{ lat: wLat, lng: wLng }}
+                        mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+                      >
+                        <div
+                          onClick={() => {
+                            setSelectedWorkerId(wKey);
+                            setActiveInfoWindowWorker(w);
+                          }}
+                          style={{
+                            position: 'absolute',
+                            transform: `translate(-50%, -50%) scale(${isSelected ? 1.18 : 1})`,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            transition: 'transform 0.2s ease',
+                            zIndex: isSelected ? 90 : 30
+                          }}
+                        >
+                          {isLive && (
+                            <div style={{
+                              position: 'absolute',
+                              width: 48,
+                              height: 48,
+                              borderRadius: 9999,
+                              background: 'rgba(37,99,235,0.25)',
+                              animation: 'ping 2s cubic-bezier(0,0,0.2,1) infinite',
+                              top: -4
+                            }} />
+                          )}
+                          <div style={{
+                            background: pinColor,
+                            color: 'white',
+                            borderRadius: 9999,
+                            width: 40,
+                            height: 40,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontWeight: 900,
+                            fontSize: 14,
+                            boxShadow: isSelected ? '0 0 16px rgba(245,158,11,0.7)' : '0 4px 14px rgba(0,0,0,0.25)',
+                            border: isSelected ? '3px solid #F59E0B' : '3px solid white',
+                          }}>
+                            {initial}
+                          </div>
+                          <div style={{
+                            background: 'white',
+                            color: '#1E293B',
+                            fontWeight: 800,
+                            fontSize: 10,
+                            padding: '2px 6px',
+                            borderRadius: 6,
+                            marginTop: 3,
+                            boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+                            border: '1px solid #E2E8F0',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            {w.workerName?.split(' ')[0] || `Worker ${idx + 1}`}
+                          </div>
+                        </div>
+                      </OverlayView>
+
+                      {activeInfoWindowWorker && (activeInfoWindowWorker.assignmentId === w.assignmentId || activeInfoWindowWorker.workerId === w.workerId) && (
+                        <InfoWindow
+                          position={{ lat: wLat, lng: wLng }}
+                          onCloseClick={() => setActiveInfoWindowWorker(null)}
+                        >
+                          <div style={{ fontFamily: 'inherit', fontSize: 12, lineHeight: 1.4, padding: 4 }}>
+                            <div style={{ fontWeight: 800, fontSize: 13, color: '#0F172A' }}>{w.workerName}</div>
+                            <div style={{ color: '#64748B', fontWeight: 600, marginTop: 2 }}>{STATUS_CONFIG[w.journeyStatus]?.label || w.journeyStatus}</div>
+                            <div style={{ color: '#059669', fontWeight: 700, marginTop: 4 }}>Rate: ₹{w.agreedRate}/{w.rateUnit || 'day'}</div>
+                            {w.distanceKm ? <div style={{ color: '#2563EB', fontWeight: 700, marginTop: 2 }}>Distance: {w.distanceKm} km</div> : null}
+                            {!w.currentLocation?.lat && <div style={{ color: '#F59E0B', fontWeight: 600, fontSize: 10, marginTop: 2 }}>(Waiting for live GPS)</div>}
+                          </div>
+                        </InfoWindow>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </GoogleMap>
+            ) : (
+              <div className="w-full h-full min-h-[300px] flex items-center justify-center bg-slate-50 text-slate-400 text-sm">
+                <FiLoader className="w-6 h-6 animate-spin text-emerald-600 mr-2" /> Loading Google Maps...
+              </div>
+            )}
 
             {/* Floating Map Controls */}
             <div className="absolute top-4 right-4 z-[400] flex flex-col gap-2">

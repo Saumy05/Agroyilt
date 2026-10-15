@@ -14,8 +14,28 @@ const AddressSelectionModal = ({ isOpen, onClose, address = '', houseNumber = ''
   const [suggestions, setSuggestions] = useState([]);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
+  const [flyToPosition, setFlyToPosition] = useState(null);
+
   const searchContainerRef = useRef(null);
   const lastSelectedAddressRef = useRef('');
+  const autocompleteServiceRef = useRef(null);
+
+  // Initialize Google AutocompleteService when Google API is available
+  useEffect(() => {
+    const initService = () => {
+      if (window.google?.maps?.places?.AutocompleteService) {
+        autocompleteServiceRef.current = new window.google.maps.places.AutocompleteService();
+      }
+    };
+    initService();
+    const timer = setInterval(() => {
+      if (window.google?.maps?.places?.AutocompleteService) {
+        initService();
+        clearInterval(timer);
+      }
+    }, 500);
+    return () => clearInterval(timer);
+  }, []);
 
   // Lock body scroll when modal open
   useEffect(() => {
@@ -60,31 +80,7 @@ const AddressSelectionModal = ({ isOpen, onClose, address = '', houseNumber = ''
     }, 250);
   };
 
-  // Convert Nominatim place to standard location object
-  const formatLocationFromPlace = (place) => {
-    const components = Object.keys(place.address || {}).map(key => ({
-      long_name: place.address[key],
-      short_name: place.address[key],
-      types: [key]
-    }));
-
-    const mappedComponents = components.map(c => {
-      if (c.types.includes('postcode')) c.types.push('postal_code');
-      if (c.types.includes('city') || c.types.includes('town') || c.types.includes('county') || c.types.includes('suburb')) c.types.push('locality');
-      if (c.types.includes('state')) c.types.push('administrative_area_level_1');
-      if (c.types.includes('suburb') || c.types.includes('neighbourhood') || c.types.includes('residential')) c.types.push('sublocality');
-      return c;
-    });
-
-    return {
-      lat: parseFloat(place.lat),
-      lng: parseFloat(place.lon),
-      address: place.display_name,
-      components: mappedComponents,
-    };
-  };
-
-  // Trigger search via Nominatim
+  // Trigger search via Google Places Autocomplete
   const performSearch = useCallback(async (queryText) => {
     const q = (queryText || '').trim();
     if (!q || q.length < 2) {
@@ -96,27 +92,60 @@ const AddressSelectionModal = ({ isOpen, onClose, address = '', houseNumber = ''
     setIsSearching(true);
     setIsDropdownOpen(true);
 
-    try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&countrycodes=in&addressdetails=1&limit=6`,
-        {
-          headers: {
-            'Accept': 'application/json',
-          }
-        }
-      );
-      if (!response.ok) throw new Error('Search network error');
-      const results = await response.json();
-
-      if (Array.isArray(results) && results.length > 0) {
-        setSuggestions(results);
-      } else {
-        setSuggestions([]);
+    if (autocompleteServiceRef.current || window.google?.maps?.places?.AutocompleteService) {
+      if (!autocompleteServiceRef.current) {
+        autocompleteServiceRef.current = new window.google.maps.places.AutocompleteService();
       }
-    } catch (error) {
-      console.warn('[AddressSearch] Search error:', error);
-      setSuggestions([]);
-    } finally {
+      try {
+        autocompleteServiceRef.current.getPlacePredictions(
+          {
+            input: q,
+            componentRestrictions: { country: 'in' },
+          },
+          (predictions, status) => {
+            setIsSearching(false);
+            if (status === window.google.maps.places.PlacesServiceStatus.OK && Array.isArray(predictions)) {
+              setSuggestions(predictions);
+            } else {
+              setSuggestions([]);
+            }
+          }
+        );
+        return;
+      } catch (err) {
+        console.warn('Google Places Autocomplete error:', err);
+      }
+    }
+
+    // Fallback to Google Geocoding API if window.google is still loading
+    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+    if (apiKey) {
+      try {
+        const response = await fetch(
+          `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(q)}&components=country:IN&key=${apiKey}`
+        );
+        const data = await response.json();
+        if (data.status === 'OK' && Array.isArray(data.results)) {
+          const mapped = data.results.map(r => ({
+            place_id: r.place_id,
+            description: r.formatted_address,
+            structured_formatting: {
+              main_text: r.address_components?.[0]?.long_name || r.formatted_address.split(',')[0],
+              secondary_text: r.formatted_address.split(',').slice(1).join(', ').trim()
+            },
+            _geocodeResult: r
+          }));
+          setSuggestions(mapped);
+        } else {
+          setSuggestions([]);
+        }
+      } catch (error) {
+        console.warn('[AddressSearch] Geocode search error:', error);
+        setSuggestions([]);
+      } finally {
+        setIsSearching(false);
+      }
+    } else {
       setIsSearching(false);
     }
   }, []);
@@ -125,7 +154,6 @@ const AddressSelectionModal = ({ isOpen, onClose, address = '', houseNumber = ''
   useEffect(() => {
     const trimmed = searchQuery.trim();
 
-    // If query matches what was already selected from map or suggestion, don't trigger auto-search
     if (!trimmed || trimmed === lastSelectedAddressRef.current.trim()) {
       return;
     }
@@ -138,20 +166,57 @@ const AddressSelectionModal = ({ isOpen, onClose, address = '', houseNumber = ''
 
     const timer = setTimeout(() => {
       performSearch(trimmed);
-    }, 400);
+    }, 350);
 
     return () => clearTimeout(timer);
   }, [searchQuery, performSearch]);
 
   // When user clicks a suggestion from the dropdown
-  const handleSelectSuggestion = (place) => {
-    const loc = formatLocationFromPlace(place);
-    lastSelectedAddressRef.current = place.display_name;
-    setSelectedLocation(loc);
-    setMapAddress(place.display_name);
-    setSearchQuery(place.display_name);
+  const handleSelectSuggestion = (prediction) => {
+    const addressStr = prediction.description || prediction.formatted_address;
+    lastSelectedAddressRef.current = addressStr;
+    setSearchQuery(addressStr);
+    setMapAddress(addressStr);
     setSuggestions([]);
     setIsDropdownOpen(false);
+
+    if (prediction._geocodeResult) {
+      const r = prediction._geocodeResult;
+      const lat = typeof r.geometry.location.lat === 'function' ? r.geometry.location.lat() : r.geometry.location.lat;
+      const lng = typeof r.geometry.location.lng === 'function' ? r.geometry.location.lng() : r.geometry.location.lng;
+      const loc = {
+        lat,
+        lng,
+        address: r.formatted_address,
+        components: r.address_components || []
+      };
+      setSelectedLocation(loc);
+      setFlyToPosition({ lat, lng });
+      return;
+    }
+
+    if (window.google?.maps?.Geocoder) {
+      const geocoder = new window.google.maps.Geocoder();
+      const request = prediction.place_id
+        ? { placeId: prediction.place_id }
+        : { address: addressStr };
+
+      geocoder.geocode(request, (results, status) => {
+        if (status === 'OK' && results && results[0]) {
+          const res = results[0];
+          const lat = res.geometry.location.lat();
+          const lng = res.geometry.location.lng();
+          const loc = {
+            lat,
+            lng,
+            address: res.formatted_address,
+            components: res.address_components || []
+          };
+          setSelectedLocation(loc);
+          setFlyToPosition({ lat, lng });
+        }
+      });
+    }
   };
 
   // When user taps on the map pin or locate me
@@ -293,6 +358,7 @@ const AddressSelectionModal = ({ isOpen, onClose, address = '', houseNumber = ''
             <LocationPicker
               onLocationSelect={handleLocationSelect}
               initialPosition={selectedLocation}
+              flyToPosition={flyToPosition}
             />
           </div>
         </div>
@@ -442,8 +508,8 @@ const AddressSelectionModal = ({ isOpen, onClose, address = '', houseNumber = ''
                       Select Location ({suggestions.length})
                     </div>
                     {suggestions.map((item, idx) => {
-                      const mainName = item.namedetails?.name || item.name || item.display_name.split(',')[0];
-                      const subAddress = item.display_name.split(',').slice(1).join(',').trim();
+                      const mainName = item.structured_formatting?.main_text || item.description?.split(',')[0] || item.display_name?.split(',')[0] || item.name || 'Location';
+                      const subAddress = item.structured_formatting?.secondary_text || item.description?.split(',').slice(1).join(', ').trim() || '';
                       return (
                         <div
                           key={item.place_id || idx}
