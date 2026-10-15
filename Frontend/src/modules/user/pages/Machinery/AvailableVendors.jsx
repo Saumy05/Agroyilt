@@ -13,6 +13,7 @@ import { publicEquipmentService } from '../../../../services/publicEquipmentServ
 import { useGeo } from '../../../../context/GeoContext';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import { themeColors } from '../../../../theme';
+import { estimateDistanceBill } from '../../../../utils/distanceFare';
 
 const AvailableVendors = () => {
   const navigate = useNavigate();
@@ -31,7 +32,8 @@ const AvailableVendors = () => {
     startTime = '09:00',
     endTime = '11:00',
     lat,
-    lng
+    lng,
+    estimatedKm = 0
   } = searchParams;
 
   const [loading, setLoading] = useState(true);
@@ -39,6 +41,15 @@ const AvailableVendors = () => {
   const [sortBy, setSortBy] = useState('nearest'); // 'nearest' | 'price_low' | 'rating'
   const [error, setError] = useState(null);
   const [selectedVendorGroup, setSelectedVendorGroup] = useState(null);
+
+  // Per-km jobs: approx bill for the farmer's estimated distance (the real bill uses the driven distance)
+  const getApproxBill = (item) => (
+    rentalType === 'distance_based'
+      ? estimateDistanceBill(item?.pricing?.distancePricing, estimatedKm, item?.pricing?.gstPercentage ?? 5)
+      : null
+  );
+  const getDisplayTotal = (item) => getApproxBill(item)?.total ?? (item?.pricing?.totalAmount || 0);
+  const isApproxBill = rentalType === 'distance_based' && estimatedKm > 0;
 
   // Lock background scroll when machine selection modal is open
   useEffect(() => {
@@ -170,6 +181,7 @@ const AvailableVendors = () => {
           visitingCharges: item.pricing.visitingCharges,
           gstPercentage: item.pricing.gstPercentage ?? 5,
           distancePricing: item.pricing.distancePricing || null,
+          estimatedKm: rentalType === 'distance_based' ? estimatedKm : undefined,
           total: item.pricing.totalAmount,
           tractorTotal: item.pricing.tractorTotal || item.pricing.basePrice,
           implementTotal: item.pricing.implementTotal || 0,
@@ -218,11 +230,12 @@ const AvailableVendors = () => {
         group.isAvailable = true;
       }
 
-      const total = item.pricing?.totalAmount || 0;
+      const approx = getApproxBill(item);
+      const total = getDisplayTotal(item);
       if (total < group.minPrice) {
         group.minPrice = total;
-        group.minBasePrice = item.pricing?.basePrice || 0;
-        group.minTax = item.pricing?.tax || 0;
+        group.minBasePrice = approx ? approx.fare : (item.pricing?.basePrice || 0);
+        group.minTax = approx ? approx.tax : (item.pricing?.tax || 0);
       }
       if (total > group.maxPrice) {
         group.maxPrice = total;
@@ -610,7 +623,7 @@ const AvailableVendors = () => {
                                 <span className="text-[8px] font-semibold text-slate-400">Available</span>
                               )}
                               <span className="text-[9.5px] font-black text-slate-900">
-                                ₹{eqItem.pricing?.totalAmount?.toLocaleString('en-IN')}
+                                ₹{getDisplayTotal(eqItem).toLocaleString('en-IN')}
                               </span>
                             </div>
                           </div>
@@ -624,7 +637,7 @@ const AvailableVendors = () => {
                 <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <p className="text-[8px] font-black text-slate-400 uppercase tracking-wider leading-none mb-0.5">
-                      {group.equipments.length > 1 ? 'Starting From' : 'Total Payable'}
+                      {isApproxBill ? `Approx bill (~${estimatedKm} km)` : (group.equipments.length > 1 ? 'Starting From' : 'Total Payable')}
                     </p>
                     <div className="flex items-baseline gap-1">
                       <span className="text-base font-black text-slate-900 leading-none">
@@ -635,7 +648,9 @@ const AvailableVendors = () => {
                       )}
                     </div>
                     <p className="text-[9px] text-slate-400 font-semibold truncate leading-tight mt-0.5">
-                      {group.equipments.length === 1 
+                      {isApproxBill
+                        ? 'Final bill = actual km driven'
+                        : group.equipments.length === 1 
                         ? `Base ₹${group.minBasePrice} + GST ₹${group.minTax}`
                         : 'All taxes incl. • Free visit'
                       }
@@ -804,13 +819,15 @@ const AvailableVendors = () => {
                       <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
                         <div>
                           <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none mb-0.5">
-                            Total Payable
+                            {isApproxBill ? `Approx bill (~${estimatedKm} km)` : 'Total Payable'}
                           </p>
                           <p className="text-base font-black text-slate-900 leading-tight">
-                            ₹{item.pricing?.totalAmount?.toLocaleString('en-IN')}
+                            ₹{getDisplayTotal(item).toLocaleString('en-IN')}
                           </p>
                           <p className="text-[9px] text-slate-400 font-semibold leading-none">
-                            Base ₹{item.pricing?.basePrice} + GST ₹{item.pricing?.tax} • Free Visiting
+                            {isApproxBill
+                              ? 'Final bill = actual km driven'
+                              : `Base ₹${item.pricing?.basePrice} + GST ₹${item.pricing?.tax} • Free Visiting`}
                           </p>
                         </div>
 

@@ -13,6 +13,7 @@ import { configService } from '../../../../services/configService';
 import authStorage from '../../../../utils/authStorage';
 import AddressSelectionModal from '../Checkout/components/AddressSelectionModal';
 import usePaymentMethods from '../../../../hooks/usePaymentMethods';
+import { estimateDistanceBill } from '../../../../utils/distanceFare';
 
 const loadRazorpay = () => {
     return new Promise((resolve) => {
@@ -110,7 +111,8 @@ const MachineryCheckout = () => {
         visitingCharges = 0,
         tractorTotal,
         implementTotal,
-        gstPercentage: passedGstPercentage
+        gstPercentage: passedGstPercentage,
+        estimatedKm
     } = bookingData;
 
     const activeGstPercentage = typeof passedGstPercentage === 'number'
@@ -135,6 +137,14 @@ const MachineryCheckout = () => {
 
     const travelCharge = Number(travel?.total) || 0;
     const payableTotal = Math.round((calculatedTotal + travelCharge) * 100) / 100; // what the farmer actually pays
+    // Per-km jobs: approx final bill for the farmer's estimated distance (the real bill uses the GPS-measured distance)
+    const approxBill = rateType === 'distance_based'
+        ? estimateDistanceBill(bookingData.distancePricing, estimatedKm, activeGstPercentage)
+        : null;
+    const approxTotal = approxBill ? Math.round((approxBill.total + travelCharge) * 100) / 100 : null;
+    // Per-km jobs are billed on the distance driven, so nothing is paid at booking: the farmer pays once the trip ends and the bill is ready
+    const payAfterTrip = rateType === 'distance_based';
+    const effectivePaymentMethod = payAfterTrip ? 'cash' : paymentMethod;
     const total = payableTotal;
     const tax = calculatedTax;
     const basePrice = calculatedBasePrice;
@@ -201,7 +211,7 @@ const MachineryCheckout = () => {
         try {
             setSubmitting(true);
 
-            if (paymentMethod === 'online') {
+            if (effectivePaymentMethod === 'online') {
                 const isLoaded = await loadRazorpay();
                 if (!isLoaded) {
                     toastManager.error('Razorpay SDK failed to load. Please check your internet connection.');
@@ -217,6 +227,7 @@ const MachineryCheckout = () => {
                 categoryId: equipment.categoryId?._id || equipment.categoryId,
                 bookingType: 'scheduled',
                 rental_type: rateType,
+                estimatedKm: rateType === 'distance_based' && estimatedKm > 0 ? estimatedKm : undefined,
                 landSize: rateType === 'land_based' ? quantity : undefined,
                 estimatedDuration: ['hourly', 'daily', 'monthly'].includes(rateType) ? quantity : undefined,
                 scheduledDate: date,
@@ -231,7 +242,7 @@ const MachineryCheckout = () => {
                     lat: selectedAddress.lat,
                     lng: selectedAddress.lng
                 },
-                paymentMethod,
+                paymentMethod: effectivePaymentMethod,
                 amount: payableTotal,
                 basePrice: calculatedBasePrice,
                 tax: calculatedTax,
@@ -270,7 +281,7 @@ const MachineryCheckout = () => {
 
             const newBookingId = res.booking?._id || res.data?._id || res.data?.booking?._id || res._id || res.booking?.id || res.data?.id;
 
-            if (paymentMethod === 'online' && newBookingId) {
+            if (effectivePaymentMethod === 'online' && newBookingId) {
                 try {
                     toastManager.info('Initializing Razorpay payment...');
                     const orderRes = await paymentService.createOrder(newBookingId);
@@ -503,6 +514,17 @@ const MachineryCheckout = () => {
                         </div>
                     </div>
 
+                    {approxBill && (
+                        <div className="rounded-xl border border-teal-200 bg-teal-50/70 p-3 space-y-0.5">
+                            <p className="text-[9.5px] font-black text-teal-800 uppercase tracking-wider">Approx. final bill</p>
+                            <p className="text-lg font-black text-teal-900">~₹{approxTotal}</p>
+                            <p className="text-[10px] font-semibold text-teal-700/90">
+                                For about {estimatedKm} km (₹{approxBill.fare} + GST ₹{approxBill.tax}{travelCharge > 0 ? ` + travel ₹${travelCharge}` : ''}).
+                                This is only an estimate. You pay for the actual road distance driven, and the final bill is shown when the trip ends.
+                            </p>
+                        </div>
+                    )}
+
                     {/* Itemized Digital Invoice Receipt */}
                     <div className="bg-gradient-to-b from-slate-50 to-emerald-50/30 p-3 rounded-xl border border-slate-200/80 space-y-1.5">
                         <div className="flex items-center justify-between pb-1.5 border-b border-dashed border-slate-200">
@@ -591,15 +613,31 @@ const MachineryCheckout = () => {
                         {/* Total Highlight */}
                         <div className="flex justify-between items-center pt-2 border-t border-slate-200">
                           <div>
-                            <span className="text-[11px] font-black text-slate-900 uppercase tracking-wider block">Total Payable</span>
-                            <span className="text-[9.5px] font-semibold text-slate-400">All taxes & operator expenses included</span>
+                            <span className="text-[11px] font-black text-slate-900 uppercase tracking-wider block">{payAfterTrip ? 'Minimum bill' : 'Total Payable'}</span>
+                            <span className="text-[9.5px] font-semibold text-slate-400">{payAfterTrip ? 'Covers the starting distance. Final bill uses the actual km driven' : 'All taxes & operator expenses included'}</span>
                           </div>
                           <span className="text-xl font-black text-emerald-800">₹{payableTotal}</span>
                         </div>
                     </div>
                 </div>
 
+                {/* Per-km: nothing is paid up front */}
+                {payAfterTrip && (
+                    <div className="bg-white rounded-2xl p-3.5 shadow-xs border border-teal-200 space-y-1.5">
+                        <div className="flex items-center gap-2">
+                            <span className="w-6 h-6 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center border border-teal-200/60 font-black text-xs">
+                                <FiDollarSign size={13} />
+                            </span>
+                            <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">Pay after the trip</h3>
+                        </div>
+                        <p className="text-[10.5px] font-semibold text-slate-500 leading-snug">
+                            You pay nothing now. When the trip ends, the final bill is made from the actual road distance driven, and you pay it then (cash or online).
+                        </p>
+                    </div>
+                )}
+
                 {/* Payment Selection Card */}
+                {!payAfterTrip && (
                 <div className="bg-white rounded-2xl p-3.5 shadow-xs border border-slate-200/80 space-y-2">
                     <div className="flex items-center gap-2">
                        <span className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center border border-emerald-200/60 font-black text-xs">
@@ -664,6 +702,7 @@ const MachineryCheckout = () => {
 )}
                     </div>
                 </div>
+                )}
 
                 {/* Trust & Safety Seals */}
                 <div className="grid grid-cols-3 gap-2 pt-0.5">
@@ -695,10 +734,10 @@ const MachineryCheckout = () => {
             <div className="fixed bottom-0 inset-x-0 z-40 bg-white/90 backdrop-blur-xl px-3.5 py-2.5 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] border-t border-slate-200/80">
                 <div className="max-w-xl mx-auto flex items-center justify-between gap-3">
                     <div>
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider leading-none mb-0.5">Total Payable</p>
-                        <h4 className="text-xl font-black text-slate-900 leading-none">₹{payableTotal}</h4>
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider leading-none mb-0.5">{payAfterTrip ? 'Approx. bill' : 'Total Payable'}</p>
+                        <h4 className="text-xl font-black text-slate-900 leading-none">{payAfterTrip ? `~₹${approxTotal ?? payableTotal}` : `₹${payableTotal}`}</h4>
                         <span className="text-[9.5px] font-bold text-emerald-700 mt-0.5 block">
-                          {paymentMethod === 'cash' ? 'Pay on field after work' : 'Online payment'}
+                          {payAfterTrip ? 'Pay after the trip' : (paymentMethod === 'cash' ? 'Pay on field after work' : 'Online payment')}
                         </span>
                     </div>
                     <button
@@ -765,8 +804,8 @@ const MachineryCheckout = () => {
                     {/* Amount Banner */}
                     <div className="rounded-2xl px-5 py-4 mb-5 flex items-center justify-between bg-gradient-to-r from-emerald-50 to-teal-50/60 border border-emerald-200/60">
                       <div>
-                        <p className="text-[10px] font-black text-emerald-800 uppercase tracking-widest">Payable Amount</p>
-                        <p className="text-2xl font-black text-emerald-950">₹{payableTotal}</p>
+                        <p className="text-[10px] font-black text-emerald-800 uppercase tracking-widest">{payAfterTrip ? 'Approx. bill (pay after trip)' : 'Payable Amount'}</p>
+                        <p className="text-2xl font-black text-emerald-950">{payAfterTrip ? `~₹${approxTotal ?? payableTotal}` : `₹${payableTotal}`}</p>
                       </div>
                       <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-emerald-700 text-white shadow-sm">
                         <FiTruck className="w-6 h-6" />
@@ -774,6 +813,11 @@ const MachineryCheckout = () => {
                     </div>
 
                     {/* Payment Options Selection */}
+                    {payAfterTrip ? (
+                      <p className="text-[11px] font-semibold text-slate-500 leading-snug mb-6">
+                        Nothing is charged now. You pay after the trip, once the final bill is made from the actual distance driven.
+                      </p>
+                    ) : (<>
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Settlement Method</p>
                     <div className="flex flex-col gap-2.5 mb-6">
                       {allowed.cash && (
@@ -838,6 +882,7 @@ const MachineryCheckout = () => {
                       </button>
 )}
                     </div>
+                    </>)}
 
                     {/* Dispatch Action */}
                     <button
@@ -848,7 +893,7 @@ const MachineryCheckout = () => {
                       disabled={submitting}
                       className="w-full py-4 rounded-2xl text-white font-black text-xs uppercase tracking-wider bg-gradient-to-r from-emerald-600 via-emerald-700 to-green-800 hover:from-emerald-700 hover:to-green-900 transition-all active:scale-95 shadow-lg shadow-emerald-700/25 cursor-pointer"
                     >
-                      {submitting ? 'Dispatching...' : `Confirm & Dispatch (₹${payableTotal}) ➔`}
+                      {submitting ? 'Dispatching...' : (payAfterTrip ? 'Confirm & Dispatch ➔' : `Confirm & Dispatch (₹${payableTotal}) ➔`)}
                     </button>
 
                     <p className="text-center text-[10px] text-slate-400 font-bold mt-3 flex items-center justify-center gap-1">

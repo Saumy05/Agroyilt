@@ -13,6 +13,7 @@ import { publicEquipmentService } from '../../../../services/publicEquipmentServ
 import { useGeo } from '../../../../context/GeoContext';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import { toastManager } from '../../../../utils/toastManager';
+import { estimateDistanceBill } from '../../../../utils/distanceFare';
 import { themeColors } from '../../../../theme';
 import FieldAreaMeasurementModal from '../../components/FieldAreaMeasurementModal';
 
@@ -96,6 +97,8 @@ const MachineryExplorer = () => {
   const [isAreaModalOpen, setIsAreaModalOpen] = useState(false);
   // Admin's per-km tier for the chosen attachment (e.g. Trolley); null when it can't be booked per km
   const [distancePricing, setDistancePricing] = useState(null);
+  // Farmer's approximate trip distance: shows an approx bill up front and tells the vendor how far to go. The bill itself is always the GPS-measured distance.
+  const [estimatedKm, setEstimatedKm] = useState(location.state?.estimatedKm ? String(location.state.estimatedKm) : '');
   const [measuredField, setMeasuredField] = useState(location.state?.measuredField || null);
 
   const handleApplyMeasuredField = (fieldData) => {
@@ -221,7 +224,13 @@ const MachineryExplorer = () => {
         if (cancelled) return;
         const dp = res?.success ? res.data : null;
         setDistancePricing(dp || null);
-        if (!dp) setRentalType(prev => (prev === 'distance_based' ? 'hourly' : prev));
+        if (dp) {
+          // Per-km attachments (e.g. Trolley) can only be billed by distance
+          setRentalType('distance_based');
+          setQuantity(1);
+        } else {
+          setRentalType(prev => (prev === 'distance_based' ? 'hourly' : prev));
+        }
       })
       .catch(() => { if (!cancelled) setDistancePricing(null); });
     return () => { cancelled = true; };
@@ -547,6 +556,10 @@ const MachineryExplorer = () => {
       toastManager.error(`Please specify a valid work scope (${min} - ${max} ${unit.toLowerCase()})`);
       return;
     }
+    if (rentalType === 'distance_based' && !(parseFloat(estimatedKm) > 0)) {
+      toastManager.error('Please enter the approximate distance in km');
+      return;
+    }
     if (!bookingDate) {
       toastManager.error('Please select a booking date');
       return;
@@ -583,7 +596,8 @@ const MachineryExplorer = () => {
         endTime,
         lat: currentCity?.lat || selectedDistrict?.lat,
         lng: currentCity?.lng || selectedDistrict?.lng,
-        measuredField
+        measuredField,
+        ...(rentalType === 'distance_based' ? { estimatedKm: Math.round(parseFloat(estimatedKm) * 10) / 10 } : {})
       }
     });
   };
@@ -923,17 +937,19 @@ const MachineryExplorer = () => {
                           Service Scope & Work Estimate
                         </h2>
                         <p className="text-[10px] font-semibold text-slate-400">
-                          Estimate work duration • Final billing based on live active minutes
+                          {distancePricing
+                            ? 'Billed per km • Final billing based on road distance driven'
+                            : 'Estimate work duration • Final billing based on live active minutes'}
                         </p>
                       </div>
                     </div>
 
-                    {/* Service Type Segmented Tabs (Hourly/Minutes vs Acreage) */}
-                    <div className={`grid ${distancePricing ? 'grid-cols-3' : 'grid-cols-2'} gap-1 bg-slate-100/90 p-1 rounded-xl border border-slate-200/60`}>
+                    {/* Service Type Segmented Tabs (Hourly/Minutes vs Acreage); per-km attachments are billed by distance only */}
+                    {!distancePricing && (
+                    <div className="grid grid-cols-2 gap-1 bg-slate-100/90 p-1 rounded-xl border border-slate-200/60">
                       {[
                         { label: '⏱️ Hourly / Minutes', value: 'hourly' },
-                        { label: '🌾 Land Area (Acres)', value: 'land_based' },
-                        ...(distancePricing ? [{ label: '🚛 Per KM', value: 'distance_based' }] : [])
+                        { label: '🌾 Land Area (Acres)', value: 'land_based' }
                       ].map((t) => (
                         <button
                           key={t.value}
@@ -949,6 +965,7 @@ const MachineryExplorer = () => {
                         </button>
                       ))}
                     </div>
+                    )}
 
                     {rentalType === 'distance_based' && distancePricing ? (
                       <div className="rounded-xl border border-teal-200 bg-teal-50/70 p-3 space-y-1">
@@ -959,6 +976,44 @@ const MachineryExplorer = () => {
                         <p className="text-[10px] font-semibold text-teal-700/80 pt-1">
                           🛰️ The meter starts when the driver starts the trip and stops when the work is completed. You pay for the actual road distance driven (GST extra).
                         </p>
+
+                        <div className="pt-2 space-y-1.5">
+                          <label className="text-xs font-black text-teal-900 uppercase tracking-wider block">Approx. distance to travel (km)</label>
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            min="1"
+                            max="500"
+                            step="0.5"
+                            value={estimatedKm}
+                            onChange={(e) => setEstimatedKm(e.target.value)}
+                            placeholder="e.g. 12"
+                            className="w-full px-3 py-2 rounded-lg border border-teal-200 bg-white text-sm font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/30"
+                          />
+                          <div className="flex gap-1.5 flex-wrap">
+                            {[5, 10, 20, 50].map((km) => (
+                              <button
+                                key={km}
+                                type="button"
+                                onClick={() => setEstimatedKm(String(km))}
+                                className="px-2.5 py-1 rounded-full bg-white border border-teal-200 text-[10.5px] font-black text-teal-800 cursor-pointer"
+                              >
+                                {km} km
+                              </button>
+                            ))}
+                          </div>
+                          {(() => {
+                            const approx = estimateDistanceBill(distancePricing, parseFloat(estimatedKm), 5);
+                            return approx ? (
+                              <p className="text-xs font-black text-teal-900 pt-0.5">
+                                Approx. bill for ~{parseFloat(estimatedKm)} km: ₹{approx.fare} <span className="font-semibold text-teal-700/80">+ GST</span>
+                              </p>
+                            ) : null;
+                          })()}
+                          <p className="text-[10px] font-semibold text-teal-700/80">
+                            This is only an estimate. The vendor sees it to plan the trip, but the final bill is based on the actual road distance driven.
+                          </p>
+                        </div>
                       </div>
                     ) : (
                     /* Stepper & Counter */
@@ -1155,7 +1210,7 @@ const MachineryExplorer = () => {
                           Service Scope & Work Estimate
                         </p>
                         <p className="text-[10px] font-semibold text-slate-400 truncate">
-                          Estimate hourly duration or land acreage
+                          {distancePricing ? 'Billed per km driven' : 'Estimate hourly duration or land acreage'}
                         </p>
                       </div>
                     </div>

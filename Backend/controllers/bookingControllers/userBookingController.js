@@ -63,6 +63,12 @@ const createBooking = async (req, res) => {
     }
 
     const userId = req.user.id;
+    try {
+      await require('../../services/paymentDefaultService').assertNoDues(userId); // unpaid dues from an earlier booking block new ones
+    } catch (duesErr) {
+      if (duesErr.code !== 'FARMER_DUES_PENDING') throw duesErr;
+      return res.status(403).json({ success: false, code: duesErr.code, dues: duesErr.dues, message: duesErr.message });
+    }
     let {
       serviceId,
       vendorId,
@@ -750,8 +756,26 @@ const createBooking = async (req, res) => {
     visitingCharges = Number(visitingCharges) || 0;
     finalAmount = Number(finalAmount) || 0;
 
+    // Per-km (trolley) jobs are billed on the distance actually driven, so nothing is paid or held at booking:
+    // the farmer pays once the trip ends and the bill exists (cash, or online if the area has no cash).
+    let payAfterTrip = false;
+    if (rental_type === 'distance_based' && paymentMethod !== 'plan_benefit') {
+      payAfterTrip = true;
+      const pmService = require('../../services/paymentMethodService');
+      const cashGate = await pmService.checkMethod({ type: 'machinery', method: 'cash', userId, address });
+      if (cashGate.ok) {
+        paymentMethod = 'cash';
+      } else {
+        const onlineGate = await pmService.checkMethod({ type: 'machinery', method: 'online', userId, address });
+        if (!onlineGate.ok) {
+          return res.status(403).json({ success: false, code: 'PAYMENT_METHOD_UNAVAILABLE', message: cashGate.message, allowed: cashGate.allowed });
+        }
+        paymentMethod = 'online';
+      }
+    }
+
     // Admin-controlled: is this payment method allowed in the farmer's area? (Settings > Payment Methods)
-    {
+    if (!payAfterTrip) {
       const gate = await require('../../services/paymentMethodService').checkMethod({
         type: providerType === 'WORKER' ? 'worker' : 'machinery', method: paymentMethod, userId, address
       });
@@ -821,7 +845,15 @@ const createBooking = async (req, res) => {
       brandIcon: reqBrandIcon || brandIcon,
       bookingType: bookingType || 'scheduled',
       rental_type: rental_type || null,
-      ...(rental_type === 'distance_based' && distancePricing ? { distanceTrip: { status: 'NOT_STARTED', pricing: distancePricing } } : {}),
+      ...(rental_type === 'distance_based' && distancePricing ? { distanceTrip: (() => {
+        const km = Math.round(Number(req.body.estimatedKm) * 10) / 10;
+        const hasEstimate = Number.isFinite(km) && km > 0 && km <= 1000;
+        return {
+          status: 'NOT_STARTED',
+          pricing: distancePricing,
+          ...(hasEstimate ? { estimatedKm: km, estimatedFare: require('../../services/distanceTripService').calcDistanceFare(distancePricing, km) } : {})
+        };
+      })() } : {}),
       cropType: cropType || null,
       chemicalUsed: chemicalUsed || null,
       landSize: landSize || null,
@@ -922,7 +954,7 @@ const createBooking = async (req, res) => {
         booking.vendorId = targetVendorId;
         booking.equipmentId = equipmentId || (equipmentObj ? equipmentObj._id : null);
         // Pay-online bookings are held (vendor not alerted) until the payment is verified
-        const holdForPayment = ['online', 'razorpay'].includes(paymentMethod) && finalAmount > 0 && !usePlanBenefits;
+        const holdForPayment = ['online', 'razorpay'].includes(paymentMethod) && finalAmount > 0 && !usePlanBenefits && !payAfterTrip;
         booking.status = holdForPayment ? BOOKING_STATUS.AWAITING_PAYMENT : BOOKING_STATUS.REQUESTED;
         booking.requestHeldForPayment = holdForPayment;
         booking.potentialVendors = []; // NO WAVES
@@ -2667,6 +2699,8 @@ const reselectVendor = async (req, res) => {
         rental_type: booking.rental_type || '',
         estimatedDuration: booking.estimatedDuration || '',
         landSize: booking.landSize || '',
+        estimatedKm: booking.distanceTrip?.estimatedKm || '',
+        estimatedFare: booking.distanceTrip?.estimatedFare || '',
         selectedImplements: booking.selectedImplements || [],
         playSound: true,
         message: `New booking request from ${req.user.name}!`
