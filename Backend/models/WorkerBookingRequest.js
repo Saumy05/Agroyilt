@@ -257,7 +257,14 @@ const workerBookingRequestSchema = new mongoose.Schema({
 
   // Immutable financial snapshot (locked at payment creation time)
   financialSnapshot: {
-    maximumBudget:        { type: Number, default: null },
+    maximumBudget:        { type: Number, default: null }, // the farmer's top rate, for reference (not reserved)
+    // Each selected worker's agreed rate and gross (rate × time), frozen when the farmer selected them. The farmer pays Σ grossAmount.
+    workerRates: [{
+      _id: false,
+      workerId:    { type: mongoose.Schema.Types.ObjectId, ref: 'Worker' },
+      offeredRate: { type: Number, default: 0 },
+      grossAmount: { type: Number, default: 0 }
+    }],
     selectedWorkerCount:  { type: Number, default: null },
     maximumWorkerAmount:  { type: Number, default: null },
     platformChargeRate:   { type: Number, default: null },

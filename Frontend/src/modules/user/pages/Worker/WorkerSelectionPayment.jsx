@@ -197,6 +197,18 @@ const WorkerSelectionPayment = () => {
 
   const canPayWallet = walletBalance !== null && walletBalance >= Number(financials.totalPayable);
 
+  // New quotes hold each selected worker's own agreed rate: the farmer pays exactly that. Older snapshots only knew the farmer's maximum.
+  const workerRates = Array.isArray(financials.workerRates) ? financials.workerRates : [];
+  const hasAgreedRates = workerRates.length > 0;
+  const isDailyQuote = financials.bookingType === 'DAILY';
+  const timeLabel = isDailyQuote
+    ? `${financials.numberOfDays || 1} day${(financials.numberOfDays || 1) > 1 ? 's' : ''}`
+    : `${Number(((financials.durationMinutes || 60) / 60).toFixed(2))} hr${Number(((financials.durationMinutes || 60) / 60).toFixed(2)) !== 1 ? 's' : ''}`;
+  const workerNameOf = (wId) => {
+    const o = (request.workerOffers || []).find(x => String(x.workerId?._id || x.workerId) === String(wId));
+    return o?.workerId?.name || 'Worker';
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 pb-20">
       <Helmet><title>Complete Payment | AgroYilt</title></Helmet>
@@ -224,7 +236,7 @@ const WorkerSelectionPayment = () => {
             </div>
             <div>
               <h2 className="text-lg font-black text-slate-800">Payment Summary</h2>
-              <p className="text-xs font-bold text-slate-500">Lock in your maximum budget</p>
+              <p className="text-xs font-bold text-slate-500">{hasAgreedRates ? 'You pay exactly what the workers quoted' : 'Lock in your maximum budget'}</p>
             </div>
           </div>
 
@@ -234,15 +246,17 @@ const WorkerSelectionPayment = () => {
               <span className="text-sm font-black text-slate-800">{financials.selectedWorkerCount}</span>
             </div>
 
-            <div className="flex justify-between items-center">
-              <span className="text-sm font-medium text-slate-600">Max Rate per Worker</span>
-              <span className="text-sm font-black text-slate-800">
-                ₹{financials.maximumBudget}
-                <span className="text-xs text-slate-400 font-normal ml-1">
-                  {financials.bookingType === 'DAILY' ? '/day' : '/hr'}
+            {!hasAgreedRates && (
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium text-slate-600">Max Rate per Worker</span>
+                <span className="text-sm font-black text-slate-800">
+                  ₹{financials.maximumBudget}
+                  <span className="text-xs text-slate-400 font-normal ml-1">
+                    {financials.bookingType === 'DAILY' ? '/day' : '/hr'}
+                  </span>
                 </span>
-              </span>
-            </div>
+              </div>
+            )}
 
             {financials.durationMinutes ? (
               <div className="flex justify-between items-center">
@@ -265,17 +279,37 @@ const WorkerSelectionPayment = () => {
               </div>
             ) : null}
 
-            <div className="flex justify-between items-center pt-2">
-              <div>
-                <span className="text-sm font-medium text-slate-600 block">Worker Payment Reserve</span>
-                <span className="text-[11px] text-slate-400 font-mono">
-                  {financials.bookingType === 'DAILY'
-                    ? `₹${financials.maximumBudget} × ${financials.selectedWorkerCount} × ${financials.numberOfDays || 1} day(s)`
-                    : `₹${financials.maximumBudget} × ${financials.selectedWorkerCount} × ${Number(((financials.durationMinutes || 60) / 60).toFixed(2))} hr(s)`}
-                </span>
+            {hasAgreedRates ? (
+              <div className="pt-2 space-y-2">
+                <span className="text-sm font-medium text-slate-600 block">Worker Payment</span>
+                {workerRates.map((r) => (
+                  <div key={String(r.workerId)} className="flex justify-between items-center">
+                    <span className="text-[11px] text-slate-500 font-mono">
+                      {workerNameOf(r.workerId)}: ₹{r.offeredRate}/{isDailyQuote ? 'day' : 'hr'} × {timeLabel}
+                    </span>
+                    <span className="text-sm font-black text-slate-800">₹{r.grossAmount}</span>
+                  </div>
+                ))}
+                {workerRates.length > 1 && (
+                  <div className="flex justify-between items-center border-t border-dashed border-slate-200 pt-2">
+                    <span className="text-sm font-medium text-slate-600">Workers subtotal</span>
+                    <span className="text-sm font-black text-slate-800">₹{financials.maximumWorkerAmount}</span>
+                  </div>
+                )}
               </div>
-              <span className="text-sm font-black text-slate-800">₹{financials.maximumWorkerAmount}</span>
-            </div>
+            ) : (
+              <div className="flex justify-between items-center pt-2">
+                <div>
+                  <span className="text-sm font-medium text-slate-600 block">Worker Payment Reserve</span>
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    {financials.bookingType === 'DAILY'
+                      ? `₹${financials.maximumBudget} × ${financials.selectedWorkerCount} × ${financials.numberOfDays || 1} day(s)`
+                      : `₹${financials.maximumBudget} × ${financials.selectedWorkerCount} × ${Number(((financials.durationMinutes || 60) / 60).toFixed(2))} hr(s)`}
+                  </span>
+                </div>
+                <span className="text-sm font-black text-slate-800">₹{financials.maximumWorkerAmount}</span>
+              </div>
+            )}
 
             {financials.platformChargeAmount > 0 && (
               <div className="flex justify-between items-center text-amber-600">
@@ -389,14 +423,18 @@ const WorkerSelectionPayment = () => {
           <div className="bg-emerald-50 border border-emerald-100 rounded-3xl p-5 flex gap-3">
             <FiShield className="text-emerald-600 shrink-0 mt-0.5" size={20} />
             <p className="text-xs text-emerald-800 font-medium leading-relaxed">
-              <strong className="font-bold">Wallet Escrow:</strong> The full amount is taken from your wallet now. Any unused amount after work verification, or the whole amount if the booking is cancelled, comes back to your wallet.
+              <strong className="font-bold">Wallet Payment:</strong> {hasAgreedRates
+                ? 'The amount shown is taken from your wallet now. If the booking is cancelled it comes back to your wallet.'
+                : 'The full amount is taken from your wallet now. Any unused amount after work verification, or the whole amount if the booking is cancelled, comes back to your wallet.'}
             </p>
           </div>
         ) : paymentMethod === 'online' ? (
           <div className="bg-blue-50 border border-blue-100 rounded-3xl p-5 flex gap-3">
             <FiCheckCircle className="text-blue-500 shrink-0 mt-0.5" size={20} />
             <p className="text-xs text-blue-800 font-medium leading-relaxed">
-              <strong className="font-bold">Online Escrow Protection:</strong> Workers may bid lower than your max rate. Any unused amount after work verification is instantly refunded to your AgroYilt wallet.
+              <strong className="font-bold">Protected Payment:</strong> {hasAgreedRates
+                ? 'You pay exactly what the selected workers quoted. If the booking is cancelled, the amount is refunded to your AgroYilt wallet.'
+                : 'Workers may bid lower than your max rate. Any unused amount after work verification is instantly refunded to your AgroYilt wallet.'}
             </p>
           </div>
         ) : (

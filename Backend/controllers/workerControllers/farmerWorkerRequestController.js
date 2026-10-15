@@ -2582,6 +2582,16 @@ exports.workerRespondToFarmerRequest = async (req, res) => {
           return res.status(409).json({ success: false, message: 'You have a conflicting booking for this time slot. Cannot accept.' });
         }
 
+        // Once the farmer has selected this worker at a price, that price is frozen until the farmer changes the selection
+        const frozenRate = (request.financialSnapshot?.workerRates || []).find(r => String(r.workerId) === String(workerId));
+        if (frozenRate && (request.selectedWorkerIds || []).map(String).includes(String(workerId)) &&
+            Number(frozenRate.offeredRate) !== Number(offeredRate)) {
+            return res.status(409).json({
+                success: false,
+                message: `The farmer has already selected you at ₹${frozenRate.offeredRate}. You can no longer change your rate.`
+            });
+        }
+
         // STRICT VALIDATION: Worker cannot exceed Farmer's maximum budget
         if (maxBudget > 0 && offeredRate > maxBudget) {
             return res.status(400).json({
@@ -3245,6 +3255,7 @@ exports.cancelFarmerRequest = async (req, res) => {
 const { createOrder, verifyPayment } = require('../../services/razorpayService');
 const { getWorkerFinancialSettings } = require('../../services/workerFinancialService');
 const confirmSvc = require('../../services/workerBookingConfirmService');
+const workerBookingMath = require('../../utils/workerBookingMath');
 
 const OID = (v) => mongoose.Types.ObjectId.isValid(String(v)) && String(new mongoose.Types.ObjectId(String(v))) === String(v);
 const rupeesToPaise = (inr) => Math.round(Number(inr) * 100);
@@ -3317,29 +3328,24 @@ exports.farmerSelectWorkers = async (req, res) => {
 
     const settings = await getWorkerFinancialSettings();
     const isDaily = request.bookingType === 'DAILY';
-    let baseRate = 0;
-    let maxWorkerPaise = 0;
-
-    if (isDaily) {
-      baseRate = Number(request.maxDailyRate || request.minDailyRate || request.maxRate || request.minRate || 0);
-      const days = Number(request.numberOfDays) || 1;
-      maxWorkerPaise = rupeesToPaise(baseRate) * selectedWorkerIds.length * days;
-    } else {
-      baseRate = Number(request.maxRate || request.minRate || 0);
-      let durationHours = 1;
-      if (request.durationMinutes && Number(request.durationMinutes) > 0) {
-        durationHours = Math.max(0.5, Number((Number(request.durationMinutes) / 60).toFixed(2)));
-      } else if (request.startTime && request.endTime) {
-        const [sH, sM] = request.startTime.split(':').map(Number);
-        const [eH, eM] = request.endTime.split(':').map(Number);
-        if (!isNaN(sH) && !isNaN(eH)) {
-          let diffMinutes = (eH * 60 + (eM || 0)) - (sH * 60 + (sM || 0));
-          if (diffMinutes < 0) diffMinutes += 24 * 60;
-          if (diffMinutes > 0) durationHours = Math.max(0.5, Number((diffMinutes / 60).toFixed(2)));
-        }
-      }
-      maxWorkerPaise = Math.round(rupeesToPaise(baseRate) * selectedWorkerIds.length * durationHours);
-    }
+    // The farmer pays exactly what the selected workers quoted: each worker's own offered rate × the booked time.
+    // (The farmer's maximum is kept on the snapshot for reference only; it is no longer reserved.)
+    const baseRate = Number(
+      isDaily
+        ? (request.maxDailyRate || request.minDailyRate || request.maxRate || request.minRate || 0)
+        : (request.maxRate || request.minRate || 0)
+    );
+    const bookedHours = workerBookingMath.bookedMinutes(request) / 60;
+    const bookedDays = Number(request.numberOfDays) || 1;
+    const workerRates = selectedWorkerIds.map((wId) => {
+      const offeredRate = workerBookingMath.rateFor(request, wId, { ignoreFrozen: true });
+      const grossPaise = isDaily
+        ? rupeesToPaise(offeredRate) * bookedDays
+        : Math.round(rupeesToPaise(offeredRate) * bookedHours);
+      return { workerId: wId, offeredRate, grossAmount: paiseToRupees(grossPaise), _paise: grossPaise };
+    });
+    const maxWorkerPaise = workerRates.reduce((sum, r) => sum + r._paise, 0);
+    workerRates.forEach((r) => { delete r._paise; });
 
     const platformRate = Number(settings.workerPlatformChargePercentage) || 0;
     const platformPaise = Math.round((maxWorkerPaise * platformRate) / 100);
@@ -3372,8 +3378,9 @@ exports.farmerSelectWorkers = async (req, res) => {
 
     const snapshot = {
       maximumBudget: baseRate,
+      workerRates, // each selected worker's agreed rate, frozen here
       selectedWorkerCount: selectedWorkerIds.length,
-      maximumWorkerAmount: paiseToRupees(maxWorkerPaise),
+      maximumWorkerAmount: paiseToRupees(maxWorkerPaise), // = Σ agreed rate × time (name kept: refunds read it)
       platformChargeRate: platformRate,
       platformChargeAmount: paiseToRupees(platformPaise),
       totalPayable: paiseToRupees(maxWorkerPaise + platformPaise + travelPaise),

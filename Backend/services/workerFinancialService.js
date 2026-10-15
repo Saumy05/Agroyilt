@@ -77,24 +77,12 @@ exports.buildFarmerPaymentSummary = (request, assignments = [], booking = null, 
     booking?.maxRate || booking?.agreedRate || booking?.totalAmount || 0
   );
 
+  // Exact booked time (the same minutes the quote and the assignment use), not rounded to whole hours
   let durationHours = 1;
   let diffMinutes = 60;
   if (!isDaily) {
-    if (request?.durationMinutes && Number(request.durationMinutes) > 0) {
-      diffMinutes = Number(request.durationMinutes);
-      durationHours = Math.max(1, Math.round(diffMinutes / 60));
-    } else if (request?.startTime && request?.endTime) {
-      const [sH, sM] = request.startTime.split(':').map(Number);
-      const [eH, eM] = request.endTime.split(':').map(Number);
-      if (!isNaN(sH) && !isNaN(eH)) {
-        let dm = (eH * 60 + (eM || 0)) - (sH * 60 + (sM || 0));
-        if (dm < 0) dm += 24 * 60;
-        if (dm > 0) {
-          diffMinutes = dm;
-          durationHours = Math.max(1, Math.round(dm / 60));
-        }
-      }
-    }
+    diffMinutes = require('../utils/workerBookingMath').bookedMinutes(request);
+    durationHours = diffMinutes / 60;
   }
   const days = isDaily ? (Number(request?.numberOfDays) || 1) : 1;
 
@@ -205,6 +193,7 @@ exports.buildFarmerPaymentSummary = (request, assignments = [], booking = null, 
   return {
     selectedWorkerCount,
     maxRatePerWorker,
+    workerRates: (snap.workerRates || []).map(r => ({ workerId: r.workerId, offeredRate: r.offeredRate, grossAmount: r.grossAmount })),
     bookingType: isDaily ? 'DAILY' : 'HOURLY',
     durationHours: !isDaily ? Number(durationHours.toFixed(2)) : null,
     durationMinutes: !isDaily ? diffMinutes : null,
@@ -556,7 +545,11 @@ exports.buildFarmerBill = (request, assignments = [], extensions = [], { isPaid 
   const lines = [{
     kind: 'booking', minutes: base.minutes, days: base.days,
     workerCount: Number(snap.selectedWorkerCount) || (request.selectedWorkerIds || []).length || 1,
-    rate: Number(snap.maximumBudget) || null, rateUnit,
+    rate: (() => {
+      // new snapshots hold each worker's agreed rate; one number only when they all agreed on the same one
+      const agreed = [...new Set((snap.workerRates || []).map(r => Number(r.offeredRate) || 0))];
+      return agreed.length ? (agreed.length === 1 ? agreed[0] : null) : (Number(snap.maximumBudget) || null);
+    })(), rateUnit,
     workerAmount: Number(snap.maximumWorkerAmount) || 0, platformFee: Number(snap.platformChargeAmount) || 0,
     // the booking line excludes travel (shown as its own line below) so the lines still add up to totalPayable
     total: (Number(snap.totalPayable) || toINR(toP(snap.maximumWorkerAmount || 0) + toP(snap.platformChargeAmount || 0))) - (Number(snap.travelChargeTotal) || 0),

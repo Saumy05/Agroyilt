@@ -19,7 +19,7 @@ const F = () => hire.asFarmer(ctx.api, farmer);
 const post = (path, body = {}) => ctx.api.post(`/api/users/farmer-worker-request${path}`).set(h.auth(farmer, 'USER')).send(body);
 
 describe('DAILY lifecycle', () => {
-  it('a full 3-day booking settles once, completes the parent and refunds the unused reserve once', async () => {
+  it('a full 3-day booking settles once and completes the parent; the farmer paid the agreed rate, so there is no reserve to refund', async () => {
     const b = await hire.confirmedDaily(ctx, farmer, [w1], { days: 3, rate: 550, max: 600 });
     const a = b.assignments[0];
     const r1 = await hire.workDay(ctx, farmer, w1, b.request, a);
@@ -37,7 +37,7 @@ describe('DAILY lifecycle', () => {
     assert.equal(doc.netEarning, 550 * 3 * 0.9);
     assert.equal(await hire.workerWallet(w1), 550 * 3 * 0.9);
     assert.equal((await P(b.request._id)).status, 'completed');
-    assert.equal(await hire.farmerWalletBalance(farmer), 600 * 3 - 550 * 3, 'unused reserve (max rate − agreed rate) refunded once');
+    assert.equal(await hire.farmerWalletBalance(farmer), 0, 'the farmer paid exactly the agreed 550 x 3 (not the 600 maximum), so nothing is left to refund');
   });
 
   it('day N cannot be worked before its calendar day', async () => {

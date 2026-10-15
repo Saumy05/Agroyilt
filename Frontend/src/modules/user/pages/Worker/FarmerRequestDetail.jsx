@@ -727,10 +727,27 @@ const FarmerRequestDetail = () => {
                 ? Number(request.paymentSummary?.numberOfDays || request.numberOfDays || 1)
                 : 1;
 
-              // Worker reserve: rate * workers * (durationHours or numberOfDays)
-              const calculatedReserve = isDaily
-                ? Math.round(ratePerWorker * effectiveWorkerCount * numberOfDays)
-                : Math.round(ratePerWorker * effectiveWorkerCount * durationHours);
+              // What each worker quoted. While still choosing, preview the current selection; once selected, the frozen rates.
+              // Older snapshots (no per-worker rates) fall back to the farmer's maximum.
+              const offerOf = (wId) => (request.workerOffers || []).find(o => String(o.workerId?._id || o.workerId) === String(wId));
+              const workerNameOf = (wId) => offerOf(wId)?.workerId?.name || 'Worker';
+              const snapRates = request.financialSnapshot?.workerRates || [];
+              let agreedRows = null;
+              if (!isPaid && !isConfirmed && selectedWorkerIds.length > 0) {
+                agreedRows = selectedWorkerIds.map((wId) => {
+                  const rate = Number(offerOf(wId)?.offeredRate) || ratePerWorker;
+                  return { id: wId, name: workerNameOf(wId), rate, gross: isDaily ? Math.round(rate * numberOfDays) : Math.round(rate * durationHours) };
+                });
+              } else if (snapRates.length > 0) {
+                agreedRows = snapRates.map(r => ({ id: r.workerId, name: workerNameOf(r.workerId), rate: Number(r.offeredRate), gross: Number(r.grossAmount) }));
+              }
+
+              // Worker payment: what the selected workers quoted (or, for older bookings, the farmer's maximum × workers × time)
+              const calculatedReserve = agreedRows
+                ? agreedRows.reduce((sum, r) => sum + r.gross, 0)
+                : (isDaily
+                  ? Math.round(ratePerWorker * effectiveWorkerCount * numberOfDays)
+                  : Math.round(ratePerWorker * effectiveWorkerCount * durationHours));
 
               const reserveAmount = isPaid
                 ? Number(request.paymentSummary?.workerReserveAmount || calculatedReserve)
@@ -778,13 +795,15 @@ const FarmerRequestDetail = () => {
                     </span>
                   </div>
 
-                  <div className="flex justify-between items-center text-slate-600">
-                    <span className="font-medium">Maximum Rate / Worker</span>
-                    <span className="font-bold text-slate-900">
-                      ₹{ratePerWorker.toLocaleString('en-IN')}
-                      <span className="text-xs text-slate-400 font-normal ml-1">{rateUnitDisplay}</span>
-                    </span>
-                  </div>
+                  {!agreedRows && (
+                    <div className="flex justify-between items-center text-slate-600">
+                      <span className="font-medium">Maximum Rate / Worker</span>
+                      <span className="font-bold text-slate-900">
+                        ₹{ratePerWorker.toLocaleString('en-IN')}
+                        <span className="text-xs text-slate-400 font-normal ml-1">{rateUnitDisplay}</span>
+                      </span>
+                    </div>
+                  )}
 
                   {!isDaily && (
                     <div className="flex justify-between items-center text-slate-600">
@@ -805,17 +824,37 @@ const FarmerRequestDetail = () => {
                     </div>
                   )}
 
-                  <div className="flex justify-between items-center text-slate-600">
-                    <div>
-                      <span className="font-medium">Worker Payment Reserve</span>
-                      <span className="block text-[11px] text-slate-400 font-mono">
-                        {calculationFormulaText}
+                  {agreedRows ? (
+                    <div className="space-y-1.5 text-slate-600">
+                      <span className="font-medium block">Worker Payment</span>
+                      {agreedRows.map((r) => (
+                        <div key={String(r.id)} className="flex justify-between items-center">
+                          <span className="text-[11px] text-slate-400 font-mono">
+                            {r.name}: ₹{r.rate.toLocaleString('en-IN')}{isDaily ? '/day' : '/hr'} × {isDaily ? `${numberOfDays} day${numberOfDays !== 1 ? 's' : ''}` : `${cleanDurationHours} hr${cleanDurationHours !== 1 ? 's' : ''}`}
+                          </span>
+                          <span className="font-bold text-slate-900">₹{r.gross.toLocaleString('en-IN')}</span>
+                        </div>
+                      ))}
+                      {agreedRows.length > 1 && (
+                        <div className="flex justify-between items-center border-t border-dashed border-slate-200 pt-1.5">
+                          <span className="font-medium">Workers subtotal</span>
+                          <span className="font-bold text-slate-900">₹{reserveAmount.toLocaleString('en-IN')}</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex justify-between items-center text-slate-600">
+                      <div>
+                        <span className="font-medium">Worker Payment Reserve</span>
+                        <span className="block text-[11px] text-slate-400 font-mono">
+                          {calculationFormulaText}
+                        </span>
+                      </div>
+                      <span className="font-bold text-slate-900">
+                        ₹{reserveAmount.toLocaleString('en-IN')}
                       </span>
                     </div>
-                    <span className="font-bold text-slate-900">
-                      ₹{reserveAmount.toLocaleString('en-IN')}
-                    </span>
-                  </div>
+                  )}
 
                   <div className="flex justify-between items-center text-slate-600">
                     <span className="font-medium">Platform Fee ({platformRate}%)</span>
@@ -871,7 +910,7 @@ const FarmerRequestDetail = () => {
                       }`}>
                         {isCash
                           ? (request.status === 'completed' ? 'Paid directly to worker • Work Completed' : 'Pay worker directly upon completion')
-                          : 'Reserve + Platform Fee'}
+                          : (agreedRows ? 'Workers\' quoted rates + Platform Fee' : 'Reserve + Platform Fee')}
                       </span>
                     </div>
                     <span className={`text-xl font-black ${

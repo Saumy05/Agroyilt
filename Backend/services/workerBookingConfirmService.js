@@ -21,6 +21,7 @@ const Booking = require('../models/Booking');
 const Worker = require('../models/Worker');
 const ledger = require('./ledgerService');
 const { issueOtp } = require('../utils/otpUtil');
+const workerBookingMath = require('../utils/workerBookingMath');
 
 const SELECTABLE = ['matching', 'awaiting_farmer_confirmation', 'pending'];
 const STALE_CLAIM_MS = 2 * 60 * 1000;
@@ -98,10 +99,8 @@ const buildDocs = (request, { method, orderId, paymentId }) => {
   const bookingDocs = [];
 
   [...new Set((request.selectedWorkerIds || []).map(String))].forEach((wId, idx) => {
-    const offer = (request.workerOffers || []).find(o => String(o.workerId) === wId && o.status !== 'rejected' && o.status !== 'expired');
-    const offeredRate = offer
-      ? offer.offeredRate
-      : (isDaily ? (request.minDailyRate || request.minRate || 0) : (request.minRate || 0));
+    // the rate frozen when the farmer selected this worker (never a later change), same duration the quote used
+    const offeredRate = workerBookingMath.rateFor(request, wId);
 
     let grossPaise;
     let bookedDays = null;
@@ -109,7 +108,7 @@ const buildDocs = (request, { method, orderId, paymentId }) => {
       bookedDays = Number(request.numberOfDays) || 1;
       grossPaise = toP(offeredRate) * bookedDays;
     } else {
-      grossPaise = Math.round(toP(offeredRate) * ((Number(request.durationMinutes) || 60) / 60));
+      grossPaise = Math.round(toP(offeredRate) * (workerBookingMath.bookedMinutes(request) / 60));
     }
     const commissionPaise = Math.floor((grossPaise * commissionRate) / 100);
     const netPaise = grossPaise - commissionPaise;

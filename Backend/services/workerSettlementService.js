@@ -385,7 +385,11 @@ const refundWorkerReserveShare = async (assignmentId, { actor = 'farmer', actorI
   if (!parent || !isPaidOnline(parent)) return { success: true, refundAmount: 0 };
   const snap = parent.financialSnapshot || {};
   const count = Number(snap.selectedWorkerCount) || (parent.selectedWorkerIds || []).length || 1;
-  const amount = toINR(Math.round(toP(snap.maximumWorkerAmount || 0) / count));
+  // new snapshots know each worker's own gross; older ones only the pooled reserve, shared equally
+  const own = (snap.workerRates || []).find(r => String(r.workerId) === String(a.workerId));
+  const amount = own && Number(own.grossAmount) > 0
+    ? toINR(toP(own.grossAmount))
+    : toINR(Math.round(toP(snap.maximumWorkerAmount || 0) / count));
   if (amount <= 0) return { success: true, refundAmount: 0 };
   const res = await creditFarmerOnce({
     parent, amount, key: `worker_removed_refund_${a._id}`, reason: 'refund',
