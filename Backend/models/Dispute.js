@@ -148,6 +148,7 @@ const disputeSchema = new mongoose.Schema({
       'VENDOR_PENALTY',
       'WORKER_PENALTY',
       'BOOKING_CANCELLED_BY_ADMIN',
+      'FARMER_PAYMENT_DEFAULT',
       'DISMISSED_NO_ACTION',
       'CUSTOM_RESOLUTION'
     ],
@@ -163,6 +164,8 @@ const disputeSchema = new mongoose.Schema({
     penaltyAppliedToVendor: { type: Number, default: 0 },
     penaltyAppliedToWorker: { type: Number, default: 0 },
     adjustedWorkerPayout:   { type: Number, default: 0 },
+    duesCreatedForFarmer:   { type: Number, default: 0 },
+    paidToVendorByPlatform: { type: Number, default: 0 },
     currency:               { type: String, default: 'INR' }
   },
   resolvedBy: {

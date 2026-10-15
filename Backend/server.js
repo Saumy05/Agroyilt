@@ -313,6 +313,7 @@ app.use('/api/vendors/soil-test', require('./routes/vendor-routes/soilTest.route
 // Booking routes
 app.use('/api/bookings/service-timer', require('./routes/booking-routes/serviceTimer.routes'));
 app.use('/api/service-timer', require('./routes/booking-routes/serviceTimer.routes'));
+app.use('/api/bookings/payment-default', require('./routes/booking-routes/paymentDefault.routes'));
 app.use('/api/bookings', require('./routes/booking-routes/userBooking.routes'));
 app.use('/api/bookings/cash', require('./routes/booking-routes/cashCollection.routes'));
 app.use('/api/tracking', require('./routes/booking-routes/tracking.routes'));

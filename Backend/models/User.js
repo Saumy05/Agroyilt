@@ -64,6 +64,11 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  // What the farmer owes after an admin-resolved payment default (blocks new bookings until cleared)
+  outstandingDues: {
+    type: Number,
+    default: 0
+  },
   wallet: {
     balance: {
       type: Number,

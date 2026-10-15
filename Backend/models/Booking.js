@@ -570,6 +570,9 @@ const bookingSchema = new mongoose.Schema({
     stoppedAt: { type: Date, default: null },
     totalDistanceKm: { type: Number, default: 0 },
     fare: { type: Number, default: 0 },
+    // Farmer's approximate distance at booking time. Informational only (vendor planning + end-of-trip summary), never billed.
+    estimatedKm: { type: Number, default: null },
+    estimatedFare: { type: Number, default: null },
     lastPoint: {
       lat: { type: Number, default: null },
       lng: { type: Number, default: null },
@@ -578,6 +581,25 @@ const bookingSchema = new mongoose.Schema({
     pointsAccepted: { type: Number, default: 0 },
     method: { type: String, default: null }, // google_roads | osrm_match | osrm_route | google_route | straight_line
     seq: { type: Number, default: 0 }        // optimistic-concurrency counter for point batches
+  },
+
+  // Vendor reported that the farmer will not pay the final bill (opens an URGENT dispute)
+  paymentDispute: {
+    isActive: { type: Boolean, default: false },
+    reason: { type: String, default: null },
+    notes: { type: String, default: null },
+    reportedAt: { type: Date, default: null },
+    disputeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Dispute', default: null }
+  },
+
+  // Set when admin resolves a payment dispute against the farmer: what the farmer owes the platform
+  paymentDefault: {
+    amount: { type: Number, default: 0 },
+    status: { type: String, enum: ['NONE', 'OPEN', 'PAID'], default: 'NONE' },
+    createdAt: { type: Date, default: null },
+    paidAt: { type: Date, default: null },
+    paidVia: { type: String, default: null }, // wallet | admin_recorded
+    disputeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Dispute', default: null }
   },
 
   // ==========================================

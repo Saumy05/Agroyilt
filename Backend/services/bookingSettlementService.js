@@ -778,6 +778,8 @@ const dispatchVendorRequest = async (booking, { io = null, distance = null, chos
       rental_type: booking.rental_type || '',
       estimatedDuration: booking.estimatedDuration || '',
       landSize: booking.landSize || '',
+      estimatedKm: booking.distanceTrip?.estimatedKm || '',
+      estimatedFare: booking.distanceTrip?.estimatedFare || '',
       selectedImplements: booking.selectedImplements || [],
       playSound: true,
       message: `New booking request from ${customerName}!`

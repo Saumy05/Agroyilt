@@ -61,7 +61,8 @@ const PAYMENT_STATUS = {
   REFUNDED: 'refunded',
   COLLECTED_BY_VENDOR: 'collected_by_vendor',
   PLAN_COVERED: 'plan_covered', // For plan_benefit bookings until bill is finalized
-  PARTIAL: 'partial' // Advance paid, but final bill is higher; balanceDue remains
+  PARTIAL: 'partial', // Advance paid, but final bill is higher; balanceDue remains
+  PAYMENT_DEFAULT: 'payment_default' // Farmer would not pay; admin resolved it against the farmer (they now owe dues)
 };
 
 // Service Status
