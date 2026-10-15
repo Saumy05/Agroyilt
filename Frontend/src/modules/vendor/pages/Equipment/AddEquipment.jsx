@@ -10,7 +10,6 @@ import { toastManager } from '../../../../utils/toastManager';
 import { motion, AnimatePresence } from 'framer-motion';
 import vendorEquipmentService from '../../../../services/vendorEquipmentService';
 import vendorService from '../../../../services/vendorService';
-import { getWorkers } from '../../services/workerService';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import { FormContainer, FormSection } from '../../../../components/common';
 import api from '../../../../services/api';
@@ -25,8 +24,6 @@ const AddEquipment = () => {
   const [machineTypes, setMachineTypes] = useState([]);
   const [machineImplements, setMachineImplements] = useState([]);
   const [uploading, setUploading] = useState(false);
-  const [vendorWorkers, setVendorWorkers] = useState([]);
-  const [showWorkerLink, setShowWorkerLink] = useState(false);
   const [isRequestingCategory, setIsRequestingCategory] = useState(false);
   const [isRequestingCity, setIsRequestingCity] = useState(false);
   const [implementSearch, setImplementSearch] = useState('');
@@ -50,18 +47,6 @@ const AddEquipment = () => {
       daily:          { price: 0, isEnabled: false },
       distance_based: { price: 0, perKmRate: 0, isEnabled: false }
     },
-    includesDriver: true,
-    driver: {
-      name: '',
-      phone: '',
-      photo: '',
-      aadharNumber: '',
-      licenseNumber: '',
-      aadharImage: '',
-      licenseImage: '',
-      additionalCharge: 0
-    },
-    workerId: null
   });
 
   // Tracks the selected category's metadata (trackingType, requiresDriver, fulfillmentMode)
@@ -93,15 +78,6 @@ const AddEquipment = () => {
         }
       } catch (e) {
         console.warn('Machine types fetch skipped:', e);
-      }
-
-      try {
-        const workerRes = await getWorkers();
-        if (workerRes.success && Array.isArray(workerRes.data)) {
-          setVendorWorkers(workerRes.data);
-        }
-      } catch (e) {
-        console.warn('Worker fetch skipped:', e);
       }
 
       let activeCategoryId = '';
@@ -155,16 +131,6 @@ const AddEquipment = () => {
               land_based: item.pricing?.land_based || { price: 0, isEnabled: false },
               daily: item.pricing?.daily || { price: 0, isEnabled: false },
               distance_based: item.pricing?.distance_based || { price: 0, perKmRate: 0, isEnabled: false }
-            },
-            driver: item.driver || {
-              name: '',
-              phone: '',
-              photo: '',
-              aadharNumber: '',
-              licenseNumber: '',
-              aadharImage: '',
-              licenseImage: '',
-              additionalCharge: 0
             }
           });
           if (item.requestedCategoryName) {
@@ -218,8 +184,7 @@ const AddEquipment = () => {
           });
           setForm(prev => ({
             ...prev,
-            listingType: mode,
-            includesDriver: mode === 'service' ? (selected.requiresDriver || false) : false
+            listingType: mode
           }));
         }
       }
@@ -263,8 +228,7 @@ const AddEquipment = () => {
         });
         setForm(prev => ({
           ...prev,
-          listingType: mode,
-          includesDriver: mode === 'service' ? (selected.requiresDriver || false) : false
+          listingType: mode
         }));
       }
     } catch (err) {
@@ -298,11 +262,7 @@ const AddEquipment = () => {
         const data = await response.json();
 
         if (data.success) {
-          if (variant === 'driver') {
-            setForm(prev => ({ ...prev, driver: { ...prev.driver, photo: data.imageUrl } }));
-          } else {
-            setForm(prev => ({ ...prev, images: [...prev.images, data.imageUrl] }));
-          }
+          setForm(prev => ({ ...prev, images: [...prev.images, data.imageUrl] }));
         } else {
           hasError = true;
           console.error("Backend upload error:", data.message || data.error);
@@ -330,6 +290,10 @@ const AddEquipment = () => {
     
     // 1. Basic Identity Validation
     const submissionData = { ...form };
+    // Operator/driver details are no longer collected (old saved drafts may still carry them)
+    delete submissionData.driver;
+    delete submissionData.includesDriver;
+    delete submissionData.workerId;
     submissionData.implements = (form.implements || []).map(i => {
       const hPrice = parseFloat(i.pricing?.hourly?.price) || 0;
       const lPrice = parseFloat(i.pricing?.land_based?.price) || 0;
@@ -381,23 +345,7 @@ const AddEquipment = () => {
       }
     }
 
-    // 3. Driver/Operator Validation - only for 'service' type (Tractor/Harvester)
-    if (form.listingType === 'service' && form.includesDriver) {
-      if (!form.driver.name) return toastManager.error('Operator name is required');
-      if (!form.driver.phone || !/^[6-9]\d{9}$/.test(form.driver.phone)) {
-        return toastManager.error('Valid 10-digit operator phone number is required');
-      }
-      if (!form.driver.aadharNumber || !/^\d{12}$/.test(form.driver.aadharNumber)) {
-        return toastManager.error('Valid 12-digit Aadhar Card number is required');
-      }
-      const cleanDL = (form.driver.licenseNumber || '').trim().toUpperCase().replace(/[\s-]/g, '');
-      const dlRegex = /^[A-Z]{2}[0-9A-Z]{9,15}$/;
-      if (!cleanDL || !dlRegex.test(cleanDL)) {
-        return toastManager.error('Please enter a valid Driving License number (e.g. RJ1420230001234)');
-      }
-    }
-
-    // 4. Visuals Validation
+    // 3. Visuals Validation
     if (form.images.length === 0) return toastManager.error('Please upload at least one machine photo');
 
     try {
@@ -558,7 +506,7 @@ const AddEquipment = () => {
 
                         <button
                           type="button"
-                          onClick={() => setForm(p => ({ ...p, listingType: 'rental', includesDriver: false }))}
+                          onClick={() => setForm(p => ({ ...p, listingType: 'rental' }))}
                           className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg font-semibold text-xs transition-all ${
                             form.listingType === 'rental'
                               ? 'bg-white text-slate-900 shadow-xs'
@@ -989,142 +937,6 @@ const AddEquipment = () => {
                 })}
               </div>
             </FormSection>
-
-            {/* Driver Section - Only rendered for Machine Service */}
-            {form.listingType === 'service' && (
-              <FormSection 
-                title="Operator / Driver"
-                headerRight={
-                  <button 
-                    type="button"
-                    onClick={() => {
-                      if (!categoryMeta.requiresDriver) {
-                        setForm(p => ({ ...p, includesDriver: !p.includesDriver }));
-                      } else {
-                        toastManager.info('This machine category requires an operator.');
-                      }
-                    }}
-                    className={`w-9 h-5 rounded-full relative transition-colors ${form.includesDriver ? 'bg-blue-600' : 'bg-slate-200'} ${categoryMeta.requiresDriver ? 'cursor-not-allowed' : ''}`}
-                  >
-                    <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all shadow-xs ${form.includesDriver ? 'right-0.5' : 'left-0.5'}`} />
-                  </button>
-                }
-              >
-                <AnimatePresence>
-                  {form.includesDriver && (
-                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} className="space-y-3 pt-1">
-                      
-                      {/* Registered Worker Quick Link */}
-                      {!isEdit && vendorWorkers.length > 0 && (
-                        <div>
-                          <button 
-                            type="button"
-                            onClick={() => setShowWorkerLink(!showWorkerLink)}
-                            className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1.5 transition-colors"
-                          >
-                            <span>{showWorkerLink ? '← Enter driver manually' : '🔗 Link registered worker'}</span>
-                          </button>
-                          
-                          {showWorkerLink && (
-                            <div className="grid grid-cols-1 gap-2 mt-2">
-                              {vendorWorkers.map(w => (
-                                <button
-                                  key={w._id}
-                                  type="button"
-                                  onClick={() => {
-                                    setForm(p => ({
-                                      ...p,
-                                      workerId: w._id,
-                                      driver: {
-                                        ...p.driver,
-                                        name: w.name,
-                                        phone: w.phone,
-                                        photo: w.profilePhoto || '',
-                                        aadharNumber: w.aadhar?.number || '',
-                                      }
-                                    }));
-                                    setShowWorkerLink(false);
-                                    toastManager.success(`Linked to ${w.name}`);
-                                  }}
-                                  className={`flex items-center gap-3 p-2.5 rounded-xl border text-left transition-all ${
-                                    form.workerId === w._id ? 'bg-blue-50/70 border-blue-200' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
-                                  }`}
-                                >
-                                  <div className="w-8 h-8 rounded-full bg-slate-200 overflow-hidden flex-shrink-0">
-                                    {w.profilePhoto ? <img src={w.profilePhoto} className="w-full h-full object-cover" /> : <FiUser className="m-auto text-slate-400 mt-2" />}
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-bold text-slate-800 truncate">{w.name}</p>
-                                    <p className="text-[11px] text-slate-500">{w.phone}</p>
-                                  </div>
-                                  <span className="text-xs font-semibold text-blue-600">Select</span>
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      <div className="flex items-center gap-3">
-                        <label className="w-14 h-14 rounded-xl bg-slate-50 border border-slate-200 hover:bg-slate-100 flex items-center justify-center cursor-pointer overflow-hidden relative flex-shrink-0 transition-colors">
-                          <input type="file" className="hidden" accept="image/*" onChange={(e) => handleImageUpload(e, 'driver')} />
-                          {form.driver.photo ? (
-                            <img src={form.driver.photo} className="w-full h-full object-cover" />
-                          ) : (
-                            <div className="flex flex-col items-center justify-center text-slate-400">
-                              <FiUser className="w-5 h-5" />
-                              <span className="text-[8px] mt-0.5">Photo</span>
-                            </div>
-                          )}
-                        </label>
-                        <div className="flex-1 space-y-2">
-                          <input 
-                            type="text"
-                            placeholder="Driver Name" 
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs sm:text-sm font-semibold text-slate-800 outline-none focus:bg-white focus:border-blue-500 transition-all placeholder:text-slate-400"
-                            value={form.driver.name} 
-                            onChange={e => {
-                              const val = e.target.value.replace(/[^a-zA-Z\s]/g, '');
-                              setForm(p => ({ ...p, driver: { ...p.driver, name: val } }));
-                            }} 
-                          />
-                          <input 
-                            type="tel" 
-                            maxLength="10" 
-                            placeholder="Mobile (10 digits)" 
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs sm:text-sm font-semibold text-slate-800 outline-none focus:bg-white focus:border-blue-500 transition-all placeholder:text-slate-400"
-                            value={form.driver.phone} 
-                            onChange={e => setForm(p => ({ ...p, driver: { ...p.driver, phone: e.target.value.replace(/\D/g, '') } }))} 
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2.5">
-                        <input 
-                          type="tel" 
-                          maxLength="12" 
-                          placeholder="Aadhaar (12 digits)" 
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-blue-500 transition-all placeholder:text-slate-400"
-                          value={form.driver.aadharNumber} 
-                          onChange={e => setForm(p => ({ ...p, driver: { ...p.driver, aadharNumber: e.target.value.replace(/\D/g, '') } }))} 
-                        />
-                        <input 
-                          type="text"
-                          maxLength={16} 
-                          placeholder="Driving License" 
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 uppercase outline-none focus:bg-white focus:border-blue-500 transition-all placeholder:text-slate-400"
-                          value={form.driver.licenseNumber} 
-                          onChange={e => {
-                            const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-                            setForm(p => ({ ...p, driver: { ...p.driver, licenseNumber: val } }));
-                          }} 
-                        />
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </FormSection>
-            )}
 
             {/* Photos Section */}
             <FormSection 

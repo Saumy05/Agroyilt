@@ -909,40 +909,6 @@ const ManageProducts = () => {
                                     </div>
                                 </div>
 
-                                {/* Operator / Driver details */}
-                                {viewEquipment.includesDriver && viewEquipment.driver && (
-                                    <div className="space-y-3">
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Assigned Operator / Driver</p>
-                                        <div className="flex gap-4 items-center bg-slate-50 p-4 rounded-3xl border border-slate-100">
-                                            <div className="w-16 h-16 rounded-2xl bg-white border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center p-1">
-                                                {viewEquipment.driver.photo ? (
-                                                    <img src={viewEquipment.driver.photo} className="w-full h-full object-cover rounded-xl" alt="" />
-                                                ) : (
-                                                    <FiUser className="w-6 h-6 text-slate-300" />
-                                                )}
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-x-6 gap-y-2 flex-1 text-xs font-bold text-slate-600">
-                                                <div>
-                                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-wider block">Operator Name</span>
-                                                    <span className="text-sm font-black text-slate-800">{viewEquipment.driver.name || 'N/A'}</span>
-                                                </div>
-                                                <div>
-                                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-wider block">Phone Number</span>
-                                                    <span className="text-sm font-black text-slate-800">{viewEquipment.driver.phone || 'N/A'}</span>
-                                                </div>
-                                                <div>
-                                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-wider block">Aadhar Card</span>
-                                                    <span className="text-xs font-black text-slate-800">{viewEquipment.driver.aadharNumber || 'N/A'}</span>
-                                                </div>
-                                                <div>
-                                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-wider block">Driving License</span>
-                                                    <span className="text-xs font-black text-slate-800">{viewEquipment.driver.licenseNumber || 'N/A'}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
                                 {/* Owner / Vendor info */}
                                 {viewEquipment.vendorId && (
                                     <div className="space-y-2">

@@ -292,43 +292,6 @@ const EquipmentApproval = () => {
                       </div>
                    </div>
 
-                  {/* Driver Section */}
-                  {selectedItem?.includesDriver && selectedItem?.driver && (
-                    <div className="bg-purple-50 rounded-3xl sm:rounded-[40px] p-5 sm:p-6 md:p-8 border border-purple-100 shadow-xl shadow-purple-900/5">
-                      <div className="flex flex-col sm:flex-row items-center gap-6 mb-8 text-center sm:text-left">
-                        <div className="relative flex-shrink-0">
-                          <div className="w-24 h-24 rounded-[32px] overflow-hidden bg-white shadow-lg border-4 border-white">
-                            {selectedItem.driver.photo ? (
-                              <img src={selectedItem.driver.photo} className="w-full h-full object-cover" />
-                            ) : (
-                              <FiUser className="w-full h-full p-6 text-purple-200" />
-                            )}
-                          </div>
-                          <div className="absolute -right-2 -bottom-2 w-10 h-10 bg-emerald-500 rounded-2xl flex items-center justify-center border-4 border-purple-50 shadow-lg">
-                            <FiCheckCircle className="text-white text-sm" />
-                          </div>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[11px] font-black text-purple-600 uppercase tracking-widest leading-none mb-2">Registered Operator</p>
-                          <h4 className="text-2xl sm:text-3xl font-black text-purple-900 break-words">{selectedItem.driver.name}</h4>
-                          <h4 className="text-sm font-bold text-purple-400 mt-2 tracking-tight flex items-center justify-center sm:justify-start gap-1.5">
-                            <FiSmartphone size={14} /> {selectedItem.driver.phone}
-                          </h4>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                         <div className="bg-white/80 p-5 rounded-3xl border border-purple-100/50 shadow-sm">
-                            <p className="text-[9px] font-black text-purple-400 uppercase tracking-widest mb-1.5">Aadhar Card</p>
-                            <p className="text-sm font-black text-purple-800 tracking-wider break-all">{selectedItem.driver.aadharNumber || 'Not Linked'}</p>
-                         </div>
-                         <div className="bg-white/80 p-5 rounded-3xl border border-purple-100/50 shadow-sm">
-                            <p className="text-[9px] font-black text-purple-400 uppercase tracking-widest mb-1.5">DL Number</p>
-                            <p className="text-sm font-black text-purple-800 tracking-wider break-all uppercase">{selectedItem.driver.licenseNumber || 'Active'}</p>
-                         </div>
-                      </div>
-                    </div>
-                  )}
-
                   {/* Rates Detail */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-6">
                     {Object.entries(selectedItem?.pricing || {}).map(([key, val]) => (

@@ -111,9 +111,6 @@ exports.addEquipment = async (req, res) => {
       description, 
       images, 
       pricing,
-      includesDriver,
-      driver,
-      workerId,
       requestedCityName
     } = req.body;
 
@@ -206,9 +203,6 @@ exports.addEquipment = async (req, res) => {
       description,
       images: images || [],
       pricing,
-      includesDriver,
-      driver,
-      workerId,
       cityIds,
       requestedCityName: requestedCityName || null,
       scope,
@@ -248,6 +242,10 @@ exports.updateEquipment = async (req, res) => {
     // Update fields (excluding vendorId and status reset)
     const updateData = req.body;
     delete updateData.vendorId;
+    // Operator/driver details are not part of a listing any more
+    delete updateData.includesDriver;
+    delete updateData.driver;
+    delete updateData.workerId;
     
     if (updateData.pricing) {
       const priceError = validatePricing(updateData.pricing);

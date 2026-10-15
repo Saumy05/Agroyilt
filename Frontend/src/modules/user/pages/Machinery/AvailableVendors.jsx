@@ -568,11 +568,6 @@ const AvailableVendors = () => {
                               {singleItem.equipment.modelNumber}
                             </span>
                           )}
-                          {singleItem.equipment.includesDriver && (
-                            <span className="text-[8.5px] font-bold text-emerald-800 bg-white px-1.5 py-0.5 rounded border border-emerald-200/70">
-                              Driver Incl.
-                            </span>
-                          )}
                         </div>
 
                         {singleItem.matchedImplement && (
@@ -794,11 +789,6 @@ const AvailableVendors = () => {
                             {item.equipment.modelNumber && (
                               <span className="text-[9px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200/60">
                                 {item.equipment.modelNumber}
-                              </span>
-                            )}
-                            {item.equipment.includesDriver && (
-                              <span className="text-[9px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200/60">
-                                Driver Included
                               </span>
                             )}
                             <span className="text-[9px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200/60 flex items-center gap-0.5">

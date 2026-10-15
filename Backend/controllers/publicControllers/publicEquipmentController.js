@@ -590,8 +590,6 @@ exports.findQualifiedVendors = async (req, res) => {
           year: eq.year || null,
           horsepower: eqHp,
           images: eq.images || [],
-          includesDriver: eq.includesDriver !== false,
-          driver: eq.driver || null,
           description: eq.description || ''
         },
         matchedImplement,

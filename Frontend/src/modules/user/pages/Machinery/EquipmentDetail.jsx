@@ -463,10 +463,8 @@ const EquipmentDetail = () => {
                 <FiUser size={13} />
               </div>
               <div className="min-w-0">
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Operator</p>
-                <p className="text-xs font-black text-slate-800">
-                  {equipment.includesDriver ? 'Included' : 'Self-Operated'}
-                </p>
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Operation</p>
+                <p className="text-xs font-black text-slate-800">Self-Operated</p>
               </div>
             </div>
           </div>
@@ -793,31 +791,17 @@ const EquipmentDetail = () => {
             ))}
           </div>
 
-          {/* Included Operator Note */}
+          {/* Self-operated note */}
           <div className="bg-slate-50/80 rounded-xl p-3 border border-slate-100 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                equipment.includesDriver ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-500'
-              }`}>
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-slate-200 text-slate-500">
                 <FiUser size={15} />
               </div>
               <div>
-                <p className="text-xs font-black text-slate-900">
-                  {equipment.includesDriver ? 'Operator Included' : 'Self-Operated Rental'}
-                </p>
-                <p className="text-[10px] font-medium text-slate-400">
-                  {equipment.includesDriver 
-                    ? 'Verified experienced driver will accompany this machinery.' 
-                    : 'Machine rented directly to farmer. Fuel & operation handled by renter.'}
-                </p>
+                <p className="text-xs font-black text-slate-900">Self-Operated Rental</p>
+                <p className="text-[10px] font-medium text-slate-400">Machine rented directly to farmer. Fuel & operation handled by renter.</p>
               </div>
             </div>
-            {equipment.driver?.additionalCharge > 0 && (
-              <div className="text-right shrink-0">
-                <span className="text-[9px] font-bold text-slate-400 block uppercase">Driver Charge</span>
-                <span className="text-xs font-black text-slate-800">+₹{equipment.driver.additionalCharge}</span>
-              </div>
-            )}
           </div>
         </div>
 
