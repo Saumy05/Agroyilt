@@ -112,7 +112,12 @@ const WorkerMpinSetup = () => {
           authStorage.clearAuthSession('worker');
           goToLoginAfterRegistration(navigate);
         } else {
-          navigate('/worker', { replace: true });
+          if (isFirstTime) {
+            toastManager.success('Welcome! Please complete your profile with your skills, location, and rates.');
+            navigate('/worker/profile/edit', { replace: true, state: { isNewRegistration: true } });
+          } else {
+            navigate('/worker', { replace: true });
+          }
         }
       }
     } catch (error) {

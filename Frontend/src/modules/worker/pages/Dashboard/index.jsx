@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiBriefcase, FiCheckCircle, FiClock, FiTrendingUp, FiChevronRight, FiUser, FiBell, FiMapPin, FiArrowRight, FiStar, FiUsers, FiLayers, FiArrowUpRight } from 'react-icons/fi';
+import { FiBriefcase, FiCheckCircle, FiClock, FiTrendingUp, FiChevronRight, FiUser, FiBell, FiMapPin, FiArrowRight, FiStar, FiUsers, FiLayers, FiArrowUpRight, FiAlertTriangle, FiTool, FiDollarSign } from 'react-icons/fi';
 import { FaWallet } from 'react-icons/fa';
 import { workerTheme as themeColors, vendorTheme } from '../../../../theme';
 import Header from '../../components/layout/Header';
@@ -11,6 +11,8 @@ import { SkeletonProfileHeader, SkeletonDashboardStats, SkeletonList } from '../
 import OptimizedImage from '../../../../components/common/OptimizedImage';
 import { useSocket } from '../../../../context/SocketContext';
 import WorkerJobAlertModal from '../../components/bookings/WorkerJobAlertModal';
+import ProfileIncompleteModal from '../../components/common/ProfileIncompleteModal';
+import { checkWorkerProfileCompleteness } from '../../utils/profileCompleteness';
 // WorkerBookingRequestAlertModal is handled globally in WorkerRoutes
 import LogoLoader from '../../../../components/common/LogoLoader';
 import authStorage from '../../../../utils/authStorage';
@@ -60,7 +62,11 @@ const Dashboard = () => {
     workerType: 'WORKER',
     teamId: null,
     status: 'OFFLINE',
+    dailyRate: 0,
+    hourlyRate: 0,
+    landRate: 0,
   });
+  const [showIncompleteModal, setShowIncompleteModal] = useState(false);
   const [isTogglingStatus, setIsTogglingStatus] = useState(false);
   const statusSeqRef = useRef(0);
   const [recentJobs, setRecentJobs] = useState([]);
@@ -120,6 +126,9 @@ const Dashboard = () => {
           workerType: profile.workerType || 'WORKER',
           teamId: profile.teamId || null,
           status: normalizedStatus,
+          dailyRate: Number(profile.dailyRate) || 0,
+          hourlyRate: Number(profile.hourlyRate) || 0,
+          landRate: Number(profile.landRate) || 0,
         });
         authStorage.updateUserData('worker', { status: normalizedStatus });
       }
@@ -209,6 +218,16 @@ const Dashboard = () => {
 
     const isCurrentlyOnline = workerProfile.status === 'ONLINE';
     const newStatus = isCurrentlyOnline ? 'OFFLINE' : 'ONLINE';
+
+    // Guard: Going ONLINE requires a complete profile for independent workers
+    if (newStatus === 'ONLINE') {
+      const completion = checkWorkerProfileCompleteness(workerProfile);
+      if (!completion.isComplete) {
+        setShowIncompleteModal(true);
+        return;
+      }
+    }
+
     const prevStatus = workerProfile.status;
     const currentSeq = ++statusSeqRef.current;
 
@@ -237,13 +256,19 @@ const Dashboard = () => {
       setWorkerProfile(prev => ({ ...prev, status: prevStatus }));
       authStorage.updateUserData('worker', { status: prevStatus });
       window.dispatchEvent(new CustomEvent('workerStatusUpdated', { detail: { status: prevStatus } }));
-      toastManager.error(err.response?.data?.message || err.message || 'Failed to update status');
+      if (err.response?.data?.isProfileIncomplete) {
+        setShowIncompleteModal(true);
+      } else {
+        toastManager.error(err.response?.data?.message || err.message || 'Failed to update status');
+      }
     } finally {
       if (currentSeq === statusSeqRef.current) {
         setIsTogglingStatus(false);
       }
     }
   };
+
+  const profileCompletion = checkWorkerProfileCompleteness(workerProfile);
 
   // Load real data from API
   useEffect(() => {
@@ -430,27 +455,65 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Incomplete Profile Prompt */}
-        {((!workerProfile.skills || workerProfile.skills.length === 0) ||
-          (!workerProfile.address || Object.keys(workerProfile.address).length === 0)) && (
-            <div className="px-4 pt-2">
-              <div
-                onClick={() => navigate('/worker/profile')}
-                className="bg-amber-50/90 border border-amber-200/90 p-3 rounded-xl shadow-xs cursor-pointer hover:bg-amber-100/80 transition-colors flex items-center gap-2.5 active:scale-[0.99]"
-              >
-                <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center shrink-0">
-                  <FiClock className="h-4 w-4 text-amber-600" />
+        {/* Incomplete Profile Setup Card */}
+        {!profileCompletion.isComplete && (
+          <div className="px-4 pt-2.5">
+            <div className="bg-gradient-to-br from-amber-50 to-orange-50/90 border border-amber-200/90 rounded-2xl p-4 shadow-xs">
+              <div className="flex items-start justify-between gap-3 mb-2.5">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <FiAlertTriangle size={16} />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-amber-950 uppercase tracking-wide">
+                      Complete Your Profile
+                    </h4>
+                    <p className="text-[11px] text-amber-800 font-medium">
+                      Required to go Online & receive farmer job requests
+                    </p>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-amber-900">Complete Your Profile</p>
-                  <p className="text-[11px] text-amber-700 truncate">
-                    Add skills and address to unlock 3x more farmer booking requests.
-                  </p>
-                </div>
-                <FiArrowRight className="h-4 w-4 text-amber-600 shrink-0" />
+                <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-900 shrink-0">
+                  {profileCompletion.completedCount}/{profileCompletion.totalSteps} Done
+                </span>
               </div>
+
+              {/* Progress Bar */}
+              <div className="w-full bg-amber-200/60 rounded-full h-1.5 mb-3 overflow-hidden">
+                <div
+                  className="bg-gradient-to-r from-amber-500 to-orange-500 h-1.5 rounded-full transition-all duration-500"
+                  style={{ width: `${profileCompletion.percentage}%` }}
+                />
+              </div>
+
+              {/* Checklist */}
+              <div className="grid grid-cols-3 gap-1.5 mb-3">
+                <div className={`p-2 rounded-xl border text-center ${profileCompletion.hasSkills ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-white/80 border-amber-200 text-amber-900'}`}>
+                  <p className="text-[10px] font-bold">{profileCompletion.hasSkills ? '✓ Skills' : '⚠️ Skills'}</p>
+                  <p className="text-[9px] text-slate-500 truncate">{profileCompletion.hasSkills ? 'Added' : 'Missing'}</p>
+                </div>
+                <div className={`p-2 rounded-xl border text-center ${profileCompletion.hasAddress ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-white/80 border-amber-200 text-amber-900'}`}>
+                  <p className="text-[10px] font-bold">{profileCompletion.hasAddress ? '✓ Location' : '⚠️ Location'}</p>
+                  <p className="text-[9px] text-slate-500 truncate">{profileCompletion.hasAddress ? 'Added' : 'Missing'}</p>
+                </div>
+                <div className={`p-2 rounded-xl border text-center ${profileCompletion.hasRates ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-white/80 border-amber-200 text-amber-900'}`}>
+                  <p className="text-[10px] font-bold">{profileCompletion.hasRates ? '✓ Rates' : '⚠️ Rates'}</p>
+                  <p className="text-[9px] text-slate-500 truncate">{profileCompletion.hasRates ? 'Added' : 'Missing'}</p>
+                </div>
+              </div>
+
+              {/* CTA button */}
+              <button
+                type="button"
+                onClick={() => navigate('/worker/profile/edit')}
+                className="w-full py-2.5 px-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.98] transition-all"
+              >
+                <span>Complete Profile Now</span>
+                <FiArrowRight size={13} />
+              </button>
             </div>
-          )}
+          </div>
+        )}
 
         {/* Primary Earnings & Wallet Overview Card */}
         <div className="px-4 pt-2.5">
@@ -854,6 +917,12 @@ const Dashboard = () => {
           fetchDashboardData();
           navigate(`/worker/job/${id}`);
         }}
+      />
+
+      <ProfileIncompleteModal
+        isOpen={showIncompleteModal}
+        onClose={() => setShowIncompleteModal(false)}
+        completion={profileCompletion}
       />
 
 

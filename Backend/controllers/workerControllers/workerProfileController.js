@@ -238,6 +238,39 @@ const updateAvailability = async (req, res) => {
       });
     }
 
+    // Guard: Prevent independent workers from going ONLINE if essential profile is incomplete
+    if (status === 'ONLINE') {
+      const isTeamMember = Boolean(worker.teamId && worker.workerType !== 'TEAM_LEADER');
+      const hasSkills = Array.isArray(worker.skills) && worker.skills.length > 0;
+      const addr = worker.address;
+      const hasAddress = Boolean(
+        addr && (
+          (addr.fullAddress && addr.fullAddress.trim()) ||
+          (addr.addressLine1 && addr.addressLine1.trim()) ||
+          (addr.city && addr.city.trim())
+        )
+      );
+      const hasRates = isTeamMember || (
+        (Number(worker.dailyRate) > 0) ||
+        (Number(worker.hourlyRate) > 0) ||
+        (Number(worker.landRate) > 0)
+      );
+
+      const missing = [];
+      if (!hasSkills) missing.push('skills');
+      if (!hasAddress) missing.push('work location');
+      if (!hasRates) missing.push('wage rates');
+
+      if (missing.length > 0) {
+        return res.status(400).json({
+          success: false,
+          isProfileIncomplete: true,
+          missingFields: missing,
+          message: `Please complete your profile before going online. Missing: ${missing.join(', ')}.`
+        });
+      }
+    }
+
     worker.status = status;
     await worker.save();
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiUser, FiEdit2, FiMapPin, FiPhone, FiMail, FiBriefcase, FiStar, FiChevronRight, FiTag, FiLogOut, FiGift, FiCreditCard, FiX, FiHelpCircle, FiFileText, FiShield } from 'react-icons/fi';
+import { FiUser, FiEdit2, FiMapPin, FiPhone, FiMail, FiBriefcase, FiStar, FiChevronRight, FiTag, FiLogOut, FiGift, FiCreditCard, FiX, FiHelpCircle, FiFileText, FiShield, FiAlertTriangle } from 'react-icons/fi';
 import { toastManager } from '../../../../utils/toastManager';
 import { workerTheme as themeColors, vendorTheme } from '../../../../theme';
 import { workerAuthService } from '../../../../services/authService';
@@ -13,6 +13,8 @@ import { useSocket } from '../../../../context/SocketContext';
 import BankDetailsSection from '../../../../components/common/BankDetailsSection';
 import LogoutModal from '../../../../components/common/LogoutModal';
 import useReferralEnabled from '../../../../hooks/useReferralEnabled';
+import ProfileIncompleteModal from '../../components/common/ProfileIncompleteModal';
+import { checkWorkerProfileCompleteness } from '../../utils/profileCompleteness';
 
 const Profile = () => {
   const { enabled: referralOn } = useReferralEnabled('worker');
@@ -26,6 +28,7 @@ const Profile = () => {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isTogglingStatus, setIsTogglingStatus] = useState(false);
+  const [showIncompleteModal, setShowIncompleteModal] = useState(false);
   const statusSeqRef = useRef(0);
 
   useLayoutEffect(() => {
@@ -64,6 +67,12 @@ const Profile = () => {
             email: workerData.email || '',
             gender: workerData.gender || 'male',
             address: addressString,
+            rawAddress: workerData.address,
+            dailyRate: workerData.dailyRate || 0,
+            hourlyRate: workerData.hourlyRate || 0,
+            landRate: workerData.landRate || 0,
+            workerType: workerData.workerType || 'WORKER',
+            teamId: workerData.teamId || null,
             rating: workerData.rating || 0,
             totalJobs: workerData.totalJobs || 0,
             completedJobs: workerData.completedJobs || 0,
@@ -184,6 +193,16 @@ const Profile = () => {
 
     const isCurrentlyOnline = profile.status === 'ONLINE';
     const newStatus = isCurrentlyOnline ? 'OFFLINE' : 'ONLINE';
+
+    // Guard: Going ONLINE requires a complete profile for independent workers
+    if (newStatus === 'ONLINE') {
+      const completion = checkWorkerProfileCompleteness(profile);
+      if (!completion.isComplete) {
+        setShowIncompleteModal(true);
+        return;
+      }
+    }
+
     const prevStatus = profile.status;
     const currentSeq = ++statusSeqRef.current;
 
@@ -211,7 +230,11 @@ const Profile = () => {
       setProfile(prev => ({ ...prev, status: prevStatus }));
       authStorage.updateUserData('worker', { status: prevStatus });
       window.dispatchEvent(new CustomEvent('workerStatusUpdated', { detail: { status: prevStatus } }));
-      toastManager.error(err.response?.data?.message || err.message || 'Failed to update status');
+      if (err.response?.data?.isProfileIncomplete) {
+        setShowIncompleteModal(true);
+      } else {
+        toastManager.error(err.response?.data?.message || err.message || 'Failed to update status');
+      }
     } finally {
       if (currentSeq === statusSeqRef.current) {
         setIsTogglingStatus(false);
@@ -264,11 +287,39 @@ const Profile = () => {
     return null;
   }
 
+  const profileCompletion = checkWorkerProfileCompleteness(profile);
+
   return (
     <div className="min-h-screen pb-24" style={{ background: themeColors.backgroundGradient }}>
       <Header title="Profile" />
 
       <main className="max-w-xl mx-auto px-4 pt-3 pb-6">
+        {/* Profile Incomplete Warning Banner */}
+        {!profileCompletion.isComplete && (
+          <div className="bg-amber-50 border border-amber-200/90 rounded-2xl p-3.5 mb-3 flex items-start gap-3 shadow-xs">
+            <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs mt-0.5">
+              <FiAlertTriangle size={16} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="text-xs font-black text-amber-950 uppercase tracking-wide">
+                  Profile Incomplete ({profileCompletion.completedCount}/{profileCompletion.totalSteps})
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => navigate('/worker/profile/edit')}
+                  className="text-[11px] font-bold text-amber-900 underline hover:text-amber-950 cursor-pointer"
+                >
+                  Edit Profile
+                </button>
+              </div>
+              <p className="text-[11px] text-amber-800 font-medium mt-0.5 leading-snug">
+                Add your {profileCompletion.missing.join(', ')} so farmers can discover and book you.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Profile Hero Card */}
         <div className="bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 rounded-2xl p-4 sm:p-5 mb-3 text-white shadow-lg relative overflow-hidden border border-emerald-500/25">
           {/* Ambient decorative glow */}
@@ -637,6 +688,12 @@ const Profile = () => {
         isLoading={isLoggingOut}
         userName={profile?.name}
         role="Worker"
+      />
+
+      <ProfileIncompleteModal
+        isOpen={showIncompleteModal}
+        onClose={() => setShowIncompleteModal(false)}
+        completion={profileCompletion}
       />
     </div>
   );

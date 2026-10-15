@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   FiSave, FiUser, FiPhone, FiMail,
   FiMapPin, FiBriefcase, FiCamera, FiCheck,
-  FiChevronDown, FiX
+  FiChevronDown, FiX, FiAlertTriangle
 } from 'react-icons/fi';
 import Header from '../../components/layout/Header';
 import BottomNav from '../../components/layout/BottomNav';
@@ -11,6 +11,7 @@ import workerService from '../../../../services/workerService';
 import { publicCatalogService } from '../../../../services/catalogService';
 import { toastManager } from '../../../../utils/toastManager';
 import AddressSelectionModal from '../../../user/pages/Checkout/components/AddressSelectionModal';
+import { checkWorkerProfileCompleteness } from '../../utils/profileCompleteness';
 import { z } from "zod";
 
 // Zod schema
@@ -40,6 +41,7 @@ const workerProfileSchema = z.object({
 
 const EditProfile = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [categories, setCategories] = useState([]);
@@ -178,6 +180,14 @@ const EditProfile = () => {
   // Instant availability toggle with optimistic UI, race protection & rollback
   const handleStatusToggle = async (newStatus) => {
     if (formData.status === newStatus || isUpdatingStatus) return;
+
+    if (newStatus === 'ONLINE') {
+      const completion = checkWorkerProfileCompleteness(formData);
+      if (!completion.isComplete) {
+        toastManager.error(`Please complete your ${completion.missing.join(', ')} and save profile first before going online.`);
+        return;
+      }
+    }
 
     const prevStatus = formData.status;
     const currentSeq = ++statusSeqRef.current;
@@ -430,11 +440,32 @@ const EditProfile = () => {
     </div>
   );
 
+  const profileCompletion = checkWorkerProfileCompleteness(formData);
+
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       <Header title="Edit Profile" />
 
       <main className="max-w-md mx-auto px-4 py-6 space-y-6">
+
+        {/* Profile Incomplete Notification Banner */}
+        {!profileCompletion.isComplete && (
+          <div className="bg-amber-50 border border-amber-200/90 rounded-2xl p-4 shadow-xs">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs mt-0.5">
+                <FiAlertTriangle size={16} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="text-xs font-black text-amber-950 uppercase tracking-wide">
+                  Complete Profile to Go Online ({profileCompletion.completedCount}/{profileCompletion.totalSteps})
+                </h4>
+                <p className="text-[11px] text-amber-800 font-medium mt-0.5 leading-snug">
+                  Please add your {profileCompletion.missing.join(', ')} and tap <strong className="font-bold">"Save Profile"</strong> below so you can go online and receive farmer requests.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Profile Photo */}
         <div className="flex flex-col items-center">
