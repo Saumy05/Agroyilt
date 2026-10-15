@@ -145,13 +145,14 @@ const MachineryExplorer = () => {
     }
   }, [bookingDate]);
 
-  // Handle category change -> reset implement unless returning with preSelectedImplement
+  // Handle category change -> only reset implement if the user actually switches to a DIFFERENT machine category
+  const prevCatIdRef = useRef(selectedCat?._id || selectedCat?.id);
   useEffect(() => {
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      return;
+    const currentCatId = selectedCat?._id || selectedCat?.id;
+    if (prevCatIdRef.current && currentCatId && String(prevCatIdRef.current) !== String(currentCatId)) {
+      setSelectedImplement(null);
     }
-    setSelectedImplement(null);
+    prevCatIdRef.current = currentCatId;
   }, [selectedCat]);
 
   // Fetch service categories and implements
@@ -278,6 +279,18 @@ const MachineryExplorer = () => {
 
   const handleStepBack = (toStep) => {
     setCurrentStep(toStep);
+  };
+
+  const handleHeaderBack = () => {
+    if (currentStep > 1) {
+      if (currentStep === 3 && !hasImplements) {
+        setCurrentStep(1);
+      } else {
+        setCurrentStep(prev => prev - 1);
+      }
+    } else {
+      navigate(-1);
+    }
   };
 
   const handleJumpToStep = (targetStep) => {
@@ -630,7 +643,7 @@ const MachineryExplorer = () => {
             {/* Left: Back button + Title & Location */}
             <div className="flex items-center gap-2 min-w-0 flex-1">
               <button 
-                onClick={() => navigate(-1)}
+                onClick={handleHeaderBack}
                 className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 flex items-center justify-center text-slate-700 active:scale-95 transition-all flex-shrink-0 border border-slate-200/60 cursor-pointer"
                 aria-label="Back"
               >

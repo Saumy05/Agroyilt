@@ -147,7 +147,9 @@ const AvailableVendors = () => {
         bookingDate,
         startTime,
         endTime,
-        step: 4
+        step: 4,
+        estimatedKm: searchParams.estimatedKm || undefined,
+        measuredField: searchParams.measuredField || null
       }
     });
   };
