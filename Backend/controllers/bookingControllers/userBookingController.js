@@ -270,44 +270,10 @@ const createBooking = async (req, res) => {
         const implId = Array.isArray(selectedImplements) && selectedImplements[0]
           ? (selectedImplements[0].subCategoryId?._id || selectedImplements[0].subCategoryId) : null;
 
-        // 1. Check if vendor's equipment has custom distance pricing for this implement
-        if (equipmentObj && Array.isArray(equipmentObj.implements) && implId) {
-          const matchedImpl = equipmentObj.implements.find(i => 
-            String(i.subCategoryId?._id || i.subCategoryId) === String(implId)
-          );
-          const vdp = matchedImpl?.pricing?.distance_based;
-          const vRate = Number(vdp?.price || vdp?.perKmRate || 0);
-          const vBase = Number(vdp?.baseCharge || 0);
-          if (vdp?.isEnabled && (vRate > 0 || vBase > 0)) {
-            const tractorKmRate = equipmentObj.pricing?.distance_based?.isEnabled
-              ? Number(equipmentObj.pricing.distance_based.price || equipmentObj.pricing.distance_based.perKmRate || 0) : 0;
-            const tractorBase = equipmentObj.pricing?.distance_based?.isEnabled
-              ? Number(equipmentObj.pricing.distance_based.baseCharge || 0) : 0;
-            dp = {
-              enabled: true,
-              baseKm: Number(vdp.baseKm || equipmentObj.pricing?.distance_based?.baseKm) || 0,
-              baseCharge: vBase + tractorBase,
-              perKmRate: vRate + tractorKmRate
-            };
-          }
-        }
+        // 1. The vendor's own per-km price on this machine (trolley add-on + the machine's own rate)
+        dp = distSvc.vendorDistancePricing(equipmentObj, implId);
 
-        // 2. Check if equipment itself has distance_based pricing
-        if (!dp && equipmentObj?.pricing?.distance_based?.isEnabled) {
-          const ep = equipmentObj.pricing.distance_based;
-          const eRate = Number(ep.price || ep.perKmRate || 0);
-          const eBase = Number(ep.baseCharge || 0);
-          if (eRate > 0 || eBase > 0) {
-            dp = {
-              enabled: true,
-              baseKm: Number(ep.baseKm) || 0,
-              baseCharge: eBase,
-              perKmRate: eRate
-            };
-          }
-        }
-
-        // 3. Fallback to Service / Admin template distance pricing
+        // 2. Fallback to Service / Admin template distance pricing
         if (!dp) {
           if (service.distance_pricing?.enabled) {
             dp = service.distance_pricing;
@@ -316,7 +282,7 @@ const createBooking = async (req, res) => {
           }
         }
 
-        // 4. Default fallback for Trolley if still no tier found
+        // 3. Default fallback for Trolley if still no tier found
         if (!dp && implId) {
           const Category = require('../../models/Category');
           const impl = await Category.findById(implId).select('title').lean();
@@ -346,7 +312,16 @@ const createBooking = async (req, res) => {
       let finalMultiplier = multiplier;
       if (rental_type === 'monthly') finalMultiplier = multiplier * 30;
 
-      const mainAgriPrice = Math.round(unitRate * finalMultiplier);
+      // Per-km jobs have no fixed price yet: until the trip is measured, the booking carries the farmer's estimate
+      // (or the minimum charge). The real bill replaces it when the trip ends.
+      let distanceStartFare = null;
+      if (rental_type === 'distance_based' && distancePricing) {
+        const estKm = Math.round(Number(req.body.estimatedKm) * 10) / 10;
+        distanceStartFare = (Number.isFinite(estKm) && estKm > 0 && estKm <= 1000)
+          ? require('../../services/distanceTripService').calcDistanceFare(distancePricing, estKm)
+          : (Number(distancePricing.baseCharge) || 0);
+      }
+      const mainAgriPrice = distanceStartFare !== null ? distanceStartFare : Math.round(unitRate * finalMultiplier);
       
       // Update the price of the main service and implements in bookedItems to reflect the calculated Agri price.
       // In rental bookings, each bookedItem is a single unit of machinery/attachment (quantity: 1), 
@@ -390,8 +365,15 @@ const createBooking = async (req, res) => {
         }, 0);
       } else {
         totalServiceValue = mainAgriPrice;
+        if (rental_type === 'distance_based' && Array.isArray(bookedItems)) {
+          // One per-km price covers machine + attachment: show it once, on the first line
+          bookedItems.forEach((item, idx) => {
+            const p = idx === 0 ? mainAgriPrice : 0;
+            if (item.card) item.card.price = p; else item.price = p;
+          });
+        }
         // Add implement pricing if implements were not in bookedItems
-        if (Array.isArray(selectedImplements) && selectedImplements.length > 0) {
+        if (rental_type !== 'distance_based' && Array.isArray(selectedImplements) && selectedImplements.length > 0) {
           selectedImplements.forEach(impl => {
             const implPriceObj = impl.pricing?.[rental_type];
             if (implPriceObj && implPriceObj.isEnabled) {

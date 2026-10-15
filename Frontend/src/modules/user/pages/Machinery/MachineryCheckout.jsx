@@ -257,7 +257,7 @@ const MachineryCheckout = () => {
                 bookedItems: [
                     {
                         title: equipment.name,
-                        price: finalTractorTotal,
+                        price: payAfterTrip ? (approxBill?.fare ?? finalTractorTotal) : finalTractorTotal,
                         quantity: 1,
                         description: rateType === 'distance_based' ? 'Per KM' : `${formatDuration(quantity, rateType)} estimated service scope`
                     },
@@ -265,9 +265,9 @@ const MachineryCheckout = () => {
                     ...selectedImplements.map(impl => ({
                         subCategoryId: impl.subCategoryId?._id || impl.subCategoryId,
                         title: impl.subCategoryId?.title || impl.title || 'Unknown Implement',
-                        price: typeof impl.total === 'number' ? impl.total : (implementTotal || 0),
+                        price: payAfterTrip ? 0 : (typeof impl.total === 'number' ? impl.total : (implementTotal || 0)),
                         quantity: 1,
-                        description: 'Matched field attachment'
+                        description: payAfterTrip ? 'Included in per-km rate' : 'Matched field attachment'
                     }))
                 ]
             };
@@ -541,15 +541,17 @@ const MachineryCheckout = () => {
                           <div className="space-y-0.5 max-w-[65%]">
                             <p className="font-bold text-slate-800 leading-snug">{equipment.name}</p>
                             <span className="text-[9.5px] font-semibold text-slate-400 block">
-                              {rateType === 'distance_based' && bookingData.distancePricing
-                                ? `Starting fare: first ${bookingData.distancePricing.baseKm} km. Then ₹${bookingData.distancePricing.perKmRate}/km extra`
+                              {payAfterTrip && bookingData.distancePricing
+                                ? `₹${bookingData.distancePricing.perKmRate}/km${bookingData.distancePricing.baseCharge > 0 ? ` · ₹${bookingData.distancePricing.baseCharge} covers the first ${bookingData.distancePricing.baseKm} km` : ''}`
                                 : `${formatDuration(quantity, rateType)} estimated service scope`}
                             </span>
-                            {rateType === 'distance_based' && (
+                            {payAfterTrip && (
                               <span className="text-[9.5px] font-bold text-teal-700 block">Final bill = actual road distance driven (shown live during the trip)</span>
                             )}
                           </div>
-                          <span className="font-black text-slate-900 shrink-0 text-xs">₹{finalTractorTotal}</span>
+                          <span className="font-black text-slate-900 shrink-0 text-xs">
+                            {payAfterTrip ? (approxBill ? `~₹${approxBill.fare}` : '—') : `₹${finalTractorTotal}`}
+                          </span>
                         </div>
 
                         {/* Implements Line Items */}
@@ -565,11 +567,11 @@ const MachineryCheckout = () => {
                                 <span className="text-[9.5px] font-semibold text-slate-400 block">Matched field attachment</span>
                               </div>
                               <div className="shrink-0 text-right">
-                                {implCost > 0 ? (
+                                {implCost > 0 && !payAfterTrip ? (
                                   <span className="font-black text-slate-900 text-xs">+ ₹{implCost}</span>
                                 ) : (
                                   <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
-                                    Included (₹0)
+                                    {payAfterTrip ? 'In per-km rate' : 'Included (₹0)'}
                                   </span>
                                 )}
                               </div>
@@ -607,16 +609,16 @@ const MachineryCheckout = () => {
                           <span className="font-bold text-slate-500 text-[11px]">
                             GST ({activeGstPercentage}%)
                           </span>
-                          <span className="font-bold text-slate-700 text-xs">+ ₹{calculatedTax || 0}</span>
+                          <span className="font-bold text-slate-700 text-xs">+ ₹{payAfterTrip ? (approxBill?.tax ?? 0) : (calculatedTax || 0)}</span>
                         </div>
 
                         {/* Total Highlight */}
                         <div className="flex justify-between items-center pt-2 border-t border-slate-200">
                           <div>
-                            <span className="text-[11px] font-black text-slate-900 uppercase tracking-wider block">{payAfterTrip ? 'Minimum bill' : 'Total Payable'}</span>
-                            <span className="text-[9.5px] font-semibold text-slate-400">{payAfterTrip ? 'Covers the starting distance. Final bill uses the actual km driven' : 'All taxes & operator expenses included'}</span>
+                            <span className="text-[11px] font-black text-slate-900 uppercase tracking-wider block">{payAfterTrip ? 'Approx. total' : 'Total Payable'}</span>
+                            <span className="text-[9.5px] font-semibold text-slate-400">{payAfterTrip ? 'Estimate only. Final bill uses the actual km driven' : 'All taxes & operator expenses included'}</span>
                           </div>
-                          <span className="text-xl font-black text-emerald-800">₹{payableTotal}</span>
+                          <span className="text-xl font-black text-emerald-800">{payAfterTrip ? `~₹${approxTotal ?? payableTotal}` : `₹${payableTotal}`}</span>
                         </div>
                     </div>
                 </div>

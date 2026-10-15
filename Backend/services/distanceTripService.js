@@ -217,6 +217,33 @@ const resolveImplementDistancePricing = async (implementId, machineCategoryId = 
   return { enabled: true, ...pricingFromService(svc), serviceId: String(svc._id) };
 };
 
+/**
+ * Per-km tier a vendor has set on their OWN machine for a job: the attachment's add-on (e.g. Trolley) plus the machine's own
+ * per-km rate, when each is enabled. The search quote and the booking both use this, so a farmer sees what they will be charged.
+ * @returns {{enabled:true, baseKm:number, baseCharge:number, perKmRate:number}|null} null when the vendor set no per-km price
+ */
+const vendorDistancePricing = (equipment, implementId = null) => {
+  if (!equipment) return null;
+  const idOf = (v) => String(v?._id || v || '');
+  const own = equipment.pricing?.distance_based;
+  const ownRate = own?.isEnabled ? Number(own.price || own.perKmRate || 0) : 0;
+  const ownBase = own?.isEnabled ? Number(own.baseCharge || 0) : 0;
+
+  if (implementId && Array.isArray(equipment.implements)) {
+    const impl = equipment.implements.find((i) => idOf(i.subCategoryId) === idOf(implementId));
+    const vdp = impl?.pricing?.distance_based;
+    const rate = Number(vdp?.price || vdp?.perKmRate || 0);
+    const base = Number(vdp?.baseCharge || 0);
+    if (vdp?.isEnabled && (rate > 0 || base > 0)) {
+      return { enabled: true, baseKm: Number(vdp.baseKm || own?.baseKm) || 0, baseCharge: base + ownBase, perKmRate: rate + ownRate };
+    }
+  }
+  if (own?.isEnabled && (ownRate > 0 || ownBase > 0)) {
+    return { enabled: true, baseKm: Number(own.baseKm) || 0, baseCharge: ownBase, perKmRate: ownRate };
+  }
+  return null;
+};
+
 /** Starts tracking (called when the vendor starts the trip). Idempotent. */
 const startTracking = (bookingId, start = null, now = new Date()) => {
   const $set = { 'distanceTrip.status': 'RUNNING', 'distanceTrip.startedAt': now, 'distanceTrip.totalDistanceKm': 0, 'distanceTrip.fare': 0 };
@@ -316,6 +343,7 @@ const routeDistanceKm = async (a, b) => {
 module.exports = {
   routeDistanceKm,
   calcDistanceFare,
+  vendorDistancePricing,
   cleanPoints,
   roadDistance,
   haversineM,

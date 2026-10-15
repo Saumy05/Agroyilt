@@ -398,6 +398,11 @@ const EquipmentInventory = () => {
                 const hasAcre = item.pricing?.land_based?.isEnabled && Number(item.pricing?.land_based?.price) > 0;
                 const hasDaily = (item.pricing?.daily?.isEnabled && Number(item.pricing?.daily?.price) > 0) ||
                                 (item.pricing?.monthly?.isEnabled && Number(item.pricing?.monthly?.price) > 0);
+                // Per-km: the machine's own rate plus the dearest attachment add-on (e.g. Trolley), which is what the farmer pays per km
+                const ownKm = item.pricing?.distance_based?.isEnabled ? (Number(item.pricing.distance_based.price) || Number(item.pricing.distance_based.perKmRate) || 0) : 0;
+                const implKm = Math.max(0, ...(item.implements || []).map(i => (i.pricing?.distance_based?.isEnabled ? (Number(i.pricing.distance_based.price) || 0) : 0)));
+                const kmRate = ownKm + implKm;
+                const hasKm = kmRate > 0;
 
                 return (
                   <motion.div 
@@ -552,7 +557,7 @@ const EquipmentInventory = () => {
                           </div>
                         )}
 
-                        {hasHourly && (hasAcre || hasDaily) && (
+                        {hasHourly && (hasAcre || hasDaily || hasKm) && (
                           <span className="text-slate-300 font-light">•</span>
                         )}
 
@@ -565,7 +570,7 @@ const EquipmentInventory = () => {
                           </div>
                         )}
 
-                        {hasAcre && hasDaily && (
+                        {hasAcre && (hasDaily || hasKm) && (
                           <span className="text-slate-300 font-light">•</span>
                         )}
 
@@ -578,7 +583,20 @@ const EquipmentInventory = () => {
                           </div>
                         )}
 
-                        {!hasHourly && !hasAcre && !hasDaily && (
+                        {hasDaily && hasKm && (
+                          <span className="text-slate-300 font-light">•</span>
+                        )}
+
+                        {hasKm && (
+                          <div className="flex items-baseline gap-0.5">
+                            <span className="text-sm sm:text-base font-black text-slate-900">
+                              {formatRupee(kmRate)}
+                            </span>
+                            <span className="text-[10px] font-medium text-slate-400">/km</span>
+                          </div>
+                        )}
+
+                        {!hasHourly && !hasAcre && !hasDaily && !hasKm && (
                           <span className="text-[11px] font-semibold text-slate-400 italic">
                             No rates set
                           </span>

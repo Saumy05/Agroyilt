@@ -534,13 +534,13 @@ exports.findQualifiedVendors = async (req, res) => {
       // Pricing validation for requested rental_type (must be explicitly enabled and price > 0)
       const pricingObj = eq.pricing?.[rental_type];
       let tractorUnitRate = 0;
+      let eqDistancePricing = null; // this vendor's own per-km tier (falls back to the admin tier)
       if (rental_type === 'distance_based') {
-        const eqKmRate = (pricingObj?.isEnabled && (pricingObj.price > 0 || pricingObj.perKmRate > 0))
-          ? (pricingObj.price || pricingObj.perKmRate) : 0;
-        const totalDistanceRate = implementUnitRate + eqKmRate;
-        tractorUnitRate = totalDistanceRate > 0 
-          ? totalDistanceRate 
-          : (distancePricing ? (distancePricing.baseCharge > 0 ? distancePricing.baseCharge : distancePricing.perKmRate) : 0);
+        const distSvc = require('../../services/distanceTripService');
+        const own = distSvc.vendorDistancePricing(eq, implementId);
+        eqDistancePricing = own ? distSvc.pricingFromService({ distance_pricing: own }) : distancePricing;
+        if (!eqDistancePricing) continue;
+        tractorUnitRate = Number(eqDistancePricing.perKmRate) || Number(eqDistancePricing.baseCharge) || 0;
       } else {
         tractorUnitRate = (pricingObj?.isEnabled && pricingObj.price > 0) ? pricingObj.price : 0;
       }
@@ -566,8 +566,9 @@ exports.findQualifiedVendors = async (req, res) => {
       }
 
       // Calculate totals with 100% synchronized pricing breakdown
-      const tractorTotal = Math.round(tractorUnitRate * multiplier);
-      const implementTotal = Math.round(implementUnitRate * multiplier);
+      // Per-km: one tier covers machine + attachment; the quote is the minimum charge, the farmer's estimate is applied by the app
+      const tractorTotal = eqDistancePricing ? Math.round(Number(eqDistancePricing.baseCharge) || 0) : Math.round(tractorUnitRate * multiplier);
+      const implementTotal = eqDistancePricing ? 0 : Math.round(implementUnitRate * multiplier);
       const basePrice = tractorTotal + implementTotal;
       const tax = Math.round(basePrice * (gstPercentage / 100));
       const totalAmount = basePrice + tax + visitingCharges;
@@ -599,10 +600,10 @@ exports.findQualifiedVendors = async (req, res) => {
           multiplier,
           tractorUnitRate,
           tractorTotal,
-          implementUnitRate,
+          implementUnitRate: eqDistancePricing ? 0 : implementUnitRate,
           implementTotal,
           basePrice,
-          ...(distancePricing ? { distancePricing, isEstimate: true } : {}),
+          ...(eqDistancePricing ? { distancePricing: eqDistancePricing, isEstimate: true } : {}),
           tax,
           gstPercentage,
           visitingCharges,
