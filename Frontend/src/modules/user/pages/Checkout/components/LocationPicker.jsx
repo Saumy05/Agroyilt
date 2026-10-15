@@ -119,6 +119,26 @@ const LocationPicker = ({ onLocationSelect, initialPosition = null, flyToPositio
     );
   };
 
+  const containerRef = useRef(null);
+
+  // Ensure all buttons created inside Google Maps (zoom, keyboard shortcuts) explicitly have type="button"
+  const ensureButtonsAreNotSubmit = useCallback(() => {
+    if (containerRef.current) {
+      const buttons = containerRef.current.querySelectorAll('button');
+      buttons.forEach(btn => {
+        if (!btn.getAttribute('type') || btn.getAttribute('type') === 'submit') {
+          btn.setAttribute('type', 'button');
+        }
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    ensureButtonsAreNotSubmit();
+    const interval = setInterval(ensureButtonsAreNotSubmit, 1000);
+    return () => clearInterval(interval);
+  }, [ensureButtonsAreNotSubmit]);
+
   if (loadError) {
     return (
       <div className="w-full h-64 flex items-center justify-center bg-slate-100 rounded-2xl text-sm text-slate-500">
@@ -139,7 +159,19 @@ const LocationPicker = ({ onLocationSelect, initialPosition = null, flyToPositio
   }
 
   return (
-    <div className="w-full relative shadow-sm rounded-2xl overflow-hidden border border-slate-200">
+    <div
+      ref={containerRef}
+      className="w-full relative shadow-sm rounded-2xl overflow-hidden border border-slate-200"
+      onClickCapture={(e) => {
+        // Prevent any button inside map from acting as form submit button
+        const btn = e.target.closest('button');
+        if (btn) {
+          if (!btn.getAttribute('type') || btn.getAttribute('type') === 'submit') {
+            btn.setAttribute('type', 'button');
+          }
+        }
+      }}
+    >
       <div className="relative h-64 bg-slate-100">
         <GoogleMap
           mapContainerStyle={mapContainerStyle}
@@ -147,7 +179,10 @@ const LocationPicker = ({ onLocationSelect, initialPosition = null, flyToPositio
           zoom={15}
           options={mapOptions}
           onClick={handleMapClick}
-          onLoad={(map) => { mapRef.current = map; }}
+          onLoad={(map) => {
+            mapRef.current = map;
+            ensureButtonsAreNotSubmit();
+          }}
         >
           <Marker position={marker} />
         </GoogleMap>

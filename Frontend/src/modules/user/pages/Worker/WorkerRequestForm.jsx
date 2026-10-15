@@ -833,7 +833,19 @@ const WorkerRequestForm = () => {
       </div>
 
       <div className="max-w-xl mx-auto px-3.5 py-3 sm:px-4 sm:py-4">
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <form
+          onSubmit={handleSubmit}
+          onKeyDown={(e) => {
+            // Prevent accidental form submission when pressing Enter inside input fields
+            if (e.key === 'Enter' && e.target.tagName === 'INPUT') {
+              e.preventDefault();
+              if (e.target.name === 'city' && citySearchResults.length > 0) {
+                handleCitySearchSelect(citySearchResults[0]);
+              }
+            }
+          }}
+          className="space-y-3"
+        >
 
           {/* Targeted Worker Hiring Banner */}
           {targetedWorker && (
@@ -1379,6 +1391,14 @@ const WorkerRequestForm = () => {
                         return;
                       }
                       cityDebounceRef.current = setTimeout(() => searchCity(val), 400);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (citySearchResults.length > 0) {
+                          handleCitySearchSelect(citySearchResults[0]);
+                        }
+                      }
                     }}
                     onFocus={() => citySearchResults.length > 0 && setShowCityDropdown(true)}
                     placeholder="Search city, village, locality…"
