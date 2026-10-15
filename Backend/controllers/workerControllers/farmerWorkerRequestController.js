@@ -1444,11 +1444,15 @@ async function scheduleTeamLeaderFallback(request, normalSkills, radiusKm, delay
 
       console.log(`[FALLBACK A7] No TL accepted request ${request._id} after ${delayMs / 60000}min — re-dispatching to independent workers.`);
 
+      // Whoever already declined must not be asked again when the request falls back to the independent pool
+      const declinedIds = (fresh.dispatchedTo || []).filter(d => d.status === 'rejected').map(d => d.workerId);
+
       await WorkerBookingRequest.findByIdAndUpdate(request._id, {
         bookingMode:  'INDEPENDENT_WORKERS',
         requestType:  'independent_broadcast',
         dispatchedTo: [],
-        status:       'matching'
+        status:       'matching',
+        ...(declinedIds.length ? { $addToSet: { excludeWorkerIds: { $each: declinedIds } } } : {})
       });
 
       const updatedReq = await WorkerBookingRequest.findById(request._id);
@@ -1959,7 +1963,9 @@ exports.getWorkerPendingFarmerRequests = async (req, res) => {
           }
         },
         {
-          workerId: workerId
+          // directly addressed to this worker, as long as they have not already accepted or declined it
+          workerId: workerId,
+          dispatchedTo: { $not: { $elemMatch: { workerId: workerId, status: { $in: ['accepted', 'rejected'] } } } }
         }
       ],
       'workerOffers.workerId': { $ne: workerId }

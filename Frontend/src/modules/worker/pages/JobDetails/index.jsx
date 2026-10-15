@@ -831,15 +831,18 @@ const JobDetails = () => {
       return (
         <div className={`space-y-2.5 ${isSticky ? '' : 'mb-4'}`}>
           <div className="flex gap-2.5">
-            <button
-              type="button"
-              onClick={handleStartBreak}
-              disabled={actionLoading}
-              className="flex-1 py-3.5 rounded-xl font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-300 shadow-md active:scale-95 transition-all text-sm flex items-center justify-center gap-1.5"
-            >
-              <FiClock className="w-4 h-4 text-amber-600" />
-              <span>{actionLoading ? 'Loading...' : '☕ 1-HR BREAK'}</span>
-            </button>
+            {/* The 1-hour break is for daily bookings only */}
+            {isDaily && (
+              <button
+                type="button"
+                onClick={handleStartBreak}
+                disabled={actionLoading}
+                className="flex-1 py-3.5 rounded-xl font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-300 shadow-md active:scale-95 transition-all text-sm flex items-center justify-center gap-1.5"
+              >
+                <FiClock className="w-4 h-4 text-amber-600" />
+                <span>{actionLoading ? 'Loading...' : '☕ 1-HR BREAK'}</span>
+              </button>
+            )}
             <button
               onClick={handleStopWork}
               disabled={actionLoading}

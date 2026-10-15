@@ -1544,17 +1544,20 @@ const BookingTrack = () => {
                               </span>
                             )}
                           </div>
-                          <button
-                            type="button"
-                            disabled={breakActionLoadingId === workerKey}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleStartBreak(workerKey);
-                            }}
-                            className="px-3 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-xs rounded-xl border border-amber-200 transition-all active:scale-95 flex items-center gap-1 shadow-xs"
-                          >
-                            <span>{breakActionLoadingId === workerKey ? 'Pausing...' : '☕ 1-Hr Break'}</span>
-                          </button>
+                          {/* The 1-hour break is for daily bookings only */}
+                          {trackingData?.bookingType === 'DAILY' && (
+                            <button
+                              type="button"
+                              disabled={breakActionLoadingId === workerKey}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleStartBreak(workerKey);
+                              }}
+                              className="px-3 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-xs rounded-xl border border-amber-200 transition-all active:scale-95 flex items-center gap-1 shadow-xs"
+                            >
+                              <span>{breakActionLoadingId === workerKey ? 'Pausing...' : '☕ 1-Hr Break'}</span>
+                            </button>
+                          )}
                         </>
                       )}
                     </div>

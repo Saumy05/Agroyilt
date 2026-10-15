@@ -978,6 +978,10 @@ exports.startBreak = async (req, res) => {
     }
 
     const isDaily = assignment.bookingType === 'DAILY';
+    // The 1-hour break belongs to full-day (daily) bookings; an hourly booking is billed for its short booked time as it is
+    if (!isDaily) {
+      return res.status(400).json({ success: false, message: 'A break is only available on daily bookings.' });
+    }
     const dayIdx = assignment.currentDayIndex || 1;
     let currentLog = isDaily ? assignment.dailyLogs?.find(l => l.dayNumber === dayIdx) : null;
 

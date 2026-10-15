@@ -128,6 +128,31 @@ const isBookingDateExpired = (data) => {
   return false;
 };
 
+// Requests this worker has already dealt with in this session, so the alert never pops up again for them.
+//  • 'responded' (accepted / declined): never shown again.
+//  • 'dismissed' (closed with X or timed out; nothing was sent to the server): not re-shown by background refreshes
+//    for 15 minutes. A fresh push from the server still shows it. It stays in "Booking Requests" either way.
+const HANDLED_KEY = 'worker_handled_requests_v1';
+const DISMISS_QUIET_MS = 15 * 60 * 1000;
+const readHandled = () => {
+  try { return JSON.parse(sessionStorage.getItem(HANDLED_KEY) || '{}') || {}; } catch (e) { return {}; }
+};
+const markHandled = (id, kind) => {
+  if (!id) return;
+  try {
+    const all = readHandled();
+    if (kind === 'dismissed' && all[id]?.kind === 'responded') return; // an answer is final
+    all[id] = { kind, at: Date.now() };
+    sessionStorage.setItem(HANDLED_KEY, JSON.stringify(all));
+  } catch (e) { /* storage unavailable: fall back to showing it */ }
+};
+const wasHandled = (id, { pushed = false } = {}) => {
+  const entry = id ? readHandled()[String(id)] : null;
+  if (!entry) return false;
+  if (entry.kind === 'responded') return true;
+  return !pushed && Date.now() - entry.at < DISMISS_QUIET_MS;
+};
+
 const WorkerRoutes = () => {
   const location = useLocation();
   const [incomingRequestData, setIncomingRequestData] = useState(null);
@@ -189,7 +214,9 @@ const WorkerRoutes = () => {
 
       // Priority 1: Team Member Invitations (Accept / Decline Card)
       const rawInvites = memberInvitesRes?.data || [];
-      const invites = Array.isArray(rawInvites) ? rawInvites.filter(i => !isBookingDateExpired(i)) : [];
+      const invites = Array.isArray(rawInvites)
+        ? rawInvites.filter(i => !isBookingDateExpired(i) && !wasHandled(i.requestId || i._id || i.id))
+        : [];
       if (invites.length > 0) {
         const normalized = normalizeRequestData(invites[0]);
         if (normalized?.requestId && !normalized.isExpired) {
@@ -200,7 +227,9 @@ const WorkerRoutes = () => {
 
       // Priority 2: Regular Farmer Requests
       const rawRequests = farmerRequestsRes?.data || [];
-      const requests = Array.isArray(rawRequests) ? rawRequests.filter(r => !isBookingDateExpired(r)) : [];
+      const requests = Array.isArray(rawRequests)
+        ? rawRequests.filter(r => !isBookingDateExpired(r) && !wasHandled(r.requestId || r._id || r.id))
+        : [];
       if (requests.length > 0) {
         const normalized = normalizeRequestData(requests[0]);
         if (normalized?.requestId && normalized?.workTitle && !normalized.isExpired) {
@@ -215,7 +244,7 @@ const WorkerRoutes = () => {
   };
 
   useEffect(() => {
-    const handleIncomingBooking = (e) => {
+    const handleIncomingBooking = async (e) => {
       console.log('[WorkerRoutes] Incoming booking request received');
       const raw = e.detail?.data || e.detail;
       if (isBookingDateExpired(raw)) {
@@ -224,8 +253,25 @@ const WorkerRoutes = () => {
       }
       const normalized = normalizeRequestData(raw);
 
+      // Already answered (or just closed) by this worker: do not ask again
+      if (normalized?.requestId && wasHandled(normalized.requestId, { pushed: e.detail?.source === 'push' })) {
+        return;
+      }
+
       // If socket payload has enough data, use it directly
       if (normalized?.requestId && normalized?.workTitle && !normalized.isExpired) {
+        // A farmer broadcast is only worth interrupting for while it is still waiting for THIS worker's answer
+        // (it may have been accepted/declined on another device, filled, or cancelled since the push was sent).
+        if (raw?.isFarmerBroadcast === true && !normalized.isTeamInvite) {
+          try {
+            const res = await workerService.getPendingFarmerRequests();
+            const stillWaiting = (res?.data || []).some(r => String(r._id || r.id) === String(normalized.requestId));
+            if (res?.success && !stillWaiting) {
+              console.log('[WorkerRoutes] Request is no longer waiting for this worker; not showing the alert');
+              return;
+            }
+          } catch (err) { /* cannot verify: show it rather than miss a job */ }
+        }
         setIncomingRequestData(normalized);
       } else {
         // Socket payload was incomplete — fall back to API
@@ -319,8 +365,13 @@ const WorkerRoutes = () => {
       <WorkerBookingRequestAlertModal
         isOpen={!!incomingRequestData}
         requestData={incomingRequestData}
-        onClose={() => setIncomingRequestData(null)}
+        onClose={() => {
+          // closing without answering must not make it pop up again on the next refresh
+          markHandled(incomingRequestData?.requestId, 'dismissed');
+          setIncomingRequestData(null);
+        }}
         onRequestResponded={() => {
+          markHandled(incomingRequestData?.requestId, 'responded');
           setIncomingRequestData(null);
           window.dispatchEvent(new Event('workerJobsUpdated'));
         }}

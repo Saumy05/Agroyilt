@@ -318,6 +318,7 @@ export const SocketProvider = ({ children }) => {
           const isTeam = data.type === 'team_member_invitation' || data.type === 'group_member_request' || data.data?.isTeamInvite;
           window.dispatchEvent(new CustomEvent('workerIncomingBooking', { 
             detail: {
+              source: 'push',
               data: {
                 ...(data.data || data),
                 ...(isTeam ? { requestType: 'TEAM_MEMBER_INVITATION', isTeamInvite: true } : {})
@@ -421,6 +422,7 @@ export const SocketProvider = ({ children }) => {
 
         window.dispatchEvent(new CustomEvent('workerIncomingBooking', {
           detail: {
+            source: 'push',
             data: requestData,
             relatedId: reqId
           }
@@ -461,6 +463,7 @@ export const SocketProvider = ({ children }) => {
         const reqId = data.relatedId || requestData.requestId || requestData._id;
         window.dispatchEvent(new CustomEvent('workerIncomingBooking', {
           detail: {
+            source: 'push',
             data: { ...requestData, requestType: 'TEAM_MEMBER_INVITATION', isTeamInvite: true },
             relatedId: reqId
           }
