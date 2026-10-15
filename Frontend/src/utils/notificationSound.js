@@ -169,6 +169,20 @@ export const playCancellationAlert = () => {
 // Play urgent ring for booking alerts / incoming calls
 let currentAudio = null;
 
+// Browsers block audio until the user has touched the page. If the ring was blocked,
+// start it on the first tap/click/key press, as long as it is still the current ring.
+const retryRingOnNextGesture = (audio) => {
+  if (typeof document === 'undefined') return;
+  const events = ['pointerdown', 'touchstart', 'click', 'keydown'];
+  const retry = () => {
+    events.forEach((ev) => document.removeEventListener(ev, retry, true));
+    if (currentAudio === audio) {
+      audio.play().catch(() => {});
+    }
+  };
+  events.forEach((ev) => document.addEventListener(ev, retry, true));
+};
+
 export const playAlertRing = (loop = false) => {
   try {
     if (currentAudio) {
@@ -184,6 +198,7 @@ export const playAlertRing = (loop = false) => {
     audio.play().catch((e) => {
       if (e.name === 'NotAllowedError') {
         console.warn('[NotificationSound] Audio blocked: User interaction required on this tab first.');
+        retryRingOnNextGesture(audio);
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('audio-play-blocked'));
         }

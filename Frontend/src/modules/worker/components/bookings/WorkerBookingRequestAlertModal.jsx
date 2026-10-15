@@ -270,6 +270,11 @@ const WorkerBookingRequestAlertModal = ({ isOpen, requestData, onClose, onReques
     return () => stopAlertRing();
   }, [isOpen, requestData, neededMembersCount, isTeamInvite, isExpired]);
 
+  // This modal lives for the whole session, so a mute from one request must not silence the next one
+  useEffect(() => {
+    if (!isOpen) setIsMuted(false);
+  }, [isOpen]);
+
   // Lock background scroll when modal is open
   const isAlertActive = isOpen && !!requestData;
   useEffect(() => {
