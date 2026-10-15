@@ -71,7 +71,22 @@ const AllWorkers = () => {
     'Loading / Unloading',
     'General Farm Helper'
   ];
-  const EMPTY_NEW_WORKER = { name: '', phone: '', email: '', gender: 'male', workerType: 'WORKER', hourlyRate: '', dailyRate: '', skills: [] };
+  const EMPTY_NEW_WORKER = {
+    name: '',
+    phone: '',
+    email: '',
+    gender: 'male',
+    workerType: 'WORKER',
+    hourlyRate: '',
+    dailyRate: '',
+    skills: [],
+    hasBike: false,
+    drivingLicenseNumber: '',
+    aadharNumber: '',
+    experienceYears: '',
+    city: '',
+    pincode: ''
+  };
   const [isSkillsOpen, setIsSkillsOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const skillsDropdownRef = useRef(null);
@@ -221,6 +236,11 @@ const AllWorkers = () => {
     if (cleanPhone.length !== 10) return toast.error('Please enter a complete 10-digit mobile number');
     if (!/^[6-9]\d{9}$/.test(cleanPhone)) return toast.error('Mobile number must start with 6, 7, 8, or 9');
 
+    const cleanAadhar = newWorker.aadharNumber ? newWorker.aadharNumber.replace(/\D/g, '') : '';
+    if (cleanAadhar && cleanAadhar.length !== 12) {
+      return toast.error('Aadhaar number must be exactly 12 digits');
+    }
+
     try {
       setIsAdding(true);
       const res = await workerService.addWorker({
@@ -231,7 +251,13 @@ const AllWorkers = () => {
         workerType: newWorker.workerType,
         hourlyRate: Number(newWorker.hourlyRate) || 0,
         dailyRate: Number(newWorker.dailyRate) || 0,
-        skills: newWorker.skills
+        skills: newWorker.skills,
+        hasBike: Boolean(newWorker.hasBike),
+        drivingLicenseNumber: newWorker.hasBike && newWorker.drivingLicenseNumber ? newWorker.drivingLicenseNumber.trim() : undefined,
+        aadharNumber: cleanAadhar || undefined,
+        experienceYears: Number(newWorker.experienceYears) || 0,
+        city: newWorker.city?.trim() || undefined,
+        pincode: newWorker.pincode?.trim() || undefined
       });
       if (res.success) {
         toast.success(res.message || 'Worker added successfully');
@@ -1166,10 +1192,13 @@ const AllWorkers = () => {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto"
+              className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
             >
-              <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 sticky top-0">
-                <h3 className="font-bold text-gray-800">Add New Worker</h3>
+              <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 sticky top-0 z-10 backdrop-blur-xs">
+                <div>
+                  <h3 className="font-bold text-gray-800">Add New Worker</h3>
+                  <p className="text-[11px] text-gray-400">Register a new worker or team leader directly</p>
+                </div>
                 <button
                   type="button"
                   onClick={() => { setIsAddModalOpen(false); setIsSkillsOpen(false); }}
@@ -1257,9 +1286,10 @@ const AllWorkers = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                {/* Rates & Experience */}
+                <div className="grid grid-cols-3 gap-2.5">
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Hourly Rate (₹)</label>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Hourly (₹)</label>
                     <input
                       type="number"
                       min="0"
@@ -1270,7 +1300,7 @@ const AllWorkers = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Daily Rate (₹)</label>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Daily (₹)</label>
                     <input
                       type="number"
                       min="0"
@@ -1280,8 +1310,115 @@ const AllWorkers = () => {
                       placeholder="e.g. 700"
                     />
                   </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Exp (Years)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="50"
+                      value={newWorker.experienceYears}
+                      onChange={(e) => setNewWorker({ ...newWorker, experienceYears: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+                      placeholder="e.g. 3"
+                    />
+                  </div>
                 </div>
 
+                {/* Commuter / Transport Details */}
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-800 mb-1">
+                      🛵 Bike Commuter
+                    </label>
+                    <p className="text-[11px] text-gray-500 mb-2">
+                      Does the worker have a bike/motorcycle for daily farm commute?
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setNewWorker({ ...newWorker, hasBike: true })}
+                        className={`py-2 px-3 rounded-lg text-xs font-bold border flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                          newWorker.hasBike
+                            ? 'bg-emerald-50 border-emerald-400 text-emerald-800 shadow-xs ring-2 ring-emerald-500/20'
+                            : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-100'
+                        }`}
+                      >
+                        <span>🛵 Yes, Has Bike</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewWorker({ ...newWorker, hasBike: false, drivingLicenseNumber: '' })}
+                        className={`py-2 px-3 rounded-lg text-xs font-bold border flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                          !newWorker.hasBike
+                            ? 'bg-slate-200/80 border-slate-400 text-slate-800 shadow-xs ring-2 ring-slate-400/20'
+                            : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-100'
+                        }`}
+                      >
+                        <span>🚶 No Bike</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {newWorker.hasBike && (
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Driving License Number (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={newWorker.drivingLicenseNumber}
+                        onChange={(e) => setNewWorker({ ...newWorker, drivingLicenseNumber: e.target.value.toUpperCase() })}
+                        placeholder="e.g. MH12 20200001234"
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:border-blue-500 uppercase font-mono"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Identity Verification (Aadhaar) */}
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-xs font-medium text-gray-700">Aadhaar Card Number (Optional)</label>
+                    {newWorker.aadharNumber && (
+                      <span className="text-[10px] text-gray-400 font-mono">{newWorker.aadharNumber.length}/12 digits</span>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    maxLength={12}
+                    value={newWorker.aadharNumber}
+                    onChange={(e) => setNewWorker({ ...newWorker, aadharNumber: e.target.value.replace(/\D/g, '').slice(0, 12) })}
+                    placeholder="12-digit Aadhaar number"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 font-mono tracking-wider"
+                  />
+                </div>
+
+                {/* Location Details */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">City / Village (Optional)</label>
+                    <input
+                      type="text"
+                      value={newWorker.city}
+                      onChange={(e) => setNewWorker({ ...newWorker, city: e.target.value })}
+                      placeholder="e.g. Indore"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Pincode (Optional)</label>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      value={newWorker.pincode}
+                      onChange={(e) => setNewWorker({ ...newWorker, pincode: e.target.value.replace(/\D/g, '').slice(0, 6) })}
+                      placeholder="e.g. 452001"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* Skills */}
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Skills (Optional)</label>
                   <div className="relative" ref={skillsDropdownRef}>

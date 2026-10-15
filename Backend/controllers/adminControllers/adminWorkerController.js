@@ -969,7 +969,12 @@ const deleteWorker = async (req, res) => {
  */
 const addWorker = async (req, res) => {
   try {
-    const { name, email, phone, workerType, serviceCategory, skills, hourlyRate, dailyRate, gender } = req.body;
+    const {
+      name, email, phone, workerType, serviceCategory, skills,
+      hourlyRate, dailyRate, gender,
+      hasBike, drivingLicenseNumber, aadharNumber, experienceYears,
+      address, city, state, pincode, district, subDistrict
+    } = req.body;
 
     if (!name || !phone) {
       return res.status(400).json({ success: false, message: 'Name and phone are required' });
@@ -993,6 +998,18 @@ const addWorker = async (req, res) => {
     // Auto-assign admin's scope fields (Phase 4: scope enforcement on create)
     const scopeFields = extractAdminScopeFields(req.user);
 
+    const dlNumber = (hasBike && drivingLicenseNumber)
+      ? String(drivingLicenseNumber).toUpperCase().trim().replace(/[^A-Z0-9-]/g, '').slice(0, 20)
+      : null;
+
+    const aadharClean = aadharNumber
+      ? String(aadharNumber).replace(/\D/g, '').slice(0, 12)
+      : null;
+
+    const exp = (!isNaN(Number(experienceYears)) && Number(experienceYears) >= 0)
+      ? Number(experienceYears)
+      : 0;
+
     const worker = await Worker.create({
       name: name.trim(),
       email: email || null,
@@ -1002,8 +1019,19 @@ const addWorker = async (req, res) => {
       // The model stores a list (serviceCategories); the old single `serviceCategory` field was silently dropped
       serviceCategories: Array.isArray(req.body.serviceCategories) ? req.body.serviceCategories : (serviceCategory ? [serviceCategory] : []),
       skills: Array.isArray(skills) ? skills : (skills ? [skills] : []),
-      hourlyRate: hourlyRate || 0,
-      dailyRate: dailyRate || 0,
+      hourlyRate: Number(hourlyRate) || 0,
+      dailyRate: Number(dailyRate) || 0,
+      hasBike: Boolean(hasBike),
+      drivingLicense: {
+        number: dlNumber || null,
+        document: null
+      },
+      aadhar: {
+        number: aadharClean || null,
+        document: null,
+        backDocument: null
+      },
+      experienceYears: exp,
       approvalStatus: 'approved',
       approvalDate: new Date(),
       isActive: true,
@@ -1019,14 +1047,14 @@ const addWorker = async (req, res) => {
         role: req.user.role
       } : null,
       address: {
-        addressLine1: req.body.address || '',
-        city: req.body.city || req.user?.cityName || '',
-        district: scopeFields.districtName || req.body.district || req.user?.districtName || '',
-        subDistrict: scopeFields.subDistrictName || req.body.subDistrict || req.user?.subDistrictName || '',
+        addressLine1: address || '',
+        city: city || req.user?.cityName || '',
+        district: scopeFields.districtName || district || req.user?.districtName || '',
+        subDistrict: scopeFields.subDistrictName || subDistrict || req.user?.subDistrictName || '',
         districtId: scopeFields.districtId || null,
         subDistrictId: scopeFields.subDistrictId || null,
-        state: req.body.state || 'Maharashtra',
-        pincode: req.body.pincode || ''
+        state: state || 'Maharashtra',
+        pincode: pincode || ''
       }
     });
 
