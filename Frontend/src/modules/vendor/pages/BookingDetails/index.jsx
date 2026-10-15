@@ -38,6 +38,7 @@ import RentalTimer from '../../../../components/common/RentalTimer';
 import RentalHandoverCard from '../../../../components/rental/RentalHandoverCard';
 import rentalService from '../../../../services/rentalService';
 import DisputeModal from '../../../../components/common/DisputeModal'; // NEW
+import ReportNonPaymentModal from '../../../../components/common/ReportNonPaymentModal';
 import disputeService from '../../../../services/disputeService'; // NEW
 import LogoLoader from '../../../../components/common/LogoLoader'; // NEW
 import flutterBridge from '../../../../utils/flutterBridge';
@@ -136,6 +137,7 @@ export default function BookingDetails() {
   const [tripMode, setTripMode] = useState('start'); // 'start' | 'end'
   const [bookingCommissionPct, setBookingCommissionPct] = useState(10); // Commission % from settings
   const [isCashModalOpen, setIsCashModalOpen] = useState(false);
+  const [showNonPaymentModal, setShowNonPaymentModal] = useState(false);
   const [cashModalMode, setCashModalMode] = useState('qr');
   // ─────────────────────────────────────────────────────────────
   const [confirmDialog, setConfirmDialog] = useState({
@@ -239,6 +241,8 @@ export default function BookingDetails() {
           // Rental details
           rental_type: apiData.rental_type,
           distanceTrip: apiData.distanceTrip,
+          paymentDispute: apiData.paymentDispute,
+          paymentDefault: apiData.paymentDefault,
           estimatedDuration: apiData.estimatedDuration,
           landSize: apiData.landSize,
           cropType: apiData.cropType,
@@ -922,7 +926,7 @@ export default function BookingDetails() {
           </div>
 
           {/* Agri / Scope Badges (if applicable) */}
-          {(booking.rental_type || booking.landSize || booking.estimatedDuration || booking.cropType || booking.chemicalUsed) && (
+          {(booking.rental_type || booking.landSize || booking.estimatedDuration || booking.cropType || booking.chemicalUsed || booking.distanceTrip?.estimatedKm) && (
             <div className="flex flex-wrap items-center gap-1.5 py-2 border-b border-gray-100">
               {booking.rental_type && (
                 <span className="text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200/60 px-2 py-0.5 rounded-md capitalize">
@@ -932,6 +936,11 @@ export default function BookingDetails() {
               {booking.estimatedDuration && (
                 <span className="text-[10px] font-bold bg-blue-50 text-blue-800 border border-blue-200/60 px-2 py-0.5 rounded-md">
                   ⏱ {booking.estimatedDuration} {booking.rental_type === 'daily' ? 'Days' : 'Hrs'}
+                </span>
+              )}
+              {booking.distanceTrip?.estimatedKm > 0 && (
+                <span className="text-[10px] font-bold bg-teal-50 text-teal-800 border border-teal-200/60 px-2 py-0.5 rounded-md">
+                  🚛 ~{booking.distanceTrip.estimatedKm} km approx{booking.distanceTrip.estimatedFare ? ` • ₹${booking.distanceTrip.estimatedFare} + GST` : ''}
                 </span>
               )}
               {booking.landSize && (
@@ -1627,6 +1636,23 @@ export default function BookingDetails() {
                   <span>{booking.paymentMethod === 'plan_benefit' ? 'Prepare/Edit Final Bill' : '💵 Collect Cash Notes'}</span>
                 </button>
               </div>
+
+              {booking.status === 'work_done' && booking.paymentMethod !== 'plan_benefit' && (
+                booking.paymentDispute?.isActive ? (
+                  <div className="mt-4 flex items-start gap-2 rounded-xl bg-amber-50 border border-amber-200 p-3 text-[11px] text-amber-800 leading-relaxed">
+                    <FiAlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                    <span>You reported that the farmer is not paying. Support is reviewing it and will contact the farmer. You will be notified.</span>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowNonPaymentModal(true)}
+                    className="mt-4 w-full py-2.5 rounded-xl text-xs font-black text-red-600 bg-red-50 border border-red-100 hover:bg-red-100 transition-all active:scale-95 cursor-pointer"
+                  >
+                    Farmer is not paying? Report to support
+                  </button>
+                )
+              )}
             </div>
           </div>
         )}
@@ -1686,6 +1712,9 @@ export default function BookingDetails() {
             km={tracker.totalDistanceKm || booking.distanceTrip?.totalDistanceKm || 0}
             fare={tracker.fare || booking.distanceTrip?.fare || 0}
             pricing={booking.distanceTrip?.pricing}
+            estimatedKm={booking.distanceTrip?.estimatedKm}
+            estimatedFare={booking.distanceTrip?.estimatedFare}
+            stopped={booking.distanceTrip?.status === 'STOPPED' || ['work_done', 'completed'].includes(booking.status?.toLowerCase())}
             running={distanceRunning}
             gpsError={tracker.gpsError}
           />
@@ -2004,6 +2033,14 @@ export default function BookingDetails() {
         bookingId={id}
       />
 
+      {/* Farmer-not-paying report */}
+      <ReportNonPaymentModal
+        isOpen={showNonPaymentModal}
+        bookingId={booking?._id || booking?.id || id}
+        amount={booking?.finalAmount}
+        onClose={() => setShowNonPaymentModal(false)}
+        onSubmitted={() => setBooking(prev => ({ ...prev, paymentDispute: { ...(prev?.paymentDispute || {}), isActive: true } }))}
+      />
       {/* Cash / Admin QR Collection Modal */}
       <CashCollectionModal
         isOpen={isCashModalOpen}

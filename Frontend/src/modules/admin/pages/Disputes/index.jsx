@@ -13,6 +13,7 @@ const RESOLUTIONS = [
     { id: 'ADMIN_COMPLETION_OVERRIDE', label: 'Complete booking without End OTP (bill from recorded work)' },
     { id: 'FULL_REFUND_TO_FARMER', label: 'Full refund to farmer', amount: 'refundAmount' },
     { id: 'PARTIAL_SETTLEMENT', label: 'Partial settlement (refund part to farmer)', amount: 'refundAmount' },
+    { id: 'FARMER_PAYMENT_DEFAULT', label: 'Farmer must pay: close booking, pay vendor from platform, add dues to farmer' },
     { id: 'VENDOR_PENALTY', label: 'Penalise vendor', amount: 'vendorPenaltyAmount' },
     { id: 'BOOKING_CANCELLED_BY_ADMIN', label: 'Cancel booking' },
     { id: 'CUSTOM_RESOLUTION', label: 'Other / custom resolution' }
@@ -100,6 +101,22 @@ const AdminDisputes = () => {
             }
         } catch (error) {
             toastManager.error(error?.response?.data?.message || 'Failed to update dispute');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleMarkDuesPaid = async () => {
+        try {
+            setSubmitting(true);
+            const response = await adminDisputeService.markDuesPaid(selectedDispute._id, resolutionNotes);
+            if (response.success) {
+                toastManager.success(response.message || 'Dues recorded as paid');
+                setIsDetailsModalOpen(false);
+                fetchDisputes();
+            }
+        } catch (error) {
+            toastManager.error(error?.response?.data?.message || 'Failed to record dues payment');
         } finally {
             setSubmitting(false);
         }
@@ -394,6 +411,26 @@ const AdminDisputes = () => {
                                         <p className="text-xs font-bold">Case Closed</p>
                                         <p className="text-[10px] opacity-80">Resolved by {selectedDispute.resolvedBy?.name} on {new Date(selectedDispute.resolvedAt).toLocaleDateString()}</p>
                                     </div>
+                                </div>
+                            )}
+                            {TERMINAL.includes(selectedDispute.status) && selectedDispute.resolutionType === 'FARMER_PAYMENT_DEFAULT' && (
+                                <div className="p-3.5 bg-amber-50/80 border border-amber-200 rounded-xl text-xs space-y-2">
+                                    <p className="font-bold text-amber-900">
+                                        Farmer dues: ₹{selectedDispute.resolutionFinancials?.duesCreatedForFarmer || 0}
+                                        {' · '}Paid to vendor by platform: ₹{selectedDispute.resolutionFinancials?.paidToVendorByPlatform || 0}
+                                    </p>
+                                    <p className="text-[11px] text-amber-800 leading-relaxed">
+                                        The farmer cannot book again until the dues are cleared. They can pay from their wallet, or you can record a payment collected outside the app.
+                                    </p>
+                                    {canManage && (
+                                        <button
+                                            onClick={handleMarkDuesPaid}
+                                            disabled={submitting}
+                                            className="w-full py-2.5 bg-amber-600 text-white rounded-xl text-xs font-bold active:scale-95 transition-transform disabled:opacity-50"
+                                        >
+                                            Record dues as paid (collected outside the app)
+                                        </button>
+                                    )}
                                 </div>
                             )}
                         </div>

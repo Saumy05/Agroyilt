@@ -281,13 +281,23 @@ const BookingAlertCard = ({ booking, onAccept, onReject, onAssign, initialTimeLe
             )}
 
             {/* Agriculture/Duration Badges */}
-            {(booking?.landSize || booking?.cropType || booking?.chemicalUsed || booking?.estimatedDuration || booking?.rental_type) && (
+            {(booking?.landSize || booking?.cropType || booking?.chemicalUsed || booking?.estimatedDuration || booking?.rental_type || booking?.estimatedKm) && (
               <div className="flex flex-wrap gap-1 mt-1.5 pt-1.5 border-t border-emerald-50">
                 {booking.rental_type === 'hourly' && booking.estimatedDuration ? (
                   <div className="bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100 flex items-center gap-1">
                     <span className="text-[8.5px] text-emerald-700 font-bold uppercase">Duration:</span>
                     <span className="text-[10px] font-black text-emerald-950">{booking.estimatedDuration} Hr(s)</span>
                   </div>
+                ) : booking.rental_type === 'distance_based' ? (
+                  (booking.estimatedKm || booking.distanceTrip?.estimatedKm) ? (
+                    <div className="bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100 flex items-center gap-1">
+                      <span className="text-[8.5px] text-teal-700 font-bold uppercase">Approx. trip:</span>
+                      <span className="text-[10px] font-black text-teal-950">
+                        ~{booking.estimatedKm || booking.distanceTrip?.estimatedKm} km
+                        {(booking.estimatedFare || booking.distanceTrip?.estimatedFare) ? ` • ₹${booking.estimatedFare || booking.distanceTrip?.estimatedFare} + GST` : ''}
+                      </span>
+                    </div>
+                  ) : null
                 ) : booking.landSize ? (
                   <div className="bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100 flex items-center gap-1">
                     <span className="text-[8.5px] text-emerald-700 font-bold uppercase">Area:</span>

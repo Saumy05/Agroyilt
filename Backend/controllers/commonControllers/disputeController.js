@@ -594,9 +594,21 @@ const resolveDispute = async (req, res) => {
           }
           break;
 
+        // ── FARMER_PAYMENT_DEFAULT ───────────────────────────────────────────
+        // Farmer would not pay the final bill: the booking closes, the platform pays the vendor, the farmer owes the dues.
+        case 'FARMER_PAYMENT_DEFAULT': {
+          const out = await require('../../services/paymentDefaultService').resolveAgainstFarmer(dispute, { adminId, adminName });
+          financials.duesCreatedForFarmer = out.dues;
+          financials.paidToVendorByPlatform = out.paidToVendor;
+          break;
+        }
+
         // ── DISMISSED_NO_ACTION ──────────────────────────────────────────────
         case 'DISMISSED_NO_ACTION':
-          // No financial action
+          // No financial action; a vendor's "farmer will not pay" report is withdrawn so the booking is not flagged any more
+          if (dispute.bookingDomain === 'VENDOR_BOOKING' && dispute.vendorBookingId && (dispute.internalTags || []).includes('FARMER_NON_PAYMENT')) {
+            await require('../../services/paymentDefaultService').clearReport(dispute.vendorBookingId);
+          }
           break;
 
         // ── CUSTOM_RESOLUTION ────────────────────────────────────────────────

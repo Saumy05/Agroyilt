@@ -11,6 +11,7 @@ const {
   escalateDispute,
   getDisputeStats
 } = require('../../controllers/commonControllers/disputeController');
+const { adminMarkDuesPaid } = require('../../controllers/bookingControllers/paymentDefaultController');
 
 /**
  * Admin: Dispute Management
@@ -29,6 +30,7 @@ router.patch('/:id/escalate', authenticate, isAdmin, requirePermission('disputes
 // Financial resolutions & dismissal: RESTRICTED to Support Supervisors (disputes.manage)
 router.patch('/:id/resolve',  authenticate, isAdmin, requirePermission('disputes.manage'), resolveDispute);
 router.patch('/:id/dismiss',  authenticate, isAdmin, requirePermission('disputes.manage'), dismissDispute);
+router.patch('/:id/mark-dues-paid', authenticate, isAdmin, requirePermission('disputes.manage'), adminMarkDuesPaid);
 
 module.exports = router;
 
