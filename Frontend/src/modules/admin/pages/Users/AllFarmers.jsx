@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiSearch, FiUser, FiPhone, FiMail, FiCheckCircle, FiSlash, FiCheck, FiTrash2, FiPlus, FiX, FiUserCheck, FiEye } from 'react-icons/fi';
+import { FiSearch, FiUser, FiPhone, FiMail, FiCheckCircle, FiSlash, FiCheck, FiTrash2, FiPlus, FiX, FiUserCheck, FiEye, FiAlertCircle } from 'react-icons/fi';
 import { toastManager } from '../../../../utils/toastManager';
 import { adminUserService } from '../../../../services/adminUserService';
 
@@ -19,6 +19,7 @@ const AllFarmers = () => {
   // Add Farmer State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newFarmer, setNewFarmer] = useState({ name: '', phone: '', email: '', gender: '' });
+  const [modalError, setModalError] = useState('');
   const [isAdding, setIsAdding] = useState(false);
 
   // View Farmer State
@@ -33,19 +34,27 @@ const AllFarmers = () => {
 
   const handleAddFarmer = async (e) => {
     e.preventDefault();
+    setModalError('');
+
     if (!newFarmer.name?.trim()) {
-      return toastManager.error('Farmer full name is required');
+      const err = 'Farmer full name is required';
+      setModalError(err);
+      return toastManager.error(err);
     }
 
     const cleanPhone = (newFarmer.phone || '').replace(/\D/g, '').slice(-10);
     const indianMobileRegex = /^[6-9]\d{9}$/;
 
     if (!cleanPhone || cleanPhone.length !== 10) {
-      return toastManager.error('Please enter a complete 10-digit mobile number');
+      const err = 'Please enter a complete 10-digit mobile number';
+      setModalError(err);
+      return toastManager.error(err);
     }
 
     if (!indianMobileRegex.test(cleanPhone)) {
-      return toastManager.error('Please enter a valid Indian mobile number starting with 6, 7, 8, or 9');
+      const err = 'Please enter a valid Indian mobile number starting with 6, 7, 8, or 9';
+      setModalError(err);
+      return toastManager.error(err);
     }
     
     try {
@@ -61,10 +70,13 @@ const AllFarmers = () => {
         toastManager.success(response.message || 'Farmer added successfully');
         setIsAddModalOpen(false);
         setNewFarmer({ name: '', phone: '', email: '', gender: '' });
+        setModalError('');
         fetchUsers();
       }
     } catch (error) {
-      toastManager.error(error.message || 'Failed to add farmer');
+      const errMsg = error.message || 'Failed to add farmer';
+      setModalError(errMsg);
+      toastManager.error(errMsg);
     } finally {
       setIsAdding(false);
     }
@@ -493,6 +505,7 @@ const AllFarmers = () => {
                   onClick={() => {
                     setIsAddModalOpen(false);
                     setNewFarmer({ name: '', phone: '', email: '', gender: '' });
+                    setModalError('');
                   }}
                   className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
                 >
@@ -501,13 +514,23 @@ const AllFarmers = () => {
               </div>
 
               <form onSubmit={handleAddFarmer} className="p-4 space-y-4">
+                {modalError && (
+                  <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-start gap-2 shadow-xs">
+                    <FiAlertCircle className="w-4 h-4 shrink-0 text-red-500 mt-0.5" />
+                    <span className="font-semibold leading-relaxed">{modalError}</span>
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Full Name *</label>
                   <input
                     type="text"
                     required
                     value={newFarmer.name}
-                    onChange={(e) => setNewFarmer({ ...newFarmer, name: e.target.value })}
+                    onChange={(e) => {
+                      if (modalError) setModalError('');
+                      setNewFarmer({ ...newFarmer, name: e.target.value });
+                    }}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                     placeholder="Enter farmer's name"
                   />
@@ -529,6 +552,7 @@ const AllFarmers = () => {
                       maxLength={10}
                       value={newFarmer.phone}
                       onChange={(e) => {
+                        if (modalError) setModalError('');
                         const val = e.target.value.replace(/\D/g, '').slice(0, 10);
                         setNewFarmer({ ...newFarmer, phone: val });
                       }}
@@ -565,7 +589,10 @@ const AllFarmers = () => {
                   <input
                     type="email"
                     value={newFarmer.email}
-                    onChange={(e) => setNewFarmer({ ...newFarmer, email: e.target.value })}
+                    onChange={(e) => {
+                      if (modalError) setModalError('');
+                      setNewFarmer({ ...newFarmer, email: e.target.value });
+                    }}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                     placeholder="Enter email address"
                   />
@@ -574,7 +601,10 @@ const AllFarmers = () => {
                   <label className="block text-xs font-medium text-gray-700 mb-1">Gender (Optional)</label>
                   <select
                     value={newFarmer.gender}
-                    onChange={(e) => setNewFarmer({ ...newFarmer, gender: e.target.value })}
+                    onChange={(e) => {
+                      if (modalError) setModalError('');
+                      setNewFarmer({ ...newFarmer, gender: e.target.value });
+                    }}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                   >
                     <option value="">Select Gender</option>
@@ -590,6 +620,7 @@ const AllFarmers = () => {
                     onClick={() => {
                       setIsAddModalOpen(false);
                       setNewFarmer({ name: '', phone: '', email: '', gender: '' });
+                      setModalError('');
                     }}
                     className="px-4 py-2 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50"
                   >
