@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   FiSearch, 
@@ -22,7 +22,9 @@ import {
   FiShield,
   FiFilter,
   FiUserCheck,
-  FiPlus
+  FiPlus,
+  FiChevronDown,
+  FiCheck
 } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import workerService from '../../services/workerService';
@@ -57,8 +59,42 @@ const AllWorkers = () => {
   const [actionLoading, setActionLoading] = useState(null);
 
   // Add Worker (admin creates the account directly)
-  const EMPTY_NEW_WORKER = { name: '', phone: '', email: '', gender: 'male', workerType: 'WORKER', hourlyRate: '', dailyRate: '', skills: '' };
+  // Same list workers pick from in their own Edit Profile screen
+  const WORKER_SKILL_OPTIONS = [
+    'Drive Tractor',
+    'Drive Harvester',
+    'Ploughing',
+    'Sowing / Seeding',
+    'Harvesting (Crop Cutting)',
+    'Crop Spraying',
+    'Weeding',
+    'Loading / Unloading',
+    'General Farm Helper'
+  ];
+  const EMPTY_NEW_WORKER = { name: '', phone: '', email: '', gender: 'male', workerType: 'WORKER', hourlyRate: '', dailyRate: '', skills: [] };
+  const [isSkillsOpen, setIsSkillsOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const skillsDropdownRef = useRef(null);
+
+  // Close the skills dropdown when clicking outside it
+  useEffect(() => {
+    if (!isSkillsOpen) return;
+    const handleClickOutside = (e) => {
+      if (skillsDropdownRef.current && !skillsDropdownRef.current.contains(e.target)) {
+        setIsSkillsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isSkillsOpen]);
+
+  // Lock background scroll while the Add Worker modal is open
+  useEffect(() => {
+    if (!isAddModalOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [isAddModalOpen]);
   const [newWorker, setNewWorker] = useState(EMPTY_NEW_WORKER);
   const [isAdding, setIsAdding] = useState(false);
 
@@ -172,6 +208,11 @@ const AllWorkers = () => {
     }
   };
 
+  // Add button stays greyed out until the required fields (name + valid mobile) are filled
+  const canAddWorker =
+    newWorker.name.trim().length > 0 &&
+    /^[6-9]\d{9}$/.test(newWorker.phone.replace(/\D/g, '').slice(-10));
+
   const handleAddWorker = async (e) => {
     e.preventDefault();
     if (!newWorker.name.trim()) return toast.error('Worker full name is required');
@@ -190,11 +231,12 @@ const AllWorkers = () => {
         workerType: newWorker.workerType,
         hourlyRate: Number(newWorker.hourlyRate) || 0,
         dailyRate: Number(newWorker.dailyRate) || 0,
-        skills: newWorker.skills.split(',').map((x) => x.trim()).filter(Boolean)
+        skills: newWorker.skills
       });
       if (res.success) {
         toast.success(res.message || 'Worker added successfully');
         setIsAddModalOpen(false);
+        setIsSkillsOpen(false);
         setNewWorker(EMPTY_NEW_WORKER);
         fetchWorkers();
       }
@@ -1130,7 +1172,7 @@ const AllWorkers = () => {
                 <h3 className="font-bold text-gray-800">Add New Worker</h3>
                 <button
                   type="button"
-                  onClick={() => setIsAddModalOpen(false)}
+                  onClick={() => { setIsAddModalOpen(false); setIsSkillsOpen(false); }}
                   className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 cursor-pointer"
                 >
                   <FiX className="w-5 h-5" />
@@ -1241,14 +1283,56 @@ const AllWorkers = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Skills (Optional, comma separated)</label>
-                  <input
-                    type="text"
-                    value={newWorker.skills}
-                    onChange={(e) => setNewWorker({ ...newWorker, skills: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500"
-                    placeholder="e.g. Harvesting, Spraying, Tractor driving"
-                  />
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Skills (Optional)</label>
+                  <div className="relative" ref={skillsDropdownRef}>
+                    <button
+                      type="button"
+                      onClick={() => setIsSkillsOpen((o) => !o)}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm flex items-center justify-between bg-white focus:outline-none focus:border-blue-500"
+                    >
+                      <span className={newWorker.skills.length ? 'text-gray-800' : 'text-gray-400'}>
+                        {newWorker.skills.length ? `${newWorker.skills.length} selected` : 'Select skills...'}
+                      </span>
+                      <FiChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isSkillsOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {isSkillsOpen && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-100 z-50 max-h-48 overflow-y-auto">
+                        {WORKER_SKILL_OPTIONS.map((skill) => {
+                          const selected = newWorker.skills.includes(skill);
+                          return (
+                            <button
+                              type="button"
+                              key={skill}
+                              onClick={() => setNewWorker((w) => ({
+                                ...w,
+                                skills: selected ? w.skills.filter((x) => x !== skill) : [...w.skills, skill]
+                              }))}
+                              className="w-full px-3 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 flex items-center justify-between border-b border-gray-50 last:border-0"
+                            >
+                              <span>{skill}</span>
+                              {selected && <FiCheck className="w-4 h-4 text-blue-600" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                  {newWorker.skills.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {newWorker.skills.map((skill) => (
+                        <span key={skill} className="bg-green-50 text-green-700 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1">
+                          {skill}
+                          <button
+                            type="button"
+                            onClick={() => setNewWorker((w) => ({ ...w, skills: w.skills.filter((x) => x !== skill) }))}
+                            className="p-0.5 hover:bg-green-100 rounded-full"
+                          >
+                            <FiX className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <p className="text-[11px] text-gray-500 bg-blue-50 border border-blue-100 rounded-lg p-2.5">
@@ -1258,15 +1342,15 @@ const AllWorkers = () => {
                 <div className="flex gap-2 pt-1">
                   <button
                     type="button"
-                    onClick={() => setIsAddModalOpen(false)}
+                    onClick={() => { setIsAddModalOpen(false); setIsSkillsOpen(false); }}
                     className="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-50 cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    disabled={isAdding}
-                    className="flex-1 px-4 py-2.5 rounded-lg text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-60 cursor-pointer"
+                    disabled={isAdding || !canAddWorker}
+                    className="flex-1 px-4 py-2.5 rounded-lg text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:text-gray-500 disabled:hover:bg-gray-300 disabled:cursor-not-allowed cursor-pointer"
                   >
                     {isAdding ? 'Adding...' : 'Add Worker'}
                   </button>
