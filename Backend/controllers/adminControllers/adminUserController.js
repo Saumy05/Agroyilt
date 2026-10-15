@@ -436,7 +436,7 @@ const updateKycStatus = async (req, res) => {
  */
 const addUser = async (req, res) => {
   try {
-    const { name, phone, email } = req.body;
+    const { name, phone, email, gender } = req.body;
 
     if (!name || !phone) {
       return res.status(400).json({
@@ -464,6 +464,14 @@ const addUser = async (req, res) => {
       });
     }
 
+    let cleanGender = null;
+    if (gender && typeof gender === 'string') {
+      const g = gender.trim().toLowerCase();
+      if (['male', 'female', 'other'].includes(g)) {
+        cleanGender = g;
+      }
+    }
+
     // Create user with admin traceability + geographic scope
     const userCity = req.body.city || req.user?.cityName || '';
     const userDistrict = req.body.district || req.user?.districtName || '';
@@ -477,6 +485,7 @@ const addUser = async (req, res) => {
       name: name.trim(),
       phone: cleanPhone,
       email: email || null,
+      gender: cleanGender,
       isPhoneVerified: true, // Auto verify since admin is adding
       isActive: true,
       approvalStatus: 'approved',

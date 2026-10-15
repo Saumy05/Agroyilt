@@ -18,7 +18,7 @@ const AllFarmers = () => {
 
   // Add Farmer State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [newFarmer, setNewFarmer] = useState({ name: '', phone: '', email: '' });
+  const [newFarmer, setNewFarmer] = useState({ name: '', phone: '', email: '', gender: '' });
   const [isAdding, setIsAdding] = useState(false);
 
   // View Farmer State
@@ -54,12 +54,13 @@ const AllFarmers = () => {
         ...newFarmer,
         name: newFarmer.name.trim(),
         phone: cleanPhone,
-        email: newFarmer.email?.trim() || undefined
+        email: newFarmer.email?.trim() || undefined,
+        gender: newFarmer.gender || undefined
       });
       if (response.success) {
         toastManager.success(response.message || 'Farmer added successfully');
         setIsAddModalOpen(false);
-        setNewFarmer({ name: '', phone: '', email: '' });
+        setNewFarmer({ name: '', phone: '', email: '', gender: '' });
         fetchUsers();
       }
     } catch (error) {
@@ -489,7 +490,10 @@ const AllFarmers = () => {
               <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
                 <h3 className="font-bold text-gray-800">Add New Farmer</h3>
                 <button
-                  onClick={() => setIsAddModalOpen(false)}
+                  onClick={() => {
+                    setIsAddModalOpen(false);
+                    setNewFarmer({ name: '', phone: '', email: '', gender: '' });
+                  }}
                   className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
                 >
                   <FiX className="w-5 h-5" />
@@ -566,11 +570,27 @@ const AllFarmers = () => {
                     placeholder="Enter email address"
                   />
                 </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Gender (Optional)</label>
+                  <select
+                    value={newFarmer.gender}
+                    onChange={(e) => setNewFarmer({ ...newFarmer, gender: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="">Select Gender</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
 
                 <div className="pt-2 flex justify-end gap-2">
                   <button
                     type="button"
-                    onClick={() => setIsAddModalOpen(false)}
+                    onClick={() => {
+                      setIsAddModalOpen(false);
+                      setNewFarmer({ name: '', phone: '', email: '', gender: '' });
+                    }}
                     className="px-4 py-2 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50"
                   >
                     Cancel
