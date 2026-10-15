@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import {
@@ -267,6 +267,97 @@ const WorkerRequestForm = () => {
   const [skillInput, setSkillInput] = useState('');
   const [hasUserEditedTitle, setHasUserEditedTitle] = useState(false);
   const [hasUserEditedDesc, setHasUserEditedDesc] = useState(false);
+
+  // City autocomplete state
+  const [citySearchResults, setCitySearchResults] = useState([]);
+  const [citySearchLoading, setCitySearchLoading] = useState(false);
+  const [showCityDropdown, setShowCityDropdown] = useState(false);
+  const [flyToPosition, setFlyToPosition] = useState(null);
+  const cityDebounceRef = useRef(null);
+  const cityDropdownRef = useRef(null);
+  const autocompleteServiceRef = useRef(null);
+
+  // Lazily init Google Places AutocompleteService
+  const getAutocompleteService = () => {
+    if (!autocompleteServiceRef.current && window.google?.maps?.places) {
+      autocompleteServiceRef.current = new window.google.maps.places.AutocompleteService();
+    }
+    return autocompleteServiceRef.current;
+  };
+
+  // Close city dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (cityDropdownRef.current && !cityDropdownRef.current.contains(e.target)) {
+        setShowCityDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const searchCity = useCallback((query) => {
+    if (!query.trim()) {
+      setCitySearchResults([]);
+      setShowCityDropdown(false);
+      return;
+    }
+    const service = getAutocompleteService();
+    if (!service) {
+      // Google Maps not loaded yet, silently skip
+      return;
+    }
+    setCitySearchLoading(true);
+    service.getPlacePredictions(
+      {
+        input: query,
+        componentRestrictions: { country: 'in' },
+        types: ['geocode'],
+      },
+      (predictions, status) => {
+        setCitySearchLoading(false);
+        if (status === window.google.maps.places.PlacesServiceStatus.OK && predictions) {
+          setCitySearchResults(predictions);
+          setShowCityDropdown(true);
+        } else {
+          setCitySearchResults([]);
+          setShowCityDropdown(!!query.trim()); // show "no results" state
+        }
+      }
+    );
+  }, []);
+
+  const handleCitySearchSelect = (prediction) => {
+    if (!window.google?.maps) return;
+    const geocoder = new window.google.maps.Geocoder();
+    geocoder.geocode({ placeId: prediction.place_id }, (results, status) => {
+      if (status === 'OK' && results[0]) {
+        const loc = results[0].geometry.location;
+        const lat = loc.lat();
+        const lng = loc.lng();
+        const comps = results[0].address_components || [];
+        const cityComp = comps.find(c =>
+          c.types.includes('locality') || c.types.includes('administrative_area_level_2')
+        );
+        const stateComp = comps.find(c => c.types.includes('administrative_area_level_1'));
+        const city = cityComp?.long_name || prediction.structured_formatting?.main_text || '';
+        const state = stateComp?.long_name || '';
+
+        setFormData(prev => ({
+          ...prev,
+          city,
+          state,
+          addressLine1: results[0].formatted_address,
+          lat: lat.toString(),
+          lng: lng.toString()
+        }));
+        setFlyToPosition({ lat, lng });
+        setShowCityDropdown(false);
+        setCitySearchResults([]);
+        if (errors.city) setErrors(prev => ({ ...prev, city: '' }));
+      }
+    });
+  };
 
   // Local calendar date helper
   const getLocalDateString = (d = new Date()) => {
@@ -1246,7 +1337,8 @@ const WorkerRequestForm = () => {
             </h3>
             
             <div className="mb-2.5 rounded-xl overflow-hidden border border-slate-200">
-              <LocationPicker 
+              <LocationPicker
+                flyToPosition={flyToPosition}
                 onLocationSelect={(loc) => {
                   let city = '';
                   let state = '';
@@ -1269,7 +1361,7 @@ const WorkerRequestForm = () => {
             </div>
             
             <div className="space-y-2">
-              <div>
+              <div ref={cityDropdownRef} className="relative">
                 <label className="text-[11px] font-bold text-slate-600 mb-1 block">City / Village *</label>
                 <div className="relative">
                   <FiMapPin className="absolute left-3 top-2.5 text-slate-400" size={14} />
@@ -1277,11 +1369,62 @@ const WorkerRequestForm = () => {
                     type="text"
                     name="city"
                     value={formData.city}
-                    onChange={handleChange}
-                    placeholder="e.g. Indore, Madhya Pradesh"
-                    className={`w-full bg-slate-50/80 border rounded-xl pl-9 pr-3 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white ${errors.city ? 'border-red-300' : 'border-slate-200'}`}
+                    onChange={(e) => {
+                      handleChange(e);
+                      clearTimeout(cityDebounceRef.current);
+                      const val = e.target.value;
+                      if (!val.trim()) {
+                        setCitySearchResults([]);
+                        setShowCityDropdown(false);
+                        return;
+                      }
+                      cityDebounceRef.current = setTimeout(() => searchCity(val), 400);
+                    }}
+                    onFocus={() => citySearchResults.length > 0 && setShowCityDropdown(true)}
+                    placeholder="Search city, village, locality…"
+                    autoComplete="off"
+                    className={`w-full bg-slate-50/80 border rounded-xl pl-9 pr-8 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white ${errors.city ? 'border-red-300' : 'border-slate-200'}`}
                   />
+                  {citySearchLoading && (
+                    <div className="absolute right-3 top-2.5">
+                      <div className="w-3.5 h-3.5 border-2 border-emerald-200 border-t-emerald-600 rounded-full animate-spin" />
+                    </div>
+                  )}
                 </div>
+
+                {/* Autocomplete dropdown - Google Places predictions */}
+                {showCityDropdown && citySearchResults.length > 0 && (
+                  <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl shadow-slate-200/60 max-h-52 overflow-y-auto divide-y divide-slate-50" style={{ zIndex: 9999 }}>
+                    {citySearchResults.map((prediction, i) => {
+                      const primary = prediction.structured_formatting?.main_text || prediction.description;
+                      const secondary = prediction.structured_formatting?.secondary_text || '';
+                      return (
+                        <button
+                          key={prediction.place_id || i}
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => handleCitySearchSelect(prediction)}
+                          className="w-full px-3 py-2 text-left hover:bg-emerald-50 transition-colors group flex items-start gap-2.5"
+                        >
+                          <span className="mt-0.5 flex-shrink-0 text-emerald-500 group-hover:text-emerald-600">📍</span>
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-slate-800 truncate leading-tight">{primary}</p>
+                            {secondary && (
+                              <p className="text-[10px] text-slate-400 truncate mt-0.5 leading-tight">{secondary}</p>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {showCityDropdown && !citySearchLoading && formData.city && citySearchResults.length === 0 && (
+                  <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg px-3 py-2.5 text-xs text-slate-500 text-center" style={{ zIndex: 9999 }}>
+                    No results for "<span className="font-semibold">{formData.city}</span>"
+                  </div>
+                )}
+
                 <FieldError name="city" />
               </div>
               <div>
