@@ -14,6 +14,7 @@ import {
 } from 'react-icons/fi';
 import { toastManager } from '../../../../utils/toastManager';
 import NotificationBell from '../../components/common/NotificationBell';
+import FarmerDuesBanner from '../../components/common/FarmerDuesBanner';
 import { motion } from 'framer-motion';
 import { bookingService } from '../../../../services/bookingService';
 import { apiCache } from '../../../../utils/apiCache';
@@ -546,6 +547,8 @@ const MyBookings = () => {
             <NotificationBell />
           </div>
         </header>
+
+        <FarmerDuesBanner />
 
         {/* Filter Tabs */}
         <div className="bg-white/90 backdrop-blur-md border-b border-slate-200/80 sticky top-[57px] z-20 shadow-[0_2px_8px_-4px_rgba(0,0,0,0.04)]">
