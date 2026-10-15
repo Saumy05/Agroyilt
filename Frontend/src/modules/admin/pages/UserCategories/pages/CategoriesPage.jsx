@@ -67,6 +67,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
   const [showReorderModal, setShowReorderModal] = useState(false);
   const [draggedItem, setDraggedItem] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [modeFilter, setModeFilter] = useState('all'); // 'all' | 'service' | 'rental'
   const [uploadingIcon, setUploadingIcon] = useState(false);
   const [premiumOfferings, setPremiumOfferings] = useState([]);
   const [viewAllSubCatsModal, setViewAllSubCatsModal] = useState({
@@ -152,21 +153,30 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
     }).length;
   }, [categoriesBase]);
 
+  const tabCategories = useMemo(() => {
+    if (activeTab !== 'main') return categoriesBase;
+    return categoriesBase.filter(c => {
+      const hasParent = c.parentCategory || (Array.isArray(c.parentCategories) && c.parentCategories.length > 0);
+      return !hasParent || c.isAlwaysMain;
+    });
+  }, [categoriesBase, activeTab]);
+
+  const modeCounts = useMemo(() => {
+    const rental = tabCategories.filter(c => c.fulfillmentMode === 'rental').length;
+    return { all: tabCategories.length, rental, service: tabCategories.length - rental };
+  }, [tabCategories]);
+
   const categoriesFiltered = useMemo(() => {
-    let list = categoriesBase;
-    if (activeTab === 'main') {
-      list = list.filter(c => {
-        const hasParent = c.parentCategory || (Array.isArray(c.parentCategories) && c.parentCategories.length > 0);
-        return !hasParent || c.isAlwaysMain;
-      });
-    }
+    let list = tabCategories;
+    if (modeFilter === 'rental') list = list.filter(c => c.fulfillmentMode === 'rental');
+    else if (modeFilter === 'service') list = list.filter(c => c.fulfillmentMode !== 'rental');
     if (!searchTerm) return list;
     const lower = searchTerm.trim().toLowerCase();
     return list.filter(c =>
       c.title?.toLowerCase().includes(lower) ||
       c.slug?.toLowerCase().includes(lower)
     );
-  }, [categoriesBase, searchTerm, activeTab]);
+  }, [tabCategories, searchTerm, modeFilter]);
 
   const editing = useMemo(() => categoriesBase.find((c) => c.id === editingId) || null, [categoriesBase, editingId]);
 
@@ -756,6 +766,27 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
               </a>
             </div>
           )}
+
+          {/* SERVICE / RENTAL FILTER */}
+          <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
+            {[
+              { value: 'all', label: 'All' },
+              { value: 'service', label: '🛠️ Service Equipment' },
+              { value: 'rental', label: '🚜 Rental Equipment' }
+            ].map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => setModeFilter(opt.value)}
+                className={`whitespace-nowrap px-4 py-2 rounded-full text-xs font-bold border transition-all ${
+                  modeFilter === opt.value
+                    ? 'bg-gray-900 text-white border-gray-900'
+                    : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
+                }`}
+              >
+                {opt.label} ({modeCounts[opt.value]})
+              </button>
+            ))}
+          </div>
 
           <div className="flex items-center justify-between">
             <div className="text-sm text-gray-600 font-bold uppercase tracking-tight">{categoriesFiltered.length} Items</div>

@@ -29,6 +29,7 @@ const ManageProducts = () => {
     const [loading, setLoading] = useState(true);
     const [uploading, setUploading] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
+    const [categoryFilter, setCategoryFilter] = useState('all');
     const [showModal, setShowModal] = useState(false);
     const [editMode, setEditMode] = useState(false);
     const [currentProduct, setCurrentProduct] = useState(null);
@@ -452,7 +453,24 @@ const ManageProducts = () => {
     };
 
     const currentList = activeTab === 'marketplace' ? products : pendingProducts;
+
+    const getCategoryInfo = (p) => {
+        const cat = p.categoryId;
+        const id = cat?._id || (typeof cat === 'string' ? cat : null);
+        if (id) return { key: id, label: cat?.title || categories.find(c => c._id === id)?.title || 'Machine' };
+        if (p.requestedCategoryName) return { key: `req:${p.requestedCategoryName.toLowerCase()}`, label: p.requestedCategoryName };
+        return { key: 'none', label: 'Machine' };
+    };
+
+    const categoryOptions = Object.values(currentList.reduce((acc, p) => {
+        const { key, label } = getCategoryInfo(p);
+        acc[key] = acc[key] || { key, label, count: 0 };
+        acc[key].count += 1;
+        return acc;
+    }, {})).sort((a, b) => a.label.localeCompare(b.label));
+
     const filteredProducts = currentList.filter(p => {
+        if (categoryFilter !== 'all' && getCategoryInfo(p).key !== categoryFilter) return false;
         const trimmedSearch = searchTerm.trim().toLowerCase();
         if (!trimmedSearch) return true;
         return (p.title?.toLowerCase().includes(trimmedSearch)) ||
@@ -477,15 +495,29 @@ const ManageProducts = () => {
             </div>
 
             <div className="flex gap-4 mb-6 border-b border-slate-200 px-6">
-                <button onClick={() => setActiveTab('marketplace')} className={`pb-4 px-2 font-black text-sm uppercase tracking-wider relative ${activeTab === 'marketplace' ? 'text-slate-800' : 'text-slate-400'}`}>
+                <button onClick={() => { setActiveTab('marketplace'); setCategoryFilter('all'); }} className={`pb-4 px-2 font-black text-sm uppercase tracking-wider relative ${activeTab === 'marketplace' ? 'text-slate-800' : 'text-slate-400'}`}>
                     Live Fleet ({products.length})
                     {activeTab === 'marketplace' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-slate-800 rounded-t-full" />}
                 </button>
-                <button onClick={() => setActiveTab('pending')} className={`pb-4 px-2 font-black text-sm uppercase tracking-wider relative ${activeTab === 'pending' ? 'text-orange-600' : 'text-slate-400'}`}>
+                <button onClick={() => { setActiveTab('pending'); setCategoryFilter('all'); }} className={`pb-4 px-2 font-black text-sm uppercase tracking-wider relative ${activeTab === 'pending' ? 'text-orange-600' : 'text-slate-400'}`}>
                     New Approvals ({pendingProducts.length})
                     {activeTab === 'pending' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-orange-600 rounded-t-full" />}
                 </button>
             </div>
+
+            {categoryOptions.length > 1 && (
+                <div className="flex gap-2 overflow-x-auto px-6 pb-2 mb-2">
+                    {[{ key: 'all', label: 'All', count: currentList.length }, ...categoryOptions].map(opt => (
+                        <button
+                            key={opt.key}
+                            onClick={() => setCategoryFilter(opt.key)}
+                            className={`whitespace-nowrap px-4 py-2 rounded-full text-[11px] font-black uppercase tracking-wide border transition-all ${categoryFilter === opt.key ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'}`}
+                        >
+                            {opt.label} ({opt.count})
+                        </button>
+                    ))}
+                </div>
+            )}
 
             <div className="bg-white border-t border-slate-100 shadow-sm overflow-hidden mt-4">
                 <div className="overflow-x-auto pb-28">
