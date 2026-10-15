@@ -401,7 +401,7 @@ const EquipmentInventory = () => {
                 // Per-km: the machine's own rate plus the dearest attachment add-on (e.g. Trolley), which is what the farmer pays per km
                 const ownKm = item.pricing?.distance_based?.isEnabled ? (Number(item.pricing.distance_based.price) || Number(item.pricing.distance_based.perKmRate) || 0) : 0;
                 const implKm = Math.max(0, ...(item.implements || []).map(i => (i.pricing?.distance_based?.isEnabled ? (Number(i.pricing.distance_based.price) || 0) : 0)));
-                const kmRate = ownKm + implKm;
+                const kmRate = (item.attachmentRates === 'total' && item.listingType !== 'rental') ? (implKm || ownKm) : ownKm + implKm;
                 const hasKm = kmRate > 0;
 
                 return (
@@ -504,9 +504,14 @@ const EquipmentInventory = () => {
                               const hourlyAdd = Number(impl.pricing?.hourly?.price) || 0;
                               const acreAdd = Number(impl.pricing?.land_based?.price) || 0;
 
+                              // Service listings on the "total" model show the price with the attachment; older ones show the add-on
+                              const isTotal = item.attachmentRates === 'total' && item.listingType !== 'rental';
+                              const kmRateOfImpl = Number(impl.pricing?.distance_based?.price) || 0;
+                              const plus = isTotal ? '' : '+';
                               let addonLabel = '';
-                              if (hourlyAdd > 0) addonLabel = `+₹${hourlyAdd}/hr`;
-                              else if (acreAdd > 0) addonLabel = `+₹${acreAdd}/ac`;
+                              if (kmRateOfImpl > 0 && isTotal) addonLabel = `₹${kmRateOfImpl}/km`;
+                              else if (hourlyAdd > 0) addonLabel = `${plus}₹${hourlyAdd}/hr`;
+                              else if (acreAdd > 0) addonLabel = `${plus}₹${acreAdd}/ac`;
 
                               return (
                                 <span 

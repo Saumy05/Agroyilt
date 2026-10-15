@@ -203,6 +203,7 @@ exports.addEquipment = async (req, res) => {
       description,
       images: images || [],
       pricing,
+      attachmentRates: finalListingType === 'service' && req.body.attachmentRates === 'total' ? 'total' : undefined,
       cityIds,
       requestedCityName: requestedCityName || null,
       scope,
@@ -287,6 +288,9 @@ exports.updateEquipment = async (req, res) => {
         updateData.listingType = catObj.fulfillmentMode;
       }
     }
+
+    // 'total' only means something on a service listing; anything else is dropped
+    if (updateData.attachmentRates !== 'total' || (updateData.listingType || equipment.listingType) === 'rental') delete updateData.attachmentRates;
 
     equipment = await VendorEquipment.findByIdAndUpdate(id, updateData, {
       new: true,

@@ -74,13 +74,6 @@ const ManageProducts = () => {
         imageUrl: '',
         images: [],
         type: 'machinery',
-        hasDriver: false,
-        driverDetails: {
-            name: '',
-            phone: '',
-            photo: '',
-            licenseNumber: ''
-        },
         specifications: []
     });
 
@@ -166,35 +159,6 @@ const ManageProducts = () => {
             }
         } catch (err) {
             toastManager.error("Upload failed");
-        } finally {
-            setUploading(false);
-        }
-    };
-
-    const handleDriverPhotoUpload = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        try {
-            setUploading(true);
-            const token = sessionStorage.getItem('adminAccessToken') || localStorage.getItem('adminAccessToken');
-            const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
-            const uploadFormData = new FormData();
-            uploadFormData.append('file', file);
-            const res = await fetch(`${baseUrl}/admin/upload`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` },
-                body: uploadFormData
-            });
-            const data = await res.json();
-            if (data.success) {
-                setFormData(prev => ({ 
-                    ...prev, 
-                    driverDetails: { ...prev.driverDetails, photo: data.imageUrl }
-                }));
-                toastManager.success("Driver photo uploaded!");
-            }
-        } catch (err) {
-            toastManager.error("Driver photo upload failed");
         } finally {
             setUploading(false);
         }
@@ -432,8 +396,6 @@ const ManageProducts = () => {
             imageUrl: '',
             images: [],
             type: 'machinery',
-            hasDriver: false,
-            driverDetails: { name: '', phone: '', photo: '', licenseNumber: '' },
             specifications: []
         });
         setEditMode(false);
@@ -444,9 +406,7 @@ const ManageProducts = () => {
         setFormData({
             ...product,
             categoryId: product.categoryId?._id || product.categoryId,
-            type: 'machinery',
-            hasDriver: product.hasDriver || false,
-            driverDetails: product.driverDetails || { name: '', phone: '', photo: '', licenseNumber: '' }
+            type: 'machinery'
         });
         setEditMode(true);
         setShowModal(true);
@@ -758,24 +718,6 @@ const ManageProducts = () => {
                                     </div>
                                 </div>
 
-                                <div className="pt-4 border-t">
-                                    <label className="flex items-center gap-3 cursor-pointer">
-                                        <div className={`w-10 h-6 rounded-full p-1 transition-all ${formData.hasDriver ? 'bg-orange-500' : 'bg-slate-200'}`}>
-                                            <div className={`w-4 h-4 rounded-full bg-white transform ${formData.hasDriver ? 'translate-x-4' : 'translate-x-0'}`} />
-                                        </div>
-                                        <input type="checkbox" className="hidden" checked={formData.hasDriver} onChange={e => setFormData({...formData, hasDriver: e.target.checked})} />
-                                        <span className="text-xs font-black uppercase tracking-tight">Include Driver Details?</span>
-                                    </label>
-                                    
-                                    {formData.hasDriver && (
-                                        <div className="mt-4 p-5 bg-orange-50/30 rounded-3xl border border-orange-100 space-y-4">
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <input placeholder="Driver Name" className="bg-white rounded-xl p-3 text-sm font-bold outline-none" value={formData.driverDetails.name} onChange={e => setFormData({...formData, driverDetails: {...formData.driverDetails, name: e.target.value}})} />
-                                                <input placeholder="Phone" className="bg-white rounded-xl p-3 text-sm font-bold outline-none" value={formData.driverDetails.phone} onChange={e => setFormData({...formData, driverDetails: {...formData.driverDetails, phone: e.target.value}})} />
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
                             </form>
                             <div className="p-8 bg-slate-50 border-t flex gap-4">
                                 <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-4 bg-white border rounded-2xl font-black text-xs uppercase">Cancel</button>

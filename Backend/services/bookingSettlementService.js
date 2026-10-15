@@ -570,9 +570,20 @@ const computeMachineryBase = ({ booking, service, equipment, workUnits, now }) =
   const hours = Math.max(1, Math.ceil(durationMs / 3600000));
   const days = Math.max(1, Math.ceil(durationMs / 86400000));
   const units = parseFloat(workUnits) || booking.workUnits || 1;
-  const hourly = equipment?.pricing?.hourly?.isEnabled ? equipment.pricing.hourly.price : service?.hourly_price;
-  const land = equipment?.pricing?.land_based?.isEnabled ? equipment.pricing.land_based.price : service?.land_price;
-  const daily = equipment?.pricing?.daily?.isEnabled ? equipment.pricing.daily.price : service?.daily_price;
+  let hourly = equipment?.pricing?.hourly?.isEnabled ? equipment.pricing.hourly.price : service?.hourly_price;
+  let land = equipment?.pricing?.land_based?.isEnabled ? equipment.pricing.land_based.price : service?.land_price;
+  let daily = equipment?.pricing?.daily?.isEnabled ? equipment.pricing.daily.price : service?.daily_price;
+
+  // Service listing on the "total" model: the attachment's rate is the whole rate, so no separate add-on is billed below
+  const attachmentPricing = require('./attachmentPricing');
+  const chosenImplId = booking.selectedImplements?.[0]?.subCategoryId;
+  const attachmentInRate = Boolean(equipment && chosenImplId && attachmentPricing.isTotalModel(equipment));
+  if (attachmentInRate) {
+    const pick = (type, fallback) => attachmentPricing.unitRates(equipment, chosenImplId, type).tractorUnitRate || fallback;
+    hourly = pick('hourly', hourly);
+    land = pick('land_based', land);
+    daily = pick('daily', daily);
+  }
 
   let base;
   switch (booking.rental_type) {
@@ -582,7 +593,7 @@ const computeMachineryBase = ({ booking, service, equipment, workUnits, now }) =
     case 'monthly': base = service?.monthly_price || booking.basePrice || 0; break;
     default: base = booking.basePrice || 0;
   }
-  for (const impl of booking.selectedImplements || []) {
+  for (const impl of attachmentInRate ? [] : (booking.selectedImplements || [])) {
     const p = impl.pricing || {};
     if (booking.rental_type === 'hourly' && p.hourly?.isEnabled) base += (p.hourly.price || 0) * hours;
     else if (booking.rental_type === 'land_based' && p.land_based?.isEnabled) base += (p.land_based.price || 0) * units;

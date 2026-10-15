@@ -43,10 +43,17 @@ const resolveRates = async (booking) => {
     let combinedHourly = 0;
 
     // A. Tractor / Base Equipment Rate
+    let attachmentInRate = false; // service listing on the "total" model: the attachment's rate is the whole hourly rate
     if (booking.equipmentId) {
       try {
         const eq = await VendorEquipment.findById(booking.equipmentId);
-        if (eq) {
+        const attachmentPricing = require('../../services/attachmentPricing');
+        const chosenImplId = booking.selectedImplements?.[0]?.subCategoryId;
+        if (eq && chosenImplId && attachmentPricing.isTotalModel(eq)) {
+          const total = attachmentPricing.unitRates(eq, chosenImplId, 'hourly').tractorUnitRate;
+          if (total > 0) { combinedHourly = total; attachmentInRate = true; }
+        }
+        if (eq && !attachmentInRate) {
           if (eq.pricing?.hourly?.isEnabled && Number(eq.pricing?.hourly?.price) > 0) {
             combinedHourly += Number(eq.pricing.hourly.price);
           } else if (eq.pricing?.per_minute?.isEnabled && Number(eq.pricing?.per_minute?.price) > 0) {
@@ -59,7 +66,7 @@ const resolveRates = async (booking) => {
     }
 
     // B. Attached Implements (e.g. Rotavator, Cultivator, Straw Baler)
-    if (Array.isArray(booking.selectedImplements) && booking.selectedImplements.length > 0) {
+    if (!attachmentInRate && Array.isArray(booking.selectedImplements) && booking.selectedImplements.length > 0) {
       for (const impl of booking.selectedImplements) {
         const hourlyRate = Number(impl.pricing?.hourly?.price) || 0;
         const perMinRate = Number(impl.pricing?.per_minute?.price) || 0;

@@ -532,7 +532,6 @@ exports.findQualifiedVendors = async (req, res) => {
       }
 
       // Pricing validation for requested rental_type (must be explicitly enabled and price > 0)
-      const pricingObj = eq.pricing?.[rental_type];
       let tractorUnitRate = 0;
       let eqDistancePricing = null; // this vendor's own per-km tier (falls back to the admin tier)
       if (rental_type === 'distance_based') {
@@ -542,7 +541,10 @@ exports.findQualifiedVendors = async (req, res) => {
         if (!eqDistancePricing) continue;
         tractorUnitRate = Number(eqDistancePricing.perKmRate) || Number(eqDistancePricing.baseCharge) || 0;
       } else {
-        tractorUnitRate = (pricingObj?.isEnabled && pricingObj.price > 0) ? pricingObj.price : 0;
+        // Service listings on the "total" model: the attachment's rate is the job's rate. Otherwise machine + attachment add-on.
+        const rates = require('../../services/attachmentPricing').unitRates(eq, implementId, rental_type);
+        tractorUnitRate = rates.tractorUnitRate;
+        implementUnitRate = rates.implementUnitRate;
       }
       if (tractorUnitRate <= 0) continue; // Not enabled or price <= 0
 

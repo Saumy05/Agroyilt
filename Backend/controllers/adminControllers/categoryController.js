@@ -705,6 +705,14 @@ const updateCategory = async (req, res) => {
 
     await category.save();
 
+    // The category decides Service vs Rental: keep every vendor listing in it in step, so one never contradicts the other
+    if (fulfillmentMode !== undefined) {
+      await require('../../models/VendorEquipment').updateMany(
+        { categoryId: category._id, listingType: { $ne: category.fulfillmentMode } },
+        { $set: { listingType: category.fulfillmentMode } }
+      );
+    }
+
     const updatedCategory = await Category.findById(category._id)
       .populate('parentCategory', 'title slug')
       .populate('parentCategories', 'title slug')

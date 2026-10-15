@@ -27,6 +27,8 @@ const AllMachineryCategories = () => {
         if (res.success && Array.isArray(res.categories)) {
           // Filter to only show main categories (isAlwaysMain or has no parent)
           const mains = res.categories.filter(c => {
+            // Rentals have their own catalog (/user/rentals); this list is for service bookings only
+            if (c.fulfillmentMode === 'rental') return false;
             const hasParent = c.parentCategory || (c.parentCategories && c.parentCategories.length > 0);
             if (hasParent) return c.isAlwaysMain === true;
             return true;

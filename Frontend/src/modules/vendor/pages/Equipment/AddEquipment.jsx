@@ -14,6 +14,32 @@ import LogoLoader from '../../../../components/common/LogoLoader';
 import { FormContainer, FormSection } from '../../../../components/common';
 import api from '../../../../services/api';
 
+// Older service listings stored attachment rates as add-ons on top of the machine's rate. The form now works with the
+// price the farmer actually pays for the attachment, so fold the add-on into it (same price, nothing changes for farmers).
+const foldAddOnsIntoTotals = (implementsList = [], pricing = {}) => (implementsList || []).map((i) => {
+  const next = { ...(i.pricing || {}) };
+  ['hourly', 'land_based', 'daily'].forEach((mode) => {
+    const add = Number(i.pricing?.[mode]?.price) || 0;
+    const machine = pricing[mode]?.isEnabled ? (Number(pricing[mode].price) || 0) : 0;
+    next[mode] = { ...(i.pricing?.[mode] || {}), price: add > 0 ? machine + add : 0, isEnabled: i.pricing?.[mode]?.isEnabled ?? true };
+  });
+  const kmAdd = Number(i.pricing?.distance_based?.price) || 0;
+  const kmBase = Number(i.pricing?.distance_based?.baseCharge) || 0;
+  if (kmAdd > 0 || kmBase > 0) {
+    const own = pricing.distance_based?.isEnabled ? pricing.distance_based : null;
+    const km = kmAdd + (Number(own?.price) || 0);
+    next.distance_based = {
+      ...(i.pricing.distance_based || {}),
+      price: km,
+      perKmRate: km,
+      baseCharge: kmBase + (Number(own?.baseCharge) || 0),
+      baseKm: Number(i.pricing.distance_based?.baseKm || own?.baseKm) || 0,
+      isEnabled: true
+    };
+  }
+  return { ...i, pricing: next };
+});
+
 const AddEquipment = () => {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -47,6 +73,7 @@ const AddEquipment = () => {
       daily:          { price: 0, isEnabled: false },
       distance_based: { price: 0, perKmRate: 0, isEnabled: false }
     },
+    attachmentRates: 'total' // the attachment's rate is the price for that job (service listings)
   });
 
   // Tracks the selected category's metadata (trackingType, requiresDriver, fulfillmentMode)
@@ -108,30 +135,34 @@ const AddEquipment = () => {
         if (item) {
           const catId = item.categoryId?._id || item.categoryId || '';
           activeCategoryId = catId;
+          const loadedPricing = {
+            hourly: item.pricing?.hourly || { price: 0, isEnabled: false },
+            land_based: item.pricing?.land_based || { price: 0, isEnabled: false },
+            daily: item.pricing?.daily || { price: 0, isEnabled: false },
+            distance_based: item.pricing?.distance_based || { price: 0, perKmRate: 0, isEnabled: false }
+          };
+          const loadedImplements = item.implements?.map(i => ({
+            ...i,
+            subCategoryId: i.subCategoryId?._id || i.subCategoryId,
+            pricing: {
+              hourly: i.pricing?.hourly || { price: 0, isEnabled: false },
+              land_based: i.pricing?.land_based || { price: 0, isEnabled: false },
+              daily: i.pricing?.daily || { price: 0, isEnabled: false },
+              distance_based: i.pricing?.distance_based || { price: 0, perKmRate: 0, isEnabled: false }
+            }
+          })) || [];
+          const isLegacyService = (item.listingType || 'service') !== 'rental' && item.attachmentRates !== 'total';
           setForm({
             ...item,
+            attachmentRates: 'total',
             listingType: item.listingType || 'service',
             categoryId: catId,
             requestedCategoryName: item.requestedCategoryName || '',
             requestedCityName: item.requestedCityName || '',
             cityIds: item.cityIds || [],
             subCategoryIds: item.subCategoryIds?.map(s => s._id || s) || [],
-            implements: item.implements?.map(i => ({
-              ...i,
-              subCategoryId: i.subCategoryId?._id || i.subCategoryId,
-              pricing: {
-                hourly: i.pricing?.hourly || { price: 0, isEnabled: false },
-                land_based: i.pricing?.land_based || { price: 0, isEnabled: false },
-                daily: i.pricing?.daily || { price: 0, isEnabled: false },
-                distance_based: i.pricing?.distance_based || { price: 0, perKmRate: 0, isEnabled: false }
-              }
-            })) || [],
-            pricing: {
-              hourly: item.pricing?.hourly || { price: 0, isEnabled: false },
-              land_based: item.pricing?.land_based || { price: 0, isEnabled: false },
-              daily: item.pricing?.daily || { price: 0, isEnabled: false },
-              distance_based: item.pricing?.distance_based || { price: 0, perKmRate: 0, isEnabled: false }
-            }
+            implements: isLegacyService ? foldAddOnsIntoTotals(loadedImplements, loadedPricing) : loadedImplements,
+            pricing: loadedPricing
           });
           if (item.requestedCategoryName) {
             setIsRequestingCategory(true);
@@ -146,8 +177,9 @@ const AddEquipment = () => {
         const savedDraft = localStorage.getItem('groo_add_machine_draft');
         if (savedDraft) {
           try {
-            const { draftForm, draftIsRequesting, draftIsRequestingCity } = JSON.parse(savedDraft);
-            if (draftForm) {
+            const { v, draftForm, draftIsRequesting, draftIsRequestingCity } = JSON.parse(savedDraft);
+            // v2 drafts use the "attachment price = job price" model; older drafts held add-ons, so they are not reused
+            if (v === 2 && draftForm) {
               setForm(prev => ({ ...prev, ...draftForm }));
               activeCategoryId = draftForm.categoryId || '';
             }
@@ -200,6 +232,7 @@ const AddEquipment = () => {
   useEffect(() => {
     if (!isEdit && !loading) {
       localStorage.setItem('groo_add_machine_draft', JSON.stringify({
+        v: 2,
         draftForm: form,
         draftIsRequesting: isRequestingCategory,
         draftIsRequestingCity: isRequestingCity
@@ -518,7 +551,7 @@ const AddEquipment = () => {
                         </button>
                       </div>
                       <p className="text-[11px] text-slate-400 pl-0.5">
-                        {form.listingType === 'service' ? 'Includes operator & live GPS tracking' : 'Equipment only (operated by farmer)'}
+                        {form.listingType === 'service' ? "You do the job at the farmer's field, with live GPS tracking" : 'Equipment only (operated by farmer)'}
                         {' · '}Admin confirms this when approving your new category.
                       </p>
                     </div>
@@ -543,7 +576,7 @@ const AddEquipment = () => {
                         <div className="min-w-0 flex-1">
                           <div className="text-xs font-bold text-blue-900">Machine Service</div>
                           <p className="text-[11px] text-blue-700/90 leading-tight mt-0.5">
-                            Service booking with operator & live GPS tracking. Platform matches farmer bookings to your machine.
+                            The farmer books a job and your machine does it at their field, with live GPS tracking and start/end OTPs.
                           </p>
                         </div>
                       </div>
@@ -626,9 +659,11 @@ const AddEquipment = () => {
                         <div className="space-y-2 pt-2 border-t border-slate-100">
                           <div className="flex items-center justify-between">
                             <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">
-                              Attachment Rates (Add-on to Tractor)
+                              {form.listingType === 'rental' ? 'Accessories (extra charge)' : 'Price with each attachment'}
                             </span>
-                            <span className="text-[10px] text-slate-400">₹0 = Included with Tractor</span>
+                            <span className="text-[10px] text-slate-400">
+                              {form.listingType === 'rental' ? '₹0 = included in the rental' : "Blank = same as the machine's own rate"}
+                            </span>
                           </div>
 
                           <div className="space-y-2">
@@ -662,12 +697,12 @@ const AddEquipment = () => {
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                     {form.pricing.hourly.isEnabled && (
                                       <div className="flex items-center justify-between bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 focus-within:border-blue-500 transition-colors">
-                                        <span className="text-[11px] text-slate-600 font-medium">Hourly Add-on</span>
+                                        <span className="text-[11px] text-slate-600 font-medium">{form.listingType === 'rental' ? 'Hourly Add-on' : 'Hourly'}</span>
                                         <div className="flex items-center gap-1 w-24">
                                           <span className="text-xs text-slate-400 font-bold">₹</span>
                                           <input
                                             type="number"
-                                            placeholder="0"
+                                            placeholder={form.listingType === 'rental' ? '0' : String(form.pricing.hourly.price || 0)}
                                             className="w-full text-right text-xs font-bold text-slate-800 outline-none bg-transparent"
                                             onFocus={(e) => e.target.select()}
                                             value={implItem.pricing?.hourly?.price === 0 ? '' : implItem.pricing?.hourly?.price}
@@ -690,12 +725,12 @@ const AddEquipment = () => {
 
                                     {form.pricing.land_based.isEnabled && (
                                       <div className="flex items-center justify-between bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 focus-within:border-blue-500 transition-colors">
-                                        <span className="text-[11px] text-slate-600 font-medium">Per Acre Add-on</span>
+                                        <span className="text-[11px] text-slate-600 font-medium">{form.listingType === 'rental' ? 'Per Acre Add-on' : 'Per Acre'}</span>
                                         <div className="flex items-center gap-1 w-24">
                                           <span className="text-xs text-slate-400 font-bold">₹</span>
                                           <input
                                             type="number"
-                                            placeholder="0"
+                                            placeholder={form.listingType === 'rental' ? '0' : String(form.pricing.land_based.price || 0)}
                                             className="w-full text-right text-xs font-bold text-slate-800 outline-none bg-transparent"
                                             onFocus={(e) => e.target.select()}
                                             value={implItem.pricing?.land_based?.price === 0 ? '' : implItem.pricing?.land_based?.price}
@@ -723,7 +758,7 @@ const AddEquipment = () => {
                                       return (
                                         <div className="flex items-center justify-between bg-white border border-teal-200/80 rounded-lg px-2.5 py-1.5 focus-within:border-teal-500 transition-colors">
                                           <div className="flex items-center gap-1">
-                                            <span className="text-[11px] text-teal-800 font-bold">{form.pricing.distance_based?.isEnabled ? 'Per KM Add-on' : 'Per KM Rate'}</span>
+                                            <span className="text-[11px] text-teal-800 font-bold">Per KM Rate</span>
                                             {isTrolleyImpl && (
                                               <span className="text-[8.5px] bg-teal-100 text-teal-800 px-1 py-0.2 rounded font-bold">Trolley</span>
                                             )}
@@ -772,19 +807,23 @@ const AddEquipment = () => {
                                     <span className="text-slate-400">Farmer pays:</span>
                                     {form.pricing.hourly.isEnabled && (
                                       <span className="font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.5 rounded text-[10px]">
-                                        ₹{(Number(form.pricing.hourly.price) || 0) + (Number(implItem.pricing?.hourly?.price) || 0)}/hr
+                                        ₹{form.listingType === 'rental'
+                                          ? (Number(form.pricing.hourly.price) || 0) + (Number(implItem.pricing?.hourly?.price) || 0)
+                                          : (Number(implItem.pricing?.hourly?.price) || Number(form.pricing.hourly.price) || 0)}/hr
                                       </span>
                                     )}
                                     {form.pricing.land_based.isEnabled && (
                                       <span className="font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.5 rounded text-[10px]">
-                                        ₹{(Number(form.pricing.land_based.price) || 0) + (Number(implItem.pricing?.land_based?.price) || 0)}/acre
+                                        ₹{form.listingType === 'rental'
+                                          ? (Number(form.pricing.land_based.price) || 0) + (Number(implItem.pricing?.land_based?.price) || 0)
+                                          : (Number(implItem.pricing?.land_based?.price) || Number(form.pricing.land_based.price) || 0)}/acre
                                       </span>
                                     )}
                                     {(() => {
                                       const isTrolleyImpl = (/trailer|trolley|ट्राली|ट्रॉली/i).test(name);
                                       if (form.listingType === 'rental') return null;
                                       if (!form.pricing.distance_based?.isEnabled && !isTrolleyImpl) return null;
-                                      const totalKmRate = (Number(form.pricing.distance_based?.price) || 0) + (Number(implItem.pricing?.distance_based?.price) || 0);
+                                      const totalKmRate = Number(implItem.pricing?.distance_based?.price) || Number(form.pricing.distance_based?.price) || 0;
                                       return (
                                         <span className="font-bold text-teal-800 bg-teal-50 border border-teal-200/60 px-1.5 py-0.5 rounded text-[10px]">
                                           ₹{totalKmRate}/km
@@ -860,7 +899,7 @@ const AddEquipment = () => {
               <p className="text-[11px] text-slate-400 -mt-1 mb-2.5 leading-snug">
                 {form.listingType === 'rental'
                   ? 'Farmer rents the machine and runs it. Charged by the hour or by the day.'
-                  : 'Machine goes with an operator. Charged by the hour or per acre. A trolley is charged per km (set it on the attachment above).'}
+                  : 'The farmer books a job and you do it at their field. Charged by the hour or per acre. A trolley is charged per km, set on the attachment above.'}
               </p>
               <div className="space-y-2.5">
                 {[

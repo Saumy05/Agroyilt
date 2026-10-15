@@ -262,6 +262,13 @@ const createBooking = async (req, res) => {
       // Determine correct unit rate 
       // NEW: Prioritize vendor's actual equipment price over Admin's template cap
       let unitRate = service.basePrice || 500;
+      let attachmentInRate = false; // the attachment's price is already inside the machine's rate (no separate add-on line)
+
+      // Per-km billing needs a vendor-driven, GPS-metered trip: it is a service, never a rental
+      if (rental_type === 'distance_based' && equipmentObj &&
+          (equipmentObj.listingType === 'rental' || category?.fulfillmentMode === 'rental')) {
+        return res.status(400).json({ success: false, message: 'Per-km billing is only for services, not rentals.' });
+      }
 
       if (rental_type === 'distance_based') {
         const distSvc = require('../../services/distanceTripService');
@@ -301,6 +308,16 @@ const createBooking = async (req, res) => {
         if (rental_type === 'hourly' && ep.hourly?.isEnabled) unitRate = ep.hourly.price;
         else if (rental_type === 'land_based' && ep.land_based?.isEnabled) unitRate = ep.land_based.price;
         else if (rental_type === 'daily' && ep.daily?.isEnabled) unitRate = ep.daily.price;
+
+        // Service listing on the "total" model: the chosen attachment's rate is the whole rate (the server decides, not the client)
+        const attachmentPricing = require('../../services/attachmentPricing');
+        const chosenImplId = Array.isArray(selectedImplements) && selectedImplements[0]
+          ? (selectedImplements[0].subCategoryId?._id || selectedImplements[0].subCategoryId) : null;
+        if (attachmentPricing.isTotalModel(equipmentObj) && chosenImplId) {
+          const r = attachmentPricing.unitRates(equipmentObj, chosenImplId, rental_type);
+          if (r.tractorUnitRate > 0) unitRate = r.tractorUnitRate;
+          attachmentInRate = true;
+        }
       } else {
         // Fallback to Admin caps
         if (rental_type === 'hourly' && service.hourly_price) unitRate = service.hourly_price;
@@ -350,7 +367,7 @@ const createBooking = async (req, res) => {
             });
             if (matchedImpl) {
               const implPriceObj = matchedImpl.pricing?.[rental_type];
-              const implRate = (implPriceObj && implPriceObj.isEnabled) ? (Number(implPriceObj.price) || 0) : 0;
+              const implRate = attachmentInRate ? 0 : ((implPriceObj && implPriceObj.isEnabled) ? (Number(implPriceObj.price) || 0) : 0);
               const implTotal = Math.round(implRate * finalMultiplier);
               if (item.card) item.card.price = implTotal;
               else item.price = implTotal;
@@ -373,7 +390,7 @@ const createBooking = async (req, res) => {
           });
         }
         // Add implement pricing if implements were not in bookedItems
-        if (rental_type !== 'distance_based' && Array.isArray(selectedImplements) && selectedImplements.length > 0) {
+        if (rental_type !== 'distance_based' && !attachmentInRate && Array.isArray(selectedImplements) && selectedImplements.length > 0) {
           selectedImplements.forEach(impl => {
             const implPriceObj = impl.pricing?.[rental_type];
             if (implPriceObj && implPriceObj.isEnabled) {
@@ -2341,6 +2358,11 @@ const calculatePrice = async (req, res) => {
     }
 
     let calculatedDistancePricing = null;
+    let attachmentInRate = false;
+    if (rental_type === 'distance_based' && equipmentObj &&
+        (equipmentObj.listingType === 'rental' || category?.fulfillmentMode === 'rental')) {
+      return res.status(400).json({ success: false, message: 'Per-km billing is only for services, not rentals.' });
+    }
     if (rental_type === 'distance_based') {
       const distSvc = require('../../services/distanceTripService');
       let dp = null;
@@ -2348,40 +2370,8 @@ const calculatePrice = async (req, res) => {
       const implId = Array.isArray(selectedImplements) && selectedImplements[0]
         ? (selectedImplements[0].subCategoryId?._id || selectedImplements[0].subCategoryId) : null;
 
-      if (equipmentObj && Array.isArray(equipmentObj.implements) && implId) {
-        const matchedImpl = equipmentObj.implements.find(i => 
-          String(i.subCategoryId?._id || i.subCategoryId) === String(implId)
-        );
-        const vdp = matchedImpl?.pricing?.distance_based;
-        const vRate = Number(vdp?.price || vdp?.perKmRate || 0);
-        const vBase = Number(vdp?.baseCharge || 0);
-        if (vdp?.isEnabled && (vRate > 0 || vBase > 0)) {
-          const tractorKmRate = equipmentObj.pricing?.distance_based?.isEnabled
-            ? Number(equipmentObj.pricing.distance_based.price || equipmentObj.pricing.distance_based.perKmRate || 0) : 0;
-          const tractorBase = equipmentObj.pricing?.distance_based?.isEnabled
-            ? Number(equipmentObj.pricing.distance_based.baseCharge || 0) : 0;
-          dp = {
-            enabled: true,
-            baseKm: Number(vdp.baseKm || equipmentObj.pricing?.distance_based?.baseKm) || 0,
-            baseCharge: vBase + tractorBase,
-            perKmRate: vRate + tractorKmRate
-          };
-        }
-      }
-
-      if (!dp && equipmentObj?.pricing?.distance_based?.isEnabled) {
-        const ep = equipmentObj.pricing.distance_based;
-        const eRate = Number(ep.price || ep.perKmRate || 0);
-        const eBase = Number(ep.baseCharge || 0);
-        if (eRate > 0 || eBase > 0) {
-          dp = {
-            enabled: true,
-            baseKm: Number(ep.baseKm) || 0,
-            baseCharge: eBase,
-            perKmRate: eRate
-          };
-        }
-      }
+      // The vendor's own per-km price on this machine (same resolver the search and the booking use)
+      dp = distSvc.vendorDistancePricing(equipmentObj, implId);
 
       if (!dp) {
         if (service.distance_pricing?.enabled) {
@@ -2409,6 +2399,16 @@ const calculatePrice = async (req, res) => {
       if (rental_type === 'hourly' && ep.hourly?.isEnabled) unitRate = ep.hourly.price;
       else if (rental_type === 'land_based' && ep.land_based?.isEnabled) unitRate = ep.land_based.price;
       else if (rental_type === 'daily' && ep.daily?.isEnabled) unitRate = ep.daily.price;
+
+      // Service listing on the "total" model: the attachment's rate is the whole rate
+      const attachmentPricing = require('../../services/attachmentPricing');
+      const chosenImplId = Array.isArray(selectedImplements) && selectedImplements[0]
+        ? (selectedImplements[0].subCategoryId?._id || selectedImplements[0].subCategoryId) : null;
+      if (attachmentPricing.isTotalModel(equipmentObj) && chosenImplId) {
+        const r = attachmentPricing.unitRates(equipmentObj, chosenImplId, rental_type);
+        if (r.tractorUnitRate > 0) unitRate = r.tractorUnitRate;
+        attachmentInRate = true;
+      }
     } else {
       if (rental_type === 'hourly' && service.hourly_price) unitRate = service.hourly_price;
       else if (rental_type === 'land_based' && service.land_price) unitRate = service.land_price;
@@ -2423,9 +2423,16 @@ const calculatePrice = async (req, res) => {
       multiplier = parseFloat(String(landSize).replace(/[^\d.]/g, '')) || 1;
     }
 
-    const mainAgriPrice = Math.round(unitRate * multiplier);
-    
-    if (isAgriService && (!bookedItems || bookedItems.length === 0)) {
+    // Per-km: one price covers machine + attachment, and until the trip is measured the quote is the farmer's estimate (or the minimum charge)
+    let mainAgriPrice = Math.round(unitRate * multiplier);
+    if (rental_type === 'distance_based' && calculatedDistancePricing) {
+      const estKm = Math.round(Number(req.body.estimatedKm) * 10) / 10;
+      mainAgriPrice = (Number.isFinite(estKm) && estKm > 0 && estKm <= 1000)
+        ? require('../../services/distanceTripService').calcDistanceFare(calculatedDistancePricing, estKm)
+        : (Number(calculatedDistancePricing.baseCharge) || 0);
+    }
+
+    if (isAgriService && (!bookedItems || bookedItems.length === 0 || rental_type === 'distance_based' || attachmentInRate)) {
       totalServiceValue = mainAgriPrice;
     } else if (isAgriService && bookedItems && bookedItems.length > 0) {
       // Overwrite main service item price

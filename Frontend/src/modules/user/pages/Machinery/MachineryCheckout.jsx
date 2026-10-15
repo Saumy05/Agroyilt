@@ -571,7 +571,7 @@ const MachineryCheckout = () => {
                                   <span className="font-black text-slate-900 text-xs">+ ₹{implCost}</span>
                                 ) : (
                                   <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
-                                    {payAfterTrip ? 'In per-km rate' : 'Included (₹0)'}
+                                    {payAfterTrip ? 'In per-km rate' : 'Included in rate'}
                                   </span>
                                 )}
                               </div>

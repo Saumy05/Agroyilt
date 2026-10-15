@@ -225,6 +225,7 @@ const resolveImplementDistancePricing = async (implementId, machineCategoryId = 
 const vendorDistancePricing = (equipment, implementId = null) => {
   if (!equipment) return null;
   const idOf = (v) => String(v?._id || v || '');
+  const total = require('./attachmentPricing').isTotalModel(equipment);
   const own = equipment.pricing?.distance_based;
   const ownRate = own?.isEnabled ? Number(own.price || own.perKmRate || 0) : 0;
   const ownBase = own?.isEnabled ? Number(own.baseCharge || 0) : 0;
@@ -235,7 +236,10 @@ const vendorDistancePricing = (equipment, implementId = null) => {
     const rate = Number(vdp?.price || vdp?.perKmRate || 0);
     const base = Number(vdp?.baseCharge || 0);
     if (vdp?.isEnabled && (rate > 0 || base > 0)) {
-      return { enabled: true, baseKm: Number(vdp.baseKm || own?.baseKm) || 0, baseCharge: base + ownBase, perKmRate: rate + ownRate };
+      // total model: the attachment's rate is the whole rate; legacy: the machine's own per-km is added on
+      return total
+        ? { enabled: true, baseKm: Number(vdp.baseKm || own?.baseKm) || 0, baseCharge: base, perKmRate: rate }
+        : { enabled: true, baseKm: Number(vdp.baseKm || own?.baseKm) || 0, baseCharge: base + ownBase, perKmRate: rate + ownRate };
     }
   }
   if (own?.isEnabled && (ownRate > 0 || ownBase > 0)) {

@@ -186,6 +186,12 @@ const vendorEquipmentSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  // How attachment rates combine with the machine's rate on a SERVICE listing:
+  // 'total' = the attachment's rate is the rate for that job; unset = legacy add-on (machine + attachment). Rentals always add on.
+  attachmentRates: {
+    type: String,
+    enum: ['addon', 'total']
+  },
   // Driver / Operator Config (legacy: no longer collected or shown; kept so old listings load)
   includesDriver: {
     type: Boolean,
