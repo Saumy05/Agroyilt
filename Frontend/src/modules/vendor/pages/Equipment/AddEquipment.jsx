@@ -519,6 +519,7 @@ const AddEquipment = () => {
                       </div>
                       <p className="text-[11px] text-slate-400 pl-0.5">
                         {form.listingType === 'service' ? 'Includes operator & live GPS tracking' : 'Equipment only (operated by farmer)'}
+                        {' · '}Admin confirms this when approving your new category.
                       </p>
                     </div>
                   ) : form.categoryId ? (
@@ -589,20 +590,17 @@ const AddEquipment = () => {
                                     };
                                   } else {
                                     const isTrolleyChip = (/trailer|trolley|ट्राली|ट्रॉली/i).test(cleanName);
-                                    const updatedPricing = isTrolleyChip && !p.pricing?.distance_based?.isEnabled
-                                      ? { ...p.pricing, distance_based: { price: p.pricing?.distance_based?.price || 0, perKmRate: 0, isEnabled: true } }
-                                      : p.pricing;
+                                    // The trolley's per-km rate lives on the attachment itself (one rate); the machine's own per-km row is left alone
 
                                     return {
                                       ...p,
-                                      pricing: updatedPricing,
                                       implements: [...p.implements, {
                                         subCategoryId: implId,
                                         pricing: {
                                           hourly: { price: 0, isEnabled: p.pricing?.hourly?.isEnabled ?? true },
                                           land_based: { price: 0, isEnabled: p.pricing?.land_based?.isEnabled ?? false },
                                           daily: { price: 0, isEnabled: p.pricing?.daily?.isEnabled ?? false },
-                                          distance_based: { price: 0, perKmRate: 0, isEnabled: isTrolleyChip || !!p.pricing?.distance_based?.isEnabled }
+                                          distance_based: { price: 0, perKmRate: 0, isEnabled: (isTrolleyChip && p.listingType !== 'rental') || !!p.pricing?.distance_based?.isEnabled }
                                         }
                                       }],
                                       subCategoryIds: [...p.subCategoryIds, implId]
@@ -720,11 +718,12 @@ const AddEquipment = () => {
 
                                     {(() => {
                                       const isTrolleyImpl = (/trailer|trolley|ट्राली|ट्रॉली/i).test(name);
+                                      if (form.listingType === 'rental') return null; // per-km needs an operator and GPS: service only
                                       if (!form.pricing.distance_based?.isEnabled && !isTrolleyImpl) return null;
                                       return (
                                         <div className="flex items-center justify-between bg-white border border-teal-200/80 rounded-lg px-2.5 py-1.5 focus-within:border-teal-500 transition-colors">
                                           <div className="flex items-center gap-1">
-                                            <span className="text-[11px] text-teal-800 font-bold">Per KM Add-on</span>
+                                            <span className="text-[11px] text-teal-800 font-bold">{form.pricing.distance_based?.isEnabled ? 'Per KM Add-on' : 'Per KM Rate'}</span>
                                             {isTrolleyImpl && (
                                               <span className="text-[8.5px] bg-teal-100 text-teal-800 px-1 py-0.2 rounded font-bold">Trolley</span>
                                             )}
@@ -783,6 +782,7 @@ const AddEquipment = () => {
                                     )}
                                     {(() => {
                                       const isTrolleyImpl = (/trailer|trolley|ट्राली|ट्रॉली/i).test(name);
+                                      if (form.listingType === 'rental') return null;
                                       if (!form.pricing.distance_based?.isEnabled && !isTrolleyImpl) return null;
                                       const totalKmRate = (Number(form.pricing.distance_based?.price) || 0) + (Number(implItem.pricing?.distance_based?.price) || 0);
                                       return (
@@ -856,14 +856,26 @@ const AddEquipment = () => {
             </FormSection>
 
             {/* Pricing Section */}
-            <FormSection title="Rental Rates">
+            <FormSection title={form.listingType === 'rental' ? 'Rental Rates' : 'Service Rates'}>
+              <p className="text-[11px] text-slate-400 -mt-1 mb-2.5 leading-snug">
+                {form.listingType === 'rental'
+                  ? 'Farmer rents the machine and runs it. Charged by the hour or by the day.'
+                  : 'Machine goes with an operator. Charged by the hour or per acre. A trolley is charged per km (set it on the attachment above).'}
+              </p>
               <div className="space-y-2.5">
                 {[
                   { key: 'hourly', label: 'Hourly Rate', unit: '/ hr', sub: 'For standard agricultural operations' },
                   { key: 'land_based', label: 'Per Acre Rate', unit: '/ acre', sub: 'Calculated per acre field work' },
                   { key: 'daily', label: 'Daily Rate', unit: '/ day', sub: 'Flat full-day machine rent' },
-                  { key: 'distance_based', label: 'Per KM Rate (Trolley / Transport)', unit: '/ km', sub: 'Live GPS road distance tracking' }
-                ].map(({ key, label, unit }) => {
+                  { key: 'distance_based', label: "Machine's own Per KM Rate", unit: '/ km', sub: 'Live GPS road distance tracking' }
+                ].filter(({ key }) => {
+                  // Only the modes that make sense for this kind of listing; one that is already switched on stays visible
+                  if (form.pricing[key]?.isEnabled) return true;
+                  if (key === 'hourly') return true;
+                  if (key === 'land_based') return form.listingType !== 'rental';
+                  if (key === 'daily') return form.listingType === 'rental';
+                  return false; // per-km is set on the trolley attachment
+                }).map(({ key, label, unit }) => {
                   const isEnabled = !!form.pricing[key]?.isEnabled;
                   const price = form.pricing[key]?.price;
                   return (
