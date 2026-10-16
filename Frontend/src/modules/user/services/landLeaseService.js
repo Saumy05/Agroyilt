@@ -100,6 +100,18 @@ const landLeaseService = {
     return response.data;
   },
 
+  /** Online payment (when the wallet is short): open a Razorpay order for a rent installment or settlement */
+  createOnlineOrder: async (id, kind, itemId) => {
+    const response = await api.post(`/farmer/land-leases/${id}/${kind}s/${itemId}/pay-online/order`);
+    return response.data;
+  },
+
+  /** Online payment: confirm the Razorpay checkout result so the owner gets paid */
+  verifyOnlinePayment: async (id, kind, itemId, payload) => {
+    const response = await api.post(`/farmer/land-leases/${id}/${kind}s/${itemId}/pay-online/verify`, payload);
+    return response.data;
+  },
+
   /**
    * Delete or withdraw a land listing
    * @param {string} id 

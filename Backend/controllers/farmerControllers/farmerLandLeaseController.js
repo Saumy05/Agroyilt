@@ -3,7 +3,7 @@ const User = require('../../models/User');
 const mongoose = require('mongoose');
 const Settings = require('../../models/Settings');
 const { buildAgreement, commissionSplit, round2 } = require('../../services/landLeaseScheduleService');
-const { payItem } = require('../../services/landLeasePaymentService');
+const { payItem, createOnlineOrder, verifyOnlinePayment } = require('../../services/landLeasePaymentService');
 const { notifyLease } = require('../../services/landLeaseNotifyService');
 
 const escapeRegex = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -967,6 +967,41 @@ const farmerLandLeaseController = {
       res.status(200).json({ success: true, message: 'बटाई का हिस्सा चुकाया गया (Crop-share paid successfully)', data: result.lease });
     } catch (error) {
       console.error('Error paying settlement:', error);
+      res.status(500).json({ success: false, message: 'Server Error' });
+    }
+  },
+
+  // 7f. Online payment (wallet can't cover it): open a Razorpay order, then verify the checkout result.
+  // Used for both rent installments and crop-share settlements; `kind` is fixed per route.
+  createOnlinePaymentOrder: (kind) => async (req, res) => {
+    try {
+      const result = await createOnlineOrder({ leaseId: req.params.id, tenantId: req.user.id, kind, itemId: req.params.itemId });
+      if (!result.ok) return res.status(result.code || 400).json({ success: false, message: result.reason });
+      res.status(200).json({
+        success: true,
+        data: { ...result.order, keyId: process.env.RAZORPAY_KEY_ID }
+      });
+    } catch (error) {
+      console.error('Error creating lease payment order:', error);
+      res.status(500).json({ success: false, message: 'Server Error' });
+    }
+  },
+
+  verifyOnlinePayment: (kind) => async (req, res) => {
+    try {
+      const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body || {};
+      const result = await verifyOnlinePayment({
+        leaseId: req.params.id, tenantId: req.user.id, kind, itemId: req.params.itemId,
+        orderId: razorpay_order_id, paymentId: razorpay_payment_id, signature: razorpay_signature
+      });
+      if (!result.ok) return res.status(result.code || 400).json({ success: false, message: result.reason });
+      res.status(200).json({
+        success: true,
+        message: kind === 'installment' ? 'किराया सफलतापूर्वक चुकाया गया (Rent paid successfully)' : 'बटाई का हिस्सा चुकाया गया (Crop-share paid successfully)',
+        data: result.lease
+      });
+    } catch (error) {
+      console.error('Error verifying lease payment:', error);
       res.status(500).json({ success: false, message: 'Server Error' });
     }
   },

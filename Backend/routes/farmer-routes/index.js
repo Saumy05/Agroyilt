@@ -70,10 +70,14 @@ router.post('/land-leases/:id/reject-offer', landLeaseController.rejectOffer);
 router.post('/land-leases/:id/accept', landLeaseController.acceptLeaseTerms);
 router.get('/land-leases/:id/payments', landLeaseController.getPayments);
 router.post('/land-leases/:id/installments/:itemId/pay', landLeaseController.payInstallment);
+router.post('/land-leases/:id/installments/:itemId/pay-online/order', landLeaseController.createOnlinePaymentOrder('installment'));
+router.post('/land-leases/:id/installments/:itemId/pay-online/verify', landLeaseController.verifyOnlinePayment('installment'));
 router.post('/land-leases/:id/settlements', landLeaseController.submitSettlement);
 router.post('/land-leases/:id/settlements/:itemId/confirm', landLeaseController.reviewSettlement('confirmed'));
 router.post('/land-leases/:id/settlements/:itemId/reject', landLeaseController.reviewSettlement('rejected'));
 router.post('/land-leases/:id/settlements/:itemId/pay', landLeaseController.paySettlement);
+router.post('/land-leases/:id/settlements/:itemId/pay-online/order', landLeaseController.createOnlinePaymentOrder('settlement'));
+router.post('/land-leases/:id/settlements/:itemId/pay-online/verify', landLeaseController.verifyOnlinePayment('settlement'));
 router.delete('/land-leases/:id', landLeaseController.deleteLand);
 
 // 9. Agreements

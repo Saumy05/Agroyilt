@@ -211,7 +211,8 @@ const getWalletTransactions = async (req, res) => {
 
     // Fetch from WalletTransaction and Transaction (exclude vendor-scoped or cash collection transactions)
     const [walletTxns, generalTxns] = await Promise.all([
-      walletId ? WalletTransaction.find({ walletId }).sort({ createdAt: -1 }).limit(500).lean() : [],
+      // A declined attempt (e.g. wallet too low) leaves a 'failed' row as an idempotency guard; it moved no money, so it is not history
+      walletId ? WalletTransaction.find({ walletId, status: { $ne: 'failed' } }).sort({ createdAt: -1 }).limit(500).lean() : [],
       Transaction.find({
         userId,
         $or: [{ vendorId: null }, { vendorId: { $exists: false } }],
@@ -248,9 +249,11 @@ const getWalletTransactions = async (req, res) => {
       }
 
       // Resolve user-friendly type
+      // A payment still in flight is a normal payment, never a "debit" (the page files bare debits under Penalties)
+      const isInFlight = wt.status === 'pending' && wt.type === 'debit';
       const finalType = (wt.reason === 'payout' || matchingGt?.type === 'withdrawal')
         ? 'withdrawal'
-        : (matchingGt?.type || wt.type || 'credit');
+        : (matchingGt?.type || (isInFlight ? 'payment' : wt.type) || 'credit');
 
       // Resolve clear description
       const finalDesc = matchingGt?.description || wt.description || (
@@ -259,6 +262,8 @@ const getWalletTransactions = async (req, res) => {
         wt.reason === 'topup' ? 'Wallet Top-up' :
         wt.reason === 'referral_reward' ? 'Referral Reward' :
         wt.reason === 'referral_reversal' ? 'Referral Reward Reversal' :
+        wt.reason === 'lease_payment' ? 'Land lease rent payment' :
+        wt.reason === 'lease_receipt' ? 'Land lease rent received' :
         (wt.reason || 'Wallet Credit')
       );
 
@@ -295,14 +300,16 @@ const getWalletTransactions = async (req, res) => {
     merged.sort((a, b) => new Date(b.date) - new Date(a.date));
 
     // Calculate full ledger metrics
-    const totalSpent = merged
+    // Only settled money counts: a payment still processing has not moved anything yet
+    const settled = merged.filter(t => String(t.status || '').toLowerCase() !== 'pending');
+    const totalSpent = settled
       .filter(t => ['payment', 'withdrawal', 'platform_fee', 'convenience_fee', 'gst', 'worker_payment'].includes(t.type))
       .reduce((sum, t) => sum + (t.amount || 0), 0) -
-      merged
+      settled
       .filter(t => ['refund', 'cashback'].includes(t.type))
       .reduce((sum, t) => sum + (t.amount || 0), 0);
 
-    const totalPenalty = merged
+    const totalPenalty = settled
       .filter(t => ['penalty', 'fine', 'cancellation_fee', 'debit'].includes(t.type))
       .reduce((sum, t) => sum + (t.amount || 0), 0);
 

@@ -2,7 +2,9 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { FiX, FiCheck, FiClock, FiCreditCard } from 'react-icons/fi';
 import { motion } from 'framer-motion';
 import landLeaseService from '../../services/landLeaseService';
+import { walletService } from '../../../../services/walletService';
 import { toastManager } from '../../../../utils/toastManager';
+import authStorage from '../../../../utils/authStorage';
 
 const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '-');
@@ -25,6 +27,18 @@ const STATUS_LABEL = {
   rejected: 'Rejected'
 };
 
+const loadRazorpay = () => new Promise((resolve) => {
+  if (window.Razorpay) return resolve(true);
+  const script = document.createElement('script');
+  script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+  script.onload = () => resolve(true);
+  script.onerror = () => resolve(false);
+  document.body.appendChild(script);
+});
+
+// An online payment already took the money but finishing failed: the server resumes it, no new charge
+const isOnlineResume = (item) => item.status === 'processing' && String(item.paymentKey || '').startsWith('rzp_');
+
 const StatusChip = ({ status }) => (
   <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${STATUS_STYLE[status] || 'bg-gray-100 text-gray-700'}`}>
     {STATUS_LABEL[status] || status}
@@ -35,6 +49,7 @@ const LeasePaymentsModal = ({ landId, onClose, onChanged }) => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
+  const [walletBalance, setWalletBalance] = useState(null); // null until loaded; payments stay allowed so the server still decides
   const [harvest, setHarvest] = useState({ cropName: '', harvestValue: '', note: '' });
 
   const onCloseRef = useRef(onClose);
@@ -52,9 +67,93 @@ const LeasePaymentsModal = ({ landId, onClose, onChanged }) => {
     }
   }, [landId]);
 
+  const loadBalance = useCallback(async () => {
+    try {
+      const res = await walletService.getBalance();
+      if (res?.success) setWalletBalance(Number(res.data?.balance) || 0);
+    } catch {
+      // Balance is only a hint here; the server re-checks on every payment
+    }
+  }, []);
+
   useEffect(() => {
     load();
-  }, [load]);
+    loadBalance();
+  }, [load, loadBalance]);
+
+  // One Pay button: wallet when it covers the amount, otherwise the full amount online
+  const renderPayButton = (item, onPay, label) => {
+    const walletShort = walletBalance !== null && walletBalance < item.amount && !isOnlineResume(item);
+    return (
+      <button
+        onClick={onPay}
+        disabled={!!busyId}
+        className="py-1.5 px-3 bg-emerald-800 hover:bg-emerald-900 disabled:opacity-60 text-white rounded-xl font-bold flex items-center gap-1"
+      >
+        <FiCreditCard className="w-3.5 h-3.5" />
+        <span>{busyId === item._id ? '...' : isOnlineResume(item) ? 'Finish payment' : walletShort ? `Pay ${inr(item.amount)} online` : label}</span>
+      </button>
+    );
+  };
+
+  // Full amount through Razorpay (the wallet is not touched). Resolves true once the owner is credited.
+  const payOnline = async (kind, item, successMsg) => {
+    setBusyId(item._id);
+    try {
+      if (!(await loadRazorpay())) {
+        toastManager.error('Could not load the payment window. Check your internet and try again.');
+        return false;
+      }
+      const orderRes = await landLeaseService.createOnlineOrder(landId, kind, item._id);
+      if (!orderRes?.success) {
+        toastManager.error(orderRes?.message || 'Could not start the payment');
+        return false;
+      }
+      const { orderId, amount, currency, keyId } = orderRes.data;
+      const user = authStorage.getUserData('user') || {};
+
+      return await new Promise((resolve) => {
+        const checkout = new window.Razorpay({
+          key: keyId || import.meta.env.VITE_RAZORPAY_KEY_ID,
+          amount: String(amount),
+          currency: currency || 'INR',
+          name: 'Agroyilt Land Lease',
+          description: kind === 'installment' ? `Rent installment ${item.number}` : 'Crop-share settlement',
+          order_id: orderId,
+          prefill: { name: user.name || '', contact: user.phone || '' },
+          theme: { color: '#065f46' },
+          handler: async (response) => {
+            try {
+              const res = await landLeaseService.verifyOnlinePayment(landId, kind, item._id, {
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature
+              });
+              if (res?.success) {
+                toastManager.success(successMsg);
+                await Promise.all([load(), loadBalance()]);
+                onChanged?.();
+                return resolve(true);
+              }
+              toastManager.error(res?.message || 'Payment could not be confirmed');
+            } catch (err) {
+              toastManager.error(err.response?.data?.message || 'Payment could not be confirmed');
+            }
+            await Promise.all([load(), loadBalance()]); // the server may have refunded it to the wallet, or left it to finish
+            resolve(false);
+          },
+          modal: { ondismiss: () => resolve(false) }
+        });
+        checkout.on?.('payment.failed', (r) => toastManager.error(r?.error?.description || 'Payment failed'));
+        checkout.open();
+      });
+    } catch (err) {
+      toastManager.error(err.response?.data?.message || 'Could not start the payment');
+      return false;
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   // Runs one money/status action, then refreshes this modal and the parent list. Resolves true on success.
   const run = async (id, action, successMsg) => {
@@ -64,28 +163,41 @@ const LeasePaymentsModal = ({ landId, onClose, onChanged }) => {
       const res = await action();
       if (res?.success) {
         toastManager.success(successMsg);
-        await load();
+        await Promise.all([load(), loadBalance()]);
         onChanged?.();
         return true;
       }
       toastManager.error(res?.message || 'Action failed');
     } catch (err) {
       toastManager.error(err.response?.data?.message || 'Action failed');
+      loadBalance(); // a "balance is low" reply means our number was stale
     } finally {
       setBusyId(null);
     }
     return false;
   };
 
-  const payInstallment = (item) => {
-    if (!window.confirm(`Pay ${inr(item.amount)} from wallet?`)) return;
-    run(item._id, () => landLeaseService.payInstallment(landId, item._id), 'Rent paid');
+  // Wallet when it covers the amount, else the whole amount online. The server still checks the wallet:
+  // if our balance was stale and it says "low", the balance refreshes and the button becomes "Pay online".
+  const startPayment = async (kind, item, successMsg) => {
+    if (busyId) return;
+    const walletPay = () => run(item._id, () => (kind === 'installment'
+      ? landLeaseService.payInstallment(landId, item._id)
+      : landLeaseService.paySettlement(landId, item._id)), successMsg);
+
+    if (isOnlineResume(item)) return walletPay(); // finishing a payment that is already taken
+
+    const walletCovers = walletBalance === null || walletBalance >= item.amount;
+    if (walletCovers) {
+      if (!window.confirm(`Pay ${inr(item.amount)} from wallet?`)) return;
+      return walletPay();
+    }
+    if (!window.confirm(`Your wallet has ${inr(walletBalance)}, which is not enough.\n\nPay ${inr(item.amount)} online instead?`)) return;
+    return payOnline(kind, item, successMsg);
   };
 
-  const paySettlement = (item) => {
-    if (!window.confirm(`Pay ${inr(item.amount)} from wallet?`)) return;
-    run(item._id, () => landLeaseService.paySettlement(landId, item._id), 'Share paid');
-  };
+  const payInstallment = (item) => startPayment('installment', item, 'Rent paid');
+  const paySettlement = (item) => startPayment('settlement', item, 'Share paid');
 
   const submitHarvest = (e) => {
     e.preventDefault();
@@ -155,7 +267,8 @@ const LeasePaymentsModal = ({ landId, onClose, onChanged }) => {
 
             {isTenant && (
               <p className="text-[11px] text-gray-500">
-                Payment is deducted from your wallet. A platform fee of {agreement.commissionPercentage || 0}% is deducted from the owner's amount.
+                Payment comes from your wallet; if the wallet is short, you pay the full amount online. A platform fee of {agreement.commissionPercentage || 0}% is deducted from the owner's amount.
+                {walletBalance !== null && <span className="block font-bold text-gray-700 mt-0.5">Wallet balance: {inr(walletBalance)}</span>}
               </p>
             )}
 
@@ -178,14 +291,7 @@ const LeasePaymentsModal = ({ landId, onClose, onChanged }) => {
                     <div className="flex items-center gap-2 shrink-0">
                       <StatusChip status={item.status} />
                       {isTenant && nextDue?._id === item._id && item.status !== 'paid' && (
-                        <button
-                          onClick={() => payInstallment(item)}
-                          disabled={!!busyId}
-                          className="py-1.5 px-3 bg-emerald-800 hover:bg-emerald-900 disabled:opacity-60 text-white rounded-xl font-bold flex items-center gap-1"
-                        >
-                          <FiCreditCard className="w-3.5 h-3.5" />
-                          <span>{busyId === item._id ? '...' : 'Pay'}</span>
-                        </button>
+                        renderPayButton(item, () => payInstallment(item), 'Pay')
                       )}
                     </div>
                   </div>
@@ -238,14 +344,7 @@ const LeasePaymentsModal = ({ landId, onClose, onChanged }) => {
 
                     {isTenant && (item.status === 'confirmed' || item.status === 'processing') && (
                       <div className="flex justify-end">
-                        <button
-                          onClick={() => paySettlement(item)}
-                          disabled={!!busyId}
-                          className="py-1.5 px-3 bg-emerald-800 hover:bg-emerald-900 disabled:opacity-60 text-white rounded-xl font-bold flex items-center gap-1"
-                        >
-                          <FiCreditCard className="w-3.5 h-3.5" />
-                          <span>{busyId === item._id ? '...' : `Pay ${inr(item.amount)}`}</span>
-                        </button>
+                        {renderPayButton(item, () => paySettlement(item), `Pay ${inr(item.amount)}`)}
                       </div>
                     )}
                   </div>

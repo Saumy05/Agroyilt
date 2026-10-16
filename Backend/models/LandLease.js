@@ -54,7 +54,8 @@ const installmentSchema = new mongoose.Schema({
   ownerAmount: { type: Number, default: 0 }, // INR credited to the owner
   status: { type: String, enum: ['pending', 'processing', 'paid'], default: 'pending' },
   paidAt: { type: Date, default: null },
-  paymentKey: { type: String, default: null }
+  paymentKey: { type: String, default: null },
+  razorpayOrderId: { type: String, default: null }
 });
 
 const settlementSchema = new mongoose.Schema({
@@ -72,6 +73,7 @@ const settlementSchema = new mongoose.Schema({
   },
   paidAt: { type: Date, default: null },
   paymentKey: { type: String, default: null },
+  razorpayOrderId: { type: String, default: null },
   createdAt: { type: Date, default: Date.now }
 });
 
