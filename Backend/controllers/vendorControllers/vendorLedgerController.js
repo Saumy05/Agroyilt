@@ -26,7 +26,8 @@ exports.getTransactions = async (req, res) => {
     const wallet = await Wallet.findOne({ userId: vendorId, userModel: 'Vendor' });
     if (!wallet) return res.status(200).json({ success: true, data: [] });
 
-    const query = { walletId: wallet._id };
+    // 'failed' rows are idempotency guards for declined debits; they moved no money (admin views are separate)
+    const query = { walletId: wallet._id, status: { $ne: 'failed' } };
     if (type) query.type = type;
     if (dateFrom || dateTo) {
       query.createdAt = {};

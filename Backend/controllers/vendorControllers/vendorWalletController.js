@@ -110,7 +110,9 @@ const getTransactions = async (req, res) => {
 
     const query = { vendorId };
     if (type) query.type = type;
-    if (status) query.status = status;
+    // Failed attempts moved no money, so the vendor's own history leaves them out (admin views are separate).
+    // Asking for a status explicitly still returns it.
+    query.status = status || { $ne: 'failed' };
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
 

@@ -52,6 +52,9 @@ const TYPE_CONFIG = {
   debit: { label: 'Deduction', kind: 'penalty' }
 };
 
+// A payment that has not settled yet: shown as Processing, never as money taken
+const isProcessing = (tx) => String(tx?.status || '').toLowerCase() === 'pending';
+
 const getKind = (type = '') => {
   const norm = String(type).toLowerCase();
   return TYPE_CONFIG[norm]?.kind || (norm.includes('refund') || norm.includes('credit') ? 'credit' : 'debit');
@@ -478,13 +481,14 @@ const WalletHistory = () => {
                   </div>
                 ) : (
                   filteredTransactions.map((item, index) => {
+                    const processing = isProcessing(item);
                     const kind = getKind(item.type);
                     const formattedDate = formatDate(item.createdAt || item.date || item.timestamp);
-                    const label = getLabel(item.type);
+                    const label = processing ? 'Processing' : getLabel(item.type);
 
                     // Refined, subtle styling (NO loud borders)
-                    const isCredit = kind === 'credit';
-                    const isPenalty = kind === 'penalty';
+                    const isCredit = !processing && kind === 'credit';
+                    const isPenalty = !processing && kind === 'penalty';
 
                     const iconBg = isCredit
                       ? 'bg-emerald-50 text-emerald-600'
@@ -492,13 +496,15 @@ const WalletHistory = () => {
                         ? 'bg-amber-50 text-amber-600'
                         : 'bg-slate-100 text-slate-600';
 
-                    const amountColor = isCredit
-                      ? 'text-emerald-600'
-                      : isPenalty
-                        ? 'text-amber-700'
-                        : 'text-slate-900';
+                    const amountColor = processing
+                      ? 'text-slate-400'
+                      : isCredit
+                        ? 'text-emerald-600'
+                        : isPenalty
+                          ? 'text-amber-700'
+                          : 'text-slate-900';
 
-                    const amountSign = isCredit ? '+' : '-';
+                    const amountSign = processing ? '' : isCredit ? '+' : '-';
 
                     return (
                       <div
@@ -523,7 +529,7 @@ const WalletHistory = () => {
                             </p>
                             <div className="flex items-center gap-2 mt-0.5">
                               <span className="text-[10.5px] text-slate-400 font-medium">{formattedDate}</span>
-                              <span className="text-[9.5px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded">
+                              <span className={`text-[9.5px] font-semibold px-1.5 py-0.2 rounded ${processing ? 'text-blue-700 bg-blue-50' : 'text-slate-500 bg-slate-100'}`}>
                                 {label}
                               </span>
                             </div>
@@ -789,7 +795,7 @@ const WalletHistory = () => {
               </p>
               <div className="inline-flex items-center gap-1 mt-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60">
                 <FiCheckCircle className="w-3 h-3" />
-                <span>{selectedTx.status === 'completed' ? 'Completed & Settled' : (selectedTx.status || 'Success')}</span>
+                <span>{selectedTx.status === 'completed' ? 'Completed & Settled' : isProcessing(selectedTx) ? 'Processing' : (selectedTx.status || 'Success')}</span>
               </div>
             </div>
 

@@ -249,8 +249,9 @@ const getWalletTransactions = async (req, res) => {
       }
 
       // Resolve user-friendly type
-      // A payment still in flight is a normal payment, never a "debit" (the page files bare debits under Penalties)
-      const isInFlight = wt.status === 'pending' && wt.type === 'debit';
+      // Payments are payments, never a bare "debit" (the page files those under Penalties): covers a payment
+      // still in flight and a lease payment whose passbook entry is missing
+      const isInFlight = wt.type === 'debit' && (wt.status === 'pending' || wt.reason === 'lease_payment');
       const finalType = (wt.reason === 'payout' || matchingGt?.type === 'withdrawal')
         ? 'withdrawal'
         : (matchingGt?.type || (isInFlight ? 'payment' : wt.type) || 'credit');

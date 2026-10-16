@@ -384,8 +384,10 @@ const Wallet = () => {
                     : 'Recent';
 
                   // Subtle, calm categorization (NO loud warning borders)
-                  const isCredit = ['credit', 'refund', 'topup', 'referral', 'cashback', 'cash_collected'].includes(item.type);
-                  const isPenalty = ['penalty', 'fine', 'cancellation_fee', 'debit'].includes(item.type);
+                  // A payment still in flight (status pending) is Processing, not money taken
+                  const processing = String(item.status || '').toLowerCase() === 'pending';
+                  const isCredit = !processing && ['credit', 'refund', 'topup', 'referral', 'cashback', 'cash_collected'].includes(item.type);
+                  const isPenalty = !processing && ['penalty', 'fine', 'cancellation_fee', 'debit'].includes(item.type);
 
                   const iconBg = isCredit 
                     ? 'bg-emerald-50 text-emerald-600' 
@@ -393,13 +395,15 @@ const Wallet = () => {
                       ? 'bg-amber-50 text-amber-600' 
                       : 'bg-slate-100 text-slate-600';
 
-                  const amountColor = isCredit 
-                    ? 'text-emerald-600' 
-                    : isPenalty 
-                      ? 'text-amber-700' 
-                      : 'text-slate-900';
+                  const amountColor = processing
+                    ? 'text-slate-400'
+                    : isCredit 
+                      ? 'text-emerald-600' 
+                      : isPenalty 
+                        ? 'text-amber-700' 
+                        : 'text-slate-900';
 
-                  const amountSign = isCredit ? '+' : '-';
+                  const amountSign = processing ? '' : isCredit ? '+' : '-';
 
                   return (
                     <div
@@ -425,13 +429,15 @@ const Wallet = () => {
                             <span className="text-[10.5px] text-slate-400 font-medium">{formattedDate}</span>
                             {item.type && (
                               <span className={`text-[9.5px] font-semibold px-1.5 py-0.2 rounded ${
-                                isCredit 
-                                  ? 'bg-emerald-50 text-emerald-700' 
-                                  : isPenalty 
-                                    ? 'bg-amber-50 text-amber-700' 
-                                    : 'bg-slate-100 text-slate-600'
+                                processing
+                                  ? 'bg-blue-50 text-blue-700'
+                                  : isCredit 
+                                    ? 'bg-emerald-50 text-emerald-700' 
+                                    : isPenalty 
+                                      ? 'bg-amber-50 text-amber-700' 
+                                      : 'bg-slate-100 text-slate-600'
                               }`}>
-                                {item.type.replace(/_/g, ' ')}
+                                {processing ? 'Processing' : item.type.replace(/_/g, ' ')}
                               </span>
                             )}
                           </div>
