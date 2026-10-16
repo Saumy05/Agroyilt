@@ -118,6 +118,7 @@ const AllWorkers = () => {
 
   // Worker Details & Document Modal State
   const [selectedWorker, setSelectedWorker] = useState(null);
+  const [openedFromLeader, setOpenedFromLeader] = useState(null);
   const [workerStats, setWorkerStats] = useState(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [detailsLoading, setDetailsLoading] = useState(false);
@@ -155,7 +156,8 @@ const AllWorkers = () => {
   }, [search, statusFilter, workerTypeFilter, createdByMe]);
 
   // Open worker details modal and fetch full details
-  const handleOpenDetails = async (worker) => {
+  const handleOpenDetails = async (worker, fromLeader = null) => {
+    setOpenedFromLeader(fromLeader); // set when opened from a leader's roster, so admin can step back
     setSelectedWorker(worker);
     setIsDetailsModalOpen(true);
     setDetailsLoading(true);
@@ -172,6 +174,12 @@ const AllWorkers = () => {
       }
     } catch (err) {
       console.error('Failed to fetch full worker details:', err);
+      if (fromLeader) {
+        // Don't leave admin on a half-empty card (e.g. the member is outside their area)
+        toast.error(err?.response?.data?.message || 'Could not load this member\'s details');
+        setSelectedWorker(fromLeader);
+        setOpenedFromLeader(null);
+      }
     } finally {
       setDetailsLoading(false);
     }
@@ -510,10 +518,17 @@ const AllWorkers = () => {
                     <td className="py-4 px-4">
                       <div className="flex flex-col items-start gap-1">
                         {worker.workerType === 'TEAM_LEADER' ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200/80 shadow-2xs">
-                            <FiUsers className="text-purple-600" size={13} />
-                            Team Leader
-                          </span>
+                          <>
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200/80 shadow-2xs">
+                              <FiUsers className="text-purple-600" size={13} />
+                              Team Leader
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-medium">
+                              {worker.teamMemberCount > 0
+                                ? `${worker.teamMemberCount} team member${worker.teamMemberCount > 1 ? 's' : ''}`
+                                : 'No members yet'}
+                            </span>
+                          </>
                         ) : worker.teamId ? (
                           <div className="flex flex-col gap-0.5">
                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/80 shadow-2xs">
@@ -694,6 +709,7 @@ const AllWorkers = () => {
                   onClick={() => {
                     setIsDetailsModalOpen(false);
                     setSelectedWorker(null);
+                    setOpenedFromLeader(null);
                   }}
                   className="w-9 h-9 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-800 flex items-center justify-center transition-all cursor-pointer shrink-0 ml-2"
                 >
@@ -709,6 +725,15 @@ const AllWorkers = () => {
                   </div>
                 ) : (
                   <>
+                    {openedFromLeader && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenDetails(openedFromLeader)}
+                        className="text-xs font-bold text-purple-700 hover:text-purple-900 flex items-center gap-1 -mb-1"
+                      >
+                        ← Back to team leader {openedFromLeader.name}
+                      </button>
+                    )}
                     {/* Worker Role Information Card */}
                     {selectedWorker.workerType === 'TEAM_LEADER' ? (
                       <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-50 via-indigo-50 to-purple-50/60 border border-purple-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
@@ -728,13 +753,13 @@ const AllWorkers = () => {
                               )}
                             </div>
                             <h5 className="text-sm font-black text-slate-800 mt-0.5">
-                              {selectedWorker.team?.name || 'Assigned Farm Worker Team'}
+                              {selectedWorker.team?.name || 'No team formed yet'}
                             </h5>
                           </div>
                         </div>
                         <div className="flex items-center gap-2 self-start sm:self-auto">
                           <span className="px-3 py-1.5 bg-white rounded-xl border border-purple-200 text-xs font-bold text-purple-700 shadow-2xs">
-                            👥 {selectedWorker.teamMembers?.length || selectedWorker.team?.memberCount || 0} Team Members
+                            👥 {selectedWorker.teamMembers?.length || 0} Team Members
                           </span>
                         </div>
                       </div>
@@ -791,7 +816,11 @@ const AllWorkers = () => {
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           {selectedWorker.teamMembers.map((m, idx) => (
-                            <div key={m._id || idx} className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-slate-100 text-xs shadow-2xs">
+                            <div
+                              key={m._id || idx}
+                              onClick={() => handleOpenDetails(m, selectedWorker)}
+                              className="flex items-center justify-between gap-2 bg-white px-3 py-2 rounded-xl border border-slate-100 text-xs shadow-2xs cursor-pointer hover:border-purple-300 hover:shadow-xs transition-all"
+                            >
                               <div className="flex items-center gap-2 min-w-0">
                                 <div className="w-6 h-6 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-[10px]">
                                   {m.name ? m.name[0] : 'W'}
@@ -801,11 +830,16 @@ const AllWorkers = () => {
                                   <p className="text-[10px] text-slate-400">{m.phone || 'No phone'}</p>
                                 </div>
                               </div>
-                              {m.hasBike && (
-                                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
-                                  🛵
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {m.hasBike && (
+                                  <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
+                                    🛵
+                                  </span>
+                                )}
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-700 bg-purple-50 px-2 py-1 rounded-lg">
+                                  <FiEye size={11} /> View
                                 </span>
-                              )}
+                              </div>
                             </div>
                           ))}
                         </div>

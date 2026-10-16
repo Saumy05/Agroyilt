@@ -121,10 +121,39 @@ const getAllWorkers = async (req, res) => {
     const jobsMap = new Map(completedJobsStats.map(item => [item._id.toString(), item.count]));
     const ratingsMap = new Map(reviewStats.map(item => [item._id.toString(), Number(item.avgRating.toFixed(1))]));
 
+    // Real team size for each leader on this page. Members are tied to a leader two ways (the team that names the
+    // leader, and managedByLeaderId), and Team.memberCount can drift, so count the linked workers from the leader's side.
+    const pageLeaderIds = workers.filter(w => w.workerType === 'TEAM_LEADER').map(w => w._id);
+    const teamSizeMap = new Map();
+    if (pageLeaderIds.length > 0) {
+      const Team = require('../../models/Team');
+      const teams = await Team.find({ leaderId: { $in: pageLeaderIds } }).select('_id leaderId').lean();
+      const leaderByTeam = new Map(teams.map(t => [t._id.toString(), t.leaderId.toString()]));
+      const linked = await Worker.find({
+        _id: { $nin: pageLeaderIds },
+        $or: [{ teamId: { $in: teams.map(t => t._id) } }, { managedByLeaderId: { $in: pageLeaderIds } }]
+      }).select('teamId managedByLeaderId').lean();
+
+      const membersOf = new Map(); // leaderId -> Set(memberId), so a member linked both ways counts once
+      const add = (leaderId, memberId) => {
+        if (!leaderId) return;
+        if (!membersOf.has(leaderId)) membersOf.set(leaderId, new Set());
+        membersOf.get(leaderId).add(memberId);
+      };
+      linked.forEach(m => {
+        const id = m._id.toString();
+        if (m.teamId) add(leaderByTeam.get(m.teamId.toString()), id);
+        if (m.managedByLeaderId) add(m.managedByLeaderId.toString(), id);
+      });
+      membersOf.forEach((set, leaderId) => teamSizeMap.set(leaderId, set.size));
+    }
+
     const dynamicWorkers = workers.map(w => {
       const idStr = w._id.toString();
+      const isLeader = w.workerType === 'TEAM_LEADER';
       return {
         ...w,
+        ...(isLeader ? { teamMemberCount: teamSizeMap.get(idStr) || 0 } : {}),
         totalJobs: jobsMap.get(idStr) ?? w.totalJobs ?? 0,
         rating: ratingsMap.get(idStr) ?? w.rating ?? 0
       };
@@ -228,19 +257,27 @@ const getWorkerDetails = async (req, res) => {
     if (worker.workerType === 'TEAM_LEADER' || worker.teamId) {
       try {
         const Team = require('../../models/Team');
-        if (worker.teamId) {
-          team = await Team.findById(worker.teamId)
-            .populate('leaderId', 'name phone profilePhoto workerType status')
-            .lean();
-        }
-        if (!team) {
+        // A leader's own team is the one that names them as leader (their teamId can be missing or stale)
+        if (worker.workerType === 'TEAM_LEADER') {
           team = await Team.findOne({ leaderId: worker._id })
             .populate('leaderId', 'name phone profilePhoto workerType status')
             .lean();
         }
+        if (!team && worker.teamId) {
+          team = await Team.findById(worker.teamId)
+            .populate('leaderId', 'name phone profilePhoto workerType status')
+            .lean();
+        }
 
-        // If this worker is a Team Leader, fetch their team roster
-        if (team && team._id) {
+        // Roster: workers in the leader's team, plus any tied to them through managedByLeaderId
+        if (worker.workerType === 'TEAM_LEADER') {
+          teamMembers = await Worker.find({
+            _id: { $ne: worker._id },
+            $or: [...(team?._id ? [{ teamId: team._id }] : []), { managedByLeaderId: worker._id }]
+          })
+            .select('name phone status skills rating profilePhoto dailyRate hourlyRate hasBike')
+            .lean();
+        } else if (team && team._id) {
           teamMembers = await Worker.find({ teamId: team._id, _id: { $ne: worker._id } })
             .select('name phone status skills rating profilePhoto dailyRate hourlyRate hasBike')
             .lean();
