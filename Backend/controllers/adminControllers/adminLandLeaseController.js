@@ -5,7 +5,8 @@ const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const paidTotals = (lease) => {
   let collected = 0;
-  let commission = 0;
+  let commission = 0;       // commission from paid installments only
+  let totalCommission = 0; // commission across ALL active installments (expected)
   let pending = 0;
   [...(lease.installments || []), ...(lease.settlements || [])].forEach((i) => {
     if (i.status === 'paid') {
@@ -14,9 +15,13 @@ const paidTotals = (lease) => {
     } else if (!['rejected', 'submitted'].includes(i.status)) {
       pending += i.amount;
     }
+    // Accumulate expected commission for every non-rejected installment
+    if (!['rejected'].includes(i.status)) {
+      totalCommission += i.commission || 0;
+    }
   });
   const r = (n) => Math.round(n * 100) / 100;
-  return { collected: r(collected), commission: r(commission), pending: r(pending) };
+  return { collected: r(collected), commission: r(commission), totalCommission: r(totalCommission), pending: r(pending) };
 };
 
 const adminLandLeaseController = {

@@ -241,7 +241,13 @@ const LandLeases = () => {
                 {fmtDate(detail.agreement?.startDate)} – {fmtDate(detail.agreement?.endDate)}
               </div>
               <div className="bg-emerald-50 rounded-xl p-3"><span className="text-emerald-600 block">Collected</span><b>{inr(detail.totals.collected)}</b></div>
-              <div className="bg-amber-50 rounded-xl p-3"><span className="text-amber-600 block">Commission ({detail.agreement?.commissionPercentage ?? 0}%)</span><b>{inr(detail.totals.commission)}</b></div>
+              <div className="bg-amber-50 rounded-xl p-3">
+                <span className="text-amber-600 block">Commission ({detail.agreement?.commissionPercentage ?? 0}%)</span>
+                <b>{inr(detail.totals.totalCommission ?? detail.totals.commission)}</b>
+                {detail.totals.commission > 0 && detail.totals.commission < (detail.totals.totalCommission ?? 0) && (
+                  <span className="text-[10px] text-amber-500 block mt-0.5">₹{detail.totals.commission.toLocaleString('en-IN')} collected</span>
+                )}
+              </div>
             </div>
 
             {/* Farm Features Strip */}
