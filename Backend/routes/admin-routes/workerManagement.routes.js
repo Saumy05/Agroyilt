@@ -13,6 +13,7 @@ const {
   getWorkerEarnings,
   payWorker,
   getAllWorkerJobs,
+  getOpenWorkerRequests,
   getWorkerAnalytics,
   getWorkerPaymentsSummary,
   toggleWorkerStatus,
@@ -36,6 +37,7 @@ router.get('/workers', authenticate, isAdmin, getAllWorkers);
 router.post('/workers', authenticate, isAdmin, addWorker);
 router.get('/workers/analytics', authenticate, isAdmin, getWorkerAnalytics);
 router.get('/workers/jobs', authenticate, isAdmin, getAllWorkerJobs);
+router.get('/workers/requests', authenticate, isAdmin, getOpenWorkerRequests);
 router.get('/workers/payments', authenticate, isAdmin, getWorkerPaymentsSummary);
 router.get('/workers/:id', authenticate, isAdmin, getWorkerDetails);
 router.post('/workers/:id/approve', authenticate, isAdmin, approveWorker);

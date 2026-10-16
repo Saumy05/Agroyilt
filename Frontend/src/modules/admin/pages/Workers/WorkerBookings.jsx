@@ -27,15 +27,25 @@ import workerService from '../../services/workerService';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import { toastManager } from '../../../../utils/toastManager';
 
+// What a farmer's open request is waiting on
+const OPEN_REQUEST_STATUS = {
+  pending: { label: 'Waiting for workers', bg: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' },
+  matching: { label: 'Finding workers', bg: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' },
+  awaiting_farmer_confirmation: { label: 'Waiting for farmer to select & pay', bg: 'bg-blue-50 text-blue-700 border-blue-200', dot: 'bg-blue-500' }
+};
+
+const formatDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : null);
+
 const WorkerBookings = () => {
   const navigate = useNavigate();
   const [bookings, setBookings] = useState([]);
+  const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [pagination, setPagination] = useState({ page: 1, limit: 12, total: 0, pages: 1 });
-  const [stats, setStats] = useState({ total: 0, completed: 0, inProgress: 0, pending: 0, cancelled: 0 });
+  const [stats, setStats] = useState({ total: 0, completed: 0, inProgress: 0, pending: 0, cancelled: 0, openRequests: 0 });
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [copiedId, setCopiedId] = useState(null);
 
@@ -50,6 +60,23 @@ const WorkerBookings = () => {
   const fetchBookings = async (page = 1) => {
     try {
       setLoading(true);
+
+      if (filterStatus === 'open_requests') {
+        const reqRes = await workerService.getOpenWorkerRequests({
+          page,
+          limit: pagination.limit,
+          search: debouncedSearch.trim() || undefined
+        });
+        if (reqRes.success) {
+          setRequests(reqRes.data || []);
+          if (reqRes.pagination) setPagination(reqRes.pagination);
+        }
+        // Keep the tab counts fresh too (cheap: limit 1)
+        const statRes = await workerService.getAllWorkerJobs({ page: 1, limit: 1 });
+        if (statRes.success && statRes.stats) setStats(statRes.stats);
+        return;
+      }
+
       const res = await workerService.getAllWorkerJobs({
         page,
         limit: pagination.limit,
@@ -119,7 +146,7 @@ const WorkerBookings = () => {
       case 'awaiting_payment':
       case 'pending':
         return {
-          label: 'Awaiting / Pending',
+          label: 'Awaiting Payment',
           bg: 'bg-amber-50 text-amber-700 border-amber-200',
           dot: 'bg-amber-500'
         };
@@ -136,8 +163,9 @@ const WorkerBookings = () => {
     { key: 'all', label: 'All Bookings', count: stats.total },
     { key: 'in_progress', label: 'In Progress / Active', count: stats.inProgress },
     { key: 'completed', label: 'Work Done / Completed', count: stats.completed },
-    { key: 'pending', label: 'Pending / Awaiting', count: stats.pending },
+    { key: 'awaiting_payment', label: 'Awaiting Payment', count: stats.pending },
     { key: 'cancelled', label: 'Cancelled', count: stats.cancelled },
+    { key: 'open_requests', label: 'Open Requests', count: stats.openRequests },
   ];
 
   return (
@@ -193,7 +221,7 @@ const WorkerBookings = () => {
             <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg" />
             <input
               type="text"
-              placeholder="Search by Booking #, Farmer name, Worker name, Phone, or Service..."
+              placeholder={filterStatus === 'open_requests' ? 'Search by Farmer name, Phone, or Work title...' : 'Search by Booking #, Farmer name, Worker name, Phone, or Service...'}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
@@ -244,6 +272,89 @@ const WorkerBookings = () => {
         <div className="flex justify-center py-20 bg-white rounded-3xl border border-slate-200">
           <LogoLoader />
         </div>
+      ) : filterStatus === 'open_requests' ? (
+        requests.length === 0 ? (
+          <div className="text-center py-16 bg-white rounded-3xl border border-dashed border-slate-300 p-6">
+            <h3 className="text-lg font-black text-slate-800">No open requests</h3>
+            <p className="text-slate-500 text-sm mt-1 max-w-sm mx-auto">
+              Farmer requests that are still waiting for workers or for the farmer to pay will appear here.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {requests.map((r) => {
+              const st = OPEN_REQUEST_STATUS[r.status] || OPEN_REQUEST_STATUS.pending;
+              const isDaily = r.bookingType === 'DAILY';
+              const dateText = isDaily
+                ? [formatDate(r.startDate), r.numberOfDays ? `${r.numberOfDays} day${r.numberOfDays > 1 ? 's' : ''}` : null].filter(Boolean).join(' · ')
+                : [formatDate(r.scheduledDate), r.startTime && r.endTime ? `${r.startTime}–${r.endTime}` : r.startTime].filter(Boolean).join(' · ');
+              const minRate = isDaily ? r.minDailyRate : r.minRate;
+              const maxRate = isDaily ? r.maxDailyRate : r.maxRate;
+              return (
+                <motion.div
+                  key={r._id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-3"
+                >
+                  <div className="flex items-start justify-between gap-2 pb-3 border-b border-slate-100">
+                    <div className="min-w-0">
+                      <p className="font-black text-slate-900 text-sm truncate">{r.workTitle || r.workCategory || 'Farm Labor Request'}</p>
+                      <p className="text-[11px] text-slate-400 font-medium">
+                        Requested {r.createdAt ? new Date(r.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'N/A'}
+                      </p>
+                    </div>
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border text-right ${st.bg}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${st.dot}`}></span>
+                      {st.label}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2.5 bg-slate-50/80 rounded-2xl p-3 border border-slate-100">
+                    <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-black text-sm shrink-0">
+                      {r.farmerId?.name?.charAt(0)?.toUpperCase() || 'F'}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-bold text-slate-800 text-sm truncate">{r.farmerId?.name || 'Farmer'}</p>
+                      <p className="text-xs text-slate-500 flex items-center gap-1">
+                        <FiPhone size={11} className="text-slate-400" />
+                        {r.farmerId?.phone || 'No phone'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5 text-xs text-slate-500">
+                    <div className="flex items-center gap-1.5">
+                      <FiCalendar className="text-slate-400 shrink-0" />
+                      <span>{dateText || 'Flexible'}</span>
+                      <span className="ml-auto font-bold text-slate-700">{r.requiredWorkers} worker{r.requiredWorkers > 1 ? 's' : ''} needed</span>
+                    </div>
+                    {(r.location?.addressLine1 || r.location?.city) && (
+                      <div className="flex items-center gap-1.5 truncate">
+                        <FiMapPin className="text-slate-400 shrink-0" />
+                        <span className="truncate">{[r.location.addressLine1, r.location.city, r.location.state].filter(Boolean).join(', ')}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-4 gap-2 pt-3 border-t border-slate-100 text-center">
+                    {[
+                      ['Notified', r.dispatchedWorkersCount],
+                      ['Accepted', r.acceptedWorkersCount],
+                      ['Rejected', r.rejectedWorkersCount],
+                      ['Budget', minRate || maxRate ? `₹${minRate ?? maxRate}${maxRate && maxRate !== minRate ? `–${maxRate}` : ''}` : '—']
+                    ].map(([label, value]) => (
+                      <div key={label}>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
+                        <p className="text-sm font-black text-slate-800">{value ?? 0}</p>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        )
       ) : bookings.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-3xl border border-dashed border-slate-300 p-6">
           <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400">

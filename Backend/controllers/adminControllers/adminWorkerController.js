@@ -4,11 +4,15 @@ const User = require('../../models/User');
 const Admin = require('../../models/Admin');
 const Review = require('../../models/Review');
 const Booking = require('../../models/Booking');
+const WorkerBookingRequest = require('../../models/WorkerBookingRequest');
 const { validationResult } = require('express-validator');
 const { WORKER_STATUS, BOOKING_STATUS, VENDOR_STATUS } = require('../../utils/constants');
 const { createNotification } = require('../notificationControllers/notificationController');
 const { buildAdminScopeFilter, auditAdminAction, verifyResourceScope, extractAdminScopeFields } = require('../../utils/adminScopeHelper');
 const { validateDob } = require('../../utils/age');
+
+// Farmer worker requests that haven't turned into a paid booking yet
+const OPEN_REQUEST_STATUSES = ['pending', 'matching', 'awaiting_farmer_confirmation'];
 
 /**
  * Get all workers with filters and pagination
@@ -583,6 +587,9 @@ const getAllWorkerJobs = async (req, res) => {
         query.status = { $in: [BOOKING_STATUS.COMPLETED, 'completed', 'work_done'] };
       } else if (status === 'in_progress') {
         query.status = { $in: ['in_progress', 'confirmed', 'accepted', 'journey_started', 'started'] };
+      } else if (status === 'awaiting_payment' || status === 'pending') {
+        // Same set the stats count uses, so the tab shows exactly what its badge counts
+        query.status = { $in: ['pending', 'awaiting_payment'] };
       } else {
         query.status = status;
       }
@@ -622,12 +629,13 @@ const getAllWorkerJobs = async (req, res) => {
     const total = await Booking.countDocuments(query);
 
     // Quick stats for worker bookings tab
-    const [allCount, completedCount, inProgressCount, pendingCount, cancelledCount] = await Promise.all([
+    const [allCount, completedCount, inProgressCount, pendingCount, cancelledCount, openRequestsCount] = await Promise.all([
       Booking.countDocuments({ workerId: { $exists: true, $ne: null } }),
       Booking.countDocuments({ workerId: { $exists: true, $ne: null }, status: { $in: [BOOKING_STATUS.COMPLETED, 'work_done', 'completed'] } }),
       Booking.countDocuments({ workerId: { $exists: true, $ne: null }, status: { $in: ['in_progress', 'confirmed', 'accepted', 'journey_started', 'started'] } }),
       Booking.countDocuments({ workerId: { $exists: true, $ne: null }, status: { $in: ['pending', 'awaiting_payment'] } }),
-      Booking.countDocuments({ workerId: { $exists: true, $ne: null }, status: BOOKING_STATUS.CANCELLED })
+      Booking.countDocuments({ workerId: { $exists: true, $ne: null }, status: BOOKING_STATUS.CANCELLED }),
+      WorkerBookingRequest.countDocuments({ status: { $in: OPEN_REQUEST_STATUSES } })
     ]);
 
     res.status(200).json({
@@ -638,7 +646,8 @@ const getAllWorkerJobs = async (req, res) => {
         completed: completedCount,
         inProgress: inProgressCount,
         pending: pendingCount,
-        cancelled: cancelledCount
+        cancelled: cancelledCount,
+        openRequests: openRequestsCount
       },
       pagination: {
         page: parseInt(page),
@@ -966,6 +975,54 @@ const deleteWorker = async (req, res) => {
 };
 
 /**
+ * Farmer worker requests nobody has been confirmed for yet (no booking / worker attached).
+ *   pending                       – dispatched, waiting for workers to respond
+ *   matching                      – backend still finding workers
+ *   awaiting_farmer_confirmation  – workers accepted; farmer must pick and pay
+ */
+const getOpenWorkerRequests = async (req, res) => {
+  try {
+    const { page = 1, limit = 12, search } = req.query;
+    const pageNum = Math.max(parseInt(page) || 1, 1);
+    const limitNum = Math.min(Math.max(parseInt(limit) || 12, 1), 100);
+
+    const query = { status: { $in: OPEN_REQUEST_STATUSES } };
+
+    if (search && search.trim()) {
+      const searchRegex = { $regex: search.trim(), $options: 'i' };
+      const matchingUsers = await User.find({
+        $or: [{ name: searchRegex }, { phone: searchRegex }, { email: searchRegex }]
+      }).select('_id');
+      query.$or = [
+        { workTitle: searchRegex },
+        { workCategory: searchRegex },
+        { farmerId: { $in: matchingUsers.map(u => u._id) } }
+      ];
+    }
+
+    const [requests, total] = await Promise.all([
+      WorkerBookingRequest.find(query)
+        .select('farmerId workCategory workTitle bookingType bookingMode rateUnit scheduledDate startTime endTime startDate endDate numberOfDays location requiredWorkers minRate maxRate minDailyRate maxDailyRate status eligibleWorkersCount dispatchedWorkersCount acceptedWorkersCount rejectedWorkersCount createdAt')
+        .populate('farmerId', 'name phone')
+        .sort({ createdAt: -1 })
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum)
+        .lean(),
+      WorkerBookingRequest.countDocuments(query)
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: requests,
+      pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) }
+    });
+  } catch (error) {
+    console.error('Get open worker requests error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch open worker requests' });
+  }
+};
+
+/**
  * Add worker directly by Admin
  */
 const addWorker = async (req, res) => {
@@ -1087,6 +1144,7 @@ const addWorker = async (req, res) => {
 module.exports = {
   getAllWorkers,
   getWorkerDetails,
+  getOpenWorkerRequests,
   approveWorker,
   rejectWorker,
   suspendWorker,

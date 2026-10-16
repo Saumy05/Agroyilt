@@ -83,6 +83,19 @@ export const workerService = {
   },
 
   /**
+   * Farmer worker requests still waiting on workers / the farmer (no booking yet)
+   */
+  getOpenWorkerRequests: async (params = {}) => {
+    const qp = new URLSearchParams();
+    if (params.page) qp.append('page', params.page);
+    if (params.limit) qp.append('limit', params.limit);
+    if (params.search) qp.append('search', params.search);
+
+    const response = await api.get(`/admin/workers/requests${qp.toString() ? `?${qp.toString()}` : ''}`);
+    return response.data;
+  },
+
+  /**
    * Get worker analytics overview
    */
   getWorkerAnalytics: async (params = {}) => {
