@@ -386,7 +386,7 @@ const Wallet = () => {
                   // Subtle, calm categorization (NO loud warning borders)
                   // A payment still in flight (status pending) is Processing, not money taken
                   const processing = String(item.status || '').toLowerCase() === 'pending';
-                  const isCredit = !processing && ['credit', 'refund', 'topup', 'referral', 'cashback', 'cash_collected'].includes(item.type);
+                  const isCredit = !processing && ['credit', 'refund', 'topup', 'referral', 'referral_reward', 'cashback', 'cash_collected', 'earnings_credit', 'lease_receipt'].includes(item.type);
                   const isPenalty = !processing && ['penalty', 'fine', 'cancellation_fee', 'debit'].includes(item.type);
 
                   const iconBg = isCredit 
@@ -404,6 +404,16 @@ const Wallet = () => {
                         : 'text-slate-900';
 
                   const amountSign = processing ? '' : isCredit ? '+' : '-';
+
+                  const itemBadgeLabel = processing
+                    ? 'Processing'
+                    : item.metadata?.landLeaseId && (item.type === 'earnings_credit' || item.type === 'lease_receipt')
+                      ? 'Lease Rent Received'
+                      : item.metadata?.landLeaseId && (item.type === 'payment' || item.type === 'lease_payment')
+                        ? 'Lease Rent Paid'
+                        : item.type === 'earnings_credit'
+                          ? 'Rent Received'
+                          : item.type ? item.type.replace(/_/g, ' ') : 'Transaction';
 
                   return (
                     <div
@@ -437,7 +447,7 @@ const Wallet = () => {
                                       ? 'bg-amber-50 text-amber-700' 
                                       : 'bg-slate-100 text-slate-600'
                               }`}>
-                                {processing ? 'Processing' : item.type.replace(/_/g, ' ')}
+                                {itemBadgeLabel}
                               </span>
                             )}
                           </div>

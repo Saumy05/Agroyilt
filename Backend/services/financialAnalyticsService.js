@@ -137,6 +137,7 @@ const classifyTransaction = (tx) => {
   if (tx.vendorId) role = 'vendor';
   else if (tx.workerId) role = 'worker';
   else if (tx.userId) role = 'user';
+  else role = 'admin';
 
   switch (type) {
     case 'payment':
@@ -288,6 +289,11 @@ const getFinancialOverview = async ({
       txMatch.vendorId = { $ne: null };
     } else if (role === 'worker') {
       txMatch.workerId = { $ne: null };
+    } else if (role === 'admin') {
+      txMatch.$or = [
+        { type: { $in: ['commission', 'platform_fee', 'convenience_fee', 'penalty'] } },
+        { userId: null, vendorId: null, workerId: null }
+      ];
     }
   }
 
@@ -341,6 +347,22 @@ const getFinancialOverview = async ({
                 $and: [
                   { $eq: ['$type', 'commission'] },
                   { $ne: ['$workerId', null] }
+                ]
+              },
+              { $round: [{ $multiply: ['$amount', 100] }, 0] },
+              0
+            ]
+          }
+        },
+        // Explicit Platform / Land Lease Commissions logged in ledger (no vendor or worker attached)
+        explicitPlatformCommissionPaise: {
+          $sum: {
+            $cond: [
+              {
+                $and: [
+                  { $eq: ['$type', 'commission'] },
+                  { $eq: ['$vendorId', null] },
+                  { $eq: ['$workerId', null] }
                 ]
               },
               { $round: [{ $multiply: ['$amount', 100] }, 0] },
@@ -498,8 +520,10 @@ const getFinancialOverview = async ({
     ? workerData.commissionAmountPaise
     : (txData.explicitWorkerCommissionPaise || 0);
 
-  // Platform Fees: direct platform fees + registration fees
-  const totalPlatformFeesPaise = (txData.directPlatformFeesPaise || 0) + totalRegistrationFeesPaise;
+  const platformCommissionPaise = txData.explicitPlatformCommissionPaise || 0;
+
+  // Platform Fees: direct platform fees + registration fees + platform direct commission
+  const totalPlatformFeesPaise = (txData.directPlatformFeesPaise || 0) + totalRegistrationFeesPaise + platformCommissionPaise;
 
   // Role Breakdown
   const userFarmerPlatformFeesPaise = (txData.userFarmerConvenienceFeesPaise || 0) + userRegistrationPaise;
@@ -529,7 +553,8 @@ const getFinancialOverview = async ({
       // Row 2: Breakdown & Gross Payments
       grossCustomerPayments: toINR(grossCustomerPaymentsPaise),
       totalPlatformFees: toINR(totalPlatformFeesPaise),
-      totalCommission: toINR(vendorCommissionPaise + workerCommissionPaise),
+      totalCommission: toINR(vendorCommissionPaise + workerCommissionPaise + platformCommissionPaise),
+      platformCommission: toINR(platformCommissionPaise),
       vendorCommission: toINR(vendorCommissionPaise),
       workerCommission: toINR(workerCommissionPaise),
 
@@ -601,6 +626,11 @@ const getFinancialTransactions = async ({
       query.vendorId = { $ne: null };
     } else if (role === 'worker') {
       query.workerId = { $ne: null };
+    } else if (role === 'admin') {
+      query.$or = [
+        { type: { $in: ['commission', 'platform_fee', 'convenience_fee', 'penalty'] } },
+        { userId: null, vendorId: null, workerId: null }
+      ];
     }
   }
 

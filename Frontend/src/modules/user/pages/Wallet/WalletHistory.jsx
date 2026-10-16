@@ -38,13 +38,18 @@ const TYPE_CONFIG = {
   referral_reward: { label: 'Referral Reward', kind: 'credit' },
   cashback: { label: 'Cashback', kind: 'credit' },
   cash_collected: { label: 'Cash Collected', kind: 'credit' },
+  earnings_credit: { label: 'Land Lease Rent Received', kind: 'credit' },
+  lease_receipt: { label: 'Land Lease Rent Received', kind: 'credit' },
   payment: { label: 'Payment', kind: 'debit' },
+  lease_payment: { label: 'Land Lease Rent Paid', kind: 'debit' },
   booking_payment: { label: 'Booking Payment', kind: 'debit' },
   worker_payment: { label: 'Worker Payment', kind: 'debit' },
   withdrawal: { label: 'Withdrawal', kind: 'debit' },
   payout: { label: 'Withdrawal', kind: 'debit' },
   platform_fee: { label: 'Platform Fee', kind: 'debit' },
   convenience_fee: { label: 'Convenience Fee', kind: 'debit' },
+  commission: { label: 'Platform Commission', kind: 'debit' },
+  commission_deduction: { label: 'Commission Deduction', kind: 'debit' },
   gst: { label: 'GST', kind: 'debit' },
   penalty: { label: 'Penalty', kind: 'penalty' },
   fine: { label: 'Penalty Fine', kind: 'penalty' },
@@ -60,8 +65,12 @@ const getKind = (type = '') => {
   return TYPE_CONFIG[norm]?.kind || (norm.includes('refund') || norm.includes('credit') ? 'credit' : 'debit');
 };
 
-const getLabel = (type = '') => {
+const getLabel = (type = '', item = null) => {
   const norm = String(type).toLowerCase();
+  if (item?.metadata?.landLeaseId) {
+    if (norm === 'earnings_credit' || norm === 'lease_receipt') return 'Land Lease Rent Received';
+    if (norm === 'payment' || norm === 'lease_payment') return 'Land Lease Rent Paid';
+  }
   return TYPE_CONFIG[norm]?.label || String(type).replace(/_/g, ' ').toUpperCase();
 };
 
@@ -484,7 +493,7 @@ const WalletHistory = () => {
                     const processing = isProcessing(item);
                     const kind = getKind(item.type);
                     const formattedDate = formatDate(item.createdAt || item.date || item.timestamp);
-                    const label = processing ? 'Processing' : getLabel(item.type);
+                    const label = processing ? 'Processing' : getLabel(item.type, item);
 
                     // Refined, subtle styling (NO loud borders)
                     const isCredit = !processing && kind === 'credit';
@@ -782,7 +791,7 @@ const WalletHistory = () => {
             {/* Amount Banner */}
             <div className="bg-slate-50 rounded-xl p-3 text-center border border-slate-100">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
-                {getLabel(selectedTx.type)}
+                {getLabel(selectedTx.type, selectedTx)}
               </span>
               <p className={`text-2xl font-black ${
                 getKind(selectedTx.type) === 'credit'

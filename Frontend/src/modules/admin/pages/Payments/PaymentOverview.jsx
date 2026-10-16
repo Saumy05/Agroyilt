@@ -267,7 +267,7 @@ const PaymentOverview = () => {
       case 'WITHDRAWAL':
         return <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-orange-50 text-orange-700 border border-orange-200">Withdrawal Payout</span>;
       case 'EARNINGS_CREDIT':
-        return <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">Vendor Earning</span>;
+        return <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">Rent / Earnings</span>;
       case 'WORKER_PAYMENT':
         return <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-cyan-50 text-cyan-700 border border-cyan-200">Worker Earning</span>;
       case 'REFERRAL_REWARD':
@@ -288,6 +288,8 @@ const PaymentOverview = () => {
       case 'user':
       case 'farmer':
         return <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-blue-100 text-blue-800">Farmer</span>;
+      case 'admin':
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-emerald-100 text-emerald-800">Platform</span>;
       default:
         return <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-gray-100 text-gray-700">System</span>;
     }

@@ -16,6 +16,7 @@
 
 const crypto = require('crypto');
 const LandLease = require('../models/LandLease');
+const Admin = require('../models/Admin');
 const ledger = require('./ledgerService');
 const { notifyLease } = require('./landLeaseNotifyService');
 const razorpayService = require('./razorpayService');
@@ -69,11 +70,39 @@ const finish = async ({ lease, kind, item, tenantId, paymentKey, method = 'walle
     metadata: { landLeaseId: lease._id, itemId: item._id, kind }
   });
   if (item.commission > 0) {
+    let superAdmin = null;
+    try {
+      superAdmin = await Admin.findOne({ role: 'super_admin' }).select('_id').lean()
+        || await Admin.findOne().sort({ createdAt: 1 }).select('_id').lean();
+      if (superAdmin) {
+        await ledger.applyOnce({
+          ownerId: superAdmin._id,
+          ownerModel: 'Admin',
+          amount: item.commission,
+          key: `lease_admin_commission_${paymentKey}`,
+          reason: 'commission',
+          referenceId: ref
+        });
+      }
+    } catch (adminErr) {
+      console.warn('[landLeasePayment] admin wallet commission credit warning:', adminErr && adminErr.message);
+    }
+
     await ledger.recordPassbookOnce(`lease_commission_${paymentKey}`, {
       type: 'commission', amount: item.commission, status: 'completed', paymentMethod: 'system',
       description: `Platform commission on land lease ${label} for "${title}"`, referenceId: ref,
-      metadata: { landLeaseId: lease._id, itemId: item._id, kind }
+      metadata: { adminId: superAdmin?._id || null, landLeaseId: lease._id, itemId: item._id, kind }
     });
+
+    try {
+      const { recordBookingEarning } = require('./earningTrackerService');
+      await recordBookingEarning({
+        date: new Date(),
+        totalRevenue: item.amount,
+        platformCommission: item.commission,
+        vendorEarnings: 0
+      });
+    } catch (_) { /* stats best-effort */ }
   }
 
   await LandLease.updateOne(

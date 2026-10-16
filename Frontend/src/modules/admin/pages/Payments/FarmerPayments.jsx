@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   FiSearch,
@@ -109,8 +109,10 @@ const FarmerPayments = () => {
 
   const getTypeColor = (type) => {
     switch (type) {
-      case 'credit': return 'text-green-600';
-      case 'debit': return 'text-red-600';
+      case 'credit':
+      case 'earnings_credit': return 'text-green-600';
+      case 'debit':
+      case 'payment': return 'text-red-600';
       case 'refund': return 'text-orange-600';
       default: return 'text-blue-600';
     }
@@ -237,7 +239,9 @@ const FarmerPayments = () => {
             className="px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm font-medium text-gray-600 min-w-[150px]"
           >
             <option value="all">All Types</option>
-            <option value="payment">Online Payment</option>
+            <option value="payment">Online / Lease Payment</option>
+            <option value="earnings_credit">Rent Received (Earnings)</option>
+            <option value="credit">Wallet Credit</option>
             <option value="cash_collected">Cash Collected</option>
             <option value="debit">Wallet Debit</option>
             <option value="refund">Refund</option>
@@ -314,7 +318,7 @@ const FarmerPayments = () => {
                     </td>
                     <td className="px-6 py-4">
                       <span className={`text-sm font-bold ${getTypeColor(tx.type)}`}>
-                        {tx.type === 'credit' ? '+ ' : tx.type === 'debit' ? '- ' : ''}
+                        {['credit', 'earnings_credit'].includes(tx.type) ? '+ ' : ['debit', 'payment'].includes(tx.type) ? '- ' : ''}
                         {formatCurrency(tx.amount)}
                       </span>
                     </td>
