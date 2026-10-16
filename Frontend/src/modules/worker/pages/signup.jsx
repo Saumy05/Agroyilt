@@ -7,6 +7,8 @@ import { workerAuthService } from '../../../services/authService';
 import { uploadSignupDocument, isRemoteUrl } from '../../../services/signupUploadService';
 import Logo from '../../../components/common/Logo';
 import ReferralInput from '../../../components/common/ReferralInput';
+import DobInput from '../../../components/common/DobInput';
+import { getDobError } from '../../../utils/age';
 
 import { z } from "zod";
 
@@ -32,6 +34,7 @@ const WorkerSignup = () => {
       email: '',
       phoneNumber: '',
       gender: 'male',
+      dateOfBirth: '',
       aadhar: '',
       aadharDocument: null,
       aadharBackDocument: null,
@@ -246,6 +249,12 @@ const WorkerSignup = () => {
       return;
     }
 
+    const dobError = getDobError(formData.dateOfBirth);
+    if (dobError) {
+      toastManager.error(dobError);
+      return;
+    }
+
     if (!acceptedTerms) {
       toastManager.error('Please accept the Terms and Conditions to continue');
       return;
@@ -273,6 +282,7 @@ const WorkerSignup = () => {
           email: formData.email,
           phone: formData.phoneNumber,
           gender: formData.gender || 'male',
+          dateOfBirth: formData.dateOfBirth,
           aadhar: formData.aadhar,
           aadharDocument: aadharDoc,
           aadharBackDocument: aadharBackDoc,
@@ -371,6 +381,7 @@ const WorkerSignup = () => {
         email: formData.email,
         phone: formData.phoneNumber,
         gender: formData.gender || 'male',
+        dateOfBirth: formData.dateOfBirth,
         aadhar: formData.aadhar,
         aadharDocument: aadharDoc,
         aadharBackDocument: aadharBackDoc,
@@ -493,6 +504,13 @@ const WorkerSignup = () => {
                   ))}
                 </div>
               </div>
+
+              <DobInput
+                className="animate-stagger-2 animate-fade-in"
+                value={formData.dateOfBirth}
+                onChange={(dateOfBirth) => setFormData(prev => ({ ...prev, dateOfBirth }))}
+                inputClassName=""
+              />
 
               {!verificationToken && (
                 <div className="animate-stagger-3 animate-fade-in">

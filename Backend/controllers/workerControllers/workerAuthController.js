@@ -7,6 +7,7 @@ const cloudinaryService = require('../../services/cloudinaryService');
 const { USER_ROLES, WORKER_STATUS } = require('../../utils/constants');
 const { validationResult } = require('express-validator');
 const mpinService = require('../../utils/mpinService');
+const { validateDob } = require('../../utils/age');
 
 // Offline team members are run by their Team Leader (no KYC or approval of their own): no app login with that number
 const offlineMemberLoginBlocked = (res) => res.status(403).json({
@@ -140,6 +141,7 @@ const register = async (req, res) => {
       drivingLicenseNumber,
       drivingLicenseDocument,
       gender,
+      dateOfBirth,
       termsAccepted
     } = req.body;
     let phone = req.body.phone;
@@ -151,6 +153,10 @@ const register = async (req, res) => {
         message: 'Please accept the Terms and Conditions and Privacy Policy to continue.'
       });
     }
+
+    // Checked before OTP so a rejected under-18 signup doesn't burn the user's OTP
+    const dobCheck = validateDob(dateOfBirth, { required: true });
+    if (!dobCheck.ok) return res.status(400).json({ success: false, message: dobCheck.message });
 
     if (verificationToken) {
       const verifiedPhone = verifyVerificationToken(verificationToken);
@@ -209,6 +215,7 @@ const register = async (req, res) => {
       email: normalizedEmail,
       phone,
       gender: (gender && ['male', 'female', 'other'].includes(String(gender).toLowerCase())) ? String(gender).toLowerCase() : 'male',
+      dateOfBirth: dobCheck.dob,
       isPhoneVerified: true,
       aadhar: {
         number: req.body.aadhar || aadharNumber,

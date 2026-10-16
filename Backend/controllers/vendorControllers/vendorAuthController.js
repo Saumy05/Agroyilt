@@ -7,6 +7,7 @@ const cloudinaryService = require('../../services/cloudinaryService');
 const { USER_ROLES, VENDOR_STATUS } = require('../../utils/constants');
 const { validationResult } = require('express-validator');
 const mpinService = require('../../utils/mpinService');
+const { validateDob } = require('../../utils/age');
 
 /**
  * Send OTP for vendor registration/login
@@ -174,8 +175,12 @@ const register = async (req, res) => {
     }
 
     // verificationToken handling
-    const { name, email, verificationToken, aadhar, pan, businessName, service, serviceCategoryIds, labDetails, shopDetails, gender } = req.body;
+    const { name, email, verificationToken, aadhar, pan, businessName, service, serviceCategoryIds, labDetails, shopDetails, gender, dateOfBirth } = req.body;
     let phone = req.body.phone;
+
+    // Checked before OTP so a rejected under-18 signup doesn't burn the user's OTP
+    const dobCheck = validateDob(dateOfBirth, { required: true });
+    if (!dobCheck.ok) return res.status(400).json({ success: false, message: dobCheck.message });
 
     if (verificationToken) {
       const verifiedPhone = verifyVerificationToken(verificationToken);
@@ -260,6 +265,7 @@ const register = async (req, res) => {
     const vendorData = {
       name, phone,
       gender: (gender && ['male', 'female', 'other'].includes(String(gender).toLowerCase())) ? String(gender).toLowerCase() : null,
+      dateOfBirth: dobCheck.dob,
       businessName,
       service: resolvedServices.service,
       categories: resolvedServices.service,

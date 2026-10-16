@@ -11,6 +11,8 @@ import api from '../../../../services/api';
 import { toastManager } from '../../../../utils/toastManager';
 import { useSocket } from '../../../../context/SocketContext';
 import Header from '../../components/layout/Header';
+import DobInput from '../../../../components/common/DobInput';
+import { getDobError, toDateInputValue } from '../../../../utils/age';
 import workerRequestService from '../../../../services/workerRequestService';
 
 const loadRazorpay = () => new Promise((resolve) => {
@@ -142,7 +144,7 @@ const WorkerTeam = () => {
 
   const openAddOfflineModal = () => {
     setEditingMemberId(null);
-    setOfflineForm({ name: '', phone: '', gender: 'male', skills: ['General Labor'], dailyRate: '', experienceYears: 1 });
+    setOfflineForm({ name: '', phone: '', gender: 'male', dateOfBirth: '', skills: ['General Labor'], dailyRate: '', experienceYears: 1 });
     setIsOfflineModalOpen(true);
   };
 
@@ -155,6 +157,7 @@ const WorkerTeam = () => {
       name: member.name || '',
       phone: member.phone || '',
       gender: member.gender || 'male',
+      dateOfBirth: toDateInputValue(member.dateOfBirth),
       skills: skillsList,
       dailyRate: member.dailyRate || '',
       experienceYears: member.experienceYears || 1
@@ -190,6 +193,12 @@ const WorkerTeam = () => {
       toastManager.error('Please enter member name');
       return;
     }
+    // Existing members added before DOB was collected may not have one; new members must
+    const dobError = getDobError(offlineForm.dateOfBirth, { required: !editingMemberId });
+    if (dobError) {
+      toastManager.error(dobError);
+      return;
+    }
     if (!editingMemberId && offlineMemberFee > 0 && feeMethod === 'wallet' && walletBalance < offlineMemberFee) {
       toastManager.error('Wallet balance is low for the registration fee. Choose Pay Online.');
       return;
@@ -200,6 +209,7 @@ const WorkerTeam = () => {
         name: offlineForm.name.trim(),
         phone: offlineForm.phone.trim() || undefined,
         gender: offlineForm.gender || 'male',
+        dateOfBirth: offlineForm.dateOfBirth || undefined,
         skills: offlineForm.skills,
         dailyRate: offlineForm.dailyRate ? Number(offlineForm.dailyRate) : undefined,
         experienceYears: offlineForm.experienceYears ? Number(offlineForm.experienceYears) : 1
@@ -228,7 +238,7 @@ const WorkerTeam = () => {
       if (res.data.success) {
         setIsOfflineModalOpen(false);
         setEditingMemberId(null);
-        setOfflineForm({ name: '', phone: '', gender: 'male', skills: ['General Labor'], dailyRate: '', experienceYears: 1 });
+        setOfflineForm({ name: '', phone: '', gender: 'male', dateOfBirth: '', skills: ['General Labor'], dailyRate: '', experienceYears: 1 });
         setProfile(prev => ({ ...prev, workerType: 'TEAM_LEADER' }));
         fetchData();
       }
@@ -986,6 +996,14 @@ const WorkerTeam = () => {
                   ))}
                 </div>
               </div>
+
+              <DobInput
+                required={!editingMemberId}
+                label="Date of Birth (must be 18+)"
+                value={offlineForm.dateOfBirth}
+                onChange={(dateOfBirth) => setOfflineForm(prev => ({ ...prev, dateOfBirth }))}
+                inputClassName="py-2.5 text-sm bg-slate-50"
+              />
 
               <div className="grid grid-cols-2 gap-3">
                 <div>

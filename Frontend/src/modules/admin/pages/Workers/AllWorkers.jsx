@@ -29,6 +29,8 @@ import {
 import toast from 'react-hot-toast';
 import workerService from '../../services/workerService';
 import LogoLoader from '../../../../components/common/LogoLoader';
+import DobInput from '../../../../components/common/DobInput';
+import { calculateAge, getDobError } from '../../../../utils/age';
 
 const StatusBadge = ({ status }) => {
   const styles = {
@@ -76,6 +78,7 @@ const AllWorkers = () => {
     phone: '',
     email: '',
     gender: 'male',
+    dateOfBirth: '',
     workerType: 'WORKER',
     hourlyRate: '',
     dailyRate: '',
@@ -226,7 +229,8 @@ const AllWorkers = () => {
   // Add button stays greyed out until the required fields (name + valid mobile) are filled
   const canAddWorker =
     newWorker.name.trim().length > 0 &&
-    /^[6-9]\d{9}$/.test(newWorker.phone.replace(/\D/g, '').slice(-10));
+    /^[6-9]\d{9}$/.test(newWorker.phone.replace(/\D/g, '').slice(-10)) &&
+    !getDobError(newWorker.dateOfBirth);
 
   const handleAddWorker = async (e) => {
     e.preventDefault();
@@ -235,6 +239,9 @@ const AllWorkers = () => {
     const cleanPhone = newWorker.phone.replace(/\D/g, '').slice(-10);
     if (cleanPhone.length !== 10) return toast.error('Please enter a complete 10-digit mobile number');
     if (!/^[6-9]\d{9}$/.test(cleanPhone)) return toast.error('Mobile number must start with 6, 7, 8, or 9');
+
+    const dobError = getDobError(newWorker.dateOfBirth);
+    if (dobError) return toast.error(dobError);
 
     const cleanAadhar = newWorker.aadharNumber ? newWorker.aadharNumber.replace(/\D/g, '') : '';
     if (cleanAadhar && cleanAadhar.length !== 12) {
@@ -248,6 +255,7 @@ const AllWorkers = () => {
         phone: cleanPhone,
         email: newWorker.email.trim() || undefined,
         gender: newWorker.gender,
+        dateOfBirth: newWorker.dateOfBirth,
         workerType: newWorker.workerType,
         hourlyRate: Number(newWorker.hourlyRate) || 0,
         dailyRate: Number(newWorker.dailyRate) || 0,
@@ -662,6 +670,11 @@ const AllWorkers = () => {
                       )}
                       <span className="flex items-center gap-1">
                         <FiUser className="text-emerald-500 shrink-0" /> Gender: {selectedWorker.gender ? selectedWorker.gender.charAt(0).toUpperCase() + selectedWorker.gender.slice(1) : 'Not provided'}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <FiUser className="text-emerald-500 shrink-0" /> Age: {selectedWorker.dateOfBirth
+                          ? `${calculateAge(selectedWorker.dateOfBirth)} yrs (DOB ${new Date(selectedWorker.dateOfBirth).toLocaleDateString('en-IN', { timeZone: 'UTC' })})`
+                          : 'Not provided'}
                       </span>
                       {selectedWorker.workerType === 'TEAM_LEADER' ? (
                         <span className="bg-purple-100 text-purple-800 border border-purple-200 font-bold px-2.5 py-0.5 rounded-lg inline-flex items-center gap-1.5 shadow-2xs">
@@ -1285,6 +1298,13 @@ const AllWorkers = () => {
                     </select>
                   </div>
                 </div>
+
+                <DobInput
+                  label="Date of Birth *"
+                  value={newWorker.dateOfBirth}
+                  onChange={(dateOfBirth) => setNewWorker({ ...newWorker, dateOfBirth })}
+                  inputClassName="py-2 text-sm"
+                />
 
                 {/* Rates & Experience */}
                 <div className="grid grid-cols-3 gap-2.5">

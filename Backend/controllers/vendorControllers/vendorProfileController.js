@@ -3,6 +3,7 @@ const { resolveVendorServices } = require('../../utils/vendorCategories');
 const Vendor = require('../../models/Vendor');
 const { validationResult } = require('express-validator');
 const cloudinaryService = require('../../services/cloudinaryService');
+const { validateDob, calculateAge } = require('../../utils/age');
 
 /**
  * Get vendor profile
@@ -42,6 +43,8 @@ const getProfile = async (req, res) => {
         email: vendor.email,
         phone: vendor.phone,
         gender: vendor.gender || null,
+        dateOfBirth: vendor.dateOfBirth || null,
+        age: calculateAge(vendor.dateOfBirth),
         service: vendor.service,
         skills: vendor.skills || [],
         address: vendor.address || null,
@@ -83,7 +86,7 @@ const updateProfile = async (req, res) => {
     }
 
     const vendorId = req.user.id;
-    const { name, businessName, address, profilePhoto, serviceCategory, skills, aadharNumber, aadharDocument, panNumber, panDocument, gender } = req.body;
+    const { name, businessName, address, profilePhoto, serviceCategory, skills, aadharNumber, aadharDocument, panNumber, panDocument, gender, dateOfBirth } = req.body;
 
     const vendor = await Vendor.findById(vendorId);
 
@@ -103,6 +106,11 @@ const updateProfile = async (req, res) => {
       } else if (gender === null || gender === '') {
         vendor.gender = null;
       }
+    }
+    if (dateOfBirth !== undefined && dateOfBirth !== null && dateOfBirth !== '') {
+      const dobCheck = validateDob(dateOfBirth);
+      if (!dobCheck.ok) return res.status(400).json({ success: false, message: dobCheck.message });
+      vendor.dateOfBirth = dobCheck.dob;
     }
     if (address) {
       if (typeof address === 'string') {

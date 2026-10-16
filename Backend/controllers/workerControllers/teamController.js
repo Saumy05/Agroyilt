@@ -7,6 +7,7 @@ const Notification = require('../../models/Notification');
 const { getIO } = require('../../sockets');
 const { sendNotificationToWorker } = require('../../services/firebaseAdmin');
 const offlineMemberFeeService = require('../../services/offlineMemberFeeService');
+const { validateDob } = require('../../utils/age');
 
 // Safe emit helper
 const emitSafe = (room, event, data) => {
@@ -672,11 +673,14 @@ exports.addOfflineMember = async (req, res) => {
   session.startTransaction();
 
   try {
-    const { name, phone, skills, dailyRate, hourlyRate, experienceYears, gender } = req.body;
+    const { name, phone, skills, dailyRate, hourlyRate, experienceYears, gender, dateOfBirth } = req.body;
 
     if (!name || !name.trim()) {
       throw new Error('Member name is required');
     }
+
+    const dobCheck = validateDob(dateOfBirth, { required: true });
+    if (!dobCheck.ok) throw new Error(dobCheck.message);
 
     const leader = await Worker.findById(req.userId).session(session);
     if (!leader) throw new Error('Worker not found');
@@ -778,6 +782,7 @@ exports.addOfflineMember = async (req, res) => {
       hourlyRate: Number(hourlyRate) || leader.hourlyRate || 70,
       experienceYears: Number(experienceYears) || 1,
       gender: (gender && ['male', 'female', 'other'].includes(String(gender).toLowerCase())) ? String(gender).toLowerCase() : 'male',
+      dateOfBirth: dobCheck.dob,
       location: leader.location || undefined,
       verified: true
     }], { session });
@@ -813,7 +818,7 @@ exports.updateOfflineMember = async (req, res) => {
   try {
     const leaderId = req.userId;
     const { memberId } = req.params;
-    const { name, phone, skills, dailyRate, hourlyRate, experienceYears, gender } = req.body;
+    const { name, phone, skills, dailyRate, hourlyRate, experienceYears, gender, dateOfBirth } = req.body;
 
     const member = await Worker.findOne({
       _id: memberId,
@@ -845,6 +850,11 @@ exports.updateOfflineMember = async (req, res) => {
     if (experienceYears !== undefined && !isNaN(Number(experienceYears))) member.experienceYears = Number(experienceYears);
     if (gender && ['male', 'female', 'other'].includes(String(gender).toLowerCase())) {
       member.gender = String(gender).toLowerCase();
+    }
+    if (dateOfBirth !== undefined && dateOfBirth !== null && dateOfBirth !== '') {
+      const dobCheck = validateDob(dateOfBirth);
+      if (!dobCheck.ok) return res.status(400).json({ success: false, message: dobCheck.message });
+      member.dateOfBirth = dobCheck.dob;
     }
 
     await member.save();

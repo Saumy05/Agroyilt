@@ -8,6 +8,7 @@ const { validationResult } = require('express-validator');
 const { WORKER_STATUS, BOOKING_STATUS, VENDOR_STATUS } = require('../../utils/constants');
 const { createNotification } = require('../notificationControllers/notificationController');
 const { buildAdminScopeFilter, auditAdminAction, verifyResourceScope, extractAdminScopeFields } = require('../../utils/adminScopeHelper');
+const { validateDob } = require('../../utils/age');
 
 /**
  * Get all workers with filters and pagination
@@ -971,7 +972,7 @@ const addWorker = async (req, res) => {
   try {
     const {
       name, email, phone, workerType, serviceCategory, skills,
-      hourlyRate, dailyRate, gender,
+      hourlyRate, dailyRate, gender, dateOfBirth,
       hasBike, drivingLicenseNumber, aadharNumber, experienceYears,
       address, city, state, pincode, district, subDistrict
     } = req.body;
@@ -989,6 +990,9 @@ const addWorker = async (req, res) => {
         message: 'Please provide a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.'
       });
     }
+
+    const dobCheck = validateDob(dateOfBirth, { required: true });
+    if (!dobCheck.ok) return res.status(400).json({ success: false, message: dobCheck.message });
 
     const existing = await Worker.findOne({ phone: cleanPhone });
     if (existing) {
@@ -1016,6 +1020,7 @@ const addWorker = async (req, res) => {
       phone: cleanPhone,
       workerType: ['WORKER', 'TEAM_LEADER'].includes(workerType) ? workerType : 'WORKER',
       gender: ['male', 'female', 'other'].includes(String(gender || '').toLowerCase()) ? String(gender).toLowerCase() : 'male',
+      dateOfBirth: dobCheck.dob,
       // The model stores a list (serviceCategories); the old single `serviceCategory` field was silently dropped
       serviceCategories: Array.isArray(req.body.serviceCategories) ? req.body.serviceCategories : (serviceCategory ? [serviceCategory] : []),
       skills: Array.isArray(skills) ? skills : (skills ? [skills] : []),

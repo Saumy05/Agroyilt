@@ -1,6 +1,7 @@
 const Worker = require('../../models/Worker');
 const { validationResult } = require('express-validator');
 const cloudinaryService = require('../../services/cloudinaryService');
+const { validateDob, calculateAge } = require('../../utils/age');
 
 /**
  * Get worker profile
@@ -41,6 +42,8 @@ const getProfile = async (req, res) => {
         profilePhoto: worker.profilePhoto || null,
         workerType: worker.workerType || 'WORKER',
         gender: worker.gender || 'male',
+        dateOfBirth: worker.dateOfBirth || null,
+        age: calculateAge(worker.dateOfBirth),
         hasBike: Boolean(worker.hasBike),
         drivingLicense: worker.drivingLicense || null,
         teamId: worker.teamId || null,
@@ -75,7 +78,7 @@ const updateProfile = async (req, res) => {
     }
 
     const workerId = req.user.id;
-    const { name, serviceCategories, serviceCategory, skills, hourlyRate, dailyRate, landRate, customRates, address, status, profilePhoto, gender } = req.body;
+    const { name, serviceCategories, serviceCategory, skills, hourlyRate, dailyRate, landRate, customRates, address, status, profilePhoto, gender, dateOfBirth } = req.body;
 
     const worker = await Worker.findById(workerId);
 
@@ -90,6 +93,11 @@ const updateProfile = async (req, res) => {
     if (name) worker.name = name.trim();
     if (gender && ['male', 'female', 'other'].includes(String(gender).toLowerCase())) {
       worker.gender = String(gender).toLowerCase();
+    }
+    if (dateOfBirth !== undefined && dateOfBirth !== null && dateOfBirth !== '') {
+      const dobCheck = validateDob(dateOfBirth);
+      if (!dobCheck.ok) return res.status(400).json({ success: false, message: dobCheck.message });
+      worker.dateOfBirth = dobCheck.dob;
     }
 
     // Handle categories: prefer array, fallback to single legacy string

@@ -8,6 +8,7 @@ import Modal from '../UserCategories/components/Modal';
 import adminVendorService from '../../../../services/adminVendorService';
 import { publicCatalogService } from '../../../../services/catalogService';
 import GoogleMapPicker from '../../../vendor/pages/AddressManagement/components/GoogleMapPicker';
+import { calculateAge } from '../../../../utils/age';
 
 const AllOwners = () => {
   const [owners, setOwners] = useState([]);
@@ -115,6 +116,7 @@ const AllOwners = () => {
           email: owner.email,
           phone: owner.phone,
           gender: owner.gender,
+          dateOfBirth: owner.dateOfBirth,
           businessName: owner.businessName,
           service: owner.service,
           shopDetails: owner.shopDetails,
@@ -722,6 +724,14 @@ const AllOwners = () => {
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Gender</label>
                 <div className="text-gray-900">
                   {selectedOwner.gender ? selectedOwner.gender.charAt(0).toUpperCase() + selectedOwner.gender.slice(1) : 'Not provided'}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Age</label>
+                <div className="text-gray-900">
+                  {selectedOwner.dateOfBirth
+                    ? `${calculateAge(selectedOwner.dateOfBirth)} years (DOB ${new Date(selectedOwner.dateOfBirth).toLocaleDateString('en-IN', { timeZone: 'UTC' })})`
+                    : 'Not provided'}
                 </div>
               </div>
               <div>

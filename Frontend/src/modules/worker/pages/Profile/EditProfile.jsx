@@ -13,6 +13,8 @@ import { toastManager } from '../../../../utils/toastManager';
 import AddressSelectionModal from '../../../user/pages/Checkout/components/AddressSelectionModal';
 import { checkWorkerProfileCompleteness } from '../../utils/profileCompleteness';
 import { z } from "zod";
+import DobInput from '../../../../components/common/DobInput';
+import { getDobError, toDateInputValue } from '../../../../utils/age';
 
 // Zod schema
 import flutterBridge from '../../../../utils/flutterBridge';
@@ -54,6 +56,7 @@ const EditProfile = () => {
     phone: '',
     email: '',
     gender: 'male',
+    dateOfBirth: '',
     address: {
       addressLine1: '',
       city: '',
@@ -107,6 +110,7 @@ const EditProfile = () => {
             phone: w.phone || '',
             email: w.email || '',
             gender: w.gender || 'male',
+            dateOfBirth: toDateInputValue(w.dateOfBirth),
             address: {
               addressLine1: w.address?.addressLine1 || '',
               city: w.address?.city || '',
@@ -355,6 +359,13 @@ const EditProfile = () => {
       return;
     }
 
+    // Older accounts may not have a DOB yet; if one is entered it must be 18+
+    const dobError = getDobError(formData.dateOfBirth, { required: false });
+    if (dobError) {
+      toastManager.error(dobError);
+      return;
+    }
+
     try {
       setSaving(true);
 
@@ -362,6 +373,7 @@ const EditProfile = () => {
         name: formData.name,
         email: formData.email,
         gender: formData.gender || 'male',
+        dateOfBirth: formData.dateOfBirth || undefined,
         serviceCategories: formData.serviceCategories,
         serviceCategory: formData.serviceCategories[0], // Fallback
         skills: formData.skills,
@@ -605,6 +617,13 @@ const EditProfile = () => {
                 ))}
               </div>
             </div>
+
+            <DobInput
+              required={false}
+              value={formData.dateOfBirth}
+              onChange={(dateOfBirth) => handleInputChange('dateOfBirth', dateOfBirth)}
+              inputClassName="py-2.5 text-sm"
+            />
           </div>
         </div>
 

@@ -66,6 +66,7 @@ const Profile = () => {
             phone: workerData.phone || '',
             email: workerData.email || '',
             gender: workerData.gender || 'male',
+            age: workerData.age ?? null,
             address: addressString,
             rawAddress: workerData.address,
             dailyRate: workerData.dailyRate || 0,
@@ -496,6 +497,18 @@ const Profile = () => {
                 <p className="text-xs sm:text-sm font-bold text-slate-800 capitalize">{profile.gender || 'Male'}</p>
               </div>
             </div>
+
+            {profile.age != null && (
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+                  <FiUser className="w-4 h-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10.5px] font-medium text-slate-400">Age</p>
+                  <p className="text-xs sm:text-sm font-bold text-slate-800">{profile.age} years</p>
+                </div>
+              </div>
+            )}
 
             <div className="flex items-start gap-3">
               <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 mt-0.5">

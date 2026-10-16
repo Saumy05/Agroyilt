@@ -28,6 +28,12 @@ const vendorSchema = new mongoose.Schema({
     lowercase: true,
     trim: true
   },
+  // Stored as a date so age stays accurate; workers/vendors must be 18+ (see utils/age.js).
+  // Optional in the schema because accounts created before this field existed have none.
+  dateOfBirth: {
+    type: Date,
+    default: null
+  },
   role: {
     type: String,
     enum: ['vendor'],

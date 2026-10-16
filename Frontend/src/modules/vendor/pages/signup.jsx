@@ -9,6 +9,8 @@ import Logo from '../../../components/common/Logo';
 import { compressImage } from '../../../utils/imageCompression';
 import { uploadSignupDocument, isRemoteUrl } from '../../../services/signupUploadService';
 import ReferralInput from '../../../components/common/ReferralInput';
+import DobInput from '../../../components/common/DobInput';
+import { getDobError } from '../../../utils/age';
 
 import { z } from "zod";
 import { publicCatalogService } from '../../../services/catalogService';
@@ -46,6 +48,7 @@ const VendorSignup = () => {
       email: '',
       phoneNumber: '',
       gender: '',
+      dateOfBirth: '',
       businessName: '',
       service: [],
       serviceCategoryIds: [],
@@ -304,6 +307,9 @@ const VendorSignup = () => {
       return;
     }
 
+    const dobError = getDobError(formData.dateOfBirth);
+    if (dobError) { toastManager.error(dobError); return; }
+
     // Manual Document Validation remains
     const hasAadharDoc = formData.documents.some(d => d.type === 'aadhar');
     const hasAadharBackDoc = formData.documents.some(d => d.type === 'aadharBack');
@@ -345,6 +351,7 @@ const VendorSignup = () => {
           email: formData.email,
           phone: formData.phoneNumber,
           gender: formData.gender || undefined,
+          dateOfBirth: formData.dateOfBirth,
           businessName: formData.businessName,
           aadhar: formData.aadhar,
           pan: formData.pan,
@@ -470,6 +477,7 @@ const VendorSignup = () => {
         email: formData.email,
         phone: formData.phoneNumber,
         gender: formData.gender || undefined,
+        dateOfBirth: formData.dateOfBirth,
         businessName: formData.businessName,
         aadhar: formData.aadhar,
         pan: formData.pan,
@@ -573,6 +581,14 @@ const VendorSignup = () => {
                       ))}
                     </div>
                   </div>
+
+                  <DobInput
+                    className="animate-fade-in"
+                    label="Date of Birth (Owner)"
+                    value={formData.dateOfBirth}
+                    onChange={(dateOfBirth) => setFormData(prev => ({ ...prev, dateOfBirth }))}
+                    inputClassName="py-2.5"
+                  />
 
                   <div className="animate-fade-in" style={{ animationDelay: '0.15s' }}>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Business / Farm Name</label>

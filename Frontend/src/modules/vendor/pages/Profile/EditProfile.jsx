@@ -9,6 +9,8 @@ import { vendorAuthService } from '../../../../services/authService';
 import AddressSelectionModal from '../../../user/pages/Checkout/components/AddressSelectionModal';
 import { toastManager } from '../../../../utils/toastManager';
 import { z } from "zod";
+import DobInput from '../../../../components/common/DobInput';
+import { getDobError, toDateInputValue } from '../../../../utils/age';
 import flutterBridge from '../../../../utils/flutterBridge';
 import authStorage from '../../../../utils/authStorage';
 
@@ -39,6 +41,7 @@ const EditProfile = () => {
   const [formData, setFormData] = useState({
     name: '',
     gender: '',
+    dateOfBirth: '',
     businessName: '',
     phone: '',
     email: '',
@@ -123,6 +126,7 @@ const EditProfile = () => {
           setFormData({
             name: v.name || '',
             gender: v.gender || '',
+            dateOfBirth: toDateInputValue(v.dateOfBirth),
             businessName: v.businessName || '',
             phone: v.phone || '',
             email: v.email || '',
@@ -150,6 +154,7 @@ const EditProfile = () => {
             setFormData({
               name: storedData.name || '',
               gender: storedData.gender || '',
+              dateOfBirth: toDateInputValue(storedData.dateOfBirth),
               businessName: storedData.businessName || '',
               phone: storedData.phone || '',
               email: storedData.email || '',
@@ -300,6 +305,13 @@ const EditProfile = () => {
       return;
     }
 
+    // Older accounts may not have a DOB yet; if one is entered it must be 18+
+    const dobError = getDobError(formData.dateOfBirth, { required: false });
+    if (dobError) {
+      toastManager.error(dobError);
+      return;
+    }
+
     try {
       setUploading(true);
       let photoUrl = formData.profilePhoto;
@@ -334,6 +346,7 @@ const EditProfile = () => {
       const payload = {
         name: formData.name,
         gender: formData.gender || null,
+        dateOfBirth: formData.dateOfBirth || undefined,
         businessName: formData.businessName,
         address: formData.address,
         serviceCategory: formData.serviceCategories,
@@ -475,6 +488,15 @@ const EditProfile = () => {
               ))}
             </div>
           </div>
+
+          {/* Date of Birth */}
+          <DobInput
+            required={false}
+            label="Owner Date of Birth"
+            value={formData.dateOfBirth}
+            onChange={(dateOfBirth) => handleInputChange('dateOfBirth', dateOfBirth)}
+            inputClassName="py-2.5"
+          />
 
           {/* Business Name */}
           <div>
