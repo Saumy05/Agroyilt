@@ -1,7 +1,17 @@
 const express = require('express');
 const router = express.Router();
 const { body } = require('express-validator');
-const { identifyRole, verifyMpin } = require('../../controllers/commonControllers/appAuthController');
+const rateLimit = require('express-rate-limit');
+const { identifyRole } = require('../../controllers/commonControllers/appAuthController');
+
+// This lookup tells an anonymous caller which account types exist for a number, so keep it tight per IP
+const identifyLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  message: { success: false, message: 'Too many attempts. Please wait a minute and try again.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 /**
  * POST /api/app/identify-role
@@ -10,6 +20,7 @@ const { identifyRole, verifyMpin } = require('../../controllers/commonController
  */
 router.post(
   '/identify-role',
+  identifyLimiter,
   [
     body('phone')
       .trim()
@@ -18,11 +29,5 @@ router.post(
   ],
   identifyRole
 );
-
-/**
- * POST /api/app/verify-mpin
- * Public — no auth required. Reports which account(s) on this phone the MPIN belongs to.
- */
-router.post('/verify-mpin', verifyMpin);
 
 module.exports = router;

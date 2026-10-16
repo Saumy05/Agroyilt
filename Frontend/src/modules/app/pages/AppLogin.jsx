@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { FiChevronLeft, FiPhone, FiCheckCircle, FiLock, FiEye, FiEyeOff, FiAlertCircle } from 'react-icons/fi';
 import { toastManager } from '../../../utils/toastManager';
 import { z } from 'zod';
@@ -21,10 +21,15 @@ const mpinSchema = z.object({
 
 const AppLogin = () => {
   const navigate = useNavigate();
-  const location = useLocation();
   const { appLogo, appName } = useBrand();
 
   const [step, setStep] = useState('login'); // 'login' | 'forgot_phone' | 'forgot_otp' | 'set_mpin'
+  // Login runs in three stages: phone number -> pick the account (skipped when there is only one) -> MPIN for that account
+  const [loginStage, setLoginStage] = useState('phone'); // 'phone' | 'account' | 'setup' (account has no MPIN yet) | 'mpin'
+  const [setupFlow, setSetupFlow] = useState(false); // the OTP / new-MPIN screens are for first-time MPIN setup, not a reset
+  const [accountRoles, setAccountRoles] = useState([]); // roles registered on the typed phone
+  const [mpinNotSetRoles, setMpinNotSetRoles] = useState([]); // of those, accounts that still need an MPIN
+  const [selectedRole, setSelectedRole] = useState(null);
   const [phone, setPhone] = useState('');
   const [mpin, setMpin] = useState('');
   const [showMpin, setShowMpin] = useState(false);
@@ -43,11 +48,6 @@ const AppLogin = () => {
   const [detectedRole, setDetectedRole] = useState(null); // 'user' | 'vendor' | 'worker'
   const [isLoading, setIsLoading] = useState(false);
   const [resendTimer, setResendTimer] = useState(0);
-  const [multipleRoles, setMultipleRoles] = useState([]); // edge case: same phone in multiple roles
-  // The role list is its own history entry, so Back returns to the form where phone / MPIN can be changed
-  const roleSelectOpen = Boolean(location.state?.selectRole);
-  const selectingRole = roleSelectOpen && multipleRoles.length > 1;
-  const wasSelectingRef = useRef(false);
   const [forgotRoles, setForgotRoles] = useState([]); // forgot-MPIN: roles to pick from when one phone has several accounts
   const [preferredForgotRole, setPreferredForgotRole] = useState(null); // role whose login reported 'MPIN not set'
 
@@ -55,14 +55,10 @@ const AppLogin = () => {
   const mpinInputRef = useRef(null);
   const otpInputRefs = useRef([]);
 
-  // Coming back from the role list: forget the roles and the typed MPIN so the person starts the check afresh
+  // Focus the MPIN box as soon as it appears
   useEffect(() => {
-    if (wasSelectingRef.current && !roleSelectOpen) {
-      setMultipleRoles([]);
-      setMpin('');
-    }
-    wasSelectingRef.current = roleSelectOpen;
-  }, [roleSelectOpen]);
+    if (step === 'login' && loginStage === 'mpin') mpinInputRef.current?.focus();
+  }, [step, loginStage]);
 
   // Auto-redirect if already logged in. A stored token is only a hint (it may be left over from
   // another account or backend), so confirm with the server before sending anyone into that app.
@@ -94,7 +90,35 @@ const AppLogin = () => {
   }, [otp]);
 
   // ─── 1. NORMAL LOGIN FLOW ───────────────────────────────────────────────
-  const handleLoginSubmit = async (e) => {
+  const lastRoleKey = (cleanPhone) => `agroyilt_last_login_role_${cleanPhone}`;
+  const getLastRole = (cleanPhone) => {
+    try { return localStorage.getItem(lastRoleKey(cleanPhone)); } catch { return null; }
+  };
+
+  // The account chosen: go to its MPIN, or to MPIN setup when it has none yet
+  const chooseAccount = async (cleanPhone, role, notSet) => {
+    setFormError('');
+    setSelectedRole(role);
+    setMpin('');
+    if (notSet.includes(role)) {
+      setPreferredForgotRole(role);
+      setLoginStage('setup'); // the OTP is only sent when the person taps "Send OTP"
+      return;
+    }
+    setLoginStage('mpin');
+  };
+
+  // First-time MPIN setup: send the OTP that proves the person holds this phone
+  const handleSendSetupOtp = async () => {
+    if (isLoading || !selectedRole) return;
+    setFormError('');
+    setSetupFlow(true);
+    setIsLoading(true);
+    await sendOtpForRole(phone.replace(/\D/g, ''), selectedRole);
+  };
+
+  // Step 1: look up the accounts on this number
+  const handlePhoneSubmit = async (e) => {
     if (e) e.preventDefault();
     setFormError('');
     const cleanPhone = phone.replace(/\D/g, '');
@@ -107,6 +131,51 @@ const AppLogin = () => {
       return;
     }
 
+    setIsLoading(true);
+    try {
+      const res = await api.post('/app/identify-role', { phone: cleanPhone });
+      const roles = res.data?.roles || [];
+      const notSet = res.data?.mpinNotSetRoles || [];
+      setMpinNotSetRoles(notSet);
+
+      if (roles.length === 0) {
+        const msg = 'No account found with this mobile number. Please register first.';
+        setFormError(msg);
+        toastManager.error(msg);
+        setIsLoading(false);
+        return;
+      }
+
+      if (roles.length === 1) {
+        setAccountRoles(roles);
+        setIsLoading(false);
+        await chooseAccount(cleanPhone, roles[0], notSet);
+        return;
+      }
+
+      // Several accounts: the one used last time goes first
+      const last = getLastRole(cleanPhone);
+      setAccountRoles(last && roles.includes(last) ? [last, ...roles.filter((r) => r !== last)] : roles);
+      setIsLoading(false);
+      setLoginStage('account');
+    } catch (error) {
+      setIsLoading(false);
+      const status = error.response?.status;
+      let msg = 'Unable to check this number. Please try again.';
+      if (status === 404) msg = 'No account found with this mobile number. Please register first.';
+      else if (status === 429) msg = error.response?.data?.message || 'Too many attempts. Please wait a minute and try again.';
+      else if (!error.response || error.code === 'ERR_NETWORK') msg = 'Unable to connect to the server. Please check your internet connection.';
+      setFormError(msg);
+      toastManager.error(msg);
+    }
+  };
+
+  // Step 3: MPIN for the chosen account
+  const handleLoginSubmit = async (e) => {
+    if (e) e.preventDefault();
+    setFormError('');
+    const cleanPhone = phone.replace(/\D/g, '');
+
     const mpinVal = mpinSchema.safeParse({ mpin });
     if (!mpinVal.success) {
       const msg = 'Please enter your 4-digit MPIN';
@@ -114,58 +183,12 @@ const AppLogin = () => {
       toastManager.error(msg);
       return;
     }
-
-    setIsLoading(true);
-
-    try {
-      // Find which account(s) this phone + MPIN belongs to. Only a MPIN that fits several accounts needs a role choice.
-      const verifyRes = await api.post('/app/verify-mpin', { phone: cleanPhone, mpin });
-      const roles = verifyRes.data?.roles || [];
-
-      if (roles.length > 1) {
-        setMultipleRoles(roles);
-        setIsLoading(false);
-        navigate('/app/login', { state: { selectRole: true } });
-        return;
-      }
-
-      await executeMpinLogin(cleanPhone, mpin, roles[0]);
-    } catch (error) {
-      console.error('Login error:', error);
-      setIsLoading(false);
-      const status = error.response?.status;
-      const rawMsg = (error.response?.data?.message || '').toLowerCase();
-      let friendlyMsg = 'Unable to sign in. Please verify your mobile number and try again.';
-
-      if (error.response?.data?.mpinNotSet) {
-        const unsetRoles = error.response.data.roles || [];
-        const msg = '4-digit MPIN is not yet set for your account. Redirecting to setup...';
-        setFormError(msg);
-        toastManager.error(msg);
-        setPreferredForgotRole(unsetRoles.length === 1 ? unsetRoles[0] : null);
-        setStep('forgot_phone');
-        return;
-      }
-
-      if (status === 401) {
-        const left = rawMsg.match(/(\d+)\s+attempts?\s+remaining/)?.[1];
-        friendlyMsg = left
-          ? `Incorrect 4-digit MPIN. You have ${left} attempt${left === '1' ? '' : 's'} remaining.`
-          : 'Incorrect 4-digit MPIN. Please try again.';
-      } else if (status === 404 || rawMsg.includes('not found') || rawMsg.includes('exist')) {
-        friendlyMsg = 'No account found with this mobile number. Please register first.';
-      } else if (status === 403 || rawMsg.includes('inactive') || rawMsg.includes('deactivated') || rawMsg.includes('suspended')) {
-        friendlyMsg = 'Your account has been deactivated. Please contact customer support.';
-      } else if (status === 429) {
-        friendlyMsg = 'Too many attempts. Please wait a few moments and try again.';
-      } else if (status >= 500) {
-        friendlyMsg = 'Our server is temporarily busy. Please try again in a few moments.';
-      } else if (!error.response || error.code === 'ERR_NETWORK') {
-        friendlyMsg = 'Unable to connect to the server. Please check your internet connection.';
-      }
-      setFormError(friendlyMsg);
-      toastManager.error(friendlyMsg);
+    if (!selectedRole) {
+      setLoginStage('phone');
+      return;
     }
+
+    await executeMpinLogin(cleanPhone, mpin, selectedRole);
   };
 
   const executeMpinLogin = async (cleanPhone, mpinValue, role) => {
@@ -181,6 +204,7 @@ const AppLogin = () => {
       }
 
       if (response.success && response.accessToken) {
+        try { localStorage.setItem(lastRoleKey(cleanPhone), role); } catch { /* storage may be unavailable; it only orders the list */ }
         toastManager.success('Welcome back! 👋');
         if (role === 'user') navigate('/user', { replace: true });
         else if (role === 'vendor') navigate('/vendor', { replace: true });
@@ -225,11 +249,11 @@ const AppLogin = () => {
       }
 
       if (errorData?.mpinNotSet) {
-        const msg = '4-digit MPIN is not yet set for your account. Redirecting to setup...';
-        setFormError(msg);
-        toastManager.error(msg);
+        toastManager.info(`Your ${roleLabel[role]} account has no MPIN yet. Set one to continue.`);
         setPreferredForgotRole(role);
-        setStep('forgot_phone');
+        setSelectedRole(role);
+        setMpinNotSetRoles((prev) => (prev.includes(role) ? prev : [...prev, role]));
+        setLoginStage('setup');
         return;
       }
 
@@ -354,7 +378,7 @@ const AppLogin = () => {
         setVerificationToken(response.verificationToken);
         setStep('set_mpin');
         setIsLoading(false);
-        toastManager.success('OTP Verified. Please set a new MPIN.');
+        toastManager.success(setupFlow ? 'OTP verified. Now create your MPIN.' : 'OTP Verified. Please set a new MPIN.');
       } else {
         throw new Error('Verification token not received.');
       }
@@ -395,8 +419,12 @@ const AppLogin = () => {
       else if (detectedRole === 'worker') response = await workerAuthService.resetMpin(payload);
 
       if (response?.success) {
-        toastManager.success('MPIN updated successfully. You can now login.');
-        // Reset states and go back to login
+        toastManager.success(setupFlow ? 'MPIN created. Enter it to log in.' : 'MPIN updated. Enter it to log in.');
+        // Land on the MPIN screen of the same account, so nobody has to pick it again
+        setSelectedRole(detectedRole);
+        setMpinNotSetRoles((prev) => prev.filter((r) => r !== detectedRole));
+        setSetupFlow(false);
+        setLoginStage('mpin');
         setStep('login');
         setMpin('');
         setNewMpin('');
@@ -461,9 +489,11 @@ const AppLogin = () => {
 
   const handleBack = () => {
     setFormError('');
-    if (selectingRole) navigate(-1);
+    if (step === 'login' && loginStage === 'mpin') { setMpin(''); setLoginStage(accountRoles.length > 1 ? 'account' : 'phone'); }
+    else if (step === 'login' && loginStage === 'setup') setLoginStage(accountRoles.length > 1 ? 'account' : 'phone');
+    else if (step === 'login' && loginStage === 'account') setLoginStage('phone');
     else if (step === 'forgot_phone') { setStep('login'); setForgotRoles([]); setPreferredForgotRole(null); }
-    else if (step === 'forgot_otp') { setStep('forgot_phone'); setOtp(['','','','','','']); }
+    else if (step === 'forgot_otp') { setOtp(['','','','','','']); if (setupFlow) { setStep('login'); setLoginStage('setup'); } else setStep('forgot_phone'); }
     else if (step === 'set_mpin') { setStep('forgot_otp'); setNewMpin(''); setConfirmMpin(''); }
     else navigate('/app');
   };
@@ -506,7 +536,7 @@ const AppLogin = () => {
         </div>
         <div>
           <h1 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#1B5E20' }}>
-            {selectingRole ? 'Choose Account' : step === 'login' ? 'Login' : step === 'forgot_phone' ? 'Reset MPIN' : step === 'forgot_otp' ? 'Verify OTP' : 'Set New MPIN'}
+            {step === 'login' && loginStage === 'account' ? 'Choose Account' : step === 'login' && loginStage === 'setup' ? 'Set up MPIN' : step === 'login' ? 'Login' : step === 'forgot_phone' ? 'Reset MPIN' : step === 'forgot_otp' ? (setupFlow ? 'Set up MPIN' : 'Verify OTP') : (setupFlow ? 'Set up MPIN' : 'Set New MPIN')}
           </h1>
           <p style={{ margin: 0, fontSize: '0.72rem', color: '#78909C' }}>
             {appName || 'AgroYilt'}
@@ -531,48 +561,17 @@ const AppLogin = () => {
           </div>
         )}
 
-        {/* --- NORMAL LOGIN FLOW --- */}
-        {step === 'login' && selectingRole && (
-          <>
-            <h2 style={{ margin: '0 0 8px', fontSize: '1.5rem', fontWeight: 800, color: '#1B5E20' }}>
-              Choose your account
-            </h2>
-            <p style={{ margin: '0 0 28px', fontSize: '0.875rem', color: '#78909C', lineHeight: 1.5 }}>
-              This mobile number and MPIN belong to more than one account. Select the one you want to log in to.
-            </p>
-            {multipleRoles.map(role => (
-              <button
-                key={role}
-                type="button"
-                disabled={isLoading}
-                onClick={() => executeMpinLogin(phone.replace(/\D/g, ''), mpin, role)}
-                style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  width: '100%', padding: '16px 18px',
-                  background: '#fff', border: `2px solid ${roleColor[role]}`,
-                  borderRadius: '14px', cursor: isLoading ? 'wait' : 'pointer',
-                  marginBottom: '12px', color: roleColor[role],
-                  fontSize: '1rem', fontWeight: 700,
-                }}
-              >
-                <span>Login as {roleLabel[role]}</span>
-                <FiChevronLeft size={18} style={{ transform: 'rotate(180deg)' }} />
-              </button>
-            ))}
-          </>
-        )}
-
-        {step === 'login' && !selectingRole && (
+        {/* --- NORMAL LOGIN FLOW: 1) phone number --- */}
+        {step === 'login' && loginStage === 'phone' && (
           <>
             <h2 style={{ margin: '0 0 8px', fontSize: '1.5rem', fontWeight: 800, color: '#1B5E20' }}>
               Welcome back!
             </h2>
             <p style={{ margin: '0 0 32px', fontSize: '0.875rem', color: '#78909C', lineHeight: 1.5 }}>
-              Login with your mobile number and 4-digit MPIN.
+              Enter your mobile number to log in.
             </p>
 
-            <form onSubmit={handleLoginSubmit}>
-              {/* Phone Input */}
+            <form onSubmit={handlePhoneSubmit}>
               <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#546E7A', marginBottom: '8px' }}>
                 Mobile Number
               </label>
@@ -589,6 +588,7 @@ const AppLogin = () => {
                 <div style={{ width: '1px', height: '28px', background: '#E0E0E0' }} />
                 <input
                   ref={phoneInputRef}
+                  id="app-login-phone"
                   type="tel"
                   inputMode="numeric"
                   maxLength={10}
@@ -596,7 +596,7 @@ const AppLogin = () => {
                   onChange={e => { if (formError) setFormError(''); setPhone(e.target.value.replace(/\D/g, '')); }}
                   placeholder="Enter 10-digit number"
                   style={{
-                    flex: 1, border: 'none', outline: 'none', background: 'transparent', 
+                    flex: 1, border: 'none', outline: 'none', background: 'transparent',
                     fontSize: '1rem', fontWeight: 500, color: '#263238', padding: '14px 0',
                     fontFamily: "'Inter', 'Segoe UI', sans-serif",
                     width: '100%', minWidth: 0
@@ -604,6 +604,131 @@ const AppLogin = () => {
                 />
               </div>
 
+              <div style={{ textAlign: 'right', marginBottom: '32px' }}>
+                <button type="button" onClick={() => { setFormError(''); setSetupFlow(false); setStep('forgot_phone'); setForgotRoles([]); setPreferredForgotRole(null); }} style={{ background: 'none', border: 'none', color: '#2E7D32', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}>
+                  Forgot MPIN?
+                </button>
+              </div>
+
+              <button
+                type="submit"
+                id="app-login-continue-btn"
+                disabled={isLoading || !(phone.length === 10)}
+                style={{
+                  width: '100%', padding: '18px',
+                  borderRadius: '16px', border: 'none',
+                  background: ((phone.length === 10) && !isLoading)
+                    ? 'linear-gradient(135deg, #2E7D32 0%, #43A047 100%)' : '#E0E0E0',
+                  color: ((phone.length === 10) && !isLoading) ? '#fff' : '#9E9E9E',
+                  fontSize: '1rem', fontWeight: 700,
+                  cursor: ((phone.length === 10) && !isLoading) ? 'pointer' : 'not-allowed',
+                  boxShadow: ((phone.length === 10) && !isLoading) ? '0 4px 16px rgba(46,125,50,0.35)' : 'none',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                {isLoading ? 'Checking...' : 'Continue'}
+              </button>
+            </form>
+          </>
+        )}
+
+        {/* --- 2) pick the account (only when the number has more than one) --- */}
+        {step === 'login' && loginStage === 'account' && (
+          <>
+            <h2 style={{ margin: '0 0 8px', fontSize: '1.5rem', fontWeight: 800, color: '#1B5E20' }}>
+              Choose your account
+            </h2>
+            <p style={{ margin: '0 0 28px', fontSize: '0.875rem', color: '#78909C', lineHeight: 1.5 }}>
+              +91 {phone} has more than one account. Select the one you want to log in to.
+            </p>
+            {accountRoles.map((role, idx) => {
+              const needsMpin = mpinNotSetRoles.includes(role);
+              const isLast = idx === 0 && getLastRole(phone.replace(/\D/g, '')) === role;
+              return (
+                <button
+                  key={role}
+                  id={`app-login-account-${role}`}
+                  type="button"
+                  disabled={isLoading}
+                  onClick={() => chooseAccount(phone.replace(/\D/g, ''), role, mpinNotSetRoles)}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    width: '100%', padding: '16px 18px',
+                    background: '#fff', border: `2px solid ${roleColor[role]}`,
+                    borderRadius: '14px', cursor: isLoading ? 'wait' : 'pointer',
+                    marginBottom: '12px', color: roleColor[role],
+                    fontSize: '1rem', fontWeight: 700,
+                  }}
+                >
+                  <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}>
+                    <span>{roleLabel[role]}</span>
+                    {(isLast || needsMpin) && (
+                      <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#78909C' }}>
+                        {needsMpin ? 'Set your MPIN to continue' : 'Last used'}
+                      </span>
+                    )}
+                  </span>
+                  <FiChevronLeft size={18} style={{ transform: 'rotate(180deg)' }} />
+                </button>
+              );
+            })}
+          </>
+        )}
+
+        {/* --- 3a) the chosen account has no MPIN yet: verify the phone with an OTP, then create one --- */}
+        {step === 'login' && loginStage === 'setup' && selectedRole && (
+          <>
+            <h2 style={{ margin: '0 0 8px', fontSize: '1.5rem', fontWeight: 800, color: '#1B5E20' }}>
+              Set up your MPIN
+            </h2>
+            <p style={{ margin: '0 0 24px', fontSize: '0.875rem', color: '#78909C', lineHeight: 1.5 }}>
+              Your <strong id="app-login-setup-role" style={{ color: roleColor[selectedRole] }}>{roleLabel[selectedRole]}</strong> account does not have an MPIN yet.
+              We will send a 6-digit OTP to <strong>+91 {phone}</strong> to confirm it is you, then you can create your MPIN.
+            </p>
+            <button
+              id="app-login-send-otp-btn"
+              type="button"
+              onClick={handleSendSetupOtp}
+              disabled={isLoading}
+              style={{
+                width: '100%', padding: '18px', borderRadius: '16px', border: 'none',
+                background: isLoading ? '#E0E0E0' : 'linear-gradient(135deg, #2E7D32 0%, #43A047 100%)',
+                color: isLoading ? '#9E9E9E' : '#fff', fontSize: '1rem', fontWeight: 700,
+                cursor: isLoading ? 'wait' : 'pointer',
+                boxShadow: isLoading ? 'none' : '0 4px 16px rgba(46,125,50,0.35)',
+                transition: 'all 0.2s ease', marginBottom: '16px',
+              }}
+            >
+              {isLoading ? 'Sending OTP...' : 'Send OTP'}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setFormError(''); setLoginStage('phone'); }}
+              style={{ background: 'none', border: 'none', padding: 0, color: '#2E7D32', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}
+            >
+              Not you? Change number
+            </button>
+          </>
+        )}
+
+        {/* --- 3) MPIN for the chosen account --- */}
+        {step === 'login' && loginStage === 'mpin' && selectedRole && (
+          <>
+            <h2 style={{ margin: '0 0 8px', fontSize: '1.5rem', fontWeight: 800, color: '#1B5E20' }}>
+              Enter MPIN
+            </h2>
+            <p style={{ margin: '0 0 6px', fontSize: '0.875rem', color: '#78909C', lineHeight: 1.5 }}>
+              Logging in as <strong id="app-login-selected-role" style={{ color: roleColor[selectedRole] }}>{roleLabel[selectedRole]}</strong> with +91 {phone}
+            </p>
+            <button
+              type="button"
+              onClick={() => { setMpin(''); setFormError(''); setLoginStage('phone'); }}
+              style={{ background: 'none', border: 'none', padding: 0, margin: '0 0 28px', color: '#2E7D32', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}
+            >
+              Not you? Change number
+            </button>
+
+            <form onSubmit={handleLoginSubmit}>
               {/* MPIN Input */}
               <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#546E7A', marginBottom: '8px' }}>
                 4-Digit MPIN
@@ -620,6 +745,7 @@ const AppLogin = () => {
                 <div style={{ width: '1px', height: '28px', background: '#E0E0E0' }} />
                 <input
                   ref={mpinInputRef}
+                  id="app-login-mpin"
                   type={showMpin ? 'text' : 'password'}
                   inputMode="numeric"
                   maxLength={4}
@@ -639,24 +765,26 @@ const AppLogin = () => {
                 </button>
               </div>
 
+
               <div style={{ textAlign: 'right', marginBottom: '32px' }}>
-                <button type="button" onClick={() => { setFormError(''); setStep('forgot_phone'); setPhone(''); setForgotRoles([]); setPreferredForgotRole(null); }} style={{ background: 'none', border: 'none', color: '#2E7D32', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}>
+                <button type="button" onClick={() => { setFormError(''); setSetupFlow(false); setPreferredForgotRole(selectedRole); setStep('forgot_phone'); setForgotRoles([]); }} style={{ background: 'none', border: 'none', color: '#2E7D32', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}>
                   Forgot MPIN?
                 </button>
               </div>
 
               <button
                 type="submit"
-                disabled={isLoading || phone.length !== 10 || mpin.length !== 4}
+                id="app-login-submit-btn"
+                disabled={isLoading || !(mpin.length === 4)}
                 style={{
                   width: '100%', padding: '18px',
                   borderRadius: '16px', border: 'none',
-                  background: (phone.length === 10 && mpin.length === 4 && !isLoading)
+                  background: ((mpin.length === 4) && !isLoading)
                     ? 'linear-gradient(135deg, #2E7D32 0%, #43A047 100%)' : '#E0E0E0',
-                  color: (phone.length === 10 && mpin.length === 4 && !isLoading) ? '#fff' : '#9E9E9E',
+                  color: ((mpin.length === 4) && !isLoading) ? '#fff' : '#9E9E9E',
                   fontSize: '1rem', fontWeight: 700,
-                  cursor: (phone.length === 10 && mpin.length === 4 && !isLoading) ? 'pointer' : 'not-allowed',
-                  boxShadow: (phone.length === 10 && mpin.length === 4 && !isLoading) ? '0 4px 16px rgba(46,125,50,0.35)' : 'none',
+                  cursor: ((mpin.length === 4) && !isLoading) ? 'pointer' : 'not-allowed',
+                  boxShadow: ((mpin.length === 4) && !isLoading) ? '0 4px 16px rgba(46,125,50,0.35)' : 'none',
                   transition: 'all 0.2s ease',
                 }}
               >
@@ -840,10 +968,10 @@ const AppLogin = () => {
         {step === 'set_mpin' && (
           <>
             <h2 style={{ margin: '0 0 8px', fontSize: '1.5rem', fontWeight: 800, color: '#1B5E20' }}>
-              Set New MPIN
+              {setupFlow ? 'Set up your MPIN' : 'Set New MPIN'}
             </h2>
             <p style={{ margin: '0 0 32px', fontSize: '0.875rem', color: '#78909C', lineHeight: 1.5 }}>
-              Create a 4-digit MPIN for your account.
+              Create a 4-digit MPIN for your {detectedRole ? roleLabel[detectedRole] : ''} account.
             </p>
 
             <form onSubmit={handleSetMpinSubmit}>
@@ -932,7 +1060,7 @@ const AppLogin = () => {
       </div>
 
       {/* Footer (Only on Login screen) */}
-      {step === 'login' && !selectingRole && (
+      {step === 'login' && loginStage !== 'account' && (
         <div style={{ padding: '16px 24px 8px', textAlign: 'center' }}>
           <p style={{ fontSize: '0.875rem', color: '#78909C' }}>
             Don't have an account?{' '}
