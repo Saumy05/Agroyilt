@@ -80,7 +80,7 @@ const AddressSelectionModal = ({ isOpen, onClose, address = '', houseNumber = ''
     }, 250);
   };
 
-  // Trigger search via Google Places Autocomplete
+  // Trigger search via Google Places Autocomplete or Nominatim fallback
   const performSearch = useCallback(async (queryText) => {
     const q = (queryText || '').trim();
     if (!q || q.length < 2) {
@@ -92,62 +92,86 @@ const AddressSelectionModal = ({ isOpen, onClose, address = '', houseNumber = ''
     setIsSearching(true);
     setIsDropdownOpen(true);
 
+    const fallbackToNominatim = async () => {
+      try {
+        const osmResp = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&countrycodes=in&limit=6&addressdetails=1`,
+          { headers: { 'Accept-Language': 'en' } }
+        );
+        if (osmResp.ok) {
+          const osmData = await osmResp.json();
+          if (Array.isArray(osmData) && osmData.length > 0) {
+            const mapped = osmData.map(item => ({
+              place_id: `osm_${item.place_id}`,
+              description: item.display_name,
+              structured_formatting: {
+                main_text: item.display_name.split(',')[0],
+                secondary_text: item.display_name.split(',').slice(1).join(', ').trim()
+              },
+              _geocodeResult: {
+                geometry: {
+                  location: {
+                    lat: () => parseFloat(item.lat),
+                    lng: () => parseFloat(item.lon)
+                  }
+                },
+                formatted_address: item.display_name,
+                address_components: [
+                  item.address?.city || item.address?.town || item.address?.village ? { types: ['locality'], long_name: item.address?.city || item.address?.town || item.address?.village } : null,
+                  item.address?.state ? { types: ['administrative_area_level_1'], long_name: item.address?.state } : null,
+                  item.address?.postcode ? { types: ['postal_code'], long_name: item.address?.postcode } : null,
+                ].filter(Boolean)
+              }
+            }));
+            setSuggestions(mapped);
+            setIsSearching(false);
+            return true;
+          }
+        }
+      } catch (err) {
+        console.warn('[AddressSearch] Nominatim search error:', err);
+      }
+      return false;
+    };
+
     if (autocompleteServiceRef.current || window.google?.maps?.places?.AutocompleteService) {
       if (!autocompleteServiceRef.current) {
-        autocompleteServiceRef.current = new window.google.maps.places.AutocompleteService();
+        try {
+          autocompleteServiceRef.current = new window.google.maps.places.AutocompleteService();
+        } catch (e) {
+          console.warn('Could not instantiate AutocompleteService:', e);
+        }
       }
-      try {
-        autocompleteServiceRef.current.getPlacePredictions(
-          {
-            input: q,
-            componentRestrictions: { country: 'in' },
-          },
-          (predictions, status) => {
-            setIsSearching(false);
-            if (status === window.google.maps.places.PlacesServiceStatus.OK && Array.isArray(predictions)) {
-              setSuggestions(predictions);
-            } else {
-              setSuggestions([]);
+      if (autocompleteServiceRef.current) {
+        try {
+          autocompleteServiceRef.current.getPlacePredictions(
+            {
+              input: q,
+              componentRestrictions: { country: 'in' },
+            },
+            async (predictions, status) => {
+              if (status === window.google.maps.places.PlacesServiceStatus.OK && Array.isArray(predictions) && predictions.length > 0) {
+                setIsSearching(false);
+                setSuggestions(predictions);
+              } else {
+                const found = await fallbackToNominatim();
+                if (!found) setSuggestions([]);
+                setIsSearching(false);
+              }
             }
-          }
-        );
-        return;
-      } catch (err) {
-        console.warn('Google Places Autocomplete error:', err);
+          );
+          return;
+        } catch (err) {
+          console.warn('Google Places Autocomplete error:', err);
+        }
       }
     }
 
-    // Fallback to Google Geocoding API if window.google is still loading
-    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-    if (apiKey) {
-      try {
-        const response = await fetch(
-          `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(q)}&components=country:IN&key=${apiKey}`
-        );
-        const data = await response.json();
-        if (data.status === 'OK' && Array.isArray(data.results)) {
-          const mapped = data.results.map(r => ({
-            place_id: r.place_id,
-            description: r.formatted_address,
-            structured_formatting: {
-              main_text: r.address_components?.[0]?.long_name || r.formatted_address.split(',')[0],
-              secondary_text: r.formatted_address.split(',').slice(1).join(', ').trim()
-            },
-            _geocodeResult: r
-          }));
-          setSuggestions(mapped);
-        } else {
-          setSuggestions([]);
-        }
-      } catch (error) {
-        console.warn('[AddressSearch] Geocode search error:', error);
-        setSuggestions([]);
-      } finally {
-        setIsSearching(false);
-      }
-    } else {
-      setIsSearching(false);
+    const found = await fallbackToNominatim();
+    if (!found) {
+      setSuggestions([]);
     }
+    setIsSearching(false);
   }, []);
 
   // Live debounced search as user types
@@ -564,8 +588,34 @@ const AddressSelectionModal = ({ isOpen, onClose, address = '', houseNumber = ''
                   </div>
                 ) : !isSearching ? (
                   <div style={{ padding: '16px', textAlign: 'center', color: '#64748b', fontSize: 13 }}>
-                    <div style={{ fontWeight: 600, color: '#334155', marginBottom: 2 }}>No matching places found</div>
-                    <div style={{ fontSize: 11, color: '#94a3b8' }}>Try searching by colony, road, landmark, or city name</div>
+                    <div style={{ fontWeight: 600, color: '#334155', marginBottom: 6 }}>No matching places found</div>
+                    <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 10 }}>Try searching by colony, road, landmark, or city name</div>
+                    {searchQuery.trim().length >= 3 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const typedLoc = {
+                            lat: selectedLocation?.lat || flyToPosition?.lat || 28.6139,
+                            lng: selectedLocation?.lng || flyToPosition?.lng || 77.2090,
+                            address: searchQuery.trim(),
+                            components: [{ types: ['locality'], long_name: searchQuery.trim().split(',')[0] || '' }]
+                          };
+                          handleLocationSelect(typedLoc);
+                        }}
+                        style={{
+                          padding: '7px 12px',
+                          background: '#ecfdf5',
+                          color: themeColors.button || '#059669',
+                          border: `1px solid ${themeColors.button || '#059669'}40`,
+                          borderRadius: 8,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Use "{searchQuery.slice(0, 24)}{searchQuery.length > 24 ? '…' : ''}" as address
+                      </button>
+                    )}
                   </div>
                 ) : null}
               </div>
@@ -596,7 +646,7 @@ const AddressSelectionModal = ({ isOpen, onClose, address = '', houseNumber = ''
           </div>
 
           {/* Selected address preview */}
-          {mapAddress ? (
+          {(mapAddress || searchQuery.trim()) ? (
             <div style={{
               background: `${themeColors.brand?.teal || '#059669'}0D`,
               border: `1px solid ${themeColors.brand?.teal || '#059669'}30`,
@@ -604,26 +654,36 @@ const AddressSelectionModal = ({ isOpen, onClose, address = '', houseNumber = ''
               display: 'flex', alignItems: 'flex-start', gap: 8,
             }}>
               <FiMapPin size={14} color={themeColors.button || '#059669'} style={{ marginTop: 2, flexShrink: 0 }} />
-              <span style={{ fontSize: 13, color: '#333', lineHeight: 1.5 }}>{mapAddress}</span>
+              <span style={{ fontSize: 13, color: '#333', lineHeight: 1.5 }}>{mapAddress || searchQuery.trim()}</span>
             </div>
           ) : null}
 
           {/* Save Button */}
           <button
             type="button"
-            onClick={() => onSave(houseNumber, selectedLocation || (mapAddress ? { address: mapAddress } : null))}
-            disabled={!mapAddress}
+            onClick={() => {
+              const effectiveAddr = mapAddress || searchQuery.trim();
+              const loc = selectedLocation || {
+                address: effectiveAddr,
+                lat: flyToPosition?.lat || 28.6139,
+                lng: flyToPosition?.lng || 77.2090,
+                components: [{ types: ['locality'], long_name: effectiveAddr.split(',')[0] || '' }]
+              };
+              if (!loc.components) loc.components = [];
+              onSave(houseNumber, loc);
+            }}
+            disabled={!mapAddress && !searchQuery.trim()}
             style={{
               width: '100%', padding: '15px', borderRadius: 14,
-              background: mapAddress ? (themeColors.button || '#059669') : '#d1d5db',
+              background: (mapAddress || searchQuery.trim()) ? (themeColors.button || '#059669') : '#d1d5db',
               color: '#fff', fontWeight: 800, fontSize: 13,
               textTransform: 'uppercase', letterSpacing: '0.08em',
-              border: 'none', cursor: mapAddress ? 'pointer' : 'not-allowed',
-              boxShadow: mapAddress ? `0 6px 18px ${(themeColors.button || '#059669')}40` : 'none',
+              border: 'none', cursor: (mapAddress || searchQuery.trim()) ? 'pointer' : 'not-allowed',
+              boxShadow: (mapAddress || searchQuery.trim()) ? `0 6px 18px ${(themeColors.button || '#059669')}40` : 'none',
               marginBottom: 40, transition: 'all 0.2s',
             }}
           >
-            {mapAddress ? '✓ Confirm & Save Location' : 'Pin a Location on Map First'}
+            {(mapAddress || searchQuery.trim()) ? '✓ Confirm & Save Location' : 'Pin a Location on Map First'}
           </button>
         </div>
       </div>

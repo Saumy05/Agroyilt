@@ -783,14 +783,15 @@ const MachineryCheckout = () => {
               houseNumber={houseNumber}
               onHouseNumberChange={setHouseNumber}
               onSave={(houseNo, location) => {
+                  const comps = Array.isArray(location?.components) ? location.components : [];
                   setSelectedAddress({
-                      addressLine1: location.address,
-                      addressLine2: houseNo,
-                      city: location.components.find(c => c.types.includes('locality')) ?.long_name || '',
-                      state: location.components.find(c => c.types.includes('administrative_area_level_1')) ?.long_name || '',
-                      pincode: location.components.find(c => c.types.includes('postal_code')) ?.long_name || '',
-                      lat: location.lat,
-                      lng: location.lng
+                      addressLine1: location?.address || '',
+                      addressLine2: houseNo || '',
+                      city: comps.find(c => c?.types?.includes('locality'))?.long_name || '',
+                      state: comps.find(c => c?.types?.includes('administrative_area_level_1'))?.long_name || '',
+                      pincode: comps.find(c => c?.types?.includes('postal_code'))?.long_name || '',
+                      lat: location?.lat,
+                      lng: location?.lng
                   });
                   setShowAddressModal(false);
               }}

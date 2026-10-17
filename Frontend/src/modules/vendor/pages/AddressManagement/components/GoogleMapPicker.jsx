@@ -58,44 +58,97 @@ const GoogleMapPicker = ({ onLocationSelect, initialPosition = null }) => {
     }
   }, [initialPosition, isLoaded, map]);
 
-  // Reverse geocode to get address from coordinates
+  // Reverse geocode to get address from coordinates with Nominatim fallback
   const reverseGeocode = async (position) => {
-    if (!window.google) return;
-
+    if (!position || typeof position.lat !== 'number' || typeof position.lng !== 'number') return;
     setLoading(true);
-    const geocoder = new window.google.maps.Geocoder();
 
-    geocoder.geocode({ location: position }, (results, status) => {
-      setLoading(false);
-      if (status === 'OK' && results[0]) {
-        let city = '';
-        let state = '';
-        let pincode = '';
-        
-        results[0].address_components.forEach(component => {
-          if (component.types.includes('locality') || component.types.includes('administrative_area_level_2') || component.types.includes('administrative_area_level_3')) {
-             if(!city) city = component.long_name;
+    const fallbackNominatimOrCoords = async () => {
+      try {
+        const resp = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.lat}&lon=${position.lng}&zoom=18&addressdetails=1`,
+          { headers: { 'Accept-Language': 'en' } }
+        );
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data && data.display_name) {
+            const city = data.address?.city || data.address?.town || data.address?.village || data.address?.suburb || '';
+            const state = data.address?.state || '';
+            const pincode = data.address?.postcode || '';
+            if (onLocationSelect) {
+              onLocationSelect({
+                lat: position.lat,
+                lng: position.lng,
+                address: data.display_name,
+                city,
+                state,
+                pincode
+              });
+            }
+            return;
           }
-          if (component.types.includes('administrative_area_level_1')) {
-            state = component.long_name;
-          }
-          if (component.types.includes('postal_code')) {
-            pincode = component.long_name;
+        }
+      } catch (e) {
+        console.warn('Nominatim fallback failed:', e);
+      }
+
+      if (onLocationSelect) {
+        onLocationSelect({
+          lat: position.lat,
+          lng: position.lng,
+          address: `Pinned Location (${position.lat.toFixed(5)}, ${position.lng.toFixed(5)})`,
+          city: '',
+          state: '',
+          pincode: ''
+        });
+      }
+    };
+
+    if (window.google?.maps?.Geocoder) {
+      try {
+        const geocoder = new window.google.maps.Geocoder();
+        geocoder.geocode({ location: position }, async (results, status) => {
+          if (status === 'OK' && results && results[0]) {
+            setLoading(false);
+            let city = '';
+            let state = '';
+            let pincode = '';
+            
+            (results[0].address_components || []).forEach(component => {
+              if (component.types.includes('locality') || component.types.includes('administrative_area_level_2') || component.types.includes('administrative_area_level_3')) {
+                if (!city) city = component.long_name;
+              }
+              if (component.types.includes('administrative_area_level_1')) {
+                state = component.long_name;
+              }
+              if (component.types.includes('postal_code')) {
+                pincode = component.long_name;
+              }
+            });
+
+            if (onLocationSelect) {
+              onLocationSelect({
+                lat: position.lat,
+                lng: position.lng,
+                address: results[0].formatted_address,
+                city,
+                state,
+                pincode
+              });
+            }
+          } else {
+            await fallbackNominatimOrCoords();
+            setLoading(false);
           }
         });
-
-        if (onLocationSelect) {
-          onLocationSelect({
-            lat: position.lat,
-            lng: position.lng,
-            address: results[0].formatted_address,
-            city,
-            state,
-            pincode
-          });
-        }
+        return;
+      } catch (err) {
+        console.warn('Google geocoding error:', err);
       }
-    });
+    }
+
+    await fallbackNominatimOrCoords();
+    setLoading(false);
   };
 
   // Handle map click
