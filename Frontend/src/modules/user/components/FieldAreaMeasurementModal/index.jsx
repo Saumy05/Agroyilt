@@ -9,13 +9,10 @@ import {
   FiCheck,
   FiLayers,
   FiSearch,
-  FiInfo,
   FiEdit3,
-  FiGlobe,
   FiSave
 } from 'react-icons/fi';
 import GoogleFieldMap from './components/GoogleFieldMap';
-import LeafletFieldMap from './components/LeafletFieldMap';
 import {
   calculateGeodesicArea,
   calculatePolygonPerimeter,
@@ -49,19 +46,6 @@ const FieldAreaMeasurementModal = ({
   const [savingFarm, setSavingFarm] = useState(false);
   const [farmName, setFarmName] = useState('');
   const [showSaveInput, setShowSaveInput] = useState(false);
-
-  // Check if Google Maps API key is configured
-  const hasGoogleApiKey = Boolean(import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim());
-  const [mapEngine, setMapEngine] = useState(hasGoogleApiKey ? 'google' : 'leaflet');
-
-  // Update mapEngine if key status changes
-  useEffect(() => {
-    if (hasGoogleApiKey) {
-      setMapEngine('google');
-    } else {
-      setMapEngine('leaflet');
-    }
-  }, [hasGoogleApiKey]);
 
   // Sync initial center or acquire user's current GPS location on open
   useEffect(() => {
@@ -300,25 +284,6 @@ const FieldAreaMeasurementModal = ({
             </div>
 
             <div className="flex items-center gap-2">
-              {/* Engine Switch Pill */}
-              <div className="hidden sm:flex items-center gap-1 bg-black/25 px-2.5 py-1 rounded-full text-[10px] font-bold border border-white/10">
-                <FiGlobe size={11} className="text-emerald-300" />
-                <span>
-                  {mapEngine === 'google'
-                    ? 'Google Maps Hybrid'
-                    : 'Esri World Satellite'}
-                </span>
-                {hasGoogleApiKey && (
-                  <button
-                    type="button"
-                    onClick={() => setMapEngine((prev) => (prev === 'google' ? 'leaflet' : 'google'))}
-                    className="ml-1 text-[9px] underline text-emerald-200 hover:text-white cursor-pointer"
-                  >
-                    Switch
-                  </button>
-                )}
-              </div>
-
               {/* Close Button */}
               <button
                 type="button"
@@ -330,21 +295,6 @@ const FieldAreaMeasurementModal = ({
               </button>
             </div>
           </div>
-
-          {/* ENGINE STATUS BANNER (if Google API key is missing) */}
-          {!hasGoogleApiKey && (
-            <div className="bg-amber-500/10 border-b border-amber-500/20 px-3 py-1.5 flex items-center justify-between text-[11px] text-amber-900 shrink-0">
-              <span className="flex items-center gap-1.5 font-semibold">
-                <FiInfo size={13} className="text-amber-600 shrink-0" />
-                <span>
-                  🛰️ High-Resolution Satellite View Active. Google Maps API will auto-activate when <code className="bg-amber-100 px-1 py-0.5 rounded text-[10px]">VITE_GOOGLE_MAPS_API_KEY</code> is added.
-                </span>
-              </span>
-              <span className="text-[10px] font-black uppercase text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full shrink-0">
-                Fully Functional
-              </span>
-            </div>
-          )}
 
           {/* TOOLBAR CONTROLS */}
           <div className="px-3 sm:px-4 py-2 bg-slate-50 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-2 shrink-0">
@@ -452,23 +402,13 @@ const FieldAreaMeasurementModal = ({
               <>
                 {/* Map Component */}
                 <div className="w-full h-full">
-                  {mapEngine === 'google' && hasGoogleApiKey ? (
-                    <GoogleFieldMap
-                      center={center}
-                      zoom={17}
-                      points={points}
-                      onAddPoint={handleAddPoint}
-                      onUpdatePoint={handleUpdatePoint}
-                    />
-                  ) : (
-                    <LeafletFieldMap
-                      center={center}
-                      zoom={17}
-                      points={points}
-                      onAddPoint={handleAddPoint}
-                      onUpdatePoint={handleUpdatePoint}
-                    />
-                  )}
+                  <GoogleFieldMap
+                    center={center}
+                    zoom={17}
+                    points={points}
+                    onAddPoint={handleAddPoint}
+                    onUpdatePoint={handleUpdatePoint}
+                  />
                 </div>
 
                 {/* Floating Map Instruction Pill */}
