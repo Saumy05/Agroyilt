@@ -79,16 +79,6 @@ export const PERMISSION_GROUPS = [
     ]
   },
   {
-    group: 'Agri Marketplace',
-    icon: '🛒',
-    color: 'emerald',
-    keys: [
-      { key: 'marketplace.view', label: 'View Agri Marketplace' },
-      { key: 'marketplace.orders', label: 'Manage Marketplace Orders' },
-      { key: 'marketplace.stores', label: 'Approve & Manage Stores' }
-    ]
-  },
-  {
     group: 'Referrals System',
     icon: '🎁',
     color: 'pink',

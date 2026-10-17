@@ -5,11 +5,14 @@ const Booking = require('../../models/Booking');
 const Withdrawal = require('../../models/Withdrawal');
 const Settlement = require('../../models/Settlement');
 const SoilTestRequest = require('../../models/SoilTestRequest');
-const EcommerceOrder = require('../../models/EcommerceOrder');
 const Admin = require('../../models/Admin');
 const AdminPayroll = require('../../models/AdminPayroll');
 const VendorBill = require('../../models/VendorBill');
 const Settings = require('../../models/Settings');
+const VendorEquipment = require('../../models/VendorEquipment');
+const Dispute = require('../../models/Dispute');
+const SupportTicket = require('../../models/SupportTicket');
+const supportClaims = require('../../services/supportClaimService');
 
 const { BOOKING_STATUS, PAYMENT_STATUS, VENDOR_STATUS } = require('../../utils/constants');
 const { buildAdminScopeFilter } = require('../../utils/adminScopeHelper');
@@ -96,7 +99,6 @@ const getDashboardStats = async (req, res) => {
       bookingStatusStats,
       revenueResult,
       soilTestRevenueResult,
-      ecommerceRevenueResult,
       pendingWithdrawals,
       pendingSettlementsCount,
       recentActivityDocs,
@@ -155,29 +157,6 @@ const getDashboardStats = async (req, res) => {
             _id: null,
             totalAmount: { $sum: '$totalAmount' },
             totalCommission: { $sum: '$adminCommission' },
-            count: { $sum: 1 }
-          }
-        }
-      ]),
-
-      // 7. Ecommerce revenue
-      EcommerceOrder.aggregate([
-        {
-          $match: {
-            paymentStatus: 'paid',
-            deliveryStatus: { $ne: 'cancelled' },
-            ...(startDate || endDate ? { 
-              createdAt: { 
-                ...(startDate ? { $gte: new Date(startDate) } : {}), 
-                ...(endDate ? { $lte: new Date(endDate) } : {}) 
-              } 
-            } : {})
-          }
-        },
-        {
-          $group: {
-            _id: null,
-            totalCommission: { $sum: '$pricing.platformFee' },
             count: { $sum: 1 }
           }
         }
@@ -357,10 +336,7 @@ const getDashboardStats = async (req, res) => {
     const soilTestRevData = soilTestRevenueResult[0] || { totalAmount: 0, totalCommission: 0, count: 0 };
     const soilTestCommission = soilTestRevData.totalCommission;
 
-    const ecommerceRevData = ecommerceRevenueResult[0] || { totalCommission: 0, count: 0 };
-    const ecommerceCommission = ecommerceRevData.totalCommission;
-
-    const totalRevenue = bookingCommission + soilTestCommission + ecommerceCommission;
+    const totalRevenue = bookingCommission + soilTestCommission;
 
     const recentBookings = recentActivityDocs.map(b => ({
       id: b.bookingNumber || b._id,
@@ -393,11 +369,9 @@ const getDashboardStats = async (req, res) => {
           totalRevenue: totalRevenue,
           bookingRevenue: bookingCommission,
           soilTestRevenue: soilTestCommission,
-          ecommerceRevenue: ecommerceCommission,
           platformCommission: totalRevenue,
           bookingCommission: bookingCommission,
           soilTestCommission: soilTestCommission,
-          ecommerceCommission: ecommerceCommission,
           pendingVendors,
           approvedVendors,
           pendingWithdrawals,
@@ -419,6 +393,56 @@ const getDashboardStats = async (req, res) => {
       success: false,
       message: 'Failed to fetch dashboard stats. Please try again.'
     });
+  }
+};
+
+/**
+ * Sidebar badge counts: the work queues that are waiting on an admin.
+ * Plain countDocuments only, so the sidebar can poll it without running the dashboard's revenue aggregates.
+ * Farmer / vendor / worker / booking counts follow the admin's geographic scope like their list pages;
+ * the other queues are global (their list pages are not scoped either).
+ */
+const getSidebarCounts = async (req, res) => {
+  try {
+    const scoped = (entityType, base) => {
+      const scope = buildAdminScopeFilter(req.user, entityType);
+      return Object.keys(scope).length > 0 ? { $and: [base, scope] } : base;
+    };
+
+    const [
+      farmers,
+      vendors,
+      workers,
+      bookings,
+      machinery,
+      disputes,
+      support,
+      withdrawals,
+      settlements
+    ] = await Promise.all([
+      // Applications waiting for review: accounts are created as pending before the MPIN step,
+      // so only count the ones that finished sign-up (an abandoned sign-up is not a review item)
+      User.countDocuments(scoped('user', { approvalStatus: 'pending', isMpinSet: true })),
+      Vendor.countDocuments(scoped('vendor', { approvalStatus: VENDOR_STATUS.PENDING, isActive: true, isMpinSet: true })),
+      Worker.countDocuments(scoped('worker', { approvalStatus: 'pending', isMpinSet: true })),
+      // Open bookings (not completed / cancelled), same definition the sidebar used before
+      Booking.countDocuments(scoped('booking', { status: { $nin: [BOOKING_STATUS.COMPLETED, BOOKING_STATUS.CANCELLED] } })),
+      VendorEquipment.countDocuments({ status: 'pending' }),
+      // New disputes nobody has picked up yet ('pending' is the legacy alias of OPEN)
+      Dispute.countDocuments({ status: { $in: ['OPEN', 'pending'] } }),
+      // Support tickets waiting in the unclaimed queue
+      SupportTicket.countDocuments(supportClaims.viewFilter('unassigned', req.user)),
+      Withdrawal.countDocuments({ status: 'pending' }),
+      Settlement.countDocuments({ status: 'pending' })
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: { farmers, vendors, workers, bookings, machinery, disputes, support, withdrawals, settlements }
+    });
+  } catch (error) {
+    console.error('Sidebar counts error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch sidebar counts' });
   }
 };
 
@@ -531,7 +555,6 @@ const getRevenueAnalytics = async (req, res) => {
           bookingCommission: 0,
           soilTestRevenue: 0,
           soilTestCommission: 0,
-          ecommerceRevenue: 0,
           totalRevenue: 0,
           totalCommission: 0
         };
@@ -590,44 +613,6 @@ const getRevenueAnalytics = async (req, res) => {
       entry.soilTestCommission = commission;
       entry.totalRevenue += commission;
       entry.totalCommission += commission;
-    });
-
-    // 4. Ecommerce Order Revenue Analytics
-    const ecommerceDateFilter = {};
-    if (startDate || endDate) {
-      ecommerceDateFilter.createdAt = {};
-      if (startDate) ecommerceDateFilter.createdAt.$gte = new Date(startDate);
-      if (endDate) ecommerceDateFilter.createdAt.$lte = new Date(endDate);
-    }
-
-    const ecommerceData = await EcommerceOrder.aggregate([
-      {
-        $match: {
-          paymentStatus: 'paid',
-          deliveryStatus: { $ne: 'cancelled' },
-          ...ecommerceDateFilter
-        }
-      },
-      {
-        $group: {
-          _id: {
-            $dateToString: {
-              format: groupFormat,
-              date: '$createdAt',
-              timezone
-            }
-          },
-          revenue: { $sum: '$pricing.platformFee' }
-        }
-      }
-    ]);
-
-    ecommerceData.forEach(item => {
-      const revenue = item.revenue || 0;
-      const entry = getEntry(item._id);
-      entry.ecommerceRevenue = revenue;
-      entry.totalRevenue += revenue;
-      entry.totalCommission += revenue;
     });
 
     const finalRevenueData = Object.values(mergedData).sort((a, b) => a.date.localeCompare(b.date));
@@ -776,6 +761,7 @@ const getUserGrowthMetrics = async (req, res) => {
 
 module.exports = {
   getDashboardStats,
+  getSidebarCounts,
   getRevenueAnalytics,
   getBookingTrends,
   getUserGrowthMetrics

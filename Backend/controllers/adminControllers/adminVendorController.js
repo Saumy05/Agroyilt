@@ -5,7 +5,6 @@ const Admin = require('../../models/Admin');
 const City = require('../../models/City');
 const Booking = require('../../models/Booking');
 const VendorBill = require('../../models/VendorBill');
-const Product = require('../../models/Product');
 const { validationResult } = require('express-validator');
 const { VENDOR_STATUS, BOOKING_STATUS, PAYMENT_STATUS } = require('../../utils/constants');
 const { createNotification } = require('../notificationControllers/notificationController');
@@ -657,147 +656,15 @@ module.exports = {
   toggleVendorStatus,
   updateVendorServices,
   deleteVendor,
-  // Agri-Marketplace Shop Management
-  getPendingShopApprovals: async (req, res) => {
-    try {
-      const vendors = await Vendor.find({
-        'shopDetails.storeApprovalStatus': 'pending'
-      }).select('name businessName phone shopDetails email');
-      res.status(200).json({ success: true, data: vendors });
-    } catch (error) {
-      res.status(500).json({ success: false, message: error.message });
-    }
-  },
-  updateShopStatus: async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { status, remarks } = req.body;
-      if (!['approved', 'rejected'].includes(status)) {
-        return res.status(400).json({ success: false, message: 'Invalid status' });
-      }
-      const updateData = {
-        'shopDetails.storeApprovalStatus': status,
-        'shopDetails.isStoreApproved': status === 'approved'
-      };
-      const vendor = await Vendor.findByIdAndUpdate(id, { $set: updateData }, { new: true });
-      if (!vendor) return res.status(404).json({ success: false, message: 'Vendor not found' });
-      
-      // Notification
-      await createNotification({
-        vendorId: vendor._id,
-        type: status === 'approved' ? 'shop_approved' : 'shop_rejected',
-        title: status === 'approved' ? 'Shop Registration Approved' : 'Shop Registration Rejected',
-        message: status === 'approved' ? 'Your Agri-Store is now live. You can add products.' : `Your shop registration was rejected. ${remarks || ''}`,
-        relatedId: vendor._id,
-        relatedType: 'vendor'
-      });
-
-      res.status(200).json({ success: true, message: `Shop registration ${status}`, data: vendor.shopDetails });
-    } catch (error) {
-      res.status(500).json({ success: false, message: error.message });
-    }
-  },
-  getApprovedShops: async (req, res) => {
-    try {
-      const vendors = await Vendor.find({
-        'shopDetails.storeApprovalStatus': 'approved'
-      }).select('name businessName phone shopDetails email profilePhoto');
-
-      // For each shop, get their product count and total stock
-      const vendorIds = vendors.map(v => v._id);
-      const productStats = await Product.aggregate([
-        {
-          $match: {
-            vendorId: { $in: vendorIds },
-            type: 'physical_good'
-          }
-        },
-        {
-          $group: {
-            _id: '$vendorId',
-            totalProducts: { $sum: 1 },
-            approvedProducts: { $sum: { $cond: [{ $eq: ['$approvalStatus', 'approved'] }, 1, 0] } },
-            pendingProducts: { $sum: { $cond: [{ $eq: ['$approvalStatus', 'pending'] }, 1, 0] } },
-            totalStock: { $sum: '$stock' }
-          }
-        }
-      ]);
-
-      // Map stats to each vendor
-      const statsMap = {};
-      productStats.forEach(stat => {
-        statsMap[stat._id.toString()] = stat;
-      });
-
-      const vendorsWithStats = vendors.map(v => ({
-        ...v.toObject(),
-        productStats: statsMap[v._id.toString()] || {
-          totalProducts: 0,
-          approvedProducts: 0,
-          pendingProducts: 0,
-          totalStock: 0
-        }
-      }));
-
-      res.status(200).json({ success: true, data: vendorsWithStats });
-    } catch (error) {
-      res.status(500).json({ success: false, message: error.message });
-    }
-  },
-  addVendorShop: async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { shopName, shopAddress, shopLicense, shopLocation } = req.body;
-      let licenseDocument = req.body.licenseDocument || null;
-
-      const vendor = await Vendor.findById(id);
-      if (!vendor) {
-        return res.status(404).json({ success: false, message: 'Vendor not found' });
-      }
-
-      // Upload to cloudinary if base64
-      if (licenseDocument && licenseDocument.startsWith('data:')) {
-        const cloudinaryService = require('../../services/cloudinaryService');
-        const uploadRes = await cloudinaryService.uploadFile(licenseDocument, { folder: 'vendors/documents/shop' });
-        if (uploadRes.success) licenseDocument = uploadRes.url;
-      }
-
-      const shopDetails = {
-        shopName,
-        shopAddress,
-        shopLocation: shopLocation || { lat: 0, lng: 0 },
-        shopLicense,
-        licenseDocument,
-        isStoreApproved: true,
-        storeApprovalStatus: 'approved'
-      };
-
-      const updatedVendor = await Vendor.findByIdAndUpdate(
-        id,
-        { $set: { shopDetails } },
-        { new: true }
-      );
-
-      res.status(200).json({
-        success: true,
-        message: 'Shop successfully created and approved for this vendor.',
-        data: updatedVendor.shopDetails
-      });
-    } catch (error) {
-      console.error('Admin add vendor shop error:', error);
-      res.status(500).json({ success: false, message: error.message });
-    }
-  },
   addVendor: async (req, res) => {
     try {
-      const { name, email, phone, businessName, service, aadhar, pan, labDetails, shopDetails } = req.body;
+      const { name, email, phone, businessName, service, aadhar, pan, labDetails } = req.body;
       let aadharUrl = req.body.aadharDocument || null;
       let aadharBackUrl = req.body.aadharBackDocument || null;
       let panUrl = req.body.panDocument || null;
       let otherUrls = req.body.otherDocuments || [];
 
       let parsedLabDetails = labDetails ? (typeof labDetails === 'string' ? JSON.parse(labDetails) : labDetails) : null;
-      let parsedShopDetails = shopDetails ? (typeof shopDetails === 'string' ? JSON.parse(shopDetails) : shopDetails) : null;
 
       // Validate 10-digit Indian mobile number
       const cleanPhone = String(phone || '').replace(/\D/g, '').slice(-10);
@@ -849,12 +716,6 @@ module.exports = {
       if (parsedLabDetails && parsedLabDetails.certificationDocument && parsedLabDetails.certificationDocument.startsWith('data:')) {
         const uploadRes = await cloudinaryService.uploadFile(parsedLabDetails.certificationDocument, { folder: 'vendors/documents/lab' });
         if (uploadRes.success) parsedLabDetails.certificationDocument = uploadRes.url;
-      }
-
-      // Upload shop license if base64
-      if (parsedShopDetails && parsedShopDetails.licenseDocument && parsedShopDetails.licenseDocument.startsWith('data:')) {
-        const uploadRes = await cloudinaryService.uploadFile(parsedShopDetails.licenseDocument, { folder: 'vendors/documents/shop' });
-        if (uploadRes.success) parsedShopDetails.licenseDocument = uploadRes.url;
       }
 
       // Automatically add soil_testing to service if registering as a lab
@@ -917,11 +778,6 @@ module.exports = {
 
       if (parsedLabDetails) {
         vendorData.labDetails = parsedLabDetails;
-      }
-      if (parsedShopDetails) {
-        parsedShopDetails.isStoreApproved = true;
-        parsedShopDetails.storeApprovalStatus = 'approved';
-        vendorData.shopDetails = parsedShopDetails;
       }
 
       const vendor = await Vendor.create(vendorData);

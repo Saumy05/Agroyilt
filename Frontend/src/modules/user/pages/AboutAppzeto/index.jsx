@@ -34,8 +34,6 @@ const AboutAppzeto = () => {
     'Drone Spraying Services',
     'Harvesting Solutions',
     'Agricultural Workforce & Labor',
-    'Organic Fertilizers & Seeds',
-    'Agri-Marketplace Services',
     'Weather-based Agri Advisory',
     'And many more...'
   ];

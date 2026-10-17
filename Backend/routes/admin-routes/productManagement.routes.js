@@ -9,8 +9,7 @@ const {
     rejectProduct,
     createProduct,
     updateProduct,
-    deleteProduct,
-    getAllEcommerceOrders
+    deleteProduct
 } = require('../../controllers/adminControllers/productController');
 
 // All product management routes require admin authentication
@@ -26,9 +25,6 @@ router.delete('/products/:id', deleteProduct);
 router.get('/vendor-submissions', getVendorProducts);
 router.post('/vendor-submissions/:id/approve', approveProduct);
 router.post('/vendor-submissions/:id/reject', rejectProduct);
-
-// Global Ecommerce Order View
-router.get('/orders', getAllEcommerceOrders);
 
 module.exports = router;
 

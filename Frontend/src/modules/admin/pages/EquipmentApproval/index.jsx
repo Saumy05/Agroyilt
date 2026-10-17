@@ -7,6 +7,7 @@ import { toastManager } from '../../../../utils/toastManager';
 import { motion, AnimatePresence } from 'framer-motion';
 import adminEquipmentService from '../../../../services/adminEquipmentService';
 import LogoLoader from '../../../../components/common/LogoLoader';
+import { refreshAdminCounts } from '../../utils/adminCounts';
 
 const EquipmentApproval = () => {
   const [loading, setLoading] = useState(true);
@@ -36,6 +37,7 @@ const EquipmentApproval = () => {
       const res = await adminEquipmentService.updateStatus(id, { status, remarks });
       if (res.success) {
         toastManager.success(`Machine ${status}`);
+        refreshAdminCounts();
         fetchEquipment();
         setSelectedItem(null);
       }
@@ -50,6 +52,7 @@ const EquipmentApproval = () => {
       const res = await adminEquipmentService.delete(id);
       if (res.success) {
         toastManager.success('Deleted successfully');
+        refreshAdminCounts();
         fetchEquipment();
       }
     } catch (err) {

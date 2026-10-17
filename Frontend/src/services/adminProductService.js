@@ -40,12 +40,6 @@ const adminProductService = {
     rejectProduct: async (id, reason = '') => {
         const response = await api.post(`/admin/vendor-submissions/${id}/reject`, { reason });
         return response.data;
-    },
-
-    // Ecommerce Orders (Global View)
-    getEcommerceOrders: async () => {
-        const response = await api.get('/admin/orders');
-        return response.data;
     }
 };
 

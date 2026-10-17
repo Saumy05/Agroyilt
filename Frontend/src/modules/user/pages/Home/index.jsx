@@ -28,7 +28,6 @@ import SearchOverlay from './components/SearchOverlay';
 import CoreServicesHub from './components/CoreServicesHub';
 import ActiveBookingCard from './components/ActiveBookingCard';
 import MandiAndSchemesSection from './components/MandiAndSchemesSection';
-import AgriMarketplaceSection from './components/AgriMarketplaceSection';
 import MachineryDiscoverySection from './components/MachineryDiscoverySection';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import AddressSelectionModal from '../Checkout/components/AddressSelectionModal';
@@ -739,13 +738,6 @@ const Home = () => {
             <motion.div variants={itemVariants}>
               <MachineryDiscoverySection />
             </motion.div>
-
-            {/* Agriculture Marketplace (Disabled - E-commerce seed/fertilizer store is outside the SOW) */}
-            {/* 
-            <motion.div variants={itemVariants}>
-              <AgriMarketplaceSection />
-            </motion.div>
-            */}
 
             {/* Dynamic Sections */}
             {homeContent?.isCategorySectionsVisible !== false && (homeContent?.categorySections || []).sort((a, b) => (a.order || 0) - (b.order || 0)).map((section, sIdx) => (

@@ -7,6 +7,7 @@ import { toastManager } from '../../../../utils/toastManager';
 import adminDisputeService from '../../../../services/adminDisputeService';
 import authStorage from '../../../../utils/authStorage';
 import Modal from '../../components/Modal';
+import { refreshAdminCounts } from '../../utils/adminCounts';
 
 const TERMINAL = ['RESOLVED', 'DISMISSED', 'PARTIAL_SETTLEMENT', 'resolved', 'dismissed'];
 const RESOLUTIONS = [
@@ -96,6 +97,7 @@ const AdminDisputes = () => {
             });
             if (response.success) {
                 toastManager.success(dismiss ? 'Dispute dismissed' : 'Dispute resolved');
+                refreshAdminCounts();
                 setIsDetailsModalOpen(false);
                 fetchDisputes();
             }
@@ -112,6 +114,7 @@ const AdminDisputes = () => {
             const response = await adminDisputeService.markDuesPaid(selectedDispute._id, resolutionNotes);
             if (response.success) {
                 toastManager.success(response.message || 'Dues recorded as paid');
+                refreshAdminCounts();
                 setIsDetailsModalOpen(false);
                 fetchDisputes();
             }

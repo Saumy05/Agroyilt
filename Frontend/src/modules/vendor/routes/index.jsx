@@ -42,12 +42,8 @@ const Maintenance = lazy(() => import('../pages/Maintenance'));
 const VendorReferrals = lazy(() => import('../pages/Referrals'));
 const Compliance = lazy(() => import('../pages/Compliance'));
 const Analytics = lazy(() => import('../pages/Analytics'));
-const MyStore = lazy(() => import('../pages/MyStore'));
-const StoreRegistration = lazy(() => import('../pages/MyStore/StoreRegistration'));
-const StoreOrders = lazy(() => import('../pages/MyStore/Orders'));
 import { SOIL_TESTING_ENABLED } from '../../../utils/featureFlags';
 const SoilTesting = lazy(() => import('../pages/SoilTesting'));
-const BusinessDetails = lazy(() => import('../pages/BusinessDetails'));
 const EquipmentInventory = lazy(() => import('../pages/Equipment/EquipmentInventory'));
 const AddEquipment = lazy(() => import('../pages/Equipment/AddEquipment'));
 const BankDetails = lazy(() => import('../pages/BankDetails'));
@@ -148,11 +144,7 @@ const VendorRoutes = () => {
                 <Route path="/referrals" element={<ProtectedRoute userType="vendor"><VendorReferrals /></ProtectedRoute>} />
                 <Route path="/compliance" element={<ProtectedRoute userType="vendor"><Compliance /></ProtectedRoute>} />
                 <Route path="/analytics" element={<ProtectedRoute userType="vendor"><Analytics /></ProtectedRoute>} />
-                <Route path="/store" element={<ProtectedRoute userType="vendor"><MyStore /></ProtectedRoute>} />
-                <Route path="/store/registration" element={<ProtectedRoute userType="vendor"><StoreRegistration /></ProtectedRoute>} />
-                <Route path="/store/orders" element={<ProtectedRoute userType="vendor"><StoreOrders /></ProtectedRoute>} />
                 <Route path="/soil-tests" element={SOIL_TESTING_ENABLED ? <ProtectedRoute userType="vendor"><SoilTesting /></ProtectedRoute> : <Navigate to="/vendor" replace />} />
-                <Route path="/business-details" element={<ProtectedRoute userType="vendor"><BusinessDetails /></ProtectedRoute>} />
                 <Route path="/equipment" element={<ProtectedRoute userType="vendor"><EquipmentInventory /></ProtectedRoute>} />
                 <Route path="/equipment/add" element={<ProtectedRoute userType="vendor"><AddEquipment /></ProtectedRoute>} />
                 <Route path="/equipment/edit/:id" element={<ProtectedRoute userType="vendor"><AddEquipment /></ProtectedRoute>} />

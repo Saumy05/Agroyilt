@@ -5,7 +5,6 @@ import AppRoutes from './routes';
 import { SocketProvider } from './context/SocketContext';
 import { CartProvider } from './context/CartContext';
 import { GeoProvider } from './context/GeoContext';
-import { EcommerceCartProvider } from './context/EcommerceCartContext';
 import { BrandProvider } from './context/BrandContext';
 import { initializePushNotifications, setupForegroundNotificationHandler } from './services/pushNotificationService';
 // Global common imports removed here as they are now handled in AppRoutes.jsx for conditional rendering
@@ -121,48 +120,46 @@ function App() {
         <SocketProvider>
           <GeoProvider>
             <CartProvider>
-              <EcommerceCartProvider>
-                <div className="App">
-                  <ToastLimiter />
-                  <AppRoutes />
-                  {/* Global components moved to routes/index.jsx */}
-                  <Toaster
-                    position="top-center"
-                    reverseOrder={false}
-                    containerStyle={{
-                      zIndex: 999999
-                    }}
-                    toastOptions={{
-                      duration: 2500,
+              <div className="App">
+                <ToastLimiter />
+                <AppRoutes />
+                {/* Global components moved to routes/index.jsx */}
+                <Toaster
+                  position="top-center"
+                  reverseOrder={false}
+                  containerStyle={{
+                    zIndex: 999999
+                  }}
+                  toastOptions={{
+                    duration: 2500,
+                    style: {
+                      background: '#ffffff',
+                      color: '#111827',
+                      borderRadius: '16px',
+                      padding: '14px 20px',
+                      boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05)',
+                      border: '1px solid #e5e7eb',
+                      fontWeight: '500'
+                    },
+                    success: {
+                      duration: 1500,
                       style: {
                         background: '#ffffff',
-                        color: '#111827',
-                        borderRadius: '16px',
-                        padding: '14px 20px',
-                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05)',
-                        border: '1px solid #e5e7eb',
-                        fontWeight: '500'
+                        color: '#065f46',
+                        border: '1px solid #a7f3d0'
                       },
-                      success: {
-                        duration: 1500,
-                        style: {
-                          background: '#ffffff',
-                          color: '#065f46',
-                          border: '1px solid #a7f3d0'
-                        },
+                    },
+                    error: {
+                      duration: 3000,
+                      style: {
+                        background: '#ffffff',
+                        color: '#991b1b',
+                        border: '1px solid #fecaca'
                       },
-                      error: {
-                        duration: 3000,
-                        style: {
-                          background: '#ffffff',
-                          color: '#991b1b',
-                          border: '1px solid #fecaca'
-                        },
-                      },
-                    }}
-                  />
-                </div>
-              </EcommerceCartProvider>
+                    },
+                  }}
+                />
+              </div>
             </CartProvider>
           </GeoProvider>
         </SocketProvider>

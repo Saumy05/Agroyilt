@@ -31,6 +31,7 @@ import workerService from '../../services/workerService';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import DobInput from '../../../../components/common/DobInput';
 import { calculateAge, getDobError } from '../../../../utils/age';
+import { refreshAdminCounts } from '../../utils/adminCounts';
 
 const StatusBadge = ({ status }) => {
   const styles = {
@@ -210,6 +211,7 @@ const AllWorkers = () => {
       
       if (res && res.success) {
         toast.success(res.message || `Worker ${actionStr}d successfully`);
+        refreshAdminCounts();
         
         // If the action was performed on the currently open modal worker
         if (selectedWorker && selectedWorker._id === id) {

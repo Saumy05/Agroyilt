@@ -47,7 +47,6 @@ const AdminDashboard = () => {
     totalRevenue: 0,
     bookingRevenue: 0,
     soilTestRevenue: 0,
-    ecommerceRevenue: 0,
     todayRevenue: 0,
     adminCompensation: null
   });
@@ -97,7 +96,6 @@ const AdminDashboard = () => {
             totalRevenue: s.totalRevenue || 0,
             bookingRevenue: s.bookingRevenue || 0,
             soilTestRevenue: s.soilTestRevenue || 0,
-            ecommerceRevenue: s.ecommerceRevenue || 0,
             todayRevenue: 0,
             adminCompensation: s.adminCompensation || null
           });
@@ -118,7 +116,6 @@ const AdminDashboard = () => {
             revenue: item.totalRevenue,
             bookingRevenue: item.bookingRevenue,
             soilTestRevenue: item.soilTestRevenue,
-            ecommerceRevenue: item.ecommerceRevenue || 0,
             orders: item.bookings || 0
           }));
           mapped.sort((a, b) => new Date(a.date) - new Date(b.date));

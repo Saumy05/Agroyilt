@@ -1,5 +1,4 @@
 const Product = require('../../models/Product');
-const EcommerceOrder = require('../../models/EcommerceOrder');
 
 /**
  * Admin: Get all products (Central Store + Approved Vendor Products)
@@ -131,22 +130,6 @@ const deleteProduct = async (req, res) => {
     }
 };
 
-/**
- * Admin: View all Ecommerce Orders
- */
-const getAllEcommerceOrders = async (req, res) => {
-    try {
-        const orders = await EcommerceOrder.find()
-            .populate('userId', 'name phone')
-            .populate('vendorId', 'businessName name phone')
-            .populate('items.productId', 'unit bagWeight')
-            .sort({ createdAt: -1 });
-        res.status(200).json({ success: true, data: orders });
-    } catch (error) {
-        res.status(500).json({ success: false, message: 'Failed to fetch orders' });
-    }
-};
-
 module.exports = {
     getAllProducts,
     getVendorProducts,
@@ -154,6 +137,5 @@ module.exports = {
     rejectProduct,
     createProduct,
     updateProduct,
-    deleteProduct,
-    getAllEcommerceOrders
+    deleteProduct
 };

@@ -93,7 +93,7 @@ const BottomNav = memo(({ isGlobal = false }) => {
     if (path === '/vendor' || path === '/vendor/' || path.startsWith('/vendor/dashboard')) return 'home';
     if (path.startsWith('/vendor/jobs') || path.startsWith('/vendor/active-jobs')) return 'bookings';
     if (path.startsWith('/vendor/wallet') || path.startsWith('/vendor/earnings') || path.startsWith('/vendor/settlements')) return 'wallet';
-    if (path.startsWith('/vendor/profile') || path.startsWith('/vendor/settings') || path.startsWith('/vendor/business-details')) return 'profile';
+    if (path.startsWith('/vendor/profile') || path.startsWith('/vendor/settings')) return 'profile';
     return 'home';
   };
 

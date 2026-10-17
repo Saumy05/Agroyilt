@@ -8,6 +8,7 @@ import {
 import { toastManager } from '../../../../utils/toastManager';
 import adminSupportService from '../../../../services/adminSupportService';
 import Modal from '../../components/Modal';
+import { refreshAdminCounts } from '../../utils/adminCounts';
 
 const TICKET_CATEGORIES = [
   'ALL', 'BOOKING', 'PAYMENT', 'REFUND', 'WALLET', 'WITHDRAWAL',
@@ -323,6 +324,7 @@ const AdminSupport = () => {
       const res = await adminSupportService.claimTicket(ticket._id);
       if (res?.success) {
         toastManager.success('Ticket claimed. It is yours now.');
+        refreshAdminCounts();
         if (selectedTicket?._id === ticket._id) {
           setSelectedTicket(prev => ({ ...prev, assignedAdminName: res.data?.assignedAdminName }));
           setViewer({ isOwner: true, canAct: true });
@@ -345,6 +347,7 @@ const AdminSupport = () => {
       const res = await adminSupportService.releaseTicket(selectedTicket._id);
       if (res?.success) {
         toastManager.success('Ticket returned to the queue');
+        refreshAdminCounts();
         setSelectedTicket(prev => ({ ...prev, assignedAdminName: null, assignedTo: null }));
         setViewer({ isOwner: false, canAct: false });
       }

@@ -45,17 +45,6 @@ const INITIAL_DEMO_NOTIFICATIONS = [
     createdAt: new Date(Date.now() - 1000 * 60 * 12).toISOString()
   },
   {
-    _id: 'demo-2',
-    title: 'New Store Approval Request',
-    message: 'Green Agri Supermarket submitted shop documents for verification.',
-    type: 'vendor_approval_request',
-    relatedType: 'store',
-    targetRole: 'Vendor Admin',
-    modulePermission: 'marketplace.view',
-    isRead: false,
-    createdAt: new Date(Date.now() - 1000 * 60 * 45).toISOString()
-  },
-  {
     _id: 'demo-3',
     title: 'Cash Limit Exceeded Warning',
     message: 'Vendor Vijay Kumar exceeded the maximum cash on hand limit of ₹25,000.',
@@ -320,8 +309,6 @@ const Notifications = () => {
       navigate('/admin/soil-tests');
     } else if (type.includes('withdraw') || relatedType === 'withdrawal') {
       navigate('/admin/withdrawals');
-    } else if (type.includes('approval') || relatedType === 'store') {
-      navigate('/admin/marketplace/store-approvals');
     } else if (type.includes('cash_limit') || type.includes('settlement')) {
       navigate('/admin/settlements');
     } else if (type.includes('worker') || relatedType === 'worker') {

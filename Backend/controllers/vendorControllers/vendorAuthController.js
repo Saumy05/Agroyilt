@@ -175,7 +175,7 @@ const register = async (req, res) => {
     }
 
     // verificationToken handling
-    const { name, email, verificationToken, aadhar, pan, businessName, service, serviceCategoryIds, labDetails, shopDetails, gender, dateOfBirth } = req.body;
+    const { name, email, verificationToken, aadhar, pan, businessName, service, serviceCategoryIds, labDetails, gender, dateOfBirth } = req.body;
     let phone = req.body.phone;
 
     // Checked before OTP so a rejected under-18 signup doesn't burn the user's OTP
@@ -219,14 +219,13 @@ const register = async (req, res) => {
     let panUrl = req.body.panDocument || null;
     let otherUrls = req.body.otherDocuments || [];
     let parsedLabDetails = labDetails ? (typeof labDetails === 'string' ? JSON.parse(labDetails) : labDetails) : null;
-    let parsedShopDetails = shopDetails ? (typeof shopDetails === 'string' ? JSON.parse(shopDetails) : shopDetails) : null;
 
     // Categories: ids are authoritative; names are derived from them (and kept for older clients)
     const resolvedServices = await resolveVendorServices({ ids: serviceCategoryIds, titles: service });
-    if (resolvedServices.service.length === 0 && !parsedShopDetails) {
+    if (resolvedServices.service.length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'Please select at least one equipment category (or register a shop).'
+        message: 'Please select at least one equipment category.'
       });
     }
 
@@ -241,13 +240,8 @@ const register = async (req, res) => {
       pLabCert = uploadBase64(parsedLabDetails.certificationDocument, 'vendors/documents/lab');
     }
 
-    let pShopLicense = Promise.resolve(null);
-    if (parsedShopDetails && parsedShopDetails.licenseDocument) {
-      pShopLicense = uploadBase64(parsedShopDetails.licenseDocument, 'vendors/documents/shop');
-    }
-
-    const [finalAadhar, finalAadharBack, finalPan, finalOthers, finalLabCert, finalShopLicense] = await Promise.all([
-      pAadhar, pAadharBack, pPan, pOthers, pLabCert, pShopLicense
+    const [finalAadhar, finalAadharBack, finalPan, finalOthers, finalLabCert] = await Promise.all([
+      pAadhar, pAadharBack, pPan, pOthers, pLabCert
     ]);
 
     aadharUrl = finalAadhar || aadharUrl;
@@ -257,9 +251,6 @@ const register = async (req, res) => {
     
     if (parsedLabDetails && parsedLabDetails.certificationDocument) {
       parsedLabDetails.certificationDocument = finalLabCert;
-    }
-    if (parsedShopDetails && parsedShopDetails.licenseDocument) {
-      parsedShopDetails.licenseDocument = finalShopLicense;
     }
 
     const vendorData = {
@@ -282,10 +273,6 @@ const register = async (req, res) => {
     };
 
     if (parsedLabDetails) vendorData.labDetails = parsedLabDetails;
-    if (parsedShopDetails) {
-      parsedShopDetails.storeApprovalStatus = 'pending';
-      vendorData.shopDetails = parsedShopDetails;
-    }
 
     if (normalizedEmail) {
       vendorData.email = normalizedEmail;

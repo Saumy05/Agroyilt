@@ -60,8 +60,6 @@ const NotificationWindow = ({
       navigate('/admin/users/kyc');
     } else if (type.includes('withdraw') || type.includes('settlement')) {
       navigate('/admin/settlements');
-    } else if (type.includes('store') || type.includes('shop')) {
-      navigate('/admin/marketplace/store-approvals');
     }
 
     onClose();

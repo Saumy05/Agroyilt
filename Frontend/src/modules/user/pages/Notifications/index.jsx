@@ -154,8 +154,6 @@ const Notifications = () => {
     } else if (type.includes('dispute') || relatedType.includes('dispute')) {
       if (relatedId) navigate(`/user/booking/${relatedId}`);
       else navigate('/user/my-bookings');
-    } else if (type.includes('ecommerce') || type.includes('order')) {
-      navigate('/user/my-agri-orders');
     } else if (type.includes('soil')) {
       navigate('/user/soil-testing');
     } else if (type.includes('wallet') || type.includes('refund')) {

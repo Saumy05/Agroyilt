@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, memo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiBriefcase, FiUsers, FiBell, FiArrowRight, FiUser, FiClock, FiMapPin, FiCheckCircle, FiTrendingUp, FiChevronRight, FiAlertTriangle, FiCalendar, FiBarChart2, FiActivity, FiShoppingBag, FiTruck } from 'react-icons/fi';
+import { FiBriefcase, FiUsers, FiBell, FiArrowRight, FiUser, FiClock, FiMapPin, FiCheckCircle, FiTrendingUp, FiChevronRight, FiAlertTriangle, FiCalendar, FiBarChart2, FiActivity, FiTruck } from 'react-icons/fi';
 import { FaWallet } from 'react-icons/fa';
 import { vendorTheme as themeColors } from '../../../../theme';
 import Header from '../../components/layout/Header';
@@ -87,14 +87,6 @@ const Dashboard = memo(() => {
       subtitle: stats.machinesInMaintenance > 0 ? `${stats.machinesInMaintenance} in care` : 'Maintenance',
     },
     {
-      title: 'Agri Market',
-      icon: FiShoppingBag,
-      color: '#E11D48', // Rose
-      bgLight: '#FFE4E6',
-      path: '/vendor/store/orders',
-      subtitle: `₹${(stats.ecommerceEarnings || 0).toLocaleString()} store`,
-    },
-    {
       title: 'Analytics',
       icon: FiBarChart2,
       color: '#7C3AED', // Violet
@@ -102,7 +94,7 @@ const Dashboard = memo(() => {
       path: '/vendor/analytics',
       subtitle: 'Equipment ROI',
     },
-  ], [stats.activeJobs, stats.machinesInMaintenance, stats.ecommerceEarnings]);
+  ], [stats.activeJobs, stats.machinesInMaintenance]);
 
   const getStatusStyle = (status) => {
     const s = String(status).toLowerCase();

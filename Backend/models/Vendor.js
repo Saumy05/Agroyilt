@@ -176,25 +176,12 @@ const vendorSchema = new mongoose.Schema({
     certificationDocument: { type: String } // Cloudinary URL
   },
   // ==========================================
-  // SHOP DETAILS (For Agri-Store / Ecommerce)
+  // SERVICE LOCATION (equipment search radius)
   // ==========================================
   shopDetails: {
-    shopName: { type: String, trim: true },
-    shopAddress: { type: String, trim: true },
     shopLocation: {
       lat: Number,
       lng: Number
-    },
-    shopLicense: { type: String, trim: true },
-    licenseDocument: { type: String }, // Cloudinary URL
-    isStoreApproved: {
-      type: Boolean,
-      default: false
-    },
-    storeApprovalStatus: {
-      type: String,
-      enum: ['pending', 'approved', 'rejected', 'not_submitted'],
-      default: 'not_submitted'
     },
     deliveryRadius: {
       type: Number,

@@ -297,16 +297,12 @@ app.use('/api', require('./routes/admin-routes/upload.routes')); // Generic uplo
 // User routes additions
 app.use('/api/user/soil-test', soilTestingGate);
 app.use('/api/user/soil-test', require('./routes/user-routes/soilTest.routes'));
-app.use('/api/user/ecommerce', require('./routes/user-routes/product.routes.js'));
-app.use('/api/user/ecommerce-cart', require('./routes/user-routes/ecommerceCart.routes'));
 
 // Vendor Wallet/Ledger routes
 // Vendor Wallet/Ledger routes
 // WARNING: This mounts at /api/vendors, meaning routes inside are relative to that.
 // e.g., router.post('/withdrawal') becomes /api/vendors/withdrawal
 app.use('/api/vendors', require('./routes/vendor-routes/vendorWallet.routes'));
-app.use('/api/vendors/store', require('./routes/vendor-routes/productManagement.routes'));
-app.use('/api/vendors/shop', require('./routes/vendor-routes/shop.routes'));
 app.use('/api/vendors/soil-test', soilTestingGate);
 app.use('/api/vendors/soil-test', require('./routes/vendor-routes/soilTest.routes'));
 
@@ -348,7 +344,6 @@ app.use('/api/public', require('./routes/public-routes/catalog.routes'));
 app.use('/api/public', require('./routes/public-routes/plan.routes'));
 app.use('/api/public', require('./routes/public-routes/config.routes'));
 app.use('/api/public', require('./routes/public-routes/signupUpload.routes'));
-app.use('/api/products', require('./routes/public-routes/product.routes'));
 app.use('/api/weather', require('./routes/common-routes/weather.routes'));
 app.use('/api/field-area', require('./routes/common-routes/fieldArea.routes'));
 app.use('/api/availabilities', require('./routes/common-routes/availability.routes'));

@@ -17,7 +17,6 @@ const DEFAULT_STATS = {
   rating: 0,
   complianceAlerts: [],
   machinesInMaintenance: 0,
-  ecommerceEarnings: 0
 };
 
 export const VendorDashboardProvider = ({ children }) => {
@@ -243,7 +242,6 @@ export const VendorDashboardProvider = ({ children }) => {
         rating: apiStats?.rating || 0,
         complianceAlerts: apiStats?.complianceAlerts || [],
         machinesInMaintenance: prev.machinesInMaintenance || 0,
-        ecommerceEarnings: apiStats?.ecommerceEarnings || 0,
         servicePayoutPercentage: apiStats?.servicePayoutPercentage || 70
       };
       localStorage.setItem('vendorDashboardStats', JSON.stringify(updatedStats));

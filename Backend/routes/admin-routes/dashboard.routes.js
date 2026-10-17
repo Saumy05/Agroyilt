@@ -4,6 +4,7 @@ const { authenticate } = require('../../middleware/authMiddleware');
 const { isAdmin } = require('../../middleware/roleMiddleware');
 const {
   getDashboardStats,
+  getSidebarCounts,
   getRevenueAnalytics,
   getBookingTrends,
   getUserGrowthMetrics
@@ -11,6 +12,7 @@ const {
 
 // Routes
 router.get('/dashboard/stats', authenticate, isAdmin, getDashboardStats);
+router.get('/sidebar-counts', authenticate, isAdmin, getSidebarCounts);
 router.get('/dashboard/revenue', authenticate, isAdmin, getRevenueAnalytics);
 router.get('/dashboard/bookings/trends', authenticate, isAdmin, getBookingTrends);
 router.get('/dashboard/users/growth', authenticate, isAdmin, getUserGrowthMetrics);

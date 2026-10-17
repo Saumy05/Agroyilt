@@ -226,9 +226,7 @@ export const SocketProvider = ({ children }) => {
             const relType = (data.relatedType || '').toLowerCase();
 
             if (userType === 'vendor') {
-              if (notifType.includes('ecommerce') || notifType.includes('order')) {
-                navigate('/vendor/store/orders');
-              } else if (notifType.includes('soil')) {
+              if (notifType.includes('soil')) {
                 navigate('/vendor/soil-tests');
               } else if (notifType.includes('wallet') || notifType.includes('payout')) {
                 navigate('/vendor/wallet');
@@ -259,9 +257,7 @@ export const SocketProvider = ({ children }) => {
               }
             } else {
               // User (Farmer)
-              if (notifType.includes('ecommerce') || notifType.includes('order')) {
-                navigate('/user/my-agri-orders');
-              } else if (notifType.includes('soil')) {
+              if (notifType.includes('soil')) {
                 navigate('/user/soil-testing');
               } else if (notifType.includes('wallet') || notifType.includes('refund')) {
                 navigate('/user/wallet');

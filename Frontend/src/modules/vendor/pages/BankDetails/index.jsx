@@ -84,7 +84,7 @@ const BankDetails = () => {
               Direct Earnings Settlement
             </h3>
             <p className="text-[11px] text-slate-500 font-medium leading-relaxed mt-0.5">
-              All machine booking revenue, driver wages, and Agri-Store sales are deposited directly into this account via automated bank transfers.
+              All machine booking revenue and driver wages are deposited directly into this account via automated bank transfers.
             </p>
           </div>
         </div>

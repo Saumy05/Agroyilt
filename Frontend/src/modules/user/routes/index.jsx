@@ -65,7 +65,6 @@ const FAQ = lazyLoad(() => import('../pages/FAQ'));
 const HelpSupport = lazyLoad(() => import('../pages/HelpSupport'));
 const CancellationPolicy = lazyLoad(() => import('../pages/CancellationPolicy'));
 const WeatherReport = lazyLoad(() => import('../pages/WeatherReport'));
-const Marketplace = lazyLoad(() => import('../pages/Marketplace'));
 const MachineryExplorer = lazyLoad(() => import('../pages/Machinery/MachineryExplorer'));
 const RentalCatalog = lazyLoad(() => import('../pages/Machinery/RentalCatalog'));
 const AllMachineryCategories = lazyLoad(() => import('../pages/Machinery/AllMachineryCategories'));
@@ -84,11 +83,6 @@ const AvailableVendors = lazyLoad(() => import('../pages/Machinery/AvailableVend
 const EquipmentDetail = lazyLoad(() => import('../pages/Machinery/EquipmentDetail'));
 import { SOIL_TESTING_ENABLED } from '../../../utils/featureFlags';
 const SoilTesting = lazyLoad(() => import('../pages/SoilTesting'));
-const AgriMarket = lazyLoad(() => import('../pages/AgriMarket'));
-const AgriProductDetail = lazyLoad(() => import('../pages/AgriMarket/ProductDetail'));
-const MyAgriOrders = lazyLoad(() => import('../pages/AgriMarket/MyOrders'));
-const AgriOrderPayment = lazyLoad(() => import('../pages/AgriMarket/OrderPayment'));
-const AgriCart = lazyLoad(() => import('../pages/AgriMarket/AgriCart'));
 const FieldAreaCalculator = lazyLoad(() => import('../pages/FieldAreaCalculator'));
 const MandiBhav = lazyLoad(() => import('../pages/MandiBhav'));
 const LandLease = lazyLoad(() => import('../pages/LandLease'));
@@ -167,7 +161,6 @@ const UserRoutes = () => {
               <Route path="/help-support" element={<HelpSupport />} />
               <Route path="/cancellation-policy" element={<CancellationPolicy />} />
               <Route path="/weather" element={<ProtectedRoute userType="user"><WeatherReport /></ProtectedRoute>} />
-              <Route path="/marketplace" element={<ProtectedRoute userType="user"><Marketplace /></ProtectedRoute>} />
               <Route path="/machinery-explorer" element={<ProtectedRoute userType="user"><MachineryExplorer /></ProtectedRoute>} />
               <Route path="/field-area-calculator" element={<ProtectedRoute userType="user"><FieldAreaCalculator /></ProtectedRoute>} />
               <Route path="/mandi-bhav" element={<ProtectedRoute userType="user"><MandiBhav /></ProtectedRoute>} />
@@ -198,11 +191,6 @@ const UserRoutes = () => {
               <Route path="/machinery/checkout" element={<ProtectedRoute userType="user"><MachineryCheckout /></ProtectedRoute>} />
               <Route path="/machinery/:id" element={<ProtectedRoute userType="user"><EquipmentDetail /></ProtectedRoute>} />
               <Route path="/soil-testing" element={SOIL_TESTING_ENABLED ? <ProtectedRoute userType="user"><SoilTesting /></ProtectedRoute> : <Navigate to="/user" replace />} />
-              <Route path="/agri-marketplace" element={<ProtectedRoute userType="user"><AgriMarket /></ProtectedRoute>} />
-              <Route path="/agri-marketplace/:id" element={<ProtectedRoute userType="user"><AgriProductDetail /></ProtectedRoute>} />
-              <Route path="/my-agri-orders" element={<ProtectedRoute userType="user"><MyAgriOrders /></ProtectedRoute>} />
-              <Route path="/order-payment/:id" element={<ProtectedRoute userType="user"><AgriOrderPayment /></ProtectedRoute>} />
-              <Route path="/agri-cart" element={<ProtectedRoute userType="user"><AgriCart /></ProtectedRoute>} />
             </Routes>
           </PageTransition>
         </Suspense>

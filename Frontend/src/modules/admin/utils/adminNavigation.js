@@ -94,7 +94,6 @@ export const MENU_PERMISSION_MAP = {
   'Equipment Catalog': 'services.view',
   'Machinery Approvals': 'machinery.approvals.view',
   'Machinery Management': 'machinery.view',
-  'Agri Marketplace': 'marketplace.view',
   'Reports': 'reports.view',
   'Reviews': 'reviews.view',
   'Soil Testing': 'soiltest.view',

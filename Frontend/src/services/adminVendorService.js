@@ -111,14 +111,6 @@ const adminVendorService = {
   addVendor: async (vendorData) => {
     const response = await api.post('/admin/vendors', vendorData);
     return response.data;
-  },
-
-  /**
-   * Add shop details for a vendor directly by admin
-   */
-  addVendorShop: async (id, shopData) => {
-    const response = await api.post(`/admin/vendors/${id}/shop`, shopData);
-    return response.data;
   }
 };
 

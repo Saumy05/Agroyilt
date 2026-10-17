@@ -13,6 +13,14 @@ const dashboardService = {
   },
 
   /**
+   * Get the pending-work counts shown as sidebar badges
+   */
+  getSidebarCounts: async () => {
+    const response = await api.get('/admin/sidebar-counts');
+    return response.data;
+  },
+
+  /**
    * Get revenue analytics
    * @param {Object} params - period (daily, weekly, monthly), startDate, endDate
    */

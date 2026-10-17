@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { FiSearch, FiUser, FiPhone, FiMail, FiCheckCircle, FiSlash, FiCheck, FiTrash2, FiPlus, FiX, FiUserCheck, FiEye, FiAlertCircle } from 'react-icons/fi';
 import { toastManager } from '../../../../utils/toastManager';
 import { adminUserService } from '../../../../services/adminUserService';
+import { refreshAdminCounts } from '../../utils/adminCounts';
 
 const AllFarmers = () => {
   const [users, setUsers] = useState([]);
@@ -129,6 +130,7 @@ const AllFarmers = () => {
       const response = await adminUserService.updateApprovalStatus(userId, 'approved');
       if (response.success) {
         toastManager.success('Farmer approved successfully!');
+        refreshAdminCounts();
         fetchUsers();
       } else {
         toastManager.error(response.message || 'Failed to approve farmer');
@@ -146,6 +148,7 @@ const AllFarmers = () => {
       const response = await adminUserService.updateApprovalStatus(userId, 'rejected', reason);
       if (response.success) {
         toastManager.success('Farmer application rejected.');
+        refreshAdminCounts();
         fetchUsers();
       } else {
         toastManager.error(response.message || 'Failed to reject farmer');

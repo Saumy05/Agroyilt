@@ -31,10 +31,6 @@ const Settlements = lazy(() => import('../pages/Settlements'));
 const WorkerDues = lazy(() => import('../pages/Settlements/WorkerDues'));
 const Reviews = lazy(() => import('../pages/Reviews'));
 const Products = lazy(() => import('../pages/Products'));
-const EcommerceOrders = lazy(() => import('../pages/Products/Orders'));
-const Marketplace = lazy(() => import('../pages/Products/EcommerceManager'));
-const StoreApprovals = lazy(() => import('../pages/Products/StoreApprovals'));
-const RegisteredShops = lazy(() => import('../pages/Products/RegisteredShops'));
 import { SOIL_TESTING_ENABLED } from '../../../utils/featureFlags';
 const SoilTesting = lazy(() => import('../pages/SoilTesting'));
 const LandLeases = lazy(() => import('../pages/LandLeases'));
@@ -96,10 +92,6 @@ const AdminRoutes = () => {
             <Route path="plans" element={<Navigate to="/admin/dashboard" replace />} />
             <Route path="reviews" element={<Reviews />} />
             <Route path="products" element={<Products />} />
-            <Route path="products/orders" element={<EcommerceOrders />} />
-            <Route path="marketplace" element={<Marketplace />} />
-            <Route path="marketplace/store-approvals" element={<StoreApprovals />} />
-            <Route path="marketplace/registered-shops" element={<RegisteredShops />} />
             <Route path="soil-tests" element={SOIL_TESTING_ENABLED ? <SoilTesting /> : <Navigate to="/admin/dashboard" replace />} />
             <Route path="land-leases" element={<LandLeases />} />
             <Route path="disputes" element={<Disputes />} />

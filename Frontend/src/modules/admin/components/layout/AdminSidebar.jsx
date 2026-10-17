@@ -30,7 +30,6 @@ import {
   FiMapPin,
   FiMap,
   FiKey,
-  FiShoppingCart,
   FiPieChart,
   FiTrendingUp,
   FiSearch,
@@ -40,6 +39,7 @@ import dashboardService from "../../services/dashboardService";
 import authStorage from "../../../../utils/authStorage";
 import { useBrand } from "../../../../context/BrandContext";
 import { getChildRoute, filterMenuForAdmin } from "../../utils/adminNavigation";
+import { ADMIN_COUNTS_REFRESH } from "../../utils/adminCounts";
 
 // Icon mapping for menu items
 const iconMap = {
@@ -56,7 +56,6 @@ const iconMap = {
   Notifications: FiBell,
   Reviews: FiStar,
   Settings: FiSettings,
-  "Agri Marketplace": FiShoppingCart,
   "Soil Testing": FiActivity,
   "Land Leases": FiMap,
   Disputes: FiAlertTriangle,
@@ -81,12 +80,7 @@ const AdminSidebar = ({ isOpen, onClose }) => {
   const [isMobile, setIsMobile] = useState(false);
   const [query, setQuery] = useState("");
   const [adminUser, setAdminUser] = useState({ name: 'Admin', email: '', role: 'admin' });
-  const [counts, setCounts] = useState({
-    bookings: 0,
-    owners: 0,
-    withdrawals: 0,
-    pendingSettlements: 0
-  });
+  const [counts, setCounts] = useState({});
 
   // Load admin user from storage
   useEffect(() => {
@@ -133,15 +127,9 @@ const AdminSidebar = ({ isOpen, onClose }) => {
   useEffect(() => {
     const fetchCounts = async () => {
       try {
-        const response = await dashboardService.getStats();
-        if (response.success && response.data?.stats) {
-          const stats = response.data.stats;
-          setCounts({
-            bookings: stats.pendingBookings || 0,
-            owners: stats.pendingVendors || 0,
-            withdrawals: stats.pendingWithdrawals || 0,
-            pendingSettlements: stats.pendingSettlements || 0
-          });
+        const response = await dashboardService.getSidebarCounts();
+        if (response.success && response.data) {
+          setCounts(response.data);
         }
       } catch (error) {
         console.error("Error fetching sidebar counts:", error);
@@ -149,9 +137,13 @@ const AdminSidebar = ({ isOpen, onClose }) => {
     };
 
     fetchCounts();
-    // Refresh every 30 seconds
+    // Refresh every 30 seconds, and right away when a page changes a queue (approve / reject / claim)
     const interval = setInterval(fetchCounts, 30000);
-    return () => clearInterval(interval);
+    window.addEventListener(ADMIN_COUNTS_REFRESH, fetchCounts);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener(ADMIN_COUNTS_REFRESH, fetchCounts);
+    };
   }, []);
 
   // Check if mobile on mount and resize
@@ -301,24 +293,9 @@ const AdminSidebar = ({ isOpen, onClose }) => {
           <span className="font-bold flex-1 text-sm tracking-tight">{item.title}</span>
 
           {/* Badge Display */}
-          {item.title === "Bookings" && counts.bookings > 0 && (
+          {counts[item.badgeKey] > 0 && (
             <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse mr-2">
-              {counts.bookings > 99 ? '99+' : counts.bookings}
-            </span>
-          )}
-          {item.title === "Vendors" && counts.owners > 0 && (
-            <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse mr-2">
-              {counts.owners > 99 ? '99+' : counts.owners}
-            </span>
-          )}
-          {item.title === "Withdrawals" && counts.withdrawals > 0 && (
-            <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse mr-2">
-              {counts.withdrawals > 99 ? '99+' : counts.withdrawals}
-            </span>
-          )}
-          {item.title === "Settlements" && counts.pendingSettlements > 0 && (
-            <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse mr-2">
-              {counts.pendingSettlements > 99 ? '99+' : counts.pendingSettlements}
+              {counts[item.badgeKey] > 99 ? '99+' : counts[item.badgeKey]}
             </span>
           )}
 
@@ -362,9 +339,9 @@ const AdminSidebar = ({ isOpen, onClose }) => {
                         }
                       `}>
                       <span>{child}</span>
-                      {item.title === "Settlements" && child === "Pending" && counts.pendingSettlements > 0 && (
+                      {counts[item.childBadges?.[child]] > 0 && (
                         <span className="bg-red-500 text-white text-[10px] h-4 min-w-[18px] px-1.5 flex items-center justify-center rounded-full font-black">
-                          {counts.pendingSettlements}
+                          {counts[item.childBadges[child]] > 99 ? '99+' : counts[item.childBadges[child]]}
                         </span>
                       )}
                     </div>

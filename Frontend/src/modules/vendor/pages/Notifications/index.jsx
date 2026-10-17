@@ -150,8 +150,6 @@ const Notifications = () => {
       navigate('/vendor/compliance');
     } else if (type.includes('profile')) {
       navigate('/vendor/profile/details');
-    } else if (type.includes('ecommerce') || type.includes('order')) {
-      navigate('/vendor/store/orders');
     } else if (type.includes('dispute') || relatedType === 'dispute') {
       const bId = notif.data?.bookingId || notif.bookingId;
       if (bId) navigate(`/vendor/booking/${bId}`);

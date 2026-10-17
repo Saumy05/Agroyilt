@@ -25,6 +25,7 @@ import Modal from '../../components/Modal';
 import Button from '../../components/Button';
 import withdrawalService from '../../../../services/withdrawalService';
 import { exportToCSV } from '../../../../utils/csvExport';
+import { refreshAdminCounts } from '../../utils/adminCounts';
 
 // Formatted Date Input component (Forces DD/MM/YYYY display for Indian standard)
 const FormattedDateInput = ({ value, onChange, min, max, placeholder = 'DD/MM/YYYY' }) => {
@@ -223,6 +224,7 @@ const WithdrawalsPage = () => {
       const res = await withdrawalService.adminAccept(selectedItem._id, adminNoteInput.trim());
       if (res.success) {
         toastManager.success('Withdrawal accepted for manual payout processing');
+        refreshAdminCounts();
         loadWithdrawals();
         closeModals();
       }
@@ -257,6 +259,7 @@ const WithdrawalsPage = () => {
       const res = await withdrawalService.adminReject(selectedItem._id, rejectionReasonInput.trim(), adminNoteInput.trim());
       if (res.success) {
         toastManager.success('Withdrawal rejected and reserved balance refunded');
+        refreshAdminCounts();
         loadWithdrawals();
         closeModals();
       }
@@ -290,6 +293,7 @@ const WithdrawalsPage = () => {
       const res = await withdrawalService.adminComplete(targetId, formData);
       if (res && res.success) {
         toastManager.success('Withdrawal finalized and marked as COMPLETED!');
+        refreshAdminCounts();
         loadWithdrawals();
         closeModals();
       } else {

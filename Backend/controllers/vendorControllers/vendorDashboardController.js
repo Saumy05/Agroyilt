@@ -2,7 +2,6 @@ const Booking = require('../../models/Booking');
 const VendorBill = require('../../models/VendorBill');
 const Worker = require('../../models/Worker');
 const Service = require('../../models/Service');
-const EcommerceOrder = require('../../models/EcommerceOrder');
 const Settings = require('../../models/Settings');
 const { getVendorPayoutPercentage } = require('../../utils/vendorPayout');
 const { getVendorCategoryNames } = require('../../utils/vendorCategories');
@@ -41,8 +40,7 @@ const getDashboardStats = async (req, res) => {
       inProgressBookings,
       workersOnline,
       earningsResult,
-      recentBookings,
-      ecommerceEarningsResult
+      recentBookings
     ] = await Promise.all([
       // Total bookings (excluding accepted but unpaid)
       Booking.countDocuments({
@@ -111,21 +109,7 @@ const getDashboardStats = async (req, res) => {
         .populate('workerId', 'name')
         .sort({ createdAt: -1 })
         .limit(20)
-        .lean(),
-      EcommerceOrder.aggregate([
-        {
-          $match: {
-            vendorId: vendorObjectId,
-            deliveryStatus: 'delivered'
-          }
-        },
-        {
-          $group: {
-            _id: null,
-            totalEcommerceEarnings: { $sum: '$pricing.vendorBalance' }
-          }
-        }
-      ])
+        .lean()
     ]);
 
     // Rating (Average from Bookings)
@@ -150,7 +134,6 @@ const getDashboardStats = async (req, res) => {
 
     const totalRevenue = earningsResult[0]?.totalRevenue || 0;
     const vendorEarnings = vendor?.wallet?.earnings || 0;
-    const ecommerceEarnings = ecommerceEarningsResult[0]?.totalEcommerceEarnings || 0;
 
     // Compliance Alerts (New Agriculture Feature)
     const complianceAlerts = [];
@@ -183,7 +166,6 @@ const getDashboardStats = async (req, res) => {
           inProgressBookings,
           totalRevenue,
           vendorEarnings,
-          ecommerceEarnings, // NEW
           workersOnline,
           rating,
           complianceAlerts, // Add this

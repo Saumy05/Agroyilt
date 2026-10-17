@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiUser, FiEdit2, FiMapPin, FiPhone, FiMail, FiBriefcase, FiStar, FiArrowRight, FiSettings, FiChevronRight, FiCreditCard, FiLogOut, FiTrash2, FiClock, FiCheckCircle, FiPackage, FiActivity, FiGift, FiX, FiHelpCircle, FiShield, FiFileText } from 'react-icons/fi';
+import { FiUser, FiEdit2, FiMapPin, FiPhone, FiMail, FiBriefcase, FiStar, FiArrowRight, FiSettings, FiChevronRight, FiCreditCard, FiLogOut, FiTrash2, FiClock, FiCheckCircle, FiActivity, FiGift, FiX, FiHelpCircle, FiShield, FiFileText } from 'react-icons/fi';
 import { FaWallet, FaTractor } from 'react-icons/fa';
 import { toastManager } from '../../../../utils/toastManager';
 import { vendorTheme as themeColors } from '../../../../theme';
@@ -8,7 +8,6 @@ import { vendorAuthService } from '../../../../services/authService';
 import Header from '../../components/layout/Header';
 import BottomNav from '../../components/layout/BottomNav';
 import LogoLoader from '../../../../components/common/LogoLoader';
-import vendorProductService from '../../services/vendorProductService';
 import BankDetailsSection from '../../../../components/common/BankDetailsSection';
 import LogoutModal from '../../../../components/common/LogoutModal';
 import authStorage from '../../../../utils/authStorage';
@@ -34,14 +33,11 @@ const Profile = () => {
   const [profile, setProfile] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [hasOutOfStockProducts, setHasOutOfStockProducts] = useState(false);
 
   const menuItems = React.useMemo(() => [
     { id: 'bank_details', label: 'Bank Account & Payout Details', icon: FiCreditCard, path: '/vendor/bank-details' },
     { id: 'equipment', label: 'Machinery & Equipment Fleet', icon: FaTractor, path: '/vendor/equipment' },
-    { id: 12, label: 'My Agri-Store (Supplies)', icon: FiPackage, path: '/vendor/store' },
     ...(referralOn ? [{ id: 'referrals', label: 'Refer & Earn', icon: FiGift, path: '/vendor/referrals' }] : []),
-    { id: 14, label: 'Business Profile & Registrations', icon: FiBriefcase, path: '/vendor/business-details' },
     { id: 5, label: 'My Ratings', icon: FiStar, path: '/vendor/my-ratings' },
     { id: 7, label: 'Manage Address', icon: FiMapPin, path: '/vendor/address-management' },
     { id: 8, label: 'Settings', icon: FiSettings, path: '/vendor/settings' },
@@ -49,7 +45,7 @@ const Profile = () => {
     { id: 11, label: 'Legal Compliance', icon: FiCheckCircle, path: '/vendor/compliance' },
     { id: 'help_support', label: 'Help & Support', icon: FiHelpCircle, path: '/vendor/help-support' },
     { id: 9, label: 'About Agroyilt', icon: null, customIcon: 'G', path: '/vendor/about-groo' },
-  ], [profile, hasOutOfStockProducts, referralOn]);
+  ], [profile, referralOn]);
 
   useLayoutEffect(() => {
     const html = document.documentElement;
@@ -90,8 +86,7 @@ const Profile = () => {
           photo: storedVendorData.profilePhoto || null,
           approvalStatus: storedVendorData.approvalStatus,
           isPhoneVerified: storedVendorData.isPhoneVerified || false,
-          isEmailVerified: storedVendorData.isEmailVerified || false,
-          shopDetails: storedVendorData.shopDetails || null
+          isEmailVerified: storedVendorData.isEmailVerified || false
         });
         setIsLoading(false); // Show content immediately
       }
@@ -121,8 +116,7 @@ const Profile = () => {
             photo: vendorData.profilePhoto || null,
             approvalStatus: vendorData.approvalStatus,
             isPhoneVerified: vendorData.isPhoneVerified || false,
-            isEmailVerified: vendorData.isEmailVerified || false,
-            shopDetails: vendorData.shopDetails || null
+            isEmailVerified: vendorData.isEmailVerified || false
           });
           authStorage.updateUserData('vendor', vendorData);
         } else {
@@ -258,22 +252,6 @@ const Profile = () => {
           </div>
         </div>
 
-        {/* Out of Stock Alert Banner */}
-        {hasOutOfStockProducts && (
-          <div className="p-3 bg-rose-50 rounded-2xl border border-rose-100 flex items-center gap-3 shadow-xs mb-3">
-            <div className="w-9 h-9 rounded-xl bg-rose-500 flex items-center justify-center text-white shrink-0">
-              <FiPackage className="w-4.5 h-4.5" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h4 className="text-[11px] font-black text-rose-800 uppercase tracking-wider">Product Out of Stock</h4>
-              <p className="text-[10px] font-bold text-rose-500 mt-0.5 leading-snug">One or more items in your store are out of stock.</p>
-            </div>
-            <button onClick={() => navigate('/vendor/store')} className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white text-[9px] font-black rounded-lg uppercase tracking-wider transition-all shrink-0">
-              Update
-            </button>
-          </div>
-        )}
-
         {/* Three Hub Shortcuts - Horizontal */}
         <div className="grid grid-cols-3 gap-2.5 mb-4">
           <button
@@ -313,9 +291,9 @@ const Profile = () => {
           </button>
         </div>
 
-        {/* Group 1: Fleet & Agri-Store Operations */}
+        {/* Group 1: Fleet Operations */}
         <div className="mb-3.5">
-          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 pl-1">Fleet & Store</h3>
+          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 pl-1">Fleet</h3>
           <div className="bg-white rounded-2xl border border-slate-100 shadow-xs divide-y divide-slate-100 overflow-hidden">
             <button
               onClick={() => navigate('/vendor/equipment')}
@@ -328,29 +306,6 @@ const Profile = () => {
                 <div className="min-w-0 flex-1">
                   <span className="font-bold text-xs sm:text-sm text-slate-800 block truncate">Machinery & Equipment Fleet</span>
                   <span className="text-[11px] text-slate-400 font-medium block truncate">Manage tractors, harvesters & operators</span>
-                </div>
-              </div>
-              <FiChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
-            </button>
-
-            <button
-              onClick={() => navigate('/vendor/store')}
-              className="w-full p-3.5 sm:p-4 flex items-center justify-between hover:bg-slate-50 transition-colors text-left group"
-            >
-              <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                  <FiPackage className="w-4.5 h-4.5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-xs sm:text-sm text-slate-800 block truncate">My Agri-Store (Supplies)</span>
-                    {hasOutOfStockProducts && (
-                      <span className="animate-pulse bg-rose-500 text-white text-[8.5px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0 shadow-xs">
-                        Out of Stock
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-[11px] text-slate-400 font-medium block truncate">Sell seeds, fertilizers, feeds & tools</span>
                 </div>
               </div>
               <FiChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
@@ -438,22 +393,6 @@ const Profile = () => {
         <div className="mb-3.5">
           <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 pl-1">Business & KYC</h3>
           <div className="bg-white rounded-2xl border border-slate-100 shadow-xs divide-y divide-slate-100 overflow-hidden">
-            <button
-              onClick={() => navigate('/vendor/business-details')}
-              className="w-full p-3.5 sm:p-4 flex items-center justify-between hover:bg-slate-50 transition-colors text-left group"
-            >
-              <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                  <FiBriefcase className="w-4.5 h-4.5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <span className="font-bold text-xs sm:text-sm text-slate-800 block truncate">Business Profile & Registrations</span>
-                  <span className="text-[11px] text-slate-400 font-medium block truncate">GSTIN, business registration & trade details</span>
-                </div>
-              </div>
-              <FiChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
-            </button>
-
             <button
               onClick={() => navigate('/vendor/compliance')}
               className="w-full p-3.5 sm:p-4 flex items-center justify-between hover:bg-slate-50 transition-colors text-left group"

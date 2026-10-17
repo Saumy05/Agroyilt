@@ -13,6 +13,7 @@
     "category": "USERS",
     "title": "Farmers",
     "route": "/admin/users",
+    "badgeKey": "farmers",
     "allowedRoles": [
       "super_admin",
       "admin"
@@ -28,6 +29,7 @@
     "category": "USERS",
     "title": "Workers",
     "route": "/admin/workers",
+    "badgeKey": "workers",
     "allowedRoles": [
       "super_admin",
       "admin"
@@ -43,6 +45,7 @@
     "category": "USERS",
     "title": "Vendors",
     "route": "/admin/vendors",
+    "badgeKey": "vendors",
     "allowedRoles": [
       "super_admin",
       "admin"
@@ -58,6 +61,7 @@
     "category": "OPERATIONS",
     "title": "Bookings",
     "route": "/admin/bookings",
+    "badgeKey": "bookings",
     "allowedRoles": [
       "super_admin",
       "admin"
@@ -86,6 +90,7 @@
     "category": "OPERATIONS",
     "title": "Machinery Approvals",
     "route": "/admin/equipment-approvals",
+    "badgeKey": "machinery",
     "allowedRoles": [
       "super_admin",
       "admin"
@@ -134,6 +139,7 @@
     "category": "FINANCE & PAYOUTS",
     "title": "Withdrawals",
     "route": "/admin/withdrawals",
+    "badgeKey": "withdrawals",
     "allowedRoles": [
       "super_admin",
       "admin"
@@ -144,6 +150,8 @@
     "category": "FINANCE & PAYOUTS",
     "title": "Settlements",
     "route": "/admin/settlements",
+    "badgeKey": "settlements",
+    "childBadges": { "Pending": "settlements" },
     "allowedRoles": [
       "super_admin",
       "admin"
@@ -181,6 +189,7 @@
     "category": "REPORTS & CONTENT",
     "title": "Disputes",
     "route": "/admin/disputes",
+    "badgeKey": "disputes",
     "allowedRoles": [
       "super_admin",
       "admin"
@@ -191,6 +200,7 @@
     "category": "REPORTS & CONTENT",
     "title": "Help & Support",
     "route": "/admin/support",
+    "badgeKey": "support",
     "allowedRoles": [
       "super_admin",
       "admin"
