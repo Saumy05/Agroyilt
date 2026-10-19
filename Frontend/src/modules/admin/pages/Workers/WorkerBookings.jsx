@@ -22,7 +22,7 @@ import {
   FiStar,
   FiImage
 } from 'react-icons/fi';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import workerService from '../../services/workerService';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import { toastManager } from '../../../../utils/toastManager';
@@ -41,7 +41,8 @@ const WorkerBookings = () => {
   const [bookings, setBookings] = useState([]);
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filterStatus, setFilterStatus] = useState('all');
+  const [searchParams] = useSearchParams();
+  const [filterStatus, setFilterStatus] = useState(searchParams.get('status') || 'all'); // e.g. opened from an Analytics card
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [pagination, setPagination] = useState({ page: 1, limit: 12, total: 0, pages: 1 });

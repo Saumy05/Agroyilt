@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   FiSearch, 
@@ -55,7 +56,8 @@ const AllWorkers = () => {
   const [workers, setWorkers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [searchParams] = useSearchParams();
+  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || ''); // e.g. opened from an Analytics card
   const [workerTypeFilter, setWorkerTypeFilter] = useState(''); // '' | 'INDEPENDENT' | 'TEAM_MEMBER' | 'TEAM_LEADER'
   const [createdByMe, setCreatedByMe] = useState(false);
   const [typeCounts, setTypeCounts] = useState({ total: 0, independent: 0, teamMember: 0, teamLeader: 0, myRegistrations: 0 });

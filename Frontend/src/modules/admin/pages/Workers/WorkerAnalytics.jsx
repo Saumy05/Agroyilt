@@ -1,5 +1,6 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import {
   FiUsers,
   FiAward,
@@ -36,6 +37,7 @@ import { toastManager } from '../../../../utils/toastManager';
 import { formatCurrency } from '../../utils/adminHelpers';
 
 const WorkerAnalytics = () => {
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('30'); // '30', '90', '365'
@@ -142,7 +144,12 @@ const WorkerAnalytics = () => {
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-3xl p-5 text-white shadow-lg shadow-blue-500/10 relative overflow-hidden"
+          onClick={() => navigate('/admin/workers/all')}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter') navigate('/admin/workers/all'); }}
+          title="Tap to see the records behind this number"
+          className="cursor-pointer hover:-translate-y-0.5 active:scale-[0.98] transition-transform bg-gradient-to-br from-blue-500 to-indigo-600 rounded-3xl p-5 text-white shadow-lg shadow-blue-500/10 relative overflow-hidden"
         >
           <div className="absolute right-0 top-0 w-28 h-28 bg-white/10 rounded-full -mr-8 -mt-8 pointer-events-none" />
           <div className="flex items-center justify-between mb-3">
@@ -163,7 +170,12 @@ const WorkerAnalytics = () => {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05 }}
-          className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-3xl p-5 text-white shadow-lg shadow-emerald-500/10 relative overflow-hidden"
+          onClick={() => navigate('/admin/workers/all?status=approved')}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter') navigate('/admin/workers/all?status=approved'); }}
+          title="Tap to see the records behind this number"
+          className="cursor-pointer hover:-translate-y-0.5 active:scale-[0.98] transition-transform bg-gradient-to-br from-emerald-500 to-teal-600 rounded-3xl p-5 text-white shadow-lg shadow-emerald-500/10 relative overflow-hidden"
         >
           <div className="absolute right-0 top-0 w-28 h-28 bg-white/10 rounded-full -mr-8 -mt-8 pointer-events-none" />
           <div className="flex items-center justify-between mb-3">
@@ -184,7 +196,12 @@ const WorkerAnalytics = () => {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-gradient-to-br from-amber-500 to-orange-600 rounded-3xl p-5 text-white shadow-lg shadow-amber-500/10 relative overflow-hidden"
+          onClick={() => navigate('/admin/workers/bookings?status=completed')}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter') navigate('/admin/workers/bookings?status=completed'); }}
+          title="Tap to see the records behind this number"
+          className="cursor-pointer hover:-translate-y-0.5 active:scale-[0.98] transition-transform bg-gradient-to-br from-amber-500 to-orange-600 rounded-3xl p-5 text-white shadow-lg shadow-amber-500/10 relative overflow-hidden"
         >
           <div className="absolute right-0 top-0 w-28 h-28 bg-white/10 rounded-full -mr-8 -mt-8 pointer-events-none" />
           <div className="flex items-center justify-between mb-3">
@@ -205,7 +222,12 @@ const WorkerAnalytics = () => {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15 }}
-          className="bg-gradient-to-br from-purple-500 to-violet-600 rounded-3xl p-5 text-white shadow-lg shadow-purple-500/10 relative overflow-hidden"
+          onClick={() => navigate('/admin/workers/bookings?status=completed')}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter') navigate('/admin/workers/bookings?status=completed'); }}
+          title="Tap to see the records behind this number"
+          className="cursor-pointer hover:-translate-y-0.5 active:scale-[0.98] transition-transform bg-gradient-to-br from-purple-500 to-violet-600 rounded-3xl p-5 text-white shadow-lg shadow-purple-500/10 relative overflow-hidden"
         >
           <div className="absolute right-0 top-0 w-28 h-28 bg-white/10 rounded-full -mr-8 -mt-8 pointer-events-none" />
           <div className="flex items-center justify-between mb-3">
