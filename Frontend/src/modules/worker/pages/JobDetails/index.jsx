@@ -199,32 +199,26 @@ const LifecycleStepper = ({ status, cash = null }) => {
   );
 };
 
+const fmtTime = (d) => d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+const fmtDay = (d) => d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+
+const fmtBooked = (mins) => {
+  const m = Number(mins) || 0;
+  if (m <= 0) return null;
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  return h > 0 ? (r > 0 ? `${h}h ${r}m` : `${h} hr`) : `${r} min`;
+};
+
+// Only real timestamps: the booked slot (scheduledTime) is never treated as the start.
 const getDurationInfo = (job) => {
   if (!job) return null;
-  let start = null;
-  if (job.startedAt) start = new Date(job.startedAt);
-  else if (job.workStartedAt) start = new Date(job.workStartedAt);
-  else if (job.inProgressAt) start = new Date(job.inProgressAt);
-  else if (job.journeyStartedAt) start = new Date(job.journeyStartedAt);
-  else if (job.scheduledDate && job.scheduledTime) {
-    try {
-      const dateStr = new Date(job.scheduledDate).toISOString().split('T')[0];
-      const timeParts = job.scheduledTime.trim().split(' ')[0].split(':');
-      if (timeParts.length >= 2) {
-        let h = parseInt(timeParts[0], 10);
-        const m = parseInt(timeParts[1], 10);
-        if (job.scheduledTime.toLowerCase().includes('pm') && h < 12) h += 12;
-        if (job.scheduledTime.toLowerCase().includes('am') && h === 12) h = 0;
-        const d = new Date(dateStr);
-        d.setHours(h, m, 0, 0);
-        start = d;
-      }
-    } catch (e) {}
-  }
-  if (!start && job.createdAt) start = new Date(job.createdAt);
+  const startRaw = job.workStartedAt || job.startedAt || job.inProgressAt;
+  const start = startRaw ? new Date(startRaw) : null;
 
   let end = null;
-  if (job.completedAt) end = new Date(job.completedAt);
+  if (job.workSubmittedAt) end = new Date(job.workSubmittedAt);
+  else if (job.completedAt) end = new Date(job.completedAt);
   else if (job.workDoneAt) end = new Date(job.workDoneAt);
   else if (job.workSubmittedAt) end = new Date(job.workSubmittedAt);
   else if (job.updatedAt && ['completed', 'work_done'].includes(job.status?.toLowerCase())) end = new Date(job.updatedAt);
@@ -242,8 +236,9 @@ const getDurationInfo = (job) => {
     else durationStr = `${secs}s`;
 
     return {
-      startTime: job.scheduledTime || start.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
-      endTime: end.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
+      startTime: fmtTime(start),
+      startDay: fmtDay(start),
+      endTime: fmtTime(end),
       fullDate: end.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
       duration: durationStr
     };
@@ -1183,21 +1178,33 @@ const JobDetails = () => {
                     </div>
                     <div className="grid grid-cols-2 gap-2.5 text-xs">
                       <div className="bg-white rounded-xl p-3 border border-emerald-100 shadow-sm">
-                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Scheduled / Started</p>
-                        <p className="font-black text-gray-800 text-sm mt-0.5">{job.scheduledTime || dur?.startTime || 'N/A'}</p>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Scheduled For</p>
+                        <p className="font-black text-gray-800 text-sm mt-0.5">{job.scheduledTime || 'N/A'}</p>
                         <p className="text-[10px] text-gray-500 mt-0.5">
-                          {new Date(job.scheduledDate || job.createdAt).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
+                          {job.scheduledDate ? fmtDay(new Date(job.scheduledDate)) : 'N/A'}
                         </p>
+                      </div>
+                      <div className="bg-white rounded-xl p-3 border border-emerald-100 shadow-sm">
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Work Started</p>
+                        <p className="font-black text-gray-800 text-sm mt-0.5">{dur?.startTime || 'Not recorded'}</p>
+                        <p className="text-[10px] text-gray-500 mt-0.5">{dur?.startDay || '—'}</p>
                       </div>
                       <div className="bg-white rounded-xl p-3 border border-emerald-100 shadow-sm">
                         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Completed At</p>
                         <p className="font-black text-emerald-700 text-sm mt-0.5">
-                          {dur?.endTime || (job.completedAt ? new Date(job.completedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'N/A')}
+                          {dur?.endTime || (job.completedAt ? fmtTime(new Date(job.completedAt)) : 'N/A')}
                         </p>
                         <p className="text-[10px] text-gray-500 mt-0.5">
-                          {job.completedAt ? new Date(job.completedAt).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }) : 'N/A'}
+                          {job.completedAt ? fmtDay(new Date(job.completedAt)) : 'N/A'}
                         </p>
                       </div>
+                      {(fmtBooked(job.workedMinutes) || fmtBooked(job.bookedMinutes)) && (
+                        <div className="bg-white rounded-xl p-3 border border-emerald-100 shadow-sm">
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Paid For</p>
+                          <p className="font-black text-gray-800 text-sm mt-0.5">{fmtBooked(job.workedMinutes) || fmtBooked(job.bookedMinutes)}</p>
+                          <p className="text-[10px] text-gray-500 mt-0.5">{job.workedMinutes ? `of ${fmtBooked(job.bookedMinutes) || 'booked'} booked` : 'Booked'}</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -1346,7 +1353,17 @@ const JobDetails = () => {
                         </>
                       ) : (
                         <div className="flex justify-between text-gray-600">
-                          <span className="font-medium">Agreed Rate (Gross)</span>
+                          <div>
+                            <span className="font-medium block">Agreed Rate (Gross)</span>
+                            {job.bookingType !== 'DAILY' && (job.workedMinutes ? (
+                              <span className="text-[11px] text-gray-400">
+                                ₹{Number(job.agreedRate || 0).toLocaleString('en-IN')}/hr × {fmtBooked(job.workedMinutes)} worked
+                                {fmtBooked(job.bookedMinutes) ? ` (${fmtBooked(job.bookedMinutes)} booked)` : ''}
+                              </span>
+                            ) : fmtBooked(job.bookedMinutes) ? (
+                              <span className="text-[11px] text-gray-400">Maximum for the {fmtBooked(job.bookedMinutes)} booked. Final pay is for the time you actually work.</span>
+                            ) : null)}
+                          </div>
                           <span className="font-bold text-gray-800">₹{totalGross.toFixed(2)}</span>
                         </div>
                       )}

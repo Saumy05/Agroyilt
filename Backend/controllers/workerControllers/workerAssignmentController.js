@@ -555,7 +555,7 @@ exports.submitProof = async (req, res) => {
     }
 
     // only while the work is open: never after completion / settlement
-    const assignment = await IndWorkerAssignment.findOneAndUpdate(
+    let assignment = await IndWorkerAssignment.findOneAndUpdate(
       {
         _id: assignmentId, workerId, assignmentStatus: 'CONFIRMED', visitOtpStatus: 'VERIFIED',
         completionStatus: 'PENDING', settlementStatus: 'PENDING', workStatus: { $in: ['IN_PROGRESS', 'SUBMITTED'] }
@@ -573,6 +573,12 @@ exports.submitProof = async (req, res) => {
     );
     if (!assignment) {
       return res.status(409).json({ success: false, message: 'Work can no longer be submitted for this assignment.' });
+    }
+
+    // HOURLY pay follows the time actually worked: price it now so the cash to collect and the settlement agree
+    if (assignment.bookingType !== 'DAILY') {
+      try { await settlement.repriceHourlyByTime(assignment._id); } catch (e) { console.error('[submitProof] time pricing failed:', e); }
+      assignment = await IndWorkerAssignment.findById(assignment._id);
     }
 
     emitSafe(`booking_req:${assignment.parentRequestId}`, 'assignment_work_submitted', {
@@ -674,7 +680,7 @@ exports.verifyCompletionOtp = async (req, res) => {
       };
       if (!isDaily) {
         verifiedSet.workStatus = 'SUBMITTED';
-        verifiedSet.workSubmittedAt = now;
+        verifiedSet.workSubmittedAt = assignment.workSubmittedAt || now; // keep the real Stop time (pay is priced from it)
       }
     }
 

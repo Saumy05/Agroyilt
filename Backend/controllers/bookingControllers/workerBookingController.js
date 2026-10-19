@@ -40,6 +40,7 @@ const assignmentLifecycleFields = (a) => ({
   arrivedAt: a.arrivedAt,
   workStartedAt: a.workStartedAt,
   workSubmittedAt: a.workSubmittedAt,
+  workedMinutes: a.workedMinutes ?? null,
   completedAt: a.workCompletedAt || a.completionOtpVerifiedAt || null
 });
 
@@ -441,13 +442,14 @@ const getJobById = async (req, res) => {
 
         try {
           const WorkerBookingRequest = require('../../models/WorkerBookingRequest');
-          const pReq = pReqId ? await WorkerBookingRequest.findById(pReqId).select('financialSnapshot paymentMethod paymentStatus bookingType durationMinutes numberOfDays auditLog scheduledDate startDate startTime reportingTime shiftDurationHours breakDurationHours workDurationHours') : null;
+          const pReq = pReqId ? await WorkerBookingRequest.findById(pReqId).select('financialSnapshot paymentMethod paymentStatus bookingType durationMinutes endTime numberOfDays auditLog scheduledDate startDate startTime reportingTime shiftDurationHours breakDurationHours workDurationHours') : null;
           if (assignment && pReq) {
             const { computeStartWindows } = require('../../services/workerScheduleService');
             const { getWorkerFinancialSettings } = require('../../services/workerFinancialService');
             const currentDayLog = assignment.dailyLogs?.find(l => l.dayNumber === (assignment.currentDayIndex || 1));
             jobData.startWindows = computeStartWindows(pReq, assignment, assignment.currentDayIndex || 1, await getWorkerFinancialSettings());
             jobData.reportingTime = pReq.reportingTime || null;
+            if ((assignment.bookingType || pReq.bookingType) !== 'DAILY') jobData.bookedMinutes = require('../../utils/workerBookingMath').bookedMinutes(pReq);
             jobData.shiftDurationHours = assignment.shiftDurationHours || pReq.shiftDurationHours || 9;
             jobData.breakDurationHours = assignment.breakDurationHours || pReq.breakDurationHours || 1;
             jobData.workDurationHours  = assignment.workDurationHours || pReq.workDurationHours || 8;

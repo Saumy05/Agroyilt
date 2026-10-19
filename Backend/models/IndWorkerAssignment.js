@@ -265,6 +265,8 @@ const indWorkerAssignmentSchema = new mongoose.Schema(
     visitOtpVerifiedAt:       { type: Date, default: null },
     workStartedAt:            { type: Date, default: null },
     workSubmittedAt:          { type: Date, default: null },
+    // HOURLY: minutes paid for (Start→Stop less breaks, capped at the booked minutes), set when the worker stops
+    workedMinutes:            { type: Number, default: null },
     completionOtpVerifiedAt:  { type: Date, default: null },
     workCompletedAt:          { type: Date, default: null },
     settledAt:                { type: Date, default: null },

@@ -62,6 +62,55 @@ const deductCashCommissionOnce = async ({ workerId, amount, key, referenceId }) 
   return { applied: true };
 };
 
+// ── time-based pay (HOURLY) ──────────────────────────────────────────────────────────────────────
+/**
+ * Price an HOURLY assignment by the time actually worked, once the worker stops: agreedRate (₹/hr) × minutes between
+ * the Start OTP and Stop Work, less breaks, rounded up to the minute and never above the booked minutes. Paid-for
+ * extensions keep their own gross/commission. The unused part of the farmer's prepayment comes back through
+ * processBookingRefund (refund = reserve − gross actually earned). Safe to re-run: it always starts from the rate.
+ * @returns {{ repriced: boolean, workedMinutes?: number, bookedMinutes?: number, assignment?: object }}
+ */
+const repriceHourlyByTime = async (assignmentId) => {
+  const a = await IndWorkerAssignment.findById(assignmentId);
+  if (!a || a.bookingType === 'DAILY' || a.settlementStatus !== 'PENDING' || a.completionStatus !== 'PENDING') return { repriced: false };
+  if (!a.workStartedAt || !(Number(a.agreedRate) > 0)) return { repriced: false };
+
+  const parent = await WorkerBookingRequest.findById(a.parentRequestId).select('durationMinutes startTime endTime');
+  if (!parent) return { repriced: false };
+
+  const exts = await IndWorkerExtension.find({ status: 'CONFIRMED', 'workerExtensions.assignmentId': a._id });
+  let extGrossP = 0; let extCommissionP = 0; let extMinutes = 0;
+  for (const e of exts) {
+    if (!(a.appliedExtensionIds || []).some(id => String(id) === String(e._id))) continue;
+    const w = e.workerExtensions.find(x => String(x.assignmentId) === String(a._id) && x.status === 'ACCEPTED');
+    if (!w) continue;
+    extGrossP += toP(w.extensionGrossAmount || 0);
+    extCommissionP += toP(w.extensionCommissionAmount || 0);
+    extMinutes += Number(w.extensionMinutes || e.extensionMinutes || 0);
+  }
+
+  const { bookedMinutes } = require('../utils/workerBookingMath');
+  const baseMinutes = Math.max(1, bookedMinutes(parent) - extMinutes);
+  const end = a.workSubmittedAt || new Date();
+  const elapsed = Math.ceil((end.getTime() - new Date(a.workStartedAt).getTime()) / 60000);
+  const workedMinutes = Math.min(baseMinutes, Math.max(1, elapsed - (Number(a.breakDurationMinutes) || 0)));
+
+  const baseGrossP = Math.round(toP(a.agreedRate) * (workedMinutes / 60));
+  const baseCommissionP = Math.floor((baseGrossP * (a.commissionRate ?? 10)) / 100);
+  const grossP = baseGrossP + extGrossP;
+  const commissionP = baseCommissionP + extCommissionP;
+
+  const updated = await IndWorkerAssignment.findOneAndUpdate(
+    { _id: a._id, settlementStatus: 'PENDING', completionStatus: 'PENDING' },
+    {
+      $set: { grossAmount: toINR(grossP), commissionAmount: toINR(commissionP), netEarning: toINR(grossP - commissionP), workedMinutes },
+      $push: { auditLog: audit('priced_by_time', 'system', null, { workedMinutes, baseMinutes, gross: toINR(grossP) }) }
+    },
+    { new: true }
+  );
+  return { repriced: !!updated, workedMinutes, bookedMinutes: baseMinutes, assignment: updated || a };
+};
+
 // ── settle one assignment ────────────────────────────────────────────────────────────────────────
 /**
  * Preconditions: completion OTP already verified. Safe to call concurrently / repeatedly.
@@ -434,6 +483,6 @@ const finishParent = async (parentId) => {
 };
 
 module.exports = {
-  addRefunded, settleAssignment, syncParentProgress, finishParent, processBookingRefund, refundUnusedDays, refundWorkerReserveShare,
+  addRefunded, repriceHourlyByTime, settleAssignment, syncParentProgress, finishParent, processBookingRefund, refundUnusedDays, refundWorkerReserveShare,
   reconcile, creditFarmerOnce, isPaidOnline, deductCashCommissionOnce, audit, hasStarted, STALE_PROCESSING_MS
 };

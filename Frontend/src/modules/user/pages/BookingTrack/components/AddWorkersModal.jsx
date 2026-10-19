@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   FiX, FiUsers, FiCalendar, FiClock, FiDollarSign,
-  FiPlus, FiMinus, FiCheckCircle, FiShield, FiAlertCircle
+  FiPlus, FiMinus, FiAlertCircle
 } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import api from '../../../../../services/api';
@@ -26,7 +26,6 @@ const AddWorkersModal = ({
   const [workersCount, setWorkersCount] = useState(1);
   const [daysCount, setDaysCount] = useState(Math.max(1, remainingDays));
   const [startTiming, setStartTiming] = useState('tomorrow'); // 'today' | 'tomorrow'
-  const [paymentMethod, setPaymentMethod] = useState('cash'); // 'cash' | 'online'
   const [loading, setLoading] = useState(false);
 
   if (!isOpen) return null;
@@ -53,7 +52,6 @@ const AddWorkersModal = ({
         additionalWorkersCount: workersCount,
         startDate: localStartDate,
         numberOfDays: isDaily ? daysCount : 1,
-        paymentMethod,
         offeredRate: rate,
         reason: 'Farmer requested additional manpower'
       };
@@ -197,38 +195,6 @@ const AddWorkersModal = ({
             </div>
           </div>
 
-          {/* Payment Method Selector */}
-          <div>
-            <label className="text-xs font-bold text-slate-700 block mb-2">Payment Option</label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setPaymentMethod('cash')}
-                className={`py-2.5 px-3 rounded-2xl border text-xs font-bold transition-all text-center flex items-center justify-center gap-1.5 ${
-                  paymentMethod === 'cash'
-                    ? 'border-emerald-500 bg-emerald-50 text-emerald-900 shadow-xs'
-                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                <FiShield size={14} />
-                <span>Cash on Farm</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setPaymentMethod('online')}
-                className={`py-2.5 px-3 rounded-2xl border text-xs font-bold transition-all text-center flex items-center justify-center gap-1.5 ${
-                  paymentMethod === 'online'
-                    ? 'border-blue-500 bg-blue-50 text-blue-900 shadow-xs'
-                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                <FiCheckCircle size={14} />
-                <span>Online Escrow</span>
-              </button>
-            </div>
-          </div>
-
           {/* Pricing Summary Breakdown */}
           <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-4 space-y-2">
             <div className="flex items-center justify-between text-xs text-slate-600">
@@ -247,15 +213,9 @@ const AddWorkersModal = ({
               <span className="text-xs font-black text-slate-900">Total Additional Cost</span>
               <span className="text-base font-black text-amber-950">₹{totalPayable}</span>
             </div>
-            {paymentMethod === 'cash' ? (
-              <p className="text-[11px] text-emerald-800 font-medium pt-1">
-                ✓ No advance needed. Pay physical cash to workers upon day completion.
-              </p>
-            ) : (
-              <p className="text-[11px] text-blue-800 font-medium pt-1">
-                ✓ Held in AgroYilt Escrow. Unused reserve refunded if work ends early.
-              </p>
-            )}
+            <p className="text-[11px] text-slate-600 font-medium pt-1">
+              ✓ Nothing is charged now. Once workers accept, you pick the ones you want and choose how to pay (only the options available in your area).
+            </p>
           </div>
 
           {/* Action Buttons */}
