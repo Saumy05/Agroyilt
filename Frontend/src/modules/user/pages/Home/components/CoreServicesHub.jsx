@@ -30,7 +30,7 @@ const pillars = [
     titleEn: 'Drone Spraying',
     subtitle: 'Spraying Service',
     image: '/landing_images/dron_spraying.jpg',
-    route: '/user/drone-spraying',
+    categoryMatch: 'dron',
     icon: RiGamepadLine
   },
   {
@@ -44,11 +44,17 @@ const pillars = [
   }
 ];
 
-const CoreServicesHub = ({ onScrollToMandi }) => {
+const CoreServicesHub = ({ onScrollToMandi, categories = [], onCategoryClick }) => {
   const navigate = useNavigate();
 
   const handleCardClick = (pillar) => {
-    if (pillar.route) {
+    if (pillar.categoryMatch) {
+      const cat = categories.find(c =>
+        `${c.title || ''} ${c.slug || ''}`.toLowerCase().includes(pillar.categoryMatch)
+      );
+      if (cat && onCategoryClick) onCategoryClick(cat);
+      else navigate('/user/machinery-categories');
+    } else if (pillar.route) {
       navigate(pillar.route);
     } else if (pillar.action === 'scroll-to-mandi') {
       if (onScrollToMandi) {

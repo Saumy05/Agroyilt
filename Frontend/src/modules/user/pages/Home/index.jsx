@@ -586,10 +586,14 @@ const Home = () => {
 
             {/* Core SOW Services Hub (4 Key Pillars) */}
             <motion.section variants={itemVariants}>
-              <CoreServicesHub onScrollToMandi={() => {
-                const el = document.getElementById('mandi-schemes-section');
-                if (el) el.scrollIntoView({ behavior: 'smooth' });
-              }} />
+              <CoreServicesHub
+                categories={categories}
+                onCategoryClick={handleCategoryClick}
+                onScrollToMandi={() => {
+                  const el = document.getElementById('mandi-schemes-section');
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                }}
+              />
             </motion.section>
 
             {/* Land Lease & Theka Marketplace Banner (SOW #20) */}
