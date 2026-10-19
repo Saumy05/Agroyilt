@@ -18,6 +18,9 @@ const AppEntry = () => {
   const [checking, setChecking] = React.useState(hasStoredSession);
   const [authenticatedRole, setAuthenticatedRole] = React.useState(null);
 
+  // index.html paints the page green for the mobile entry screen; drop it once this screen is gone
+  useEffect(() => () => document.documentElement.classList.remove('app-splash'), []);
+
   useEffect(() => {
     if (!hasStoredSession) return undefined;
     let cancelled = false;
@@ -45,20 +48,6 @@ const AppEntry = () => {
           background: 'linear-gradient(160deg, #1B5E20 0%, #2E7D32 35%, #388E3C 65%, #43A047 100%)',
         }}
       >
-        <div style={{
-          width: '80px', height: '80px', borderRadius: '24px',
-          overflow: 'hidden', marginBottom: '20px',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
-          background: '#fff',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <img
-            src={appLogo || '/AgroyiltLogo.png'}
-            alt={appName || 'AgroYilt'}
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-            onError={(e) => { e.target.src = '/AgroyiltLogo.png'; }}
-          />
-        </div>
         <div style={{
           width: '32px', height: '32px',
           border: '3px solid rgba(255,255,255,0.3)',
