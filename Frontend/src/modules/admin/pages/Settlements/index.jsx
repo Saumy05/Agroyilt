@@ -26,6 +26,7 @@ const SettlementManagement = () => {
   const [dashboard, setDashboard] = useState(null);
   const [pendingSettlements, setPendingSettlements] = useState([]);
   const [owners, setOwners] = useState([]);
+  const [workerDues, setWorkerDues] = useState({ workers: [], totals: { totalDues: 0, workersWithDues: 0, pendingReview: 0 } });
   const [history, setHistory] = useState([]);
   const [actionLoading, setActionLoading] = useState(false);
 
@@ -64,6 +65,13 @@ const SettlementManagement = () => {
       } else if (activeTab === 'owners' || activeTab === 'vendors') {
         const res = await adminSettlementService.getVendorBalances({ filterDue: 'true' });
         if (res.success) setOwners(res.data || []);
+        // workers owe the platform too (commission and platform fee on cash jobs); a failure here must not hide the vendors
+        try {
+          const wres = await adminSettlementService.getWorkerDues();
+          if (wres.success) setWorkerDues({ workers: wres.data.workers || [], totals: wres.data.totals || {} });
+        } catch (e) {
+          console.error('Error loading worker dues:', e);
+        }
       } else if (activeTab === 'history') {
         const res = await adminSettlementService.getSettlementHistory();
         if (res.success) setHistory(res.data || []);
@@ -281,6 +289,22 @@ const SettlementManagement = () => {
           color: 'text-indigo-600',
           bg: 'bg-indigo-50',
           border: 'border-indigo-100'
+        },
+        {
+          title: 'Total Due from Workers',
+          value: `₹${Number(workerDues.totals.totalDues || 0).toLocaleString()}`,
+          icon: FiDollarSign,
+          color: 'text-red-600',
+          bg: 'bg-red-50',
+          border: 'border-red-100'
+        },
+        {
+          title: 'Workers with Due',
+          value: workerDues.totals.workersWithDues || 0,
+          icon: FiUsers,
+          color: 'text-orange-600',
+          bg: 'bg-orange-50',
+          border: 'border-orange-100'
         }
       ];
     } else if (activeTab === 'history') {
@@ -530,6 +554,61 @@ const SettlementManagement = () => {
     )
   );
 
+  const renderWorkerDuesList = () => (
+    <div className="mt-10">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div>
+          <h2 className="text-lg font-black text-gray-900 tracking-tight">Workers with Due</h2>
+          <p className="text-xs text-gray-500">Commission and platform fee workers owe after cash jobs</p>
+        </div>
+        <button
+          onClick={() => navigate('/admin/settlements/worker-dues')}
+          className="px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-50 shadow-sm transition-all"
+        >
+          Review payments
+          {workerDues.totals.pendingReview > 0 && (
+            <span className="ml-2 text-[10px] px-2 py-0.5 rounded-full font-black bg-orange-100 text-orange-600">{workerDues.totals.pendingReview}</span>
+          )}
+        </button>
+      </div>
+      {workerDues.workers.length === 0 ? (
+        <div className="text-center py-10 bg-gray-50/50 rounded-2xl border border-dashed border-gray-200">
+          <p className="text-gray-700 font-bold text-sm">No workers with outstanding dues</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm text-gray-600">
+            <thead className="bg-gray-50 text-gray-700 uppercase text-xs">
+              <tr>
+                <th className="px-6 py-3 font-semibold">Worker</th>
+                <th className="px-6 py-3 font-semibold">Status</th>
+                <th className="px-6 py-3 font-semibold text-right">Amount Due</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {workerDues.workers.map(w => (
+                <tr key={w._id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-6 py-4">
+                    <p className="font-bold text-gray-900">{w.name}</p>
+                    <p className="text-xs text-gray-500">{w.phone}</p>
+                  </td>
+                  <td className="px-6 py-4">
+                    {w.isRestricted
+                      ? <span className="text-[10px] text-red-600 font-bold uppercase tracking-wide">Restricted</span>
+                      : <span className="text-[10px] text-green-600 font-bold uppercase tracking-wide">Active</span>}
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <span className="font-bold text-red-600 text-base">₹{Number(w.outstandingDues || 0).toLocaleString()}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+
   const renderHistoryList = () => (
     history.length === 0 ? (
       <div className="text-center py-16 bg-gray-50/50 rounded-2xl border border-dashed border-gray-200">
@@ -583,14 +662,14 @@ const SettlementManagement = () => {
       <div>
         <h1 className="text-2xl font-black text-gray-900 tracking-tight">
           {activeTab === 'owners' || activeTab === 'vendors'
-            ? 'Vendors with Due'
+            ? 'Vendors & Workers with Due'
             : activeTab === 'history'
             ? 'Settlement History'
             : 'Pending Settlements'}
         </h1>
         <p className="text-sm text-gray-500 mt-0.5">
           {activeTab === 'owners' || activeTab === 'vendors'
-            ? 'Monitor owner cash holdings, limits, and outstanding dues'
+            ? 'Monitor owner cash holdings, limits, and what vendors and workers owe the platform'
             : activeTab === 'history'
             ? 'View past transaction records and approved settlements'
             : 'Review and approve owner cash settlements'}
@@ -605,7 +684,7 @@ const SettlementManagement = () => {
         <div className="flex flex-wrap items-center gap-2">
           {[
             { id: 'pending', label: 'Pending Settlements', icon: FiClock, count: pendingSettlements.length },
-            { id: 'owners', label: 'Vendors with Due', icon: FiUsers },
+            { id: 'owners', label: 'Vendors & Workers with Due', icon: FiUsers },
             { id: 'history', label: 'Settlement History', icon: FiTrendingUp }
           ].map(tab => {
             const isActive = activeTab === tab.id;
@@ -667,7 +746,12 @@ const SettlementManagement = () => {
         ) : (
           <div>
             {activeTab === 'pending' && renderPendingSettlements()}
-            {(activeTab === 'owners' || activeTab === 'vendors') && renderOwnersList()}
+            {(activeTab === 'owners' || activeTab === 'vendors') && (
+              <>
+                {renderOwnersList()}
+                {renderWorkerDuesList()}
+              </>
+            )}
             {activeTab === 'history' && renderHistoryList()}
           </div>
         )}

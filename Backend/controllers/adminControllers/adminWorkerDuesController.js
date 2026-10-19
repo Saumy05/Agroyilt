@@ -14,18 +14,20 @@ const duesSvc = require('../../services/workerDuesService');
 /** GET /api/admin/settlements/worker-dues — payments waiting for review + workers who owe money */
 exports.getWorkerDues = async (req, res) => {
   try {
-    const [pending, workers, recent] = await Promise.all([
+    const [pending, workers, recent, [owed]] = await Promise.all([
       WorkerDuesPayment.find({ method: 'offline', status: 'PENDING_REVIEW' })
         .populate('workerId', 'name phone outstandingDues isRestricted').sort({ createdAt: 1 }).lean(),
       Worker.find({ outstandingDues: { $gt: 0 } })
         .select('name phone outstandingDues isRestricted restrictionReason').sort({ outstandingDues: -1 }).limit(200).lean(),
       WorkerDuesPayment.find({ status: { $in: ['PAID', 'REJECTED'] } })
-        .populate('workerId', 'name phone').sort({ updatedAt: -1 }).limit(50).lean()
+        .populate('workerId', 'name phone').sort({ updatedAt: -1 }).limit(50).lean(),
+      // the list is capped at 200, the totals are not
+      Worker.aggregate([{ $match: { outstandingDues: { $gt: 0 } } }, { $group: { _id: null, total: { $sum: '$outstandingDues' }, count: { $sum: 1 } } }])
     ]);
-    const totalDues = workers.reduce((sum, w) => sum + (Number(w.outstandingDues) || 0), 0);
+    const totalDues = owed?.total || 0;
     return res.json({
       success: true,
-      data: { pending, workers, recent, totals: { totalDues: Math.round(totalDues * 100) / 100, workersWithDues: workers.length, pendingReview: pending.length } }
+      data: { pending, workers, recent, totals: { totalDues: Math.round(totalDues * 100) / 100, workersWithDues: owed?.count || 0, pendingReview: pending.length } }
     });
   } catch (error) {
     console.error('[getWorkerDues]', error);
