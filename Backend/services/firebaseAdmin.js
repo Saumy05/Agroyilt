@@ -161,7 +161,7 @@ async function sendPushNotification(tokens, payload) {
       message.webpush.notification = {
         title: payload.title || 'App Notification',
         body: payload.body || 'New Update',
-        icon: payload.icon || '/agroyilt-logo.png',
+        icon: payload.icon || '/AgroyiltLogo.png',
       };
     }
 

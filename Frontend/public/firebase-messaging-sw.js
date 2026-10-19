@@ -58,8 +58,8 @@ messaging.onBackgroundMessage((payload) => {
   notificationTitle = notificationTitle || 'App Notification';
   notificationBody = notificationBody || 'You have a new update.';
 
-  let icon = data.icon || notification.icon || '/agroyilt-logo.png';
-  let badge = '/agroyilt-logo.png';
+  let icon = data.icon || notification.icon || '/AgroyiltLogo.png';
+  let badge = '/AgroyiltLogo.png';
   let tag = data.bookingId || `notification-${Date.now()}`;
   let requireInteraction = false;
   let vibrate = [200, 100, 200];
@@ -176,23 +176,10 @@ messaging.onBackgroundMessage((payload) => {
     timestamp: Date.now()
   };
 
-  // Show the notification ONLY if app is not in foreground (to avoid duplicate with in-app socket toast)
-  return self.clients.matchAll({ type: 'window', includeUncontrolled: true })
-    .then(function (clientList) {
-      const isVisible = clientList.some(function (client) {
-        return client.visibilityState === 'visible';
-      });
-
-      if (isVisible) {
-        console.log('[SW] 🚫 App is visible, skipping system notification to avoid duplicate');
-        return;
-      }
-
-      return self.registration.showNotification(notificationTitle, notificationOptions);
-    })
+  // Always display system notification banner when background push arrives
+  return self.registration.showNotification(notificationTitle, notificationOptions)
     .catch(function (err) {
-      console.error('[SW] ⚠️ Error checking clients, falling back to notification:', err);
-      return self.registration.showNotification(notificationTitle, notificationOptions);
+      console.error('[SW] ⚠️ Error displaying notification:', err);
     });
 });
 

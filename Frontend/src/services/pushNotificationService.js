@@ -48,24 +48,38 @@ async function registerServiceWorker() {
     throw new Error('FCM Service Workers not supported on iOS Safari');
   }
 
-  if ('serviceWorker' in navigator) {
-    try {
-      // Force unregister existing service workers to fix the "stuck in waiting to activate" Chrome DevTools bug
-      const existingRegistrations = await navigator.serviceWorker.getRegistrations();
-      for (let reg of existingRegistrations) {
-        await reg.unregister();
-      }
-
-      // Register a fresh Service Worker
-      const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-      // console.log('✅ Service Worker registered:', registration.scope);
-      return registration;
-    } catch (error) {
-      // console.error('❌ Service Worker registration failed:', error);
-      throw error;
-    }
-  } else {
+  if (!('serviceWorker' in navigator)) {
     throw new Error('Service Workers are not supported in this browser');
+  }
+
+  try {
+    let registration = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
+    if (!registration) {
+      registration = await navigator.serviceWorker.getRegistration('/');
+    }
+
+    if (!registration) {
+      registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' });
+      console.log('✅ Service Worker registered with scope:', registration.scope);
+    }
+
+    // Ensure worker is activated if currently installing
+    if (registration.installing) {
+      await new Promise((resolve) => {
+        registration.installing.addEventListener('statechange', (e) => {
+          if (e.target.state === 'activated' || e.target.state === 'redundant') {
+            resolve();
+          }
+        });
+        setTimeout(resolve, 3000);
+      });
+    }
+
+    await navigator.serviceWorker.ready;
+    return registration;
+  } catch (error) {
+    console.error('❌ Service Worker registration failed:', error);
+    throw error;
   }
 }
 
@@ -92,10 +106,12 @@ async function getFCMToken() {
       return null;
     }
 
+    if (!VAPID_KEY) {
+      console.warn('❌ [ATTENTION] VAPID_KEY is not defined in environment variables.');
+      return null;
+    }
+
     const registration = await registerServiceWorker();
-    
-    // Do NOT await registration.update() as it can hang indefinitely in some browsers
-    registration.update().catch(err => console.warn('SW update failed/ignored', err));
 
     // Wrap getToken in a timeout to prevent indefinite hangs
     const tokenPromise = getToken(messaging, {
@@ -112,9 +128,11 @@ async function getFCMToken() {
     if (token) {
       return token;
     } else {
+      console.warn('[FCM] ⚠️ FCM getToken returned empty token');
       return null;
     }
   } catch (error) {
+    console.error('[FCM] ❌ Error in getFCMToken:', error);
     return null;
   }
 }
@@ -179,6 +197,7 @@ async function saveTokenToBackend(token, userType, platform) {
     // Get tab-isolated auth token for the target role
     const authToken = authStorage.getAccessToken(userType);
     if (!authToken) {
+      console.warn(`[FCM] ℹ️ Skipping FCM token save: No auth token found for role '${userType}'.`);
       return null;
     }
 
@@ -202,11 +221,15 @@ async function saveTokenToBackend(token, userType, platform) {
     if (response.ok) {
       const storageKey = `fcm_token_${userType}_${platform}`;
       localStorage.setItem(storageKey, token);
+      console.log(`[FCM] ✅ Token successfully registered for ${userType} (${platform})`);
       return token;
     } else {
+      const errText = await response.text();
+      console.warn(`[FCM] ⚠️ Backend rejected FCM token registration (${response.status}):`, errText);
       return null;
     }
   } catch (error) {
+    console.error('[FCM] ❌ Error saving token to backend:', error);
     return null;
   }
 }

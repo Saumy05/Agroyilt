@@ -95,7 +95,18 @@ function App() {
               icon: payload.notification?.icon || payload.data?.icon || '/AgroyiltLogo.png'
             });
           } catch (e) {
-            console.error('Error showing native notification in foreground:', e);
+            // Android mobile browsers disallow `new Notification()` in window context and require `navigator.serviceWorker.ready.showNotification`
+            if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.ready.then((reg) => {
+                reg.showNotification(title, {
+                  body: body,
+                  icon: payload.notification?.icon || payload.data?.icon || '/AgroyiltLogo.png',
+                  data: payload.data
+                });
+              }).catch((swErr) => console.error('Error showing SW notification in foreground:', swErr));
+            } else {
+              console.error('Error showing native notification in foreground:', e);
+            }
           }
         } else {
           console.log('Native browser notifications skipped. Permission status:', 'Notification' in window ? Notification.permission : 'Not supported');
