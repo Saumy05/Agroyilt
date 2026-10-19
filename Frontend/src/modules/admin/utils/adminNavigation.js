@@ -124,8 +124,9 @@ export const filterMenuForAdmin = (menu, adminUser) => menu.filter(item => {
     // Strictly super_admin only
     return false;
   }
-  if (requiredPermission && adminUser.permissions && Object.keys(adminUser.permissions).length > 0) {
-    return !!adminUser.permissions[requiredPermission];
+  // A role without the permission does not see the item (an empty permission list used to show everything)
+  if (requiredPermission) {
+    return !!adminUser.permissions?.[requiredPermission];
   }
 
   return true;

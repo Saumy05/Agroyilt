@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { body } = require('express-validator');
 const { authenticate } = require('../../middleware/authMiddleware');
-const { isAdmin } = require('../../middleware/roleMiddleware');
+const { isAdmin, requireAnyPermission } = require('../../middleware/roleMiddleware');
 const {
   getAllUsers,
   getUserDetails,
@@ -22,16 +22,16 @@ const toggleStatusValidation = [
 ];
 
 // Routes
-router.get('/users', authenticate, isAdmin, getAllUsers);
-router.get('/users/bookings', authenticate, isAdmin, getAllUserBookings);
-router.get('/users/:id', authenticate, isAdmin, getUserDetails);
-router.put('/users/:id/status', authenticate, isAdmin, toggleStatusValidation, toggleUserStatus);
-router.put('/users/:id/approval', authenticate, isAdmin, updateApprovalStatus);
-router.delete('/users/:id', authenticate, isAdmin, deleteUser);
-router.get('/users/:id/bookings', authenticate, isAdmin, getUserBookings);
-router.get('/users/:id/wallet', authenticate, isAdmin, getUserWalletTransactions);
-router.put('/users/:id/kyc-status', authenticate, isAdmin, updateKycStatus);
-router.post('/users', authenticate, isAdmin, addUser);
+router.get('/users', authenticate, isAdmin, requireAnyPermission('users.view'), getAllUsers);
+router.get('/users/bookings', authenticate, isAdmin, requireAnyPermission('users.view'), getAllUserBookings);
+router.get('/users/:id', authenticate, isAdmin, requireAnyPermission('users.view'), getUserDetails);
+router.put('/users/:id/status', authenticate, isAdmin, requireAnyPermission('users.block'), toggleStatusValidation, toggleUserStatus);
+router.put('/users/:id/approval', authenticate, isAdmin, requireAnyPermission('users.edit'), updateApprovalStatus);
+router.delete('/users/:id', authenticate, isAdmin, requireAnyPermission('users.delete'), deleteUser);
+router.get('/users/:id/bookings', authenticate, isAdmin, requireAnyPermission('users.view'), getUserBookings);
+router.get('/users/:id/wallet', authenticate, isAdmin, requireAnyPermission('users.view'), getUserWalletTransactions);
+router.put('/users/:id/kyc-status', authenticate, isAdmin, requireAnyPermission('users.edit'), updateKycStatus);
+router.post('/users', authenticate, isAdmin, requireAnyPermission('users.create'), addUser);
 
 module.exports = router;
 

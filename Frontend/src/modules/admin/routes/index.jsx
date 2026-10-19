@@ -4,6 +4,7 @@ import AdminLayout from '../components/layout/AdminLayout';
 import ProtectedRoute from '../../../components/auth/ProtectedRoute';
 import PublicRoute from '../../../components/auth/PublicRoute';
 import ErrorBoundary from '../components/common/ErrorBoundary';
+import PermissionRoute from '../components/common/PermissionRoute';
 import useAppNotifications from '../../../hooks/useAppNotifications.jsx';
 
 // Login page (not lazy loaded for faster initial access)
@@ -74,15 +75,16 @@ const AdminRoutes = () => {
           }>
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />
-            <Route path="users/*" element={<Users />} />
-            <Route path="workers/*" element={<Workers />} />
-            <Route path="vendors/*" element={<Vendors />} />
-            <Route path="bookings" element={<Bookings />} />
-            <Route path="bookings/:id" element={<BookingDetailsPage />} />
-            <Route path="bookings/tracking" element={<BookingTracking />} />
-            <Route path="bookings/notifications" element={<BookingNotifications />} />
-            <Route path="bookings/km-photos" element={<BookingKmPhotos />} />
-            <Route path="users/kyc" element={<KycVerification />} />
+            {/* Farmers, Workers, Vendors and Bookings need the matching role permission (same keys the server checks) */}
+            <Route path="users/*" element={<PermissionRoute anyOf={['users.view']}><Users /></PermissionRoute>} />
+            <Route path="workers/*" element={<PermissionRoute anyOf={['workers.view']}><Workers /></PermissionRoute>} />
+            <Route path="vendors/*" element={<PermissionRoute anyOf={['vendors.view', 'payments.view']}><Vendors /></PermissionRoute>} />
+            <Route path="bookings" element={<PermissionRoute anyOf={['bookings.view']}><Bookings /></PermissionRoute>} />
+            <Route path="bookings/:id" element={<PermissionRoute anyOf={['bookings.view', 'disputes.view']}><BookingDetailsPage /></PermissionRoute>} />
+            <Route path="bookings/tracking" element={<PermissionRoute anyOf={['bookings.view']}><BookingTracking /></PermissionRoute>} />
+            <Route path="bookings/notifications" element={<PermissionRoute anyOf={['bookings.view']}><BookingNotifications /></PermissionRoute>} />
+            <Route path="bookings/km-photos" element={<PermissionRoute anyOf={['bookings.view']}><BookingKmPhotos /></PermissionRoute>} />
+            <Route path="users/kyc" element={<PermissionRoute anyOf={['users.view']}><KycVerification /></PermissionRoute>} />
             <Route path="equipment-catalog/*" element={<UserCategories />} />
             <Route path="equipment-approvals/*" element={<EquipmentApproval />} />
             <Route path="payments/*" element={<Payments />} />

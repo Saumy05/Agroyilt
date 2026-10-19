@@ -137,6 +137,31 @@ const requirePermission = (permissionKey) => {
   };
 };
 
+/**
+ * Like requirePermission, but any ONE of the keys is enough. For endpoints that two modules legitimately use
+ * (e.g. the vendor list is read by Vendors and by Soil Testing).
+ * Usage: requireAnyPermission('vendors.view', 'soiltest.view')
+ */
+const requireAnyPermission = (...permissionKeys) => {
+  return (req, res, next) => {
+    try {
+      const admin = req.user;
+      if (!admin) {
+        return res.status(401).json({ success: false, message: 'Authentication required.' });
+      }
+      if (admin.role === 'super_admin') return next();
+      if (permissionKeys.some(key => admin.permissions && admin.permissions[key])) return next();
+      return res.status(403).json({
+        success: false,
+        message: `Access denied. You do not have "${permissionKeys[0]}" permission.`
+      });
+    } catch (error) {
+      console.error('Permission check error:', error);
+      res.status(500).json({ success: false, message: 'Permission check failed' });
+    }
+  };
+};
+
 module.exports = {
   isUser,
   isVendor,
@@ -144,5 +169,6 @@ module.exports = {
   isAdmin,
   isAdminOrVendor,
   isSuperAdmin,
-  requirePermission
+  requirePermission,
+  requireAnyPermission
 };
