@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  FiX, FiPlus, FiTrash2, FiCreditCard, FiClock, FiCheck,
-  FiDollarSign, FiPlusCircle, FiShield, FiCheckCircle, FiRefreshCw
+  FiX, FiCreditCard, FiClock, FiCheck,
+  FiShield, FiCheckCircle, FiRefreshCw
 } from 'react-icons/fi';
 import { toastManager } from '../../../../utils/toastManager';
 import workerService from '../../../../services/workerService';
@@ -22,7 +22,6 @@ const CashCollectionModal = ({
   defaultMode = 'cash'
 }) => {
   const [paymentMode, setPaymentMode] = useState(defaultMode || 'cash'); // 'cash' or 'qr'
-  const [extraItems, setExtraItems] = useState([]);
   const [step, setStep] = useState('summary'); // 'summary' or 'otp'
   const [otp, setOtp] = useState(['', '', '', '']);
   const [submitting, setSubmitting] = useState(false);
@@ -37,9 +36,6 @@ const CashCollectionModal = ({
 
   const bookingId = booking?._id || booking?.id || booking?.assignmentId;
 
-  // Fix potential undefined issue
-  const safeExtraItems = Array.isArray(extraItems) ? extraItems : [];
-
   // Calculate base amount - For plan_benefit, base is ALWAYS 0 (covered by plan)
   const baseAmount = (() => {
     if (booking?.paymentMethod === 'plan_benefit') {
@@ -53,15 +49,10 @@ const CashCollectionModal = ({
       booking?.grossAmount ||
       booking?.workerGrossEarning ||
       (booking?.agreedRate ? (booking.agreedRate * (booking.workedDays || 1)) : 0);
-    const existingExtras = booking?.workDoneDetails?.items || [];
-    const existingExtrasTotal = existingExtras.reduce((sum, item) => sum + (parseFloat(item.price || 0) * (item.qty || 1)), 0);
-    return (booking?.customerConfirmationOTP || booking?.paymentOtp)
-      ? Math.max(0, rawFinal - existingExtrasTotal)
-      : rawFinal;
+    return rawFinal || 0;
   })();
 
-  const totalExtra = safeExtraItems.reduce((sum, item) => sum + (parseFloat(item.price || 0) * (item.qty || 1)), 0);
-  const finalTotal = baseAmount + totalExtra;
+  const finalTotal = baseAmount;
 
   // Reset or initialize state
   useEffect(() => {
@@ -75,12 +66,8 @@ const CashCollectionModal = ({
       const hasOTP = booking?.customerConfirmationOTP || booking?.paymentOtp;
       if (hasOTP) {
         setStep('otp');
-        if (booking.workDoneDetails?.items && booking.workDoneDetails.items.length > 0) {
-          setExtraItems(booking.workDoneDetails.items);
-        }
       } else {
         setStep('summary');
-        setExtraItems([]);
         setOtp(['', '', '', '']);
       }
 
@@ -152,7 +139,7 @@ const CashCollectionModal = ({
     try {
       setQrLoading(true);
       setQrError(null);
-      const res = await workerService.generateAdminQr(bookingId, finalTotal, extraItems.filter(i => String(i.title || "").trim() && parseFloat(i.price) > 0));
+      const res = await workerService.generateAdminQr(bookingId, finalTotal, []);
       if (res?.success && res.data) {
         setQrData(res.data);
       } else {
@@ -187,24 +174,6 @@ const CashCollectionModal = ({
     }
   };
 
-  const handleAddItem = () => {
-    setExtraItems([...extraItems, { title: '', price: '', qty: 1 }]);
-    // Invalidate QR if extra items change
-    setQrData(null);
-  };
-
-  const handleUpdateItem = (index, field, value) => {
-    const newItems = [...extraItems];
-    newItems[index][field] = value;
-    setExtraItems(newItems);
-    setQrData(null);
-  };
-
-  const handleRemoveItem = (index) => {
-    setExtraItems(extraItems.filter((_, i) => i !== index));
-    setQrData(null);
-  };
-
   // Auto-verify as last digit enters
   useEffect(() => {
     const otpValue = otp.join('');
@@ -231,20 +200,9 @@ const CashCollectionModal = ({
   };
 
   const handleSendOTP = async () => {
-    // a row the user added but left empty is just dropped; a half-filled row is an error
-    const filledItems = extraItems.filter(i => String(i.title || '').trim() || String(i.price || '').trim());
-    for (const item of filledItems) {
-      if (!String(item.title || '').trim() || !item.price || parseFloat(item.price) <= 0) {
-        toastManager.error('Please provide title and price for all extra items');
-        return;
-      }
-    }
-    if (filledItems.length !== extraItems.length) setExtraItems(filledItems);
-
     const isPlanBenefit = booking?.paymentMethod === 'plan_benefit';
-    const hasExtras = filledItems.length > 0 && totalExtra > 0;
 
-    if (isPlanBenefit && !hasExtras) {
+    if (isPlanBenefit) {
       setSubmitting(true);
       try {
         await onConfirm(0, [], '0000');
@@ -260,7 +218,7 @@ const CashCollectionModal = ({
 
     setSubmitting(true);
     try {
-      await onInitiateOTP(finalTotal, filledItems);
+      await onInitiateOTP(finalTotal, []);
       setStep('otp');
       toastManager.success('OTP sent to customer');
     } catch (error) {
@@ -279,7 +237,7 @@ const CashCollectionModal = ({
 
     setSubmitting(true);
     try {
-      await onConfirm(finalTotal, extraItems.filter(i => String(i.title || '').trim() && parseFloat(i.price) > 0), otpString);
+      await onConfirm(finalTotal, [], otpString);
       onClose();
       toastManager.success('Payment recorded successfully');
     } catch (error) {
@@ -497,68 +455,7 @@ const CashCollectionModal = ({
                   </div>
                 )}
 
-                {/* Extra Items Section */}
-                <div className="space-y-4 mb-6">
-                  <div className="flex justify-between items-center">
-                    <h4 className="text-sm font-bold text-gray-700 uppercase tracking-wider">Extra Services / Items</h4>
-                    <button
-                      onClick={handleAddItem}
-                      className="flex items-center gap-1.5 text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors"
-                    >
-                      <FiPlus className="w-3.5 h-3.5" />
-                      Add Extra
-                    </button>
-                  </div>
 
-                  {extraItems.length === 0 ? (
-                    <div className="text-center py-6 border-2 border-dashed border-gray-100 rounded-2xl">
-                      <p className="text-xs text-gray-400">No extra charges added yet</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {extraItems.map((item, index) => (
-                        <div key={index} className="flex gap-2 items-start animate-in slide-in-from-right-2 duration-200">
-                          <div className="flex-1 space-y-2">
-                            <input
-                              type="text"
-                              placeholder="Service name"
-                              className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 transition-all"
-                              value={item.title}
-                              onChange={(e) => handleUpdateItem(index, 'title', e.target.value)}
-                            />
-                            <div className="flex gap-2">
-                              <div className="relative flex-1">
-                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">₹</span>
-                                <input
-                                  type="number"
-                                  placeholder="Price"
-                                  className="w-full pl-7 pr-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-blue-500"
-                                  value={item.price}
-                                  onChange={(e) => handleUpdateItem(index, 'price', e.target.value)}
-                                />
-                              </div>
-                              <div className="w-20">
-                                <input
-                                  type="number"
-                                  placeholder="Qty"
-                                  className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-blue-500"
-                                  value={item.qty}
-                                  onChange={(e) => handleUpdateItem(index, 'qty', e.target.value)}
-                                />
-                              </div>
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => handleRemoveItem(index)}
-                            className="p-2 text-red-400 hover:bg-red-50 rounded-lg mt-1"
-                          >
-                            <FiTrash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
 
                 {/* Final Summary Card */}
                 <div className="bg-gray-900 rounded-2xl p-6 text-white shadow-xl mt-6 relative overflow-hidden group">
@@ -614,7 +511,7 @@ const CashCollectionModal = ({
                   onClick={() => setStep('summary')}
                   className="text-xs font-bold text-blue-600 hover:underline"
                 >
-                  Back to Edit Bill
+                  Back to Review Bill
                 </button>
               </div>
             )
@@ -630,16 +527,16 @@ const CashCollectionModal = ({
                 disabled={submitting || loading}
                 className="w-full py-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 hover:brightness-105"
                 style={{
-                  background: booking?.paymentMethod === 'plan_benefit' && extraItems.length === 0
+                  background: booking?.paymentMethod === 'plan_benefit'
                     ? 'linear-gradient(135deg, #10B981, #059669)'
                     : 'linear-gradient(135deg, #3B82F6, #2563EB)',
-                  boxShadow: booking?.paymentMethod === 'plan_benefit' && extraItems.length === 0
+                  boxShadow: booking?.paymentMethod === 'plan_benefit'
                     ? '0 8px 16px -4px rgba(16, 185, 129, 0.4)'
                     : '0 8px 16px -4px rgba(59, 130, 246, 0.4)',
                 }}
               >
                 {submitting ? 'Processing...' : (
-                  booking?.paymentMethod === 'plan_benefit' && extraItems.length === 0
+                  booking?.paymentMethod === 'plan_benefit'
                     ? 'Finalize Bill'
                     : 'Send OTP to User'
                 )}
@@ -661,8 +558,8 @@ const CashCollectionModal = ({
             )}
             <p className="text-[10px] text-gray-400 text-center italic mt-3">
               {step === 'summary'
-                ? (booking?.paymentMethod === 'plan_benefit' && extraItems.length === 0
-                  ? 'No extra charges. Clicking will finalize the bill immediately.'
+                ? (booking?.paymentMethod === 'plan_benefit'
+                  ? 'Clicking will finalize the bill immediately.'
                   : 'Clicking will finalize the bill and send a 4-digit code to the customer.')
                 : 'Enter the code provided by the customer to finalize the transaction.'}
             </p>
