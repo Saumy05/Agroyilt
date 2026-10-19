@@ -454,7 +454,9 @@ export const getUser = (role) => {
 export const updateUserData = (role, updatedProfile) => {
   if (!updatedProfile) return;
   const canonicalRole = normalizeRole(role);
-  const current = getAuthSession(canonicalRole) || { role: canonicalRole };
+  const current = getAuthSession(canonicalRole);
+  // Signed out (e.g. a profile response that lands after logout): there is nothing to update, and writing would leave a half session behind
+  if (!current) return;
   const mergedUser = {
     ...(current.user || {}),
     ...updatedProfile

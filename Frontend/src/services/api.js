@@ -172,6 +172,14 @@ api.interceptors.response.use(
 
         const { accessToken, refreshToken: newRefreshToken } = response.data;
 
+        // The user may have logged out while this refresh was in flight. Saving the new tokens now would sign
+        // that account back in (the refresh token is still valid server-side), so drop them instead.
+        if (authStorage.getRefreshToken(role) !== refreshToken) {
+          processQueue(error, null);
+          isRefreshing = false;
+          return Promise.reject(error);
+        }
+
         // Save new access token into current tab's role session
         const currentSession = authStorage.getAuthSession(role) || { role };
         authStorage.setAuthSession(role, {
