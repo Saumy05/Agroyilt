@@ -29,9 +29,12 @@ export const verifySession = async (role) => {
   }
 };
 
-/** First role with a server-verified login, or null. */
+/** First role with a server-verified login, or null. The role that signed in last is tried first. */
 export const findVerifiedRole = async () => {
-  for (const role of ['user', 'vendor', 'worker']) {
+  const last = authStorage.getLastActiveRole();
+  const order = ['user', 'vendor', 'worker'];
+  if (last) order.sort((a, b) => (b === last) - (a === last));
+  for (const role of order) {
     if (await verifySession(role)) return role;
   }
   return null;

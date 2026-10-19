@@ -6,6 +6,7 @@ import { SocketProvider } from './context/SocketContext';
 import { CartProvider } from './context/CartContext';
 import { GeoProvider } from './context/GeoContext';
 import { BrandProvider } from './context/BrandContext';
+import NoInternetScreen from './components/common/NoInternetScreen';
 import { initializePushNotifications, setupForegroundNotificationHandler } from './services/pushNotificationService';
 // Global common imports removed here as they are now handled in AppRoutes.jsx for conditional rendering
 
@@ -133,6 +134,7 @@ function App() {
             <CartProvider>
               <div className="App">
                 <ToastLimiter />
+                <NoInternetScreen />
                 <AppRoutes />
                 {/* Global components moved to routes/index.jsx */}
                 <Toaster

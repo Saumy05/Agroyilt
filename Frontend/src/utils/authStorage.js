@@ -15,6 +15,8 @@ export const AUTH_KEYS = {
   admin: 'agroyilt_auth_admin'
 };
 
+const LAST_ROLE_KEY = 'agroyilt_last_active_role';
+
 // Legacy/Compatibility key maps
 const COMPAT_KEYS = {
   user: {
@@ -342,6 +344,9 @@ export const setAuthSession = (role, sessionData) => {
       console.warn('[authStorage] Failed to write localStorage:', e);
     }
 
+    // Remember who signed in last, so a cold start (or an offline one) reopens that account, not just the first one found
+    try { if (canonicalRole !== 'admin') localStorage.setItem(LAST_ROLE_KEY, canonicalRole); } catch (e) {}
+
     // 3. Write persistent cookie for native WebView CookieManager sync (7 days)
     try {
       if (accessToken) {
@@ -384,6 +389,8 @@ export const clearAuthSession = (role) => {
       localStorage.removeItem(compat.refresh);
       localStorage.removeItem(compat.data);
     } catch (e) {}
+
+    try { if (localStorage.getItem(LAST_ROLE_KEY) === canonicalRole) localStorage.removeItem(LAST_ROLE_KEY); } catch (e) {}
 
     // 3. Expire persistent cookies
     try {
@@ -469,6 +476,19 @@ export const updateUserData = (role, updatedProfile) => {
 };
 
 /**
+ * The role that signed in most recently and has not logged out since, or null.
+ * @returns {'user' | 'worker' | 'vendor' | null}
+ */
+export const getLastActiveRole = () => {
+  try {
+    const r = localStorage.getItem(LAST_ROLE_KEY);
+    return r === 'user' || r === 'worker' || r === 'vendor' ? r : null;
+  } catch (e) {
+    return null;
+  }
+};
+
+/**
  * Checks if a role is authenticated in the current tab with a valid token
  * @param {'user' | 'worker' | 'vendor' | 'admin'} role 
  * @returns {boolean}
@@ -520,5 +540,6 @@ export default {
   getUser,
   updateUserData,
   isAuthenticated,
+  getLastActiveRole,
   isAnyAuthenticated
 };
