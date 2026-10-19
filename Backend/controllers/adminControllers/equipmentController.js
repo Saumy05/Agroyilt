@@ -1,4 +1,5 @@
 const VendorEquipment = require('../../models/VendorEquipment');
+const Category = require('../../models/Category');
 const { validationResult } = require('express-validator');
 
 /**
@@ -54,20 +55,40 @@ exports.updateEquipmentStatus = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid status' });
     }
 
-    // A listing that only has a requested (not yet created) category can't go live: farmers browse by category
+    // A listing that only has a requested (not yet created) category can't go live: farmers browse by category.
+    // Approving it creates that category (or links the existing one with the same name), as the admin expects.
+    let categoryUpdate = {};
+    let createdCategoryTitle = null;
     if (status === 'approved') {
-      const existing = await VendorEquipment.findById(id).select('categoryId requestedCategoryName');
+      const existing = await VendorEquipment.findById(id).select('categoryId requestedCategoryName listingType');
       if (existing && !existing.categoryId && existing.requestedCategoryName) {
-        return res.status(400).json({
-          success: false,
-          message: `Create the requested category "${existing.requestedCategoryName}" first (Machinery Management > Add to Catalog), then approve.`
+        const title = existing.requestedCategoryName.trim();
+        const slug = title.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').replace(/(^-|-$)/g, '');
+        const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        let category = await Category.findOne({
+          type: 'service',
+          $or: [{ title: new RegExp(`^${escaped}$`, 'i') }, ...(slug ? [{ slug }] : [])]
         });
+        if (!category) {
+          category = await Category.create({
+            title,
+            slug: slug || undefined,
+            type: 'service',
+            status: 'active',
+            showOnHome: false, // the admin decides later whether it appears on the home screen
+            scope: 'GLOBAL_INDIA',
+            fulfillmentMode: existing.listingType === 'rental' ? 'rental' : 'service',
+            createdBy: req.user?._id || null
+          });
+          createdCategoryTitle = category.title;
+        }
+        categoryUpdate = { categoryId: category._id, requestedCategoryName: null };
       }
     }
 
     const equipment = await VendorEquipment.findByIdAndUpdate(
       id,
-      { status, adminRemarks: remarks },
+      { status, adminRemarks: remarks, ...categoryUpdate },
       { new: true }
     );
 
@@ -77,7 +98,9 @@ exports.updateEquipmentStatus = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: `Equipment ${status} successfully`,
+      message: createdCategoryTitle
+        ? `Equipment approved. New category "${createdCategoryTitle}" was created.`
+        : `Equipment ${status} successfully`,
       data: equipment
     });
   } catch (error) {
