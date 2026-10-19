@@ -6,6 +6,15 @@ const { buildAdminScopeFilter, verifyResourceScope } = require('../../utils/admi
 /**
  * Get all bookings with filters and search
  */
+// The groups the admin Bookings cards count and filter by
+const ADMIN_STATUS_GROUPS = {
+  awaiting: ['searching', 'requested', 'awaiting_payment', 'pending'],
+  confirmed: ['confirmed', 'accepted', 'assigned'],
+  inProgress: ['journey_started', 'visited', 'in_progress', 'work_done'],
+  completed: ['completed'],
+  cancelled: ['cancelled', 'rejected']
+};
+
 const getAllBookings = async (req, res) => {
   try {
     const {
@@ -26,7 +35,8 @@ const getAllBookings = async (req, res) => {
     // Build query
     const query = {};
 
-    if (status) query.status = status;
+    // `status` may be one status or a comma-separated group (e.g. the dashboard cards: in_progress,journey_started,...)
+    if (status) query.status = String(status).includes(',') ? { $in: String(status).split(',').map(x => x.trim()).filter(Boolean) } : status;
     if (paymentStatus) query.paymentStatus = paymentStatus;
     if (userId) query.userId = userId;
     if (vendorId) query.vendorId = vendorId;
@@ -58,7 +68,11 @@ const getAllBookings = async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     // Fetch bookings & count concurrently with .lean() and focused projection for maximum speed
-    const [bookings, total] = await Promise.all([
+    // per-status counts for the cards: the same filters as the list, except the status itself
+    const { status: _ignoredStatus, ...queryWithoutStatus } = query;
+    const countQuery = Object.keys(scopeFilter).length > 0 ? { $and: [queryWithoutStatus, scopeFilter] } : queryWithoutStatus;
+
+    const [bookings, total, statusRows] = await Promise.all([
       Booking.find(finalQuery)
         .select('bookingNumber status scheduledDate scheduledTime timeSlot finalAmount agreedRate basePrice minRate maxRate userPayableAmount totalAmount paymentStatus paymentMethod items bookedItems selectedImplements rental_type serviceCategory serviceName address liveLocation estimatedArrivalTime distanceRemaining createdAt userId vendorId workerId serviceId categoryId districtId subDistrictId')
         .populate('userId', 'name phone email')
@@ -70,8 +84,11 @@ const getAllBookings = async (req, res) => {
         .skip(skip)
         .limit(parseInt(limit))
         .lean(),
-      Booking.countDocuments(finalQuery)
+      Booking.countDocuments(finalQuery),
+      // countDocuments (not an aggregate) so string ids in the filters are cast the same way as in the list
+      Promise.all(Object.values(ADMIN_STATUS_GROUPS).map(statuses => Booking.countDocuments({ $and: [countQuery, { status: { $in: statuses } }] })))
     ]);
+    const statusCounts = Object.fromEntries(Object.keys(ADMIN_STATUS_GROUPS).map((k, i) => [k, statusRows[i]]));
 
     // Ensure finalAmount, totalAmount, and paymentMethod are always reliably populated
     const formattedBookings = bookings.map(b => {
@@ -87,6 +104,8 @@ const getAllBookings = async (req, res) => {
     res.status(200).json({
       success: true,
       data: formattedBookings,
+      statusCounts,
+      statusGroups: ADMIN_STATUS_GROUPS,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),

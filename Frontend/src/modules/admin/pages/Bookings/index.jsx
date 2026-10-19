@@ -1,16 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   FiSearch, FiCalendar, FiDownload, FiMoreVertical,
-  FiClock, FiCheckCircle, FiBox, FiTruck, FiXCircle, FiRefreshCw, FiShoppingBag
+  FiClock, FiCheckCircle, FiBox, FiTruck, FiXCircle, FiShoppingBag, FiEye, FiCopy, FiRefreshCw
 } from 'react-icons/fi';
 import { toastManager } from '../../../../utils/toastManager';
 import { adminBookingService } from '../../../../services/adminBookingService';
-import { getDashboardStats } from '../../../../services/adminDashboardService';
 
-const BookingStatsCard = ({ title, count, icon: Icon, colorClass, bgClass }) => (
-  <div className={`p-3 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between ${bgClass}`}>
+const BookingStatsCard = ({ title, count, icon: Icon, colorClass, bgClass, active, onClick }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className={`p-3 rounded-xl border shadow-sm flex items-center justify-between text-left w-full transition-all active:scale-[0.98] hover:shadow-md ${bgClass} ${active ? 'border-gray-800 ring-2 ring-gray-800/20' : 'border-gray-100'}`}
+  >
     <div>
       <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-2 ${colorClass.replace('text-', 'bg-').replace('600', '100')}`}>
         <Icon className={`w-4 h-4 ${colorClass}`} />
@@ -19,8 +22,18 @@ const BookingStatsCard = ({ title, count, icon: Icon, colorClass, bgClass }) => 
       <p className="text-xl font-bold text-gray-800 mt-0.5">{count}</p>
     </div>
     <div className={`w-12 h-12 rounded-full opacity-10 -mr-3 -mb-3 ${colorClass.replace('text-', 'bg-')}`}></div>
-  </div>
+  </button>
 );
+
+// The cards double as the status filter; the groups of real statuses behind each come from the server
+const STATUS_CARDS = [
+  { key: 'awaiting', title: 'Awaiting', icon: FiClock, bgClass: 'bg-yellow-50', colorClass: 'text-yellow-600' },
+  { key: 'confirmed', title: 'Confirmed', icon: FiCheckCircle, bgClass: 'bg-blue-50', colorClass: 'text-blue-600' },
+  { key: 'inProgress', title: 'In Progress', icon: FiBox, bgClass: 'bg-purple-50', colorClass: 'text-purple-600' },
+  { key: 'completed', title: 'Completed', icon: FiTruck, bgClass: 'bg-green-50', colorClass: 'text-green-600' },
+  { key: 'cancelled', title: 'Cancelled', icon: FiXCircle, bgClass: 'bg-red-50', colorClass: 'text-red-600' }
+];
+const ALL_STATUS = 'All Status';
 
 const Bookings = () => {
   const [bookings, setBookings] = useState([]);
@@ -28,7 +41,7 @@ const Bookings = () => {
 
   // Filters
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All Status');
+  const [statusFilter, setStatusFilter] = useState(ALL_STATUS);
   const [moduleFilter, setModuleFilter] = useState('All Types');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -36,16 +49,46 @@ const Bookings = () => {
   // Pagination
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [totalMatching, setTotalMatching] = useState(0);
 
-  // Stats
-  const [stats, setStats] = useState({
-    pending: 0,
-    confirmed: 0,
-    inProgress: 0,
-    completed: 0,
-    cancelled: 0,
-    total: 0
-  });
+  // Card counts and the statuses behind each card (from the server)
+  const [counts, setCounts] = useState({});
+  const [groups, setGroups] = useState({});
+  const totalAll = Object.values(counts).reduce((sum, n) => sum + (n || 0), 0);
+
+  // Row action menu
+  const navigate = useNavigate();
+  const [menu, setMenu] = useState(null); // { booking, top, right }
+  useEffect(() => {
+    if (!menu) return undefined;
+    const close = () => setMenu(null);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    return () => {
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+    };
+  }, [menu]);
+
+  const openMenu = (e, booking) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    setMenu(menu?.booking._id === booking._id ? null : { booking, top: r.bottom + 4, right: Math.max(8, window.innerWidth - r.right) });
+  };
+
+  const copyId = async (booking) => {
+    try {
+      await navigator.clipboard.writeText(booking.bookingNumber || booking._id);
+      toastManager.success('Booking ID copied');
+    } catch {
+      toastManager.error('Could not copy');
+    }
+    setMenu(null);
+  };
+
+  const chooseStatus = (key) => {
+    setPage(1);
+    setStatusFilter(prev => (prev === key ? ALL_STATUS : key));
+  };
 
   // Debounce search
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -67,8 +110,8 @@ const Bookings = () => {
         startDate,
         endDate
       };
-      if (statusFilter !== 'All Status') {
-        params.status = statusFilter;
+      if (statusFilter !== ALL_STATUS && groups[statusFilter]) {
+        params.status = groups[statusFilter].join(',');
       }
       
       if (moduleFilter === 'Hourly Rent') params.rental_type = 'hourly';
@@ -79,22 +122,9 @@ const Bookings = () => {
       if (res.success) {
         setBookings(res.data);
         setTotalPages(res.pagination.pages);
-      }
-
-      // 2. Fetch Stats (only if not already fetched or if total is 0)
-      if (stats.total === 0) {
-        const statsRes = await getDashboardStats();
-        if (statsRes.success) {
-          const s = statsRes.data.stats;
-          setStats({
-            pending: s.pendingBookings || 0,
-            confirmed: 0,
-            inProgress: 0,
-            completed: s.completedBookings || 0,
-            cancelled: s.cancelledBookings || 0,
-            total: s.totalBookings || 0
-          });
-        }
+        setTotalMatching(res.pagination.total);
+        if (res.statusCounts) setCounts(res.statusCounts);
+        if (res.statusGroups) setGroups(res.statusGroups);
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -133,16 +163,29 @@ const Bookings = () => {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <BookingStatsCard title="Awaiting" count={stats.pending} icon={FiClock} bgClass="bg-yellow-50" colorClass="text-yellow-600" />
-        <BookingStatsCard title="Confirmed" count={stats.pending} icon={FiCheckCircle} bgClass="bg-blue-50" colorClass="text-blue-600" />
-        <BookingStatsCard title="In Progress" count={stats.inProgress} icon={FiBox} bgClass="bg-purple-50" colorClass="text-purple-600" />
-        <BookingStatsCard title="Completed" count={stats.completed} icon={FiTruck} bgClass="bg-green-50" colorClass="text-green-600" />
-        <BookingStatsCard title="Delivered" count={stats.completed} icon={FiCheckCircle} bgClass="bg-emerald-50" colorClass="text-emerald-600" />
-        <BookingStatsCard title="Cancelled" count={stats.cancelled} icon={FiXCircle} bgClass="bg-red-50" colorClass="text-red-600" />
-        <BookingStatsCard title="Returned" count={0} icon={FiRefreshCw} bgClass="bg-orange-50" colorClass="text-orange-600" />
-        <BookingStatsCard title="Total Orders" count={stats.total} icon={FiShoppingBag} bgClass="bg-gray-50" colorClass="text-gray-600" />
+      {/* Stats Grid: tap a card to filter the list by it */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {STATUS_CARDS.map(card => (
+          <BookingStatsCard
+            key={card.key}
+            title={card.title}
+            count={counts[card.key] ?? 0}
+            icon={card.icon}
+            bgClass={card.bgClass}
+            colorClass={card.colorClass}
+            active={statusFilter === card.key}
+            onClick={() => chooseStatus(card.key)}
+          />
+        ))}
+        <BookingStatsCard
+          title="Total Orders"
+          count={totalAll}
+          icon={FiShoppingBag}
+          bgClass="bg-gray-50"
+          colorClass="text-gray-600"
+          active={statusFilter === ALL_STATUS}
+          onClick={() => { setPage(1); setStatusFilter(ALL_STATUS); }}
+        />
       </div>
 
       {/* Filter Bar */}
@@ -161,15 +204,11 @@ const Bookings = () => {
         <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => { setPage(1); setStatusFilter(e.target.value); }}
             className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-gray-600 focus:outline-none focus:border-green-500 cursor-pointer"
           >
-            <option>All Status</option>
-            <option value="pending">Pending</option>
-            <option value="confirmed">Confirmed</option>
-            <option value="in_progress">In Progress</option>
-            <option value="completed">Completed</option>
-            <option value="cancelled">Cancelled</option>
+            <option value={ALL_STATUS}>All Status</option>
+            {STATUS_CARDS.map(card => <option key={card.key} value={card.key}>{card.title}</option>)}
           </select>
 
           <select
@@ -288,7 +327,12 @@ const Bookings = () => {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <button className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors">
+                      <button
+                        type="button"
+                        onClick={(e) => openMenu(e, booking)}
+                        aria-label="Booking actions"
+                        className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                      >
                         <FiMoreVertical className="w-4 h-4" />
                       </button>
                     </td>
@@ -302,7 +346,7 @@ const Bookings = () => {
         {/* Pagination Footer */}
         {!loading && bookings.length > 0 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 bg-gray-50/30">
-            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-tight">Showing {bookings.length} of {stats.total} entries</p>
+            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-tight">Showing {bookings.length} of {totalMatching} entries</p>
             <div className="flex gap-1.5">
               <button
                 onClick={() => setPage(p => Math.max(1, p - 1))}
@@ -322,6 +366,31 @@ const Bookings = () => {
           </div>
         )}
       </div>
+
+      {menu && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setMenu(null)} />
+          <div
+            className="fixed z-50 w-44 bg-white rounded-xl shadow-lg border border-gray-100 py-1"
+            style={{ top: menu.top, right: menu.right }}
+          >
+            <button
+              type="button"
+              onClick={() => navigate(`/admin/bookings/${menu.booking._id}`)}
+              className="w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+            >
+              <FiEye className="w-4 h-4 text-blue-500" /> View details
+            </button>
+            <button
+              type="button"
+              onClick={() => copyId(menu.booking)}
+              className="w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+            >
+              <FiCopy className="w-4 h-4 text-gray-500" /> Copy booking ID
+            </button>
+          </div>
+        </>
+      )}
     </motion.div>
   );
 };
