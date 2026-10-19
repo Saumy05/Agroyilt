@@ -99,7 +99,8 @@ const createBooking = async (req, res) => {
       endDate,      // Agriculture: extract range end
       estimatedDuration, // Agriculture: extract hours
       selectedImplements, // MACHINERY: attachments chosen by user
-      equipmentId   // NEW: For direct marketplace booking of specific equipment
+      equipmentId,  // NEW: For direct marketplace booking of specific equipment
+      unitsBooked: requestedUnits // by-the-piece equipment: how many pieces
     } = req.body;
 
     // --- TIME VALIDATION (timezone-aware: past dates, passed slots, >90 days ahead) ---
@@ -222,6 +223,7 @@ const createBooking = async (req, res) => {
 
     let equipmentObj = null;
     let calculatedDurationMinutes = null; // hoisted: persisted on the booking below
+    let unitsBooked = null; // pieces, for equipment in a by-the-piece category
 
     let distancePricing = null; // set for per-km (trolley) bookings
     if (isAgriService) {
@@ -257,6 +259,16 @@ const createBooking = async (req, res) => {
 
       if (equipmentId) {
         equipmentObj = await VendorEquipment.findById(equipmentId);
+      }
+
+      if (equipmentObj?.totalUnits > 0) {
+        unitsBooked = Number(requestedUnits);
+        if (!Number.isInteger(unitsBooked) || unitsBooked < 1) {
+          return res.status(400).json({ success: false, message: 'Choose how many pieces you need.' });
+        }
+        if (unitsBooked > equipmentObj.totalUnits) {
+          return res.status(400).json({ success: false, message: `This vendor has only ${equipmentObj.totalUnits} available.` });
+        }
       }
 
       // Determine correct unit rate 
@@ -328,6 +340,7 @@ const createBooking = async (req, res) => {
 
       let finalMultiplier = multiplier;
       if (rental_type === 'monthly') finalMultiplier = multiplier * 30;
+      if (unitsBooked) finalMultiplier *= unitsBooked; // rate is per piece
 
       // Per-km jobs have no fixed price yet: until the trip is measured, the booking carries the farmer's estimate
       // (or the minimum charge). The real bill replaces it when the trip ends.
@@ -832,6 +845,7 @@ const createBooking = async (req, res) => {
       fulfillmentMode: bookingFulfillmentMode,
       vendorId: (vendorId || (equipmentObj ? equipmentObj.vendorId : null)) || null,
       equipmentId: equipmentId || (equipmentObj ? equipmentObj._id : null),
+      unitsBooked,
       workerId: requestedWorker ? requestedWorker._id : null, // Set workerId if directly requested
       providerType,
       serviceId,
@@ -924,7 +938,7 @@ const createBooking = async (req, res) => {
         // Conflict check: vendor must not have an overlapping booking for this slot
         const resolvedEquipId = equipmentId || (equipmentObj ? equipmentObj._id : null);
         const conflictBooking = await findVendorSlotConflict(
-          { scheduledDate, timeSlot, scheduledTime, rental_type, equipmentId: resolvedEquipId, fulfillmentMode: bookingFulfillmentMode },
+          { scheduledDate, timeSlot, scheduledTime, rental_type, equipmentId: resolvedEquipId, unitsBooked, fulfillmentMode: bookingFulfillmentMode },
           targetVendorId,
           { excludeId: booking._id, statuses: [BOOKING_STATUS.REQUESTED, ...CONFLICT_STATUSES] }
         );
@@ -935,9 +949,11 @@ const createBooking = async (req, res) => {
           return res.status(409).json({
             success: false,
             conflict: true,
-            message: isRequested
-              ? 'This vendor currently has a pending request for this time slot. Please choose another vendor or time slot.'
-              : 'This vendor is already booked for this time slot. Please choose another vendor or time slot.'
+            message: unitsBooked
+              ? 'Not enough pieces are free for this time slot. Try fewer, another time slot or another vendor.'
+              : isRequested
+                ? 'This vendor currently has a pending request for this time slot. Please choose another vendor or time slot.'
+                : 'This vendor is already booked for this time slot. Please choose another vendor or time slot.'
           });
         }
 
@@ -964,7 +980,7 @@ const createBooking = async (req, res) => {
 
         // Two farmers racing for the same slot: the later request backs off
         const racer = await findVendorSlotConflict(
-          { scheduledDate, timeSlot, scheduledTime, rental_type, equipmentId: resolvedEquipId, fulfillmentMode: bookingFulfillmentMode },
+          { scheduledDate, timeSlot, scheduledTime, rental_type, equipmentId: resolvedEquipId, unitsBooked, fulfillmentMode: bookingFulfillmentMode },
           targetVendorId,
           { excludeId: booking._id, statuses: [BOOKING_STATUS.REQUESTED, ...CONFLICT_STATUSES], beatenBy: { field: 'createdAt', at: booking.createdAt, id: booking._id } }
         );
@@ -973,7 +989,9 @@ const createBooking = async (req, res) => {
           return res.status(409).json({
             success: false,
             conflict: true,
-            message: 'This vendor was just booked for this time slot. Please choose another vendor or time slot.'
+            message: unitsBooked
+              ? 'The last pieces for this time slot were just taken. Try fewer, another time slot or another vendor.'
+              : 'This vendor was just booked for this time slot. Please choose another vendor or time slot.'
           });
         }
 
@@ -1913,7 +1931,7 @@ const rescheduleBooking = async (req, res) => {
     // The vendor must be free at the new time
     if (booking.vendorId) {
       const conflict = await findVendorSlotConflict(
-        { scheduledDate, timeSlot, scheduledTime, rental_type: booking.rental_type, equipmentId: booking.equipmentId, fulfillmentMode: booking.fulfillmentMode },
+        { scheduledDate, timeSlot, scheduledTime, rental_type: booking.rental_type, equipmentId: booking.equipmentId, unitsBooked: booking.unitsBooked, fulfillmentMode: booking.fulfillmentMode },
         booking.vendorId,
         { excludeId: booking._id, statuses: [BOOKING_STATUS.REQUESTED, ...CONFLICT_STATUSES] }
       );
@@ -2564,7 +2582,7 @@ const reselectVendor = async (req, res) => {
 
     // Check real-time slot availability for the newly selected vendor
     const conflictBooking = await findVendorSlotConflict(
-      { scheduledDate: booking.scheduledDate, timeSlot: booking.timeSlot, scheduledTime: booking.scheduledTime, rental_type: booking.rental_type, equipmentId: equipmentId || booking.equipmentId, fulfillmentMode: booking.fulfillmentMode },
+      { scheduledDate: booking.scheduledDate, timeSlot: booking.timeSlot, scheduledTime: booking.scheduledTime, rental_type: booking.rental_type, equipmentId: equipmentId || booking.equipmentId, unitsBooked: booking.unitsBooked, fulfillmentMode: booking.fulfillmentMode },
       vendorId,
       { excludeId: booking._id, statuses: [BOOKING_STATUS.REQUESTED, ...CONFLICT_STATUSES] }
     );

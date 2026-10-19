@@ -74,6 +74,7 @@ const EquipmentDetail = () => {
 
   const [selectedRateType, setSelectedRateType] = useState(saved?.selectedRateType || 'hourly');
   const [quantity, setQuantity] = useState(saved?.quantity !== undefined ? saved.quantity : 1);
+  const [units, setUnits] = useState(saved?.units || 1); // pieces, for equipment rented by the piece
   const [selectedDate, setSelectedDate] = useState(saved?.selectedDate || todayStr);
   const [startTime, setStartTime] = useState(saved?.startTime || '09:00');
   const [endTime, setEndTime] = useState(saved?.endTime || '10:00');
@@ -84,9 +85,9 @@ const EquipmentDetail = () => {
 
   // Persist state to sessionStorage whenever relevant fields change
   useEffect(() => {
-    const data = { selectedRateType, quantity, selectedDate, startTime, endTime, selectedImplements };
+    const data = { selectedRateType, quantity, units, selectedDate, startTime, endTime, selectedImplements };
     sessionStorage.setItem(savedKey, JSON.stringify(data));
-  }, [selectedRateType, quantity, selectedDate, startTime, endTime, selectedImplements, savedKey]);
+  }, [selectedRateType, quantity, units, selectedDate, startTime, endTime, selectedImplements, savedKey]);
 
   // Sync endTime whenever startTime, quantity, or rateType changes
   useEffect(() => {
@@ -189,8 +190,12 @@ const EquipmentDetail = () => {
     ? (equipment.pricing?.daily?.price || 0)
     : (equipment.pricing?.land_based?.price || 0);
 
-  const implementAddon = getImplementAddon();
-  const baseTotal = currentRate * quantity;
+  // Rented by the piece: the rate is per piece, so everything scales with how many the farmer takes
+  const pieceMode = equipment.totalUnits > 0;
+  const unitName = equipment.categoryId?.unitLabel || 'piece';
+  const pieces = pieceMode ? Math.min(units, equipment.totalUnits) : 1;
+  const implementAddon = getImplementAddon() * pieces;
+  const baseTotal = currentRate * quantity * pieces;
   const total = baseTotal + implementAddon;
 
   const availableImplements = Array.isArray(equipment.implements) ? equipment.implements : [];
@@ -244,6 +249,7 @@ const EquipmentDetail = () => {
         bookingData: {
           rateType: selectedRateType,
           quantity,
+          units: pieceMode ? pieces : null,
           date: selectedDate,
           slot: formattedSlot,
           startTime,
@@ -688,6 +694,35 @@ const EquipmentDetail = () => {
             </Motion.div>
           )}
         </AnimatePresence>
+
+        {/* Section: how many pieces (only for equipment rented by the piece) */}
+        {pieceMode && (
+          <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200/80 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">How many {unitName}s?</h3>
+              <p className="text-[10px] font-semibold text-slate-400">Rate is per {unitName}. Up to {equipment.totalUnits} available.</p>
+            </div>
+            <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200/60">
+              <button
+                type="button"
+                onClick={() => setUnits(Math.max(1, pieces - 1))}
+                className="w-8 h-8 bg-white rounded-lg flex items-center justify-center font-bold text-slate-700 shadow-xs active:scale-90"
+                aria-label={`Fewer ${unitName}s`}
+              >
+                <FiMinus size={13} />
+              </button>
+              <span className="text-sm font-black text-slate-900 min-w-8 text-center px-1">{pieces}</span>
+              <button
+                type="button"
+                onClick={() => setUnits(Math.min(equipment.totalUnits, pieces + 1))}
+                className="w-8 h-8 bg-white rounded-lg flex items-center justify-center font-bold text-slate-700 shadow-xs active:scale-90"
+                aria-label={`More ${unitName}s`}
+              >
+                <FiPlus size={13} />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Section: Duration / Land Size & Stepper */}
         <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200/80 space-y-3">

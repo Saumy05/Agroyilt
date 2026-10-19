@@ -55,6 +55,8 @@ const formatCategory = (cat) => ({
   sectionType: cat.sectionType || 'General',
   bookingType: cat.bookingType || 'VENDOR',
   fulfillmentMode: cat.fulfillmentMode || 'service',
+  rentByUnit: Boolean(cat.rentByUnit),
+  unitLabel: cat.unitLabel || null,
   metaTitle: cat.metaTitle,
   metaDescription: cat.metaDescription,
   createdAt: cat.createdAt,
@@ -401,7 +403,9 @@ const createCategory = async (req, res) => {
       adminBaseCharge,
       sectionType,
       bookingType,
-      fulfillmentMode
+      fulfillmentMode,
+      rentByUnit,
+      unitLabel
     } = req.body;
 
     // Validate geographic scoping hierarchy
@@ -470,6 +474,9 @@ const createCategory = async (req, res) => {
       sectionType: sectionType || 'General',
       bookingType: bookingType || 'VENDOR',
       fulfillmentMode: fulfillmentMode === 'rental' ? 'rental' : 'service',
+      // by-the-piece applies to rentals only
+      rentByUnit: fulfillmentMode === 'rental' && Boolean(rentByUnit),
+      unitLabel: fulfillmentMode === 'rental' && rentByUnit ? (String(unitLabel || '').trim() || 'piece') : null,
       createdBy: req.user?._id || req.userId || null
     });
 
@@ -561,7 +568,9 @@ const updateCategory = async (req, res) => {
       adminBaseCharge,
       sectionType,
       bookingType,
-      fulfillmentMode
+      fulfillmentMode,
+      rentByUnit,
+      unitLabel
     } = req.body;
 
     // Check RBAC permission for existing category
@@ -696,6 +705,20 @@ const updateCategory = async (req, res) => {
     if (sectionType !== undefined) category.sectionType = sectionType;
     if (bookingType !== undefined) category.bookingType = bookingType;
     if (fulfillmentMode !== undefined) category.fulfillmentMode = fulfillmentMode === 'rental' ? 'rental' : 'service';
+
+    // By-the-piece is for rentals only. Once vendors have listed machines here, changing it would leave their stock
+    // counts and rates meaning something different, so it can only change while the category has no listings.
+    if (rentByUnit !== undefined || unitLabel !== undefined || fulfillmentMode !== undefined) {
+      const nextByUnit = category.fulfillmentMode === 'rental' && (rentByUnit !== undefined ? Boolean(rentByUnit) : Boolean(category.rentByUnit));
+      if (nextByUnit !== Boolean(category.rentByUnit) && await require('../../models/VendorEquipment').exists({ categoryId: category._id })) {
+        return res.status(409).json({
+          success: false,
+          message: 'Vendors have already listed machines in this category, so "rented by the piece" can no longer be changed.'
+        });
+      }
+      category.rentByUnit = nextByUnit;
+      category.unitLabel = nextByUnit ? (String(unitLabel !== undefined ? unitLabel : category.unitLabel || '').trim() || 'piece') : null;
+    }
 
     // Apply validated geographic scope
     category.scope = geoConfig.scope;

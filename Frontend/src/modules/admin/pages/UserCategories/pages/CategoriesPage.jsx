@@ -26,6 +26,8 @@ const categorySchema = z.object({
   trackingType: z.string().default('none'),
   bookingType: z.enum(['VENDOR', 'WORKER']).default('VENDOR'),
   fulfillmentMode: z.enum(['service', 'rental']).default('service'),
+  rentByUnit: z.boolean().default(false),
+  unitLabel: z.string().nullable().optional(),
   scope: z.enum(['GLOBAL', 'GLOBAL_INDIA', 'STATE', 'DISTRICT', 'SUB_DISTRICT']).default('GLOBAL_INDIA'),
   stateId: z.string().nullable().optional(),
   districtId: z.string().nullable().optional(),
@@ -122,6 +124,8 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
     sectionType: "General",
     bookingType: "VENDOR",
     fulfillmentMode: "service",
+    rentByUnit: false,
+    unitLabel: "",
     scope: "GLOBAL_INDIA",
     stateId: "",
     districtId: "",
@@ -402,6 +406,8 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
           sectionType: cat.sectionType || 'General',
           bookingType: cat.bookingType || 'VENDOR',
           fulfillmentMode: cat.fulfillmentMode || 'service',
+          rentByUnit: !!cat.rentByUnit,
+          unitLabel: cat.unitLabel || '',
           scope: (!cat.scope || cat.scope === 'GLOBAL') ? 'GLOBAL_INDIA' : cat.scope,
           stateId: cat.stateId || null,
           state: cat.state || null,
@@ -454,7 +460,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
           parentCategories: [], isAlwaysMain: false,
           trackingType: "none", requiresDriver: false,
           adminBaseCharge: 0,
-          sectionType: "General", bookingType: "VENDOR", fulfillmentMode: "service",
+          sectionType: "General", bookingType: "VENDOR", fulfillmentMode: "service", rentByUnit: false, unitLabel: "",
           scope: "GLOBAL_INDIA", stateId: "", districtId: "", subDistrictId: ""
         });
         setGeoSearchFilter("");
@@ -485,6 +491,8 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
         sectionType: editing.sectionType || "General",
         bookingType: editing.bookingType || "VENDOR",
         fulfillmentMode: editing.fulfillmentMode || "service",
+        rentByUnit: !!editing.rentByUnit,
+        unitLabel: editing.unitLabel || "",
         scope: editScope,
         stateId: targetStateId,
         districtId: targetDistrictId,
@@ -513,7 +521,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
       parentCategories: [], isAlwaysMain: false,
       trackingType: "none", requiresDriver: false,
       adminBaseCharge: 0,
-      sectionType: "General", bookingType: "VENDOR", fulfillmentMode: "service",
+      sectionType: "General", bookingType: "VENDOR", fulfillmentMode: "service", rentByUnit: false, unitLabel: "",
       scope: "GLOBAL_INDIA", stateId: "", districtId: "", subDistrictId: ""
     });
     setGeoSearchFilter("");
@@ -545,6 +553,8 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
     sectionType: cat.sectionType || 'General',
     bookingType: cat.bookingType || 'VENDOR',
     fulfillmentMode: cat.fulfillmentMode || 'service',
+          rentByUnit: !!cat.rentByUnit,
+          unitLabel: cat.unitLabel || '',
     scope: (!cat.scope || cat.scope === 'GLOBAL') ? 'GLOBAL_INDIA' : cat.scope,
     stateId: cat.stateId || null,
     state: cat.state || null,
@@ -1406,6 +1416,31 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
               ))}
             </div>
           </div>
+
+          {form.fulfillmentMode === 'rental' && (
+            <div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="rentByUnit"
+                  checked={!!form.rentByUnit}
+                  onChange={e => setForm({ ...form, rentByUnit: e.target.checked })}
+                  className="h-4 w-4 accent-primary-600"
+                />
+                <label htmlFor="rentByUnit" className="text-base font-bold text-gray-900">Rented by the piece</label>
+              </div>
+              <p className="text-[11px] text-gray-400 leading-tight pl-7">For many identical items, such as pipes. Vendors enter how many they have, the rate is per piece, and the farmer chooses how many to rent.</p>
+              {form.rentByUnit && (
+                <input
+                  type="text"
+                  value={form.unitLabel || ''}
+                  onChange={e => setForm({ ...form, unitLabel: e.target.value })}
+                  placeholder="What is one piece called? (e.g. pipe)"
+                  className="mt-2 ml-7 w-[calc(100%-1.75rem)] px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 font-semibold text-sm"
+                />
+              )}
+            </div>
+          )}
 
           <div>
             <label className="block text-base font-bold text-gray-900 mb-2">Home Page Tab Section</label>

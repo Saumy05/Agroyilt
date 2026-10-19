@@ -15,6 +15,11 @@ const EquipmentApproval = () => {
   const [selectedItem, setSelectedItem] = useState(null);
   const [filterStatus, setFilterStatus] = useState('pending');
   const [search, setSearch] = useState('');
+  // New rental category requested by the vendor: the admin decides whether it is rented by the piece
+  const [byUnit, setByUnit] = useState(false);
+  const [unitLabel, setUnitLabel] = useState('');
+  useEffect(() => { setByUnit(false); setUnitLabel(''); }, [selectedItem?._id]);
+  const needsCategoryChoice = (item) => Boolean(item && !item.categoryId && item.requestedCategoryName && item.listingType === 'rental');
 
   useEffect(() => {
     fetchEquipment();
@@ -32,9 +37,9 @@ const EquipmentApproval = () => {
     }
   };
 
-  const handleStatusUpdate = async (id, status, remarks = '') => {
+  const handleStatusUpdate = async (id, status, remarks = '', extra = {}) => {
     try {
-      const res = await adminEquipmentService.updateStatus(id, { status, remarks });
+      const res = await adminEquipmentService.updateStatus(id, { status, remarks, ...extra });
       if (res.success) {
         toastManager.success(`Machine ${status}`);
         refreshAdminCounts();
@@ -188,7 +193,7 @@ const EquipmentApproval = () => {
                         {item.status === 'pending' && (
                           <>
                             <button 
-                              onClick={() => handleStatusUpdate(item._id, 'approved')}
+                              onClick={() => (needsCategoryChoice(item) ? setSelectedItem(item) : handleStatusUpdate(item._id, 'approved'))}
                               className="p-2.5 bg-emerald-100 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm"
                               title="Approve"
                             >
@@ -312,11 +317,35 @@ const EquipmentApproval = () => {
                     ))}
                   </div>
 
+                  {selectedItem.totalUnits > 0 && (
+                    <p className="text-sm font-bold text-slate-600">Stock: {selectedItem.totalUnits} {selectedItem.categoryId?.unitLabel || 'piece'}(s)</p>
+                  )}
+
+                  {selectedItem.status === 'pending' && needsCategoryChoice(selectedItem) && (
+                    <div className="p-5 rounded-3xl bg-purple-50 border border-purple-100 space-y-3">
+                      <p className="text-sm font-black text-slate-800">New category: {selectedItem.requestedCategoryName}</p>
+                      <label className="flex items-center gap-3 text-sm font-bold text-slate-700">
+                        <input type="checkbox" checked={byUnit} onChange={e => setByUnit(e.target.checked)} className="h-4 w-4" />
+                        Rented by the piece (e.g. pipes)
+                      </label>
+                      {byUnit && (
+                        <input
+                          type="text"
+                          value={unitLabel}
+                          onChange={e => setUnitLabel(e.target.value)}
+                          placeholder="What is one piece called? (e.g. pipe)"
+                          className="w-full px-4 py-2.5 rounded-xl border border-purple-200 bg-white text-sm font-semibold focus:outline-none"
+                        />
+                      )}
+                      {byUnit && <p className="text-[11px] text-slate-500">The vendor will be asked how many they have. This listing goes live after they enter it.</p>}
+                    </div>
+                  )}
+
                   {/* Audit Actions */}
                   {selectedItem.status === 'pending' && (
                     <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-4">
                       <button 
-                        onClick={() => handleStatusUpdate(selectedItem._id, 'approved')}
+                        onClick={() => handleStatusUpdate(selectedItem._id, 'approved', '', needsCategoryChoice(selectedItem) ? { rentByUnit: byUnit, unitLabel } : {})}
                         className="flex-3 py-6 bg-emerald-600 text-white rounded-[32px] font-black uppercase tracking-widest shadow-2xl shadow-emerald-200 active:scale-95 transition-all text-sm flex items-center justify-center gap-3 flex-[2]"
                       >
                         <FiCheckCircle size={20} />

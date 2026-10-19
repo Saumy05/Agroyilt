@@ -187,8 +187,18 @@ exports.addEquipment = async (req, res) => {
       ? mainCategory.fulfillmentMode 
       : (listingType || 'service');
 
+    // By-the-piece category: the vendor says how many pieces they have. Any other category has no stock count.
+    let totalUnits = null;
+    if (mainCategory?.rentByUnit) {
+      totalUnits = Number(req.body.totalUnits);
+      if (!Number.isInteger(totalUnits) || totalUnits < 1) {
+        return res.status(400).json({ success: false, message: `Enter how many ${mainCategory.unitLabel || 'piece'}s you have (a whole number, 1 or more).` });
+      }
+    }
+
     const equipment = await VendorEquipment.create({
       vendorId,
+      totalUnits,
       categoryId: categoryId || null,
       serviceId: serviceId || null,
       requestedCategoryName: requestedCategoryName || null,
@@ -286,6 +296,28 @@ exports.updateEquipment = async (req, res) => {
       const catObj = await Category.findById(targetCatId).select('fulfillmentMode').lean();
       if (catObj?.fulfillmentMode) {
         updateData.listingType = catObj.fulfillmentMode;
+      }
+    }
+
+    // Stock count: only for by-the-piece categories, and never below what is already booked
+    {
+      const cat = targetCatId ? await Category.findById(targetCatId).select('rentByUnit unitLabel').lean() : null;
+      if (!cat?.rentByUnit) {
+        delete updateData.totalUnits;
+      } else if (updateData.totalUnits !== undefined) {
+        const units = Number(updateData.totalUnits);
+        if (!Number.isInteger(units) || units < 1) {
+          return res.status(400).json({ success: false, message: `Enter how many ${cat.unitLabel || 'piece'}s you have (a whole number, 1 or more).` });
+        }
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const [biggest] = await require('../../models/Booking').find({
+          equipmentId: equipment._id, scheduledDate: { $gte: today },
+          status: { $in: ['requested', 'confirmed', 'accepted', 'assigned', 'journey_started', 'visited', 'in_progress', 'work_done'] }
+        }).sort({ unitsBooked: -1 }).limit(1).select('unitsBooked').lean();
+        if (biggest?.unitsBooked > units) {
+          return res.status(409).json({ success: false, message: `A booking already needs ${biggest.unitsBooked}, so the stock cannot go below that.` });
+        }
+        updateData.totalUnits = units;
       }
     }
 

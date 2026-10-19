@@ -32,6 +32,17 @@ const categorySchema = new mongoose.Schema({
     default: 'service',
     index: true
   },
+  // Rental categories only: rented out by the piece (e.g. pipes). The vendor then lists how many pieces they have,
+  // the rate is per piece, and the farmer picks how many. Set by admin; off for every other category.
+  rentByUnit: {
+    type: Boolean,
+    default: false
+  },
+  unitLabel: {
+    type: String,
+    default: null,
+    trim: true
+  },
   slug: {
     type: String,
     required: true,

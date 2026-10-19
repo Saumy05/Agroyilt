@@ -60,6 +60,7 @@ const AddEquipment = () => {
     requestedCategoryName: '',
     requestedCityName: '',
     listingType: 'service',
+    totalUnits: '',          // pieces in stock, only for categories rented by the piece
     implements: [],          // NEW: [{subCategoryId, pricing:{hourly,land_based,daily}}]
     subCategoryIds: [],      // legacy fallback
     name: '',
@@ -77,7 +78,7 @@ const AddEquipment = () => {
   });
 
   // Tracks the selected category's metadata (trackingType, requiresDriver, fulfillmentMode)
-  const [categoryMeta, setCategoryMeta] = useState({ trackingType: 'none', requiresDriver: false, fulfillmentMode: 'service' });
+  const [categoryMeta, setCategoryMeta] = useState({ trackingType: 'none', requiresDriver: false, fulfillmentMode: 'service', rentByUnit: false, unitLabel: '' });
 
   useEffect(() => {
     fetchInitialData();
@@ -212,7 +213,9 @@ const AddEquipment = () => {
           setCategoryMeta({ 
             trackingType: selected.trackingType || 'none', 
             requiresDriver: selected.requiresDriver || false,
-            fulfillmentMode: mode
+            fulfillmentMode: mode,
+            rentByUnit: !!selected.rentByUnit,
+            unitLabel: selected.unitLabel || ''
           });
           setForm(prev => ({
             ...prev,
@@ -257,7 +260,9 @@ const AddEquipment = () => {
         setCategoryMeta({
           trackingType: selected.trackingType || 'none',
           requiresDriver: selected.requiresDriver || false,
-          fulfillmentMode: mode
+          fulfillmentMode: mode,
+          rentByUnit: !!selected.rentByUnit,
+          unitLabel: selected.unitLabel || ''
         });
         setForm(prev => ({
           ...prev,
@@ -349,6 +354,17 @@ const AddEquipment = () => {
       };
     });
     submissionData.subCategoryIds = submissionData.implements.map(i => i.subCategoryId);
+
+    // Stock count: only for a category rented by the piece
+    if (categoryMeta.rentByUnit && !isRequestingCategory) {
+      const units = Number(form.totalUnits);
+      if (!Number.isInteger(units) || units < 1) {
+        return toastManager.error(`Enter how many ${categoryMeta.unitLabel || 'piece'}s you have`);
+      }
+      submissionData.totalUnits = units;
+    } else {
+      delete submissionData.totalUnits;
+    }
 
     if (!isRequestingCategory && !submissionData.categoryId) {
       return toastManager.error('Please select machine type');
@@ -901,6 +917,21 @@ const AddEquipment = () => {
                   ? 'Farmer rents the machine and runs it. Charged by the hour or by the day.'
                   : 'The farmer books a job and you do it at their field. Charged by the hour or per acre. A trolley is charged per km, set on the attachment above.'}
               </p>
+              {categoryMeta.rentByUnit && !isRequestingCategory && (
+                <div className="mb-3 p-3 rounded-xl bg-amber-50/70 border border-amber-200/80 space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 block">How many {categoryMeta.unitLabel || 'piece'}s do you have?</label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    inputMode="numeric"
+                    value={form.totalUnits ?? ''}
+                    onChange={e => setForm(p => ({ ...p, totalUnits: e.target.value }))}
+                    className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-3.5 text-sm font-semibold text-slate-800 outline-none focus:border-blue-500"
+                  />
+                  <p className="text-[11px] text-slate-500">The rates below are for one {categoryMeta.unitLabel || 'piece'}. Farmers choose how many to rent, up to this number.</p>
+                </div>
+              )}
               <div className="space-y-2.5">
                 {[
                   { key: 'hourly', label: 'Hourly Rate', unit: '/ hr', sub: 'For standard agricultural operations' },

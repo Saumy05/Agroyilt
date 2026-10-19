@@ -63,7 +63,7 @@ const getPublicCategories = async (req, res) => {
     let homeCatsCount = await Category.countDocuments(query);
 
     let categories = await Category.find(query)
-      .select('title slug homeIconUrl homeBadge hasSaleBadge homeOrder showOnHome parentCategory parentCategories isAlwaysMain trackingType requiresDriver sectionType bookingType fulfillmentMode')
+      .select('title slug homeIconUrl homeBadge hasSaleBadge homeOrder showOnHome parentCategory parentCategories isAlwaysMain trackingType requiresDriver sectionType bookingType fulfillmentMode rentByUnit unitLabel')
       .populate('parentCategories', 'title slug')
       .sort({ homeOrder: 1, createdAt: -1 })
       .lean();
@@ -90,6 +90,8 @@ const getPublicCategories = async (req, res) => {
       requiresDriver: cat.requiresDriver || false,
       sectionType: cat.sectionType || 'General',
       fulfillmentMode: cat.fulfillmentMode || 'service',
+      rentByUnit: !!cat.rentByUnit,
+      unitLabel: cat.unitLabel || null,
       bookingType: cat.bookingType || (/labour|labor|worker|manpower|service|shramik|majdoor/i.test(cat.title || '') ? 'WORKER' : 'VENDOR')
     }));
 

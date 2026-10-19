@@ -244,6 +244,7 @@ export default function BookingDetails() {
           paymentDispute: apiData.paymentDispute,
           paymentDefault: apiData.paymentDefault,
           estimatedDuration: apiData.estimatedDuration,
+          unitsBooked: apiData.unitsBooked,
           landSize: apiData.landSize,
           cropType: apiData.cropType,
           endDate: apiData.endDate,
@@ -926,11 +927,16 @@ export default function BookingDetails() {
           </div>
 
           {/* Agri / Scope Badges (if applicable) */}
-          {(booking.rental_type || booking.landSize || booking.estimatedDuration || booking.cropType || booking.chemicalUsed || booking.distanceTrip?.estimatedKm) && (
+          {(booking.rental_type || booking.unitsBooked || booking.landSize || booking.estimatedDuration || booking.cropType || booking.chemicalUsed || booking.distanceTrip?.estimatedKm) && (
             <div className="flex flex-wrap items-center gap-1.5 py-2 border-b border-gray-100">
               {booking.rental_type && (
                 <span className="text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200/60 px-2 py-0.5 rounded-md capitalize">
                   {booking.rental_type.replace('_', ' ')}
+                </span>
+              )}
+              {booking.unitsBooked > 0 && (
+                <span className="text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200/60 px-2 py-0.5 rounded-md">
+                  📦 {booking.unitsBooked} {booking.categoryId?.unitLabel || 'pcs'}
                 </span>
               )}
               {booking.estimatedDuration && (

@@ -29,6 +29,12 @@ const vendorEquipmentSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  // Pieces the vendor has, for categories rented by the piece (Category.rentByUnit). Empty = one machine, as always.
+  totalUnits: {
+    type: Number,
+    default: null,
+    min: 1
+  },
   // ============================================================
   // LISTING TYPE: Drives the tracking & driver flow
   // 'service' = Tractor/Harvester with driver + KM tracking

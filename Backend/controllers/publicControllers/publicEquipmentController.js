@@ -146,7 +146,7 @@ exports.getPublicEquipment = async (req, res) => {
     }
 
     let equipment = await VendorEquipment.find(query)
-      .populate('categoryId', 'title slug homeIconUrl')
+      .populate('categoryId', 'title slug homeIconUrl rentByUnit unitLabel')
       .populate('subCategoryIds', 'title slug')
       .populate('implements.subCategoryId', 'title slug')
       .populate('vendorId', 'name phone rating avatar')
@@ -187,7 +187,7 @@ exports.getPublicEquipmentById = async (req, res) => {
       _id: req.params.id,
       status: { $in: ['active', 'approved'] }
     })
-      .populate('categoryId', 'title slug homeIconUrl')
+      .populate('categoryId', 'title slug homeIconUrl rentByUnit unitLabel')
       .populate('subCategoryIds', 'title slug')
       .populate('implements.subCategoryId', 'title slug')
       .populate('vendorId', 'name phone rating avatar address')

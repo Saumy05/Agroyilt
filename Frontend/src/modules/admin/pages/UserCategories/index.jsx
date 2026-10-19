@@ -28,7 +28,7 @@ const UserCategories = () => {
             showOnHome: cat.showOnHome !== false,
             homeOrder: cat.homeOrder || 0,
             bookingType: cat.bookingType || 'VENDOR',
-            fulfillmentMode: cat.fulfillmentMode || 'service',
+            fulfillmentMode: cat.fulfillmentMode || 'service', rentByUnit: !!cat.rentByUnit, unitLabel: cat.unitLabel || '',
             sectionType: cat.sectionType || 'General',
             trackingType: cat.trackingType || 'none',
             requiresDriver: Boolean(cat.requiresDriver),

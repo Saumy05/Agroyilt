@@ -101,6 +101,7 @@ const MachineryCheckout = () => {
     const { 
         rateType, 
         quantity, 
+        units,
         date, 
         slot, 
         startTime, 
@@ -230,6 +231,7 @@ const MachineryCheckout = () => {
                 estimatedKm: rateType === 'distance_based' && estimatedKm > 0 ? estimatedKm : undefined,
                 landSize: rateType === 'land_based' ? quantity : undefined,
                 estimatedDuration: ['hourly', 'daily', 'monthly'].includes(rateType) ? quantity : undefined,
+                unitsBooked: units || undefined,
                 scheduledDate: date,
                 scheduledTime: slot,
                 timeSlot: { start: startTime || slot, end: endTime || slot, date, time: slot },
@@ -543,7 +545,7 @@ const MachineryCheckout = () => {
                             <span className="text-[9.5px] font-semibold text-slate-400 block">
                               {payAfterTrip && bookingData.distancePricing
                                 ? `₹${bookingData.distancePricing.perKmRate}/km${bookingData.distancePricing.baseCharge > 0 ? ` · ₹${bookingData.distancePricing.baseCharge} covers the first ${bookingData.distancePricing.baseKm} km` : ''}`
-                                : `${formatDuration(quantity, rateType)} estimated service scope`}
+                                : `${units ? `${units} ${equipment.categoryId?.unitLabel || 'piece'}${units > 1 ? 's' : ''} × ` : ''}${formatDuration(quantity, rateType)} estimated service scope`}
                             </span>
                             {payAfterTrip && (
                               <span className="text-[9.5px] font-bold text-teal-700 block">Final bill = actual road distance driven (shown live during the trip)</span>

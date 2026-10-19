@@ -11,8 +11,8 @@ const adminEquipmentService = {
     return response.data;
   },
 
-  updateStatus: async (id, { status, remarks }) => {
-    const response = await api.patch(`/admin/equipment/${id}/status`, { status, remarks });
+  updateStatus: async (id, { status, remarks, rentByUnit, unitLabel }) => {
+    const response = await api.patch(`/admin/equipment/${id}/status`, { status, remarks, rentByUnit, unitLabel });
     return response.data;
   },
 

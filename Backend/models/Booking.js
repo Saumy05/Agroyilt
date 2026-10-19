@@ -31,6 +31,8 @@ const bookingSchema = new mongoose.Schema({
     default: null,
     index: true
   },
+  // Pieces rented, for equipment in a by-the-piece category. Empty = a single machine (the booking is priced and blocked as before).
+  unitsBooked: { type: Number, default: null, min: 1 },
   workerId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Worker',
