@@ -5,8 +5,8 @@
  */
 
 // Import Firebase scripts
-importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-messaging-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js');
 
 const firebaseConfig = {
   apiKey: "AIzaSyAyp1WH-pdFkg5MD-5-ysyi3qUHq3ir4hM",
@@ -297,6 +297,13 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   console.log('[SW] ✅ Service Worker activated');
   event.waitUntil(clients.claim());
+});
+
+// Message event for skipWaiting
+self.addEventListener('message', (event) => {
+  if (event.data && (event.data.type === 'SKIP_WAITING' || event.data === 'skipWaiting')) {
+    self.skipWaiting();
+  }
 });
 
 console.log('[SW] 🚀 Firebase Messaging Service Worker loaded');

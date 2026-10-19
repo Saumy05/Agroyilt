@@ -8,7 +8,7 @@
  */
 
 import { initializeApp } from 'firebase/app';
-import { getMessaging, getToken, onMessage } from 'firebase/messaging';
+import { getMessaging, getToken, onMessage, isSupported } from 'firebase/messaging';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -50,4 +50,4 @@ try {
   messaging = null; // Ensure messaging is null on failure
 }
 
-export { app, messaging, getToken, onMessage };
+export { app, messaging, getToken, onMessage, isSupported };

@@ -7,7 +7,7 @@
  * All functions safely return/no-op on iOS to prevent hangs.
  */
 
-import { messaging, getToken, onMessage } from '../firebase';
+import { messaging, getToken, onMessage, isSupported } from '../firebase';
 import authStorage from '../utils/authStorage';
 
 const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY;
@@ -53,30 +53,19 @@ async function registerServiceWorker() {
   }
 
   try {
-    let registration = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
-    if (!registration) {
-      registration = await navigator.serviceWorker.getRegistration('/');
-    }
-
+    let registration = await navigator.serviceWorker.getRegistration();
     if (!registration) {
       registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' });
       console.log('✅ Service Worker registered with scope:', registration.scope);
+    } else {
+      // If a new worker is waiting, signal it to activate
+      if (registration.waiting) {
+        registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+      }
     }
 
-    // Ensure worker is activated if currently installing
-    if (registration.installing) {
-      await new Promise((resolve) => {
-        registration.installing.addEventListener('statechange', (e) => {
-          if (e.target.state === 'activated' || e.target.state === 'redundant') {
-            resolve();
-          }
-        });
-        setTimeout(resolve, 3000);
-      });
-    }
-
-    await navigator.serviceWorker.ready;
-    return registration;
+    const readyRegistration = await navigator.serviceWorker.ready;
+    return readyRegistration || registration;
   } catch (error) {
     console.error('❌ Service Worker registration failed:', error);
     throw error;
@@ -101,6 +90,13 @@ async function requestNotificationPermission() {
 
 async function getFCMToken() {
   try {
+    // 1. Verify browser support (prevents errors on Safari, Incognito, etc.)
+    const supported = await isSupported().catch(() => false);
+    if (!supported) {
+      console.warn('[FCM] ℹ️ Push notifications are not supported in this browser (e.g. Safari, Incognito, or disabled Google Push).');
+      return null;
+    }
+
     if (!messaging) {
       console.warn('❌ [ATTENTION] Firebase messaging not initialized. Check firebase.js for errors.');
       return null;
@@ -113,17 +109,29 @@ async function getFCMToken() {
 
     const registration = await registerServiceWorker();
 
-    // Wrap getToken in a timeout to prevent indefinite hangs
-    const tokenPromise = getToken(messaging, {
-      vapidKey: VAPID_KEY,
-      serviceWorkerRegistration: registration
-    });
-
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('FCM getToken timed out after 10 seconds')), 10000);
-    });
-
-    const token = await Promise.race([tokenPromise, timeoutPromise]);
+    let token = null;
+    try {
+      token = await getToken(messaging, {
+        vapidKey: VAPID_KEY,
+        serviceWorkerRegistration: registration
+      });
+    } catch (tokenErr) {
+      const errStr = (tokenErr.message || tokenErr.code || '').toLowerCase();
+      // Auto-heal: If an existing push subscription has a mismatched key, reset it and retry once
+      if (errStr.includes('applicationserverkey') || errStr.includes('subscription') || tokenErr.code === 'messaging/token-subscribe-failed') {
+        console.warn('[FCM] Stale push subscription detected. Cleaning up and retrying...');
+        const existingSub = await registration.pushManager?.getSubscription().catch(() => null);
+        if (existingSub) {
+          await existingSub.unsubscribe().catch(() => {});
+        }
+        token = await getToken(messaging, {
+          vapidKey: VAPID_KEY,
+          serviceWorkerRegistration: registration
+        });
+      } else {
+        throw tokenErr;
+      }
+    }
 
     if (token) {
       return token;
@@ -132,7 +140,11 @@ async function getFCMToken() {
       return null;
     }
   } catch (error) {
-    console.error('[FCM] ❌ Error in getFCMToken:', error);
+    if (error.name === 'AbortError' || error.message?.includes('push service error')) {
+      console.warn('[FCM] ⚠️ Push service unavailable. If using Brave Browser, please enable "Use Google Services for Push Messaging" in brave://settings/privacy.');
+    } else {
+      console.error('[FCM] ❌ Error in getFCMToken:', error.name, error.message || error.code || error);
+    }
     return null;
   }
 }
