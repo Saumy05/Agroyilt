@@ -19,7 +19,11 @@ const AppEntry = () => {
   const [authenticatedRole, setAuthenticatedRole] = React.useState(null);
 
   // index.html paints the page green for the mobile entry screen; drop it once this screen is gone
-  useEffect(() => () => document.documentElement.classList.remove('app-splash'), []);
+  // ...and hand the status bar back to the white app screens
+  useEffect(() => () => {
+    document.documentElement.classList.remove('app-splash');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#ffffff');
+  }, []);
 
   useEffect(() => {
     if (!hasStoredSession) return undefined;

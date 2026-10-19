@@ -5,6 +5,9 @@
   <meta charset="UTF-8" />
   <link rel="icon" type="image/png" href="/AgroyiltLogo.png" id="dynamic-favicon" />
   <link rel="apple-touch-icon" href="/AgroyiltLogo.png" id="dynamic-apple-icon" />
+  <!-- Status bar colour: white for the app screens, dark green on the entry screen (set by the script below). The manifest gives the install splash the same green. -->
+  <meta name="theme-color" content="#ffffff" />
+  <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="viewport"
     content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content" />
 
@@ -71,7 +74,10 @@
       var p = location.pathname;
       var isEntry = p === '/' || p === '/app' || p === '/app/';
       var isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent) || window.innerWidth <= 820;
-      if (isEntry && isMobile) document.documentElement.classList.add('app-splash');
+      if (isEntry && isMobile) {
+        document.documentElement.classList.add('app-splash');
+        document.querySelector('meta[name="theme-color"]').setAttribute('content', '#1B5E20');
+      }
     })();
   </script>
 </head>
