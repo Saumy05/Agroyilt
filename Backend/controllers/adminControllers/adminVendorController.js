@@ -191,6 +191,7 @@ const approveVendor = async (req, res) => {
     const wasApproved = vendor.approvalStatus === VENDOR_STATUS.APPROVED;
     vendor.approvalStatus = VENDOR_STATUS.APPROVED;
     vendor.approvalDate = new Date();
+    vendor.isActive = true; // a vendor suspended earlier is switched off too; approving must let them in again
     await vendor.save();
 
     await auditAdminAction(

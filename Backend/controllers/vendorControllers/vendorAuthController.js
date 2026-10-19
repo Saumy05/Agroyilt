@@ -436,7 +436,7 @@ const refreshToken = async (req, res) => {
     }
 
     // Check status
-    if (vendor.approvalStatus !== 'APPROVED' || !vendor.isActive) {
+    if (vendor.approvalStatus !== VENDOR_STATUS.APPROVED || !vendor.isActive) {
       return res.status(403).json({
         success: false,
         message: 'Account is not active'
