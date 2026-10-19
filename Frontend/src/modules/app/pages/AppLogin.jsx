@@ -127,7 +127,6 @@ const AppLogin = () => {
     if (!phoneVal.success) {
       const msg = 'Please enter a valid 10-digit mobile number';
       setFormError(msg);
-      toastManager.error(msg);
       return;
     }
 
@@ -141,7 +140,6 @@ const AppLogin = () => {
       if (roles.length === 0) {
         const msg = 'No account found with this mobile number. Please register first.';
         setFormError(msg);
-        toastManager.error(msg);
         setIsLoading(false);
         return;
       }
@@ -166,7 +164,6 @@ const AppLogin = () => {
       else if (status === 429) msg = error.response?.data?.message || 'Too many attempts. Please wait a minute and try again.';
       else if (!error.response || error.code === 'ERR_NETWORK') msg = 'Unable to connect to the server. Please check your internet connection.';
       setFormError(msg);
-      toastManager.error(msg);
     }
   };
 
@@ -180,7 +177,6 @@ const AppLogin = () => {
     if (!mpinVal.success) {
       const msg = 'Please enter your 4-digit MPIN';
       setFormError(msg);
-      toastManager.error(msg);
       return;
     }
     if (!selectedRole) {
@@ -219,27 +215,23 @@ const AppLogin = () => {
       if (errorData?.code === 'ACCOUNT_PENDING_APPROVAL') {
         const msg = 'Your registration is pending admin approval. You will be able to log in once approved.';
         setFormError(msg);
-        toastManager.info(msg, { duration: 6000 });
         return;
       }
 
       if (errorData?.code === 'OFFLINE_MEMBER_ACCOUNT') {
         setFormError(errorData.message);
-        toastManager.error(errorData.message, { duration: 6000 });
         return;
       }
 
       if (errorData?.code === 'ACCOUNT_REJECTED') {
         const msg = 'Your registration was not approved. Please contact support for assistance.';
         setFormError(msg);
-        toastManager.error(msg, { duration: 6000 });
         return;
       }
 
       if (errorData?.code === 'REGISTRATION_FEE_REQUIRED') {
-        const msg = 'Registration fee payment is required before you can access your account.';
-        setFormError(msg);
-        toastManager.error(msg);
+        // leaves this page, so an inline message would vanish: toast only
+        toastManager.error('Registration fee payment is required before you can access your account.');
         sessionStorage.setItem('preAuthToken', errorData.preAuthToken);
         sessionStorage.setItem('pendingRole', errorData.role);
         localStorage.setItem('preAuthToken', errorData.preAuthToken);
@@ -280,7 +272,6 @@ const AppLogin = () => {
       }
 
       setFormError(friendlyMsg);
-      toastManager.error(friendlyMsg);
     }
   };
 
@@ -294,7 +285,6 @@ const AppLogin = () => {
     if (!validation.success) {
       const msg = 'Please enter a valid 10-digit mobile number';
       setFormError(msg);
-      toastManager.error(msg);
       return;
     }
 
@@ -307,7 +297,6 @@ const AppLogin = () => {
       if (roles.length === 0) {
         const msg = "No account found with this mobile number. Please register first.";
         setFormError(msg);
-        toastManager.error(msg);
         setIsLoading(false);
         return;
       }
@@ -324,7 +313,6 @@ const AppLogin = () => {
     } catch (error) {
       const msg = 'Unable to send verification OTP. Please check the number and try again.';
       setFormError(msg);
-      toastManager.error(msg);
       setIsLoading(false);
     }
   };
@@ -349,7 +337,6 @@ const AppLogin = () => {
     } catch (err) {
       const msg = 'Unable to send verification OTP. Please try again in a few moments.';
       setFormError(msg);
-      toastManager.error(msg);
       setIsLoading(false);
     }
   };
@@ -361,7 +348,6 @@ const AppLogin = () => {
     if (otpValue.length !== 6) {
       const msg = 'Please enter all 6 digits of the verification code';
       setFormError(msg);
-      toastManager.error(msg);
       return;
     }
 
@@ -386,7 +372,6 @@ const AppLogin = () => {
       const offlineMember = err.response?.data?.code === 'OFFLINE_MEMBER_ACCOUNT';
       const msg = offlineMember ? err.response.data.message : 'Invalid or expired verification code. Please check and try again.';
       setFormError(msg);
-      toastManager.error(msg);
       setIsLoading(false);
     }
   };
@@ -398,13 +383,11 @@ const AppLogin = () => {
     if (newMpin.length !== 4) {
       const msg = 'MPIN must be exactly 4 digits';
       setFormError(msg);
-      toastManager.error(msg);
       return;
     }
     if (newMpin !== confirmMpin) {
       const msg = 'MPINs do not match. Please re-enter.';
       setFormError(msg);
-      toastManager.error(msg);
       return;
     }
 
@@ -437,7 +420,6 @@ const AppLogin = () => {
     } catch (err) {
       const msg = 'Failed to update MPIN. Please try again.';
       setFormError(msg);
-      toastManager.error(msg);
       setIsLoading(false);
     }
   };
@@ -545,7 +527,7 @@ const AppLogin = () => {
       </div>
 
       {/* Body */}
-      <div style={{ flex: 1, padding: '32px 24px 16px' }}>
+      <div style={{ flex: 1, padding: '32px 24px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'center', width: '100%', maxWidth: '480px', margin: '0 auto', boxSizing: 'border-box' }}>
 
         {/* User-friendly Error Alert */}
         {formError && (
