@@ -48,22 +48,21 @@ const LocationPicker = ({ onLocationSelect, initialPosition = null, flyToPositio
     }
   }, [initialPosition]);
 
-  // Get user's current location on mount
+  // Get user's current location on mount for centering marker only (do not auto-reverse geocode)
   useEffect(() => {
     if (!initialPosition && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           const newPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
           setMarker(newPos);
-          reverseGeocode(newPos);
         },
         () => {}
       );
     }
-  }, [isLoaded]);
+  }, [initialPosition]);
 
   const reverseGeocode = useCallback(async (position) => {
-    if (!isLoaded || !window.google) return;
+    if (!isLoaded || loadError || !window.google?.maps?.Geocoder) return;
     setLoading(true);
     try {
       const geocoder = new window.google.maps.Geocoder();
@@ -84,7 +83,7 @@ const LocationPicker = ({ onLocationSelect, initialPosition = null, flyToPositio
       console.error('Reverse geocoding error:', err);
       setLoading(false);
     }
-  }, [isLoaded, onLocationSelect]);
+  }, [isLoaded, loadError, onLocationSelect]);
 
   const handleMapClick = useCallback((e) => {
     const newPos = { lat: e.latLng.lat(), lng: e.latLng.lng() };

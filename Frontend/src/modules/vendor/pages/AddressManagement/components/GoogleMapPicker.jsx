@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { GoogleMap, useJsApiLoader, Marker } from '@react-google-maps/api';
 import { toastManager } from '../../../../../utils/toastManager';
 
@@ -37,7 +37,7 @@ const GoogleMapPicker = ({ onLocationSelect, initialPosition = null }) => {
     }
   }, [initialPosition, map]);
 
-  // Get user's current location on mount
+  // Get user's current location on mount (center map/marker only, do not reverse geocode automatically)
   useEffect(() => {
     if (!initialPosition && navigator.geolocation && isLoaded) {
       navigator.geolocation.getCurrentPosition(
@@ -50,14 +50,13 @@ const GoogleMapPicker = ({ onLocationSelect, initialPosition = null }) => {
           if (map) {
             map.panTo(newPos);
           }
-          reverseGeocode(newPos);
         },
         (error) => {
           console.error('Error getting location:', error);
         }
       );
     }
-  }, [isLoaded, map]);
+  }, [initialPosition, isLoaded, map]);
 
   // Reverse geocode to get address from coordinates
   const reverseGeocode = async (position) => {
