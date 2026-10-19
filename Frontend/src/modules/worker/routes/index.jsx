@@ -321,7 +321,9 @@ const WorkerRoutes = () => {
     location.pathname === '/worker/login' ||
     location.pathname === '/worker/signup' ||
     location.pathname === '/worker/forgot-mpin' ||
-    location.pathname.endsWith('/map');
+    location.pathname.endsWith('/map') ||
+    // job details has its own sticky action bar at the bottom
+    /^\/worker\/job\/[^/]+\/?$/.test(location.pathname);
 
   const shouldShowBottomNav = !shouldHideBottomNav;
 
