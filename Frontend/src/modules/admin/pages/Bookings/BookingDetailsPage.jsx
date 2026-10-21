@@ -8,6 +8,8 @@ import {
 } from 'react-icons/fi';
 import { adminBookingService } from '../../../../services/adminBookingService';
 import { toastManager } from '../../../../utils/toastManager';
+import { formatFullAddress } from '../../../../utils/formatAddress';
+import { formatDateTimeDDMMYYYY } from '../../../../utils/formatDate';
 
 const BookingDetailsPage = () => {
     const { id } = useParams();
@@ -108,40 +110,52 @@ const BookingDetailsPage = () => {
                             </h2>
                         </div>
                         <div className="p-6">
-                            {booking.items && booking.items.length > 0 ? (
-                                <div className="space-y-4">
-                                    {booking.items.map((item, idx) => (
-                                        <div key={idx} className="flex items-center gap-4 p-4 border border-gray-100 rounded-xl hover:bg-gray-50 transition-all">
+                            {(() => {
+                                // The real service name: what the farmer booked, not a generic label
+                                const serviceName = booking.serviceName || booking.equipmentId?.name || booking.serviceId?.title || booking.bookedItems?.[0]?.card?.title || 'Service';
+                                const unit = booking.categoryId?.unitLabel || 'piece';
+                                const modeLabel = { hourly: 'Hourly', daily: 'Daily', land_based: 'Per acre', monthly: 'Monthly', distance_based: 'Per km' }[booking.rental_type];
+                                const scope = [
+                                    modeLabel,
+                                    booking.unitsBooked > 0 ? `${booking.unitsBooked} ${unit}${booking.unitsBooked > 1 ? 's' : ''}` : null,
+                                    booking.rental_type === 'hourly' && booking.estimatedDuration ? `${booking.estimatedDuration} hr` : null,
+                                    booking.rental_type === 'daily' && booking.estimatedDuration ? `${booking.estimatedDuration} day${booking.estimatedDuration > 1 ? 's' : ''}` : null,
+                                    booking.rental_type === 'land_based' && booking.landSize ? `${booking.landSize} acre` : null
+                                ].filter(Boolean).join(' · ');
+                                const implementNames = (booking.selectedImplements || []).map(i => i.title || i.name).filter(Boolean);
+                                const lines = (booking.bookedItems || []).filter(i => i?.card?.title || i?.serviceName);
+                                const image = booking.equipmentId?.images?.[0] || booking.serviceId?.images?.[0] || booking.serviceId?.iconUrl;
+                                return (
+                                    <div className="space-y-4">
+                                        <div className="flex items-center gap-4 p-4 border border-gray-100 rounded-xl">
                                             <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
-                                              {item.serviceId?.thumbnail || item.thumbnail ? (
-                                                <img src={item.serviceId?.thumbnail || item.thumbnail} alt={item.serviceId?.title} className="w-full h-full object-cover" />
-                                              ) : (
-                                                <div className="w-full h-full flex items-center justify-center text-gray-400">
-                                                  <FiPackage />
-                                                </div>
-                                              )}
+                                                {image ? <img src={image} alt={serviceName} className="w-full h-full object-cover" />
+                                                    : <div className="w-full h-full flex items-center justify-center text-gray-400"><FiPackage /></div>}
                                             </div>
-                                            <div className="flex-1">
-                                                <h4 className="font-bold text-gray-800">{item.serviceId?.title || 'Equipment Name'}</h4>
-                                                <p className="text-xs text-gray-500">Qty: {item.quantity} | Total Area: {item.totalArea || 0} Acre</p>
+                                            <div className="flex-1 min-w-0">
+                                                <h4 className="font-bold text-gray-800">{serviceName}</h4>
+                                                <p className="text-xs text-gray-500">
+                                                    {[booking.categoryId?.title || booking.serviceCategory, booking.equipmentId?.modelNumber].filter(Boolean).join(' · ')}
+                                                </p>
+                                                {scope && <p className="text-xs text-gray-500 mt-0.5">{scope}</p>}
+                                                {implementNames.length > 0 && (
+                                                    <p className="text-xs text-gray-500 mt-0.5">With: {implementNames.join(', ')}</p>
+                                                )}
                                             </div>
                                             <div className="text-right">
-                                                <p className="font-bold text-gray-900">₹{item.itemTotal?.toLocaleString()}</p>
+                                                <p className="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Quoted</p>
+                                                <p className="font-bold text-gray-900">₹{Number(booking.basePrice || 0).toLocaleString('en-IN')}</p>
                                             </div>
                                         </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="flex items-center gap-4 p-4 border border-gray-100 rounded-xl">
-                                    <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400">
-                                        <FiPackage />
+                                        {lines.length > 1 && lines.slice(1).map((it, idx) => (
+                                            <div key={idx} className="flex justify-between text-sm text-gray-600 px-2">
+                                                <span>{it.quantity > 1 ? `${it.quantity} × ` : ''}{it.card?.title || it.serviceName}</span>
+                                                <span className="font-semibold text-gray-800">₹{Number((it.card?.price || 0) * (it.quantity || 1)).toLocaleString('en-IN')}</span>
+                                            </div>
+                                        ))}
                                     </div>
-                                    <div>
-                                        <h4 className="font-bold text-gray-800">{booking.serviceId?.title || 'Bulk Booking'}</h4>
-                                        <p className="text-xs text-gray-500">₹{Number(booking.finalAmount ?? booking.totalAmount ?? booking.agreedRate ?? booking.basePrice ?? 0).toLocaleString('en-IN')}</p>
-                                    </div>
-                                </div>
-                            )}
+                                );
+                            })()}
                         </div>
                     </div>
 
@@ -150,21 +164,34 @@ const BookingDetailsPage = () => {
                         <h2 className="font-bold text-gray-800 flex items-center gap-2 mb-6">
                             <FiClock className="text-primary-600" /> Activity Timeline
                         </h2>
-                        <div className="relative pl-6 border-l-2 border-gray-100 space-y-8">
-                            <div className="relative pb-1">
-                                <div className="absolute -left-[30px] top-0 w-4 h-4 rounded-full bg-green-500 border-4 border-white shadow-sm"></div>
-                                <p className="text-sm font-bold text-gray-800">Booking Received</p>
-                                <p className="text-xs text-gray-500">{new Date(booking.createdAt).toLocaleString()}</p>
-                            </div>
-                            {booking.statusHistory && booking.statusHistory.map((history, idx) => (
-                                <div key={idx} className="relative pb-1">
-                                    <div className="absolute -left-[30px] top-0 w-4 h-4 rounded-full bg-primary-500 border-4 border-white shadow-sm"></div>
-                                    <p className="text-sm font-bold text-gray-800 capitalize">{history.status.replace('_', ' ')}</p>
-                                    <p className="text-xs text-gray-500">{new Date(history.timestamp).toLocaleString()}</p>
-                                    {history.comment && <p className="text-xs text-gray-400 mt-1 italic">"{history.comment}"</p>}
+                        {(() => {
+                            const cancelledBy = booking.cancelledBy ? ` by ${booking.cancelledBy}` : '';
+                            const events = [
+                                { at: booking.createdAt, label: 'Booking placed', dot: 'bg-green-500' },
+                                { at: booking.acceptedAt, label: 'Accepted by vendor', dot: 'bg-primary-500' },
+                                { at: booking.assignedAt, label: 'Operator assigned', dot: 'bg-primary-500' },
+                                { at: booking.journeyStartedAt, label: 'Vendor on the way', dot: 'bg-primary-500' },
+                                { at: booking.visitedAt, label: 'Vendor reached the farm', dot: 'bg-primary-500' },
+                                { at: booking.startedAt, label: booking.rental_type && booking.fulfillmentMode === 'rental' ? 'Equipment handed over' : 'Work started', dot: 'bg-primary-500' },
+                                { at: booking.completedAt, label: booking.fulfillmentMode === 'rental' ? 'Equipment returned' : 'Work completed', dot: 'bg-green-500' },
+                                { at: booking.cashCollectedAt, label: 'Cash collected by vendor', dot: 'bg-green-500' },
+                                { at: booking.reviewedAt, label: `Farmer rated the service${booking.rating ? ` (${booking.rating}/5)` : ''}`, dot: 'bg-yellow-500' },
+                                { at: booking.cancelledAt, label: `Cancelled${cancelledBy}`, note: booking.cancellationReason, dot: 'bg-red-500' }
+                            ].filter(e => e.at && !Number.isNaN(new Date(e.at).getTime()))
+                             .sort((x, y) => new Date(x.at) - new Date(y.at));
+                            return (
+                                <div className="relative pl-6 border-l-2 border-gray-100 space-y-8">
+                                    {events.map((e, idx) => (
+                                        <div key={idx} className="relative pb-1">
+                                            <div className={`absolute -left-[30px] top-0 w-4 h-4 rounded-full ${e.dot} border-4 border-white shadow-sm`}></div>
+                                            <p className="text-sm font-bold text-gray-800">{e.label}</p>
+                                            <p className="text-xs text-gray-500">{formatDateTimeDDMMYYYY(e.at)}</p>
+                                            {e.note && <p className="text-xs text-gray-400 mt-1 italic">"{e.note}"</p>}
+                                        </div>
+                                    ))}
                                 </div>
-                            ))}
-                        </div>
+                            );
+                        })()}
                     </div>
                 </div>
 
@@ -180,17 +207,40 @@ const BookingDetailsPage = () => {
                                 {booking.userId?.name?.charAt(0) || 'U'}
                             </div>
                             <div>
-                                <h3 className="font-bold text-gray-900">{booking.userId?.name || booking.shippingAddress?.name || 'Guest User'}</h3>
+                                <h3 className="font-bold text-gray-900">{booking.userId?.name || booking.customerName || 'Guest User'}</h3>
                                 <p className="text-xs text-gray-500">{booking.userId?.phone || booking.customerPhone}</p>
+                                {booking.userId?.email && <p className="text-xs text-gray-400">{booking.userId.email}</p>}
                             </div>
                         </div>
                         <div className="space-y-3 pt-4 border-t border-gray-50">
                             <div className="flex items-start gap-3">
                                 <FiHome className="text-gray-400 mt-0.5 flex-shrink-0" />
-                                <p className="text-xs text-gray-600">
-                                    {booking.shippingAddress?.streetAddress}, {booking.shippingAddress?.city}, {booking.shippingAddress?.state} - {booking.shippingAddress?.pincode}
-                                </p>
+                                <div className="min-w-0">
+                                    <p className="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Farm / service address</p>
+                                    <p className="text-xs text-gray-600 break-words">
+                                        {formatFullAddress(booking.address) || 'No address on this booking'}
+                                    </p>
+                                    {booking.address?.lat && booking.address?.lng && (
+                                        <a
+                                            href={`https://www.google.com/maps/search/?api=1&query=${booking.address.lat},${booking.address.lng}`}
+                                            target="_blank" rel="noreferrer"
+                                            className="text-[11px] font-semibold text-primary-600 hover:underline inline-block mt-1"
+                                        >
+                                            Open in Maps
+                                        </a>
+                                    )}
+                                </div>
                             </div>
+                            {booking.vendorId && (
+                                <div className="flex items-start gap-3">
+                                    <FiTruck className="text-gray-400 mt-0.5 flex-shrink-0" />
+                                    <div className="min-w-0">
+                                        <p className="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Vendor</p>
+                                        <p className="text-xs text-gray-700 font-semibold">{booking.vendorId.businessName || booking.vendorId.name}</p>
+                                        {booking.vendorId.phone && <p className="text-xs text-gray-500">{booking.vendorId.phone}</p>}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
 
