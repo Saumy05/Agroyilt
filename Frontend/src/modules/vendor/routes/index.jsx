@@ -100,7 +100,8 @@ const VendorRoutes = () => {
     location.pathname.includes('/billing') ||
     location.pathname.includes('/bank-details/edit') ||
     location.pathname === '/vendor/profile/edit' ||
-    location.pathname.startsWith('/vendor/equipment/edit/');
+    location.pathname.startsWith('/vendor/equipment/edit/') ||
+    location.pathname === '/vendor/equipment/add';
 
   const shouldShowBottomNav = !shouldHideBottomNav;
 
