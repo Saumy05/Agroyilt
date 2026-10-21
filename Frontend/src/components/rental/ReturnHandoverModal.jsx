@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   FiCheckCircle,
@@ -69,11 +69,19 @@ const ReturnHandoverModal = ({
     }
   };
 
+  // Always open at the top of the form (the popup is taller than a phone screen)
+  const overlayRef = useRef(null);
+  useEffect(() => {
+    if (isOpen && overlayRef.current) overlayRef.current.scrollTop = 0;
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+      <div ref={overlayRef} className="fixed inset-0 z-[1000] bg-black/60 backdrop-blur-sm overflow-y-auto overscroll-contain">
+       {/* min-h-full + items-start on phones: a tall form is never centred with its top cut off */}
+       <div className="flex min-h-full items-start sm:items-center justify-center p-4">
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -242,6 +250,7 @@ const ReturnHandoverModal = ({
             </button>
           </div>
         </motion.div>
+       </div>
       </div>
     </AnimatePresence>
   );

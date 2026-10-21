@@ -1811,8 +1811,8 @@ const BookingDetails = () => {
             </section>
           )}
 
-          {/* Agriculture Completion OTP - Share only when work is done */}
-          {['in_progress', 'work_done'].includes(booking.status?.toLowerCase()) && booking.driver_end_otp && (
+          {/* Agriculture Completion OTP - Share only when work is done. A rental return needs no OTP: it is confirmed by both sides in the Rental Return & Handover card. */}
+          {!isRental && ['in_progress', 'work_done'].includes(booking.status?.toLowerCase()) && booking.driver_end_otp && (
             <div className="bg-gradient-to-br from-teal-600 to-emerald-700 rounded-2xl p-4 shadow-md relative overflow-hidden mb-4">
               <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-10 translate-x-10 blur-xl"></div>
 
