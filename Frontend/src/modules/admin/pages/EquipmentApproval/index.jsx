@@ -1,7 +1,7 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { 
   FiCheckCircle, FiXCircle, FiEye, FiClock, 
-  FiTruck, FiUser, FiMapPin, FiCalendar, FiSearch, FiFilter, FiMoreVertical, FiTrash2, FiSmartphone
+  FiTruck, FiUser, FiMapPin, FiCalendar, FiSearch, FiFilter, FiMoreVertical, FiTrash2, FiSmartphone, FiRotateCcw
 } from 'react-icons/fi';
 import { toastManager } from '../../../../utils/toastManager';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -43,7 +43,7 @@ const EquipmentApproval = () => {
       if (res.success) {
         // The server keeps a by-the-piece listing pending until the vendor enters their stock: say so instead of "approved"
         if (status === 'approved' && res.data?.status !== 'approved') toastManager.info(res.message || 'Not approved yet');
-        else toastManager.success(`Machine ${status}`);
+        else toastManager.success(status === 'pending' ? 'Moved back to Pending' : `Machine ${status}`);
         refreshAdminCounts();
         fetchEquipment();
         setSelectedItem(null);
@@ -51,6 +51,17 @@ const EquipmentApproval = () => {
     } catch (err) {
       toastManager.error(err.response?.data?.message || 'Update failed');
     }
+  };
+
+  // A rejection needs a reason: the vendor is told it in their notification
+  const handleReject = (id) => {
+    const reason = window.prompt('Reason for rejecting this machine (the vendor will see it):');
+    if (reason === null) return;
+    if (!reason.trim()) {
+      toastManager.error('Please give a reason so the vendor knows what to fix');
+      return;
+    }
+    handleStatusUpdate(id, 'rejected', reason.trim());
   };
 
   const handleDelete = async (id) => {
@@ -207,13 +218,22 @@ const EquipmentApproval = () => {
                               <FiCheckCircle className="w-4 h-4" />
                             </button>
                             <button 
-                              onClick={() => handleStatusUpdate(item._id, 'rejected')}
+                              onClick={() => handleReject(item._id)}
                               className="p-2.5 bg-red-100 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all shadow-sm"
                               title="Reject"
                             >
                               <FiXCircle className="w-4 h-4" />
                             </button>
                           </>
+                        )}
+                        {item.status === 'rejected' && (
+                          <button
+                            onClick={() => handleStatusUpdate(item._id, 'pending')}
+                            className="p-2.5 bg-amber-100 text-amber-600 rounded-xl hover:bg-amber-500 hover:text-white transition-all shadow-sm"
+                            title="Reopen (move back to Pending)"
+                          >
+                            <FiRotateCcw className="w-4 h-4" />
+                          </button>
                         )}
                         <button 
                           onClick={() => handleDelete(item._id)}
@@ -359,7 +379,7 @@ const EquipmentApproval = () => {
                         Confirm Listing
                       </button>
                       <button 
-                        onClick={() => handleStatusUpdate(selectedItem._id, 'rejected')}
+                        onClick={() => handleReject(selectedItem._id)}
                         className="flex-1 py-6 bg-red-50 text-red-600 rounded-[32px] font-black uppercase tracking-widest active:scale-95 transition-all text-sm border-2 border-red-100"
                       >
                         Reject

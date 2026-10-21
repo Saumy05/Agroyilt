@@ -139,7 +139,10 @@ const Notifications = () => {
     const relatedType = (notif.relatedType || '').toLowerCase();
     const relatedId = notif.relatedId || notif.bookingId || notif.itemId;
 
-    if (relatedType === 'booking' || type.includes('booking') || type.includes('job') || type.includes('work')) {
+    if (relatedType === 'equipment' || type.startsWith('equipment_')) {
+      // machine approved / rejected / needs stock: open that machine to read the reason or enter the stock
+      navigate(relatedId ? `/vendor/equipment/edit/${relatedId}` : '/vendor/equipment');
+    } else if (relatedType === 'booking' || type.includes('booking') || type.includes('job') || type.includes('work')) {
       if (relatedId) navigate(`/vendor/booking/${relatedId}`);
       else navigate('/vendor/jobs');
     } else if (type.includes('soil')) {

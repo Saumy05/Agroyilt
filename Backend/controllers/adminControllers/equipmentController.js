@@ -108,6 +108,7 @@ exports.updateEquipmentStatus = async (req, res) => {
       }
     }
 
+    const before = await VendorEquipment.findById(id).select('status').lean();
     const equipment = await VendorEquipment.findByIdAndUpdate(
       id,
       { status: finalStatus, adminRemarks: remarks, ...categoryUpdate },
@@ -116,6 +117,27 @@ exports.updateEquipmentStatus = async (req, res) => {
 
     if (!equipment) {
       return res.status(404).json({ success: false, message: 'Equipment not found' });
+    }
+
+    // Tell the vendor when their listing's status actually changes (the by-the-piece "enter your stock" notice below covers that case)
+    if (before && before.status !== equipment.status) {
+      const notice = {
+        approved: { type: 'equipment_approved', title: 'Your machine is approved', message: `"${equipment.name}" is approved and now visible to farmers for booking.` },
+        rejected: { type: 'equipment_rejected', title: 'Your machine was not approved', message: `"${equipment.name}" was rejected.${remarks ? ` Reason: ${remarks}` : ''} You can edit the listing and submit it again.` },
+        pending: { type: 'equipment_reopened', title: 'Your machine is back in review', message: `"${equipment.name}" has been moved back to review. We will let you know once it is decided.` }
+      }[equipment.status];
+      if (notice) {
+        try {
+          await require('../notificationControllers/notificationController').createNotification({
+            vendorId: equipment.vendorId,
+            ...notice,
+            relatedId: equipment._id,
+            relatedType: 'equipment'
+          });
+        } catch (e) {
+          console.error('Equipment status notification failed:', e.message);
+        }
+      }
     }
 
     if (waitingForStock) {

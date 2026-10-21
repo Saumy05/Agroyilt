@@ -67,6 +67,9 @@ const notificationSchema = new mongoose.Schema({
       'vendor_approved',
       'vendor_rejected',
       'vendor_approval_request',
+      'equipment_approved',   // Admin approved a vendor's machine listing
+      'equipment_rejected',   // Admin rejected it (with a reason)
+      'equipment_reopened',   // Admin moved a rejected listing back to review
       'farmer_approved',
       'farmer_rejected',
       'farmer_approval_request',
