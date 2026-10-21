@@ -99,7 +99,7 @@ const ManagePaymentMethods = () => {
     // Remove all non-digits
     const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
     // Add space after every 4 digits
-    const matches = v.match(/\d{4₹6}/g);
+    const matches = v.match(/\d{4,16}/g);
     const match = matches && matches[0] || '';
     const parts = [];
     for (let i = 0, len = match.length; i < len; i += 4) {

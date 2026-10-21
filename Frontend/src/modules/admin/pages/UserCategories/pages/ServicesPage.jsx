@@ -222,7 +222,7 @@ const ServicesPage = ({ catalog, setCatalog, selectedCity }) => {
 
     const result = serviceSchema.safeParse(data);
     if (!result.success) {
-      toast.error(result.error.errors[0].message);
+      toast.error((result.error.issues || result.error.errors)[0].message);
       return;
     }
 

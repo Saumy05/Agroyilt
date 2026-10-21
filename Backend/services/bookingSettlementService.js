@@ -464,7 +464,8 @@ const settleVendorCash = async (bookingId, { collectorRole, collectorId }) => {
           reason: 'refund',
           status: 'completed',
           description: `Cash change ₹${cashChange.toFixed(2)} from booking #${claimed.bookingNumber} added to wallet`,
-          referenceId: claimed._id.toString()
+          referenceId: claimed._id.toString(),
+          idempotencyKey: `cash_change_${claimed._id}`
         });
 
         await Transaction.create({

@@ -78,7 +78,7 @@ const BrandServicesModal = ({ isOpen, onClose, brand }) => {
 
     const result = serviceSchema.safeParse(data);
     if (!result.success) {
-      toastManager.error(result.error.errors[0].message);
+      toastManager.error((result.error.issues || result.error.errors)[0].message);
       return;
     }
 

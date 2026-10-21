@@ -588,7 +588,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
     });
 
     if (!val.success) {
-      toast.error(val.error.errors[0].message);
+      toast.error((val.error.issues || val.error.errors)[0].message);
       return;
     }
 
