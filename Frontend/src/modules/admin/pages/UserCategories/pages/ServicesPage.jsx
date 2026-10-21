@@ -5,6 +5,7 @@ import CardShell from "../components/CardShell";
 import Modal from "../components/Modal";
 import { ensureIds, saveCatalog, toAssetUrl } from "../utils";
 import { serviceService, categoryService } from "../../../../../services/catalogService";
+import { configService } from "../../../../../services/configService";
 import { z } from "zod";
 
 // Schema for Service Entity
@@ -127,6 +128,16 @@ const ServicesPage = ({ catalog, setCatalog, selectedCity }) => {
     fetchServices();
   }, [activeCategoryId]);
 
+  // GST on machinery bookings is one rate for all of them: Settings > Machinery Booking GST. Equipment types do not set their own.
+  const [machineryGst, setMachineryGst] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    configService.getSettings()
+      .then((res) => { if (alive && typeof res?.settings?.rentalGstPercentage === 'number') setMachineryGst(res.settings.rentalGstPercentage); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
   // Form State
   const [editingId, setEditingId] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -199,7 +210,7 @@ const ServicesPage = ({ catalog, setCatalog, selectedCity }) => {
       basePrice: form.distEnabled
         ? (parseFloat(form.distBaseCharge) || 0)
         : (parseFloat(form.hourly_price) || parseFloat(form.daily_price) || parseFloat(form.land_price) || 0),
-      gstPercentage: parseFloat(form.gstPercentage) || 18,
+      gstPercentage: machineryGst ?? (parseFloat(form.gstPercentage) || 18),
       categoryId: form.categoryId,
       hourly_price: form.distEnabled ? 0 : (parseFloat(form.hourly_price) || 0),
       land_price: form.distEnabled ? 0 : (parseFloat(form.land_price) || 0),
@@ -322,8 +333,8 @@ const ServicesPage = ({ catalog, setCatalog, selectedCity }) => {
         <div className="lg:col-span-3">
           {activeCategory ? (
             <CardShell icon={FiPackage}>
-              <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6 border-b border-gray-100 pb-4">
-                <div>
+              <div className="flex flex-col xl:flex-row justify-between xl:items-center gap-4 mb-6 border-b border-gray-100 pb-4">
+                <div className="min-w-0">
                   <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
                     {activeCategory.icon && <img src={toAssetUrl(activeCategory.icon)} className="w-6 h-6 object-contain" />}
                     {activeCategory.title}
@@ -331,15 +342,15 @@ const ServicesPage = ({ catalog, setCatalog, selectedCity }) => {
                   <p className="text-sm text-gray-500">Manage individual equipment models directly under this category</p>
                 </div>
 
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
-                  <div className="relative flex-1">
+                <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto">
+                  <div className="relative flex-1 min-w-[12rem]">
                     <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                     <input
                       type="text"
                       placeholder="Search equipment..."
                       value={searchTerm}
                       onChange={e => setSearchTerm(e.target.value)}
-                      className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 w-full sm:w-48"
+                      className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 w-full"
                     />
                   </div>
                   <button
@@ -398,8 +409,11 @@ const ServicesPage = ({ catalog, setCatalog, selectedCity }) => {
                             </div>
                           </div>
                           <div className="flex flex-col items-end gap-1">
-                            <span className="bg-blue-50 text-blue-700 text-[10px] px-2 py-1 rounded-full font-black border border-blue-100 shadow-sm whitespace-nowrap">
-                              {service.gstPercentage}% GST
+                            <span
+                              className="bg-blue-50 text-blue-700 text-[10px] px-2 py-1 rounded-full font-black border border-blue-100 shadow-sm whitespace-nowrap"
+                              title="Machinery GST, set in Settings > Financial > Machinery Booking GST. Every machinery booking uses this rate."
+                            >
+                              {machineryGst ?? service.gstPercentage}% GST
                             </span>
                           </div>
                         </div>

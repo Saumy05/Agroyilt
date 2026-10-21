@@ -267,6 +267,16 @@ exports.updateSettings = async (req, res, next) => {
 
       await settings.save();
 
+      // Equipment types keep a copy of the machinery GST: bring every copy in line with the setting (also repairs older ones)
+      if (rentalGstPercentage !== undefined) {
+        try {
+          const updated = await require('../../services/machineryGstSync').syncMachineryGst(settings.rentalGstPercentage);
+          if (updated) console.log(`[settings] Machinery GST ${settings.rentalGstPercentage}% copied to ${updated} equipment type(s)`);
+        } catch (syncErr) {
+          console.warn('[settings] machinery GST sync skipped:', syncErr.message);
+        }
+      }
+
       // A new dues limit applies to every worker now, not only at their next dues change
       if (maxWorkerDues !== undefined) {
         const Worker = require('../../models/Worker');
