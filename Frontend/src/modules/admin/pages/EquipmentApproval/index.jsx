@@ -178,7 +178,7 @@ const EquipmentApproval = () => {
                       <div className="flex flex-wrap gap-1 max-w-[150px]">
                          {Object.entries(item.pricing || {}).filter(([_, v]) => v?.isEnabled).map(([k, v]) => (
                            <div key={k} className="px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-md text-[8px] font-bold uppercase">
-                             {k === 'land_based' ? 'Acre' : k === 'hourly' ? 'Hr' : 'Day'}: ₹{v?.price}
+                             {k === 'land_based' ? 'Acre' : k === 'hourly' ? 'Hr' : k === 'daily' ? 'Day' : k === 'distance_based' ? 'Km' : k === 'monthly' ? 'Month' : k === 'per_minute' ? 'Min' : k}: ₹{k === 'distance_based' ? (v?.perKmRate || v?.price || 0) : v?.price}
                            </div>
                          ))}
                       </div>
@@ -322,22 +322,36 @@ const EquipmentApproval = () => {
                       </div>
                    </div>
 
-                  {/* Rates Detail */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-6">
-                    {Object.entries(selectedItem?.pricing || {}).map(([key, val]) => (
-                      val && (
-                        <div key={key} className={`p-6 rounded-[32px] border-2 transition-all ${val.isEnabled ? 'bg-white border-emerald-500/10 shadow-xl shadow-emerald-900/5' : 'bg-slate-50 border-transparent opacity-20'}`}>
-                          <div className="flex items-center gap-2 mb-3">
-                             {key === 'hourly' && <FiClock className="text-emerald-500" />}
-                             {key === 'land_based' && <FiMapPin className="text-emerald-500" />}
-                             {(key === 'daily' || key === 'monthly') && <FiClock className="text-emerald-500" />}
-                             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{key === 'land_based' ? 'Acre' : key === 'hourly' ? 'Hourly' : 'Daily'}</p>
+                  {/* Rates Detail: only the rates the vendor actually switched on */}
+                  {(() => {
+                    const LABELS = { hourly: 'Hourly', land_based: 'Per acre', daily: 'Daily', monthly: 'Monthly', per_minute: 'Per minute', distance_based: 'Per km' };
+                    const rates = Object.entries(selectedItem?.pricing || {})
+                      .filter(([key, val]) => val && typeof val === 'object' && val.isEnabled && LABELS[key])
+                      .map(([key, val]) => {
+                        if (key === 'distance_based') {
+                          const perKm = Number(val.perKmRate) || Number(val.price) || 0;
+                          return { key, label: LABELS[key], amount: `₹${perKm}/km`, note: Number(val.baseCharge) > 0 ? `₹${val.baseCharge} covers the first ${val.baseKm || 0} km` : '' };
+                        }
+                        return { key, label: LABELS[key], amount: `₹${Number(val.price) || 0}`, note: '' };
+                      });
+                    if (rates.length === 0) {
+                      return <p className="text-sm font-bold text-slate-400">The vendor has not set any rates for this machine.</p>;
+                    }
+                    return (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-6">
+                        {rates.map(r => (
+                          <div key={r.key} className="p-6 rounded-[32px] border-2 bg-white border-emerald-500/10 shadow-xl shadow-emerald-900/5">
+                            <div className="flex items-center gap-2 mb-3">
+                              {r.key === 'land_based' ? <FiMapPin className="text-emerald-500" /> : <FiClock className="text-emerald-500" />}
+                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{r.label}</p>
+                            </div>
+                            <p className="text-2xl font-black text-slate-900">{r.amount}</p>
+                            {r.note && <p className="text-[10px] font-semibold text-slate-400 mt-1">{r.note}</p>}
                           </div>
-                          <p className="text-2xl font-black text-slate-900">₹{val.price}</p>
-                        </div>
-                      )
-                    ))}
-                  </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
 
                   {selectedItem.status === 'pending' && needsCategoryChoice(selectedItem) && (
                     <div className="p-5 rounded-3xl bg-purple-50 border border-purple-100 space-y-3">

@@ -237,12 +237,6 @@ const MachineryExplorer = () => {
     return () => { cancelled = true; };
   }, [selectedImplement, selectedCat]);
 
-  const handleSelectSlotPreset = (start, end) => {
-    setStartTime(start);
-    setEndTime(end);
-    setActiveSlotPreset(`${start} - ${end}`);
-  };
-
   const hasImplements = equipmentImplements && equipmentImplements.length > 0;
 
   useEffect(() => {
@@ -1283,6 +1277,8 @@ const MachineryExplorer = () => {
                         min={isTodayClosed ? tomorrowStr : todayStr}
                         value={bookingDate}
                         onChange={(e) => setBookingDate(e.target.value)}
+                        // an invisible date input only opens its calendar from the tiny built-in icon: open it on any click
+                        onClick={(e) => { try { e.currentTarget.showPicker(); } catch { /* browser without showPicker: native behaviour */ } }}
                         className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
                       />
                     </div>

@@ -899,6 +899,7 @@ const EquipmentDetail = () => {
               value={selectedDate}
               min={todayStr}
               onChange={e => setSelectedDate(e.target.value)}
+              onClick={e => { try { e.currentTarget.showPicker(); } catch { /* browser without showPicker: native behaviour */ } }}
             />
           </div>
 

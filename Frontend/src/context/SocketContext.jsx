@@ -1,5 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { formatFullAddress } from '../utils/formatAddress';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { motion, useMotionValue, useTransform } from 'framer-motion'; // eslint-disable-line no-unused-vars
@@ -549,7 +550,7 @@ export const SocketProvider = ({ children }) => {
             id: data.bookingId,
             serviceType: data.serviceName,
             location: {
-              address: data.address?.addressLine1 || 'Location shared',
+              address: formatFullAddress(data.address) || 'Location shared',
               distance: (data.distance !== undefined && data.distance !== null && !isNaN(Number(data.distance)))
                 ? (Number(data.distance) < 1
                   ? `${Math.round(Number(data.distance) * 1000)} m`

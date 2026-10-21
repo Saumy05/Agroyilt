@@ -6,6 +6,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { vendorTheme as themeColors } from '../../../../theme';
 import { playAlertRing, stopAlertRing } from '../../../../utils/notificationSound';
 import authStorage from '../../../../utils/authStorage';
+import { formatFullAddress } from '../../../../utils/formatAddress';
+
+// Seconds left in a request's window: the server's expiry, else 15 minutes from when it was sent, else the default
+const getRemainingSeconds = (booking, fallback = 60) => {
+  if (!booking) return 0;
+  if (booking.expiresAt) return Math.max(0, Math.floor((new Date(booking.expiresAt).getTime() - Date.now()) / 1000));
+  const sentAt = booking.sentAt || booking.createdAt;
+  if (sentAt) return Math.max(0, 15 * 60 - Math.floor((Date.now() - new Date(sentAt).getTime()) / 1000));
+  return fallback;
+};
 
 const BookingAlertCard = ({ booking, onAccept, onReject, onAssign, initialTimeLeft = 60, servicePayoutPct = 70 }) => {
   const [timeLeft, setTimeLeft] = useState(initialTimeLeft);
@@ -89,14 +99,26 @@ const BookingAlertCard = ({ booking, onAccept, onReject, onAssign, initialTimeLe
   const storedTax = booking?.tax !== undefined && booking?.tax !== null ? Number(booking.tax) : Math.round(baseAmt * (gstRate / 100));
   const visitingCharges = Number(booking?.visitingCharges || 0);
 
-  const farmerPayable = Number(
-    booking?.finalAmount || 
-    booking?.totalAmount || 
-    booking?.amount || 
+  // The alert carries the true total as `price` (it is the booking's final amount, travel charge and platform fee included)
+  const totalPayable = Number(
+    booking?.finalAmount ||
+    booking?.totalAmount ||
+    booking?.price ||
+    booking?.amount ||
     (baseAmt + storedTax + visitingCharges)
   );
+  // Already paid online / from the wallet: nothing left for the vendor to collect from the farmer
+  const paidOnline = ['online', 'razorpay', 'wallet'].includes(String(booking?.paymentMethod || '').toLowerCase()) &&
+    String(booking?.paymentStatus || '').toLowerCase() === 'success';
+  const advancePaid = Number(booking?.advancePaid ?? booking?.advancePaidAmount ?? (paidOnline ? totalPayable : 0)) || 0;
+  const farmerPayable = Math.max(0, Math.round((totalPayable - advancePaid) * 100) / 100);
+  const isFullyPaid = advancePaid > 0 && farmerPayable <= 0;
+  // Per-km jobs are billed on the distance actually driven: the amount here is only an estimate
+  const isEstimate = booking?.rental_type === 'distance_based';
 
-  const vendorNetEarning = Math.round(baseAmt * (servicePayoutPct / 100));
+  // The travel charge is the vendor's in full; the rest follows the commission split
+  const travelCharge = Number(booking?.travelCharge || 0);
+  const vendorNetEarning = Math.round(baseAmt * (servicePayoutPct / 100) + travelCharge);
 
   const format12Hour = (timeStr) => {
     if (!timeStr) return '';
@@ -215,12 +237,18 @@ const BookingAlertCard = ({ booking, onAccept, onReject, onAssign, initialTimeLe
         <div className="grid grid-cols-2 gap-2">
           {/* Farmer Collection */}
           <div className="bg-slate-50/90 py-2 px-1.5 rounded-xl border border-slate-200/90 flex flex-col justify-between items-center h-[82px] text-center">
-            <span className="text-[8.5px] font-black text-slate-500 uppercase tracking-wider leading-none">Collect from Farmer</span>
-            <div className="text-base font-black text-slate-900 tracking-tight my-auto leading-none">
-              ₹{farmerPayable.toLocaleString('en-IN')}
+            <span className="text-[8.5px] font-black text-slate-500 uppercase tracking-wider leading-none">
+              {isFullyPaid ? 'Nothing to collect' : 'Collect from Farmer'}
+            </span>
+            <div className={`text-base font-black tracking-tight my-auto leading-none ${isFullyPaid ? 'text-emerald-700' : 'text-slate-900'}`}>
+              {isFullyPaid ? 'Paid' : `${isEstimate ? '~' : ''}₹${farmerPayable.toLocaleString('en-IN')}`}
             </div>
             <span className="text-[8px] font-black text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-full border border-emerald-200/60 leading-none">
-              Incl. {gstRate}% GST
+              {isFullyPaid
+                ? `Farmer paid ₹${advancePaid.toLocaleString('en-IN')} online`
+                : advancePaid > 0
+                  ? `₹${advancePaid.toLocaleString('en-IN')} already paid`
+                  : isEstimate ? 'Estimate: pay after trip' : `Incl. ${gstRate}% GST`}
             </span>
           </div>
 
@@ -333,8 +361,8 @@ const BookingAlertCard = ({ booking, onAccept, onReject, onAssign, initialTimeLe
                   })()}
                 </span>
               </div>
-              <p className="text-[11px] font-bold text-slate-800 truncate leading-tight">
-                {booking?.location?.address || booking?.address?.addressLine1 || 'Farm address provided'}
+              <p className="text-[11px] font-bold text-slate-800 leading-snug break-words">
+                {formatFullAddress(booking?.address) || booking?.location?.address || 'Farm address provided'}
               </p>
             </div>
           </div>
@@ -410,14 +438,24 @@ const BookingAlertModal = ({ isOpen, booking, bookings, onAccept, onReject, onAs
     };
   }, [isOpen]);
 
+  // The tone rings for as long as at least one request is still inside its time window, and stops when the window ends
+  // (an expired card stays on screen but is dead, so it must not keep ringing). Re-checked every second.
+  const [, setClock] = useState(0);
+  const hasLiveAlert = isOpen && alertsArray.some(b => b && getRemainingSeconds(b, timeLeft) > 0);
   useEffect(() => {
-    if (isOpen && alertsArray.length > 0) {
+    if (!isOpen || alertsArray.length === 0) return;
+    const t = setInterval(() => setClock(c => c + 1), 1000);
+    return () => clearInterval(t);
+  }, [isOpen, alertsArray.length]);
+
+  useEffect(() => {
+    if (hasLiveAlert) {
       playAlertRing(true);
     } else {
       stopAlertRing();
     }
     return () => stopAlertRing();
-  }, [isOpen, alertsArray.length]);
+  }, [hasLiveAlert]);
 
   // Lock background scrolling while modal is open
   const isAlertActive = isOpen && alertsArray.length > 0;
