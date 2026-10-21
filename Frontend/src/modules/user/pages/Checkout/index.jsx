@@ -222,6 +222,12 @@ const Checkout = () => {
     navigate(-1);
   };
 
+  // Home takes the checkout's slot in history, so back from the confirmation lands on Home
+  const goToConfirmation = (bookingId) => {
+    navigate('/user', { replace: true });
+    navigate(`/user/booking-confirmation/${bookingId}`);
+  };
+
   const handleQuantityChange = async (itemId, change) => {
     try {
       const item = cartItems.find(i => (i._id || i.id) === itemId);
@@ -479,9 +485,7 @@ const Checkout = () => {
         // Close modal after 2 seconds and navigate to confirmation
         setTimeout(() => {
           setShowVendorModal(false);
-          navigate(`/user/booking-confirmation/${bookingRequest._id}`, {
-            replace: true
-          });
+          goToConfirmation(bookingRequest._id);
         }, 2000);
       }
     });
@@ -803,9 +807,7 @@ const Checkout = () => {
                 return;
               }
               // Navigate to booking confirmation
-              navigate(`/user/booking-confirmation/${bookingRequest._id}`, {
-                replace: true
-              });
+              goToConfirmation(bookingRequest._id);
             } else {
               toastManager.error(verifyResponse.message || 'Payment verification failed');
             }
@@ -867,9 +869,7 @@ const Checkout = () => {
         } catch (error) {
         }
         // Navigate to booking confirmation
-        navigate(`/user/booking-confirmation/${bookingRequest._id}`, {
-          replace: true
-        });
+        goToConfirmation(bookingRequest._id);
       } else {
         toastManager.error(response.message || 'Failed to confirm booking');
       }
@@ -891,7 +891,7 @@ const Checkout = () => {
 
       // Navigate
       if (bookingRequest) {
-        navigate(`/user/booking-confirmation/${bookingRequest._id}`, { replace: true });
+        goToConfirmation(bookingRequest._id);
       }
     } else if (paymentMethod === 'online') {
       await handleOnlinePayment();

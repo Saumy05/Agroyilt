@@ -29,6 +29,12 @@ const loadRazorpay = () => {
 const MachineryCheckout = () => {
     const location = useLocation();
     const navigate = useNavigate();
+
+    // Home takes the checkout's slot in history, so back from the confirmation lands on Home
+    const goToConfirmation = (bookingId) => {
+        navigate('/user', { replace: true });
+        navigate(`/user/booking-confirmation/${bookingId}`);
+    };
     const { equipment, bookingData } = location.state || {};
     const selectedImplements = bookingData?.selectedImplements || [];
 
@@ -310,7 +316,7 @@ const MachineryCheckout = () => {
                     if (!orderRes.success) {
                         toastManager.error(orderRes.message || 'Failed to initialize payment');
                         sessionStorage.removeItem(`machinery_booking_${equipment._id}`);
-                        navigate(`/user/booking-confirmation/${newBookingId}`, { replace: true });
+                        goToConfirmation(newBookingId);
                         return;
                     }
 
@@ -340,7 +346,7 @@ const MachineryCheckout = () => {
                                 toastManager.error('Payment verification failed');
                             } finally {
                                 sessionStorage.removeItem(`machinery_booking_${equipment._id}`);
-                                navigate(`/user/booking-confirmation/${newBookingId}`, { replace: true });
+                                goToConfirmation(newBookingId);
                             }
                         },
                         prefill: {
@@ -354,7 +360,7 @@ const MachineryCheckout = () => {
                             ondismiss: function () {
                                 toastManager.warning('Payment was not completed. You can pay anytime from Booking Details.');
                                 sessionStorage.removeItem(`machinery_booking_${equipment._id}`);
-                                navigate(`/user/booking-confirmation/${newBookingId}`, { replace: true });
+                                goToConfirmation(newBookingId);
                             }
                         }
                     };
@@ -363,7 +369,7 @@ const MachineryCheckout = () => {
                     rzp.on('payment.failed', function (resp) {
                         toastManager.error(`Payment failed: ${resp.error?.description || 'Transaction unsuccessful'}`);
                         sessionStorage.removeItem(`machinery_booking_${equipment._id}`);
-                        navigate(`/user/booking-confirmation/${newBookingId}`, { replace: true });
+                        goToConfirmation(newBookingId);
                     });
                     rzp.open();
                     return;
@@ -371,7 +377,7 @@ const MachineryCheckout = () => {
                     console.error('Online payment error:', payErr);
                     toastManager.error('Could not open payment window. Redirecting to confirmation.');
                     sessionStorage.removeItem(`machinery_booking_${equipment._id}`);
-                    navigate(`/user/booking-confirmation/${newBookingId}`, { replace: true });
+                    goToConfirmation(newBookingId);
                     return;
                 }
             }
@@ -379,7 +385,7 @@ const MachineryCheckout = () => {
             toastManager.success('Booking Dispatched to Vendor!');
             sessionStorage.removeItem(`machinery_booking_${equipment._id}`);
             if (newBookingId) {
-                navigate(`/user/booking-confirmation/${newBookingId}`, { replace: true });
+                goToConfirmation(newBookingId);
             } else {
                 navigate('/user/my-bookings', { replace: true });
             }
