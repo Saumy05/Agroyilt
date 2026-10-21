@@ -816,7 +816,7 @@ export default function BookingDetails() {
   const hasBill = !!bill;
 
   return (
-    <div className="min-h-screen pb-20" style={{ background: themeColors.backgroundGradient }}>
+    <div className="min-h-screen pb-28" style={{ background: themeColors.backgroundGradient }}>
       <Header title="Booking Details" />
 
       <main className="px-3.5 py-3 space-y-2.5 max-w-lg mx-auto">
@@ -1132,14 +1132,17 @@ export default function BookingDetails() {
               {(() => {
                 const payState = getPaymentState(booking);
                 const isPaid = payState.isPaid;
+                const isRefunded = payState.state === 'refunded';
                 return (
                   <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
-                    isPaid
+                    isRefunded
+                      ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                      : isPaid
                       ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                       : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                   }`}>
                     <FiDollarSign className="w-2.5 h-2.5" />
-                    <span>Payment: {payState.state === 'refunded' ? 'Refunded to farmer' : isPaid ? (payState.isCash ? 'Received (Cash Collected)' : 'Received (Verified)') : 'Pending'}</span>
+                    <span>Payment: {isRefunded ? 'Refunded to Farmer' : isPaid ? (payState.isCash ? 'Received (Cash Collected)' : 'Received (Verified)') : 'Pending'}</span>
                   </span>
                 );
               })()}
@@ -1363,16 +1366,24 @@ export default function BookingDetails() {
                 </span>
               </div>
 
-              <div className="flex justify-between text-emerald-600/70 text-[10px] mt-2">
-                <span>Platform Commission</span>
-                <span>-₹{(bill?.adminCommission || booking.adminCommission || booking.platformCommission || 0).toFixed(2)}</span>
-              </div>
+              {/* Only show commission when there are actual earnings — hide on a ₹0 bill */}
+              {finalTotal > 0 && (
+                <div className="flex justify-between text-emerald-600/70 text-[10px] mt-2">
+                  <span>Platform Commission</span>
+                  <span>-₹{(bill
+                    ? Math.max(0, (bill.companyRevenue || 0) - (bill.totalGST || 0))
+                    : (booking.platformCommission || booking.adminCommission || 0)
+                  ).toFixed(2)}</span>
+                </div>
+              )}
               {/* Commission % info badge */}
-              <div className="mt-2 flex items-center gap-1.5 bg-orange-50 border border-orange-100 rounded-lg px-3 py-2">
-                <span className="text-[9px] font-black text-orange-500 uppercase tracking-wider">Per Booking Commission</span>
-                <span className="ml-auto text-[11px] font-black text-orange-600">{bookingCommissionPct}%</span>
-                <span className="text-[9px] text-orange-400">deducted by platform</span>
-              </div>
+              {finalTotal > 0 && (
+                <div className="mt-2 flex items-center gap-1.5 bg-orange-50 border border-orange-100 rounded-lg px-3 py-2">
+                  <span className="text-[9px] font-black text-orange-500 uppercase tracking-wider">Per Booking Commission</span>
+                  <span className="ml-auto text-[11px] font-black text-orange-600">{bookingCommissionPct}%</span>
+                  <span className="text-[9px] text-orange-400">deducted by platform</span>
+                </div>
+              )}
             </div>
           ) : (
             <div className="bg-gray-50 px-6 py-4 border-t border-gray-100/50 text-center">

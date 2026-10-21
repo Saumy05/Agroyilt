@@ -282,7 +282,7 @@ const BookingTimeline = () => {
             'visited': 3,
             'in_progress': 4,
             'work_done': 5,
-            'completed': (apiData.finalSettlementStatus === 'DONE') ? 10 : 9,
+            'completed': (apiData.finalSettlementStatus === 'DONE' || (apiData.paymentStatus || '').toLowerCase() === 'refunded') ? 10 : 9,
           };
           stage = rentalStatusMap[apiData.status] || 2;
         } else {
@@ -306,7 +306,8 @@ const BookingTimeline = () => {
           }
 
           if (apiData.status === 'completed') {
-            if (isSettled) stage = 10;
+            // A refunded booking needs no settlement — jump straight to done
+            if (isSettled || (apiData.paymentStatus || '').toLowerCase() === 'refunded') stage = 10;
             else stage = 9;
           }
         }
@@ -582,6 +583,12 @@ const BookingTimeline = () => {
       id: 7,
       title: 'Collect Payment',
       icon: FiCheckCircle,
+      isCompleted: Boolean(
+        booking?.cashCollected ||
+        ['success', 'paid', 'collected_by_vendor', 'collected_by_worker', 'plan_covered'].includes((booking?.paymentStatus || '').toLowerCase()) ||
+        booking?.paymentMethod === 'plan_benefit' ||
+        (booking?.paymentStatus || '').toLowerCase() === 'refunded'
+      ),
       action: (() => {
         if (booking?.status === 'completed' || booking?.status === 'COMPLETED' || booking?.paymentStatus === 'SUCCESS' || booking?.paymentStatus === 'paid' || booking?.paymentStatus === 'collected_by_vendor') return null;
         if (booking?.vendorBillId && booking?.paymentMethod !== 'cash' && booking?.paymentMethod !== 'pay_at_home' && booking?.paymentMethod !== 'plan_benefit') {
@@ -729,6 +736,12 @@ const BookingTimeline = () => {
       id: 7,
       title: 'Collect Payment',
       icon: FiCheckCircle,
+      isCompleted: Boolean(
+        booking?.cashCollected ||
+        ['success', 'paid', 'collected_by_vendor', 'collected_by_worker', 'plan_covered'].includes((booking?.paymentStatus || '').toLowerCase()) ||
+        booking?.paymentMethod === 'plan_benefit' ||
+        (booking?.paymentStatus || '').toLowerCase() === 'refunded'
+      ),
       action: (() => {
         if (booking?.status === 'completed' || booking?.status === 'COMPLETED' || booking?.paymentStatus === 'SUCCESS' || booking?.paymentStatus === 'paid' || booking?.paymentStatus === 'collected_by_vendor') return null;
 
