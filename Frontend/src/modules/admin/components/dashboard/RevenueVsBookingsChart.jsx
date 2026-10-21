@@ -11,6 +11,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { filterByDateRange, getDateRange, formatDate, formatCurrency } from '../../utils/adminHelpers';
+import { formatRupeeAxis, formatCountAxis } from '../../utils/adminHelpers';
 
 const RevenueVsBookingsChart = ({ data, period = 'month' }) => {
   const filteredData = useMemo(() => {
@@ -72,8 +73,10 @@ const RevenueVsBookingsChart = ({ data, period = 'month' }) => {
               fontSize={10}
               tickLine={false}
               axisLine={false}
-              tickFormatter={(v) => `₹${Math.round(v / 1000)}k`}
-              width={50}
+              tickFormatter={formatRupeeAxis}
+              domain={[0, 'auto']}
+              allowDecimals
+              width={56}
             />
             <YAxis
               yAxisId="right"
@@ -82,6 +85,9 @@ const RevenueVsBookingsChart = ({ data, period = 'month' }) => {
               fontSize={10}
               tickLine={false}
               axisLine={false}
+              tickFormatter={formatCountAxis}
+              allowDecimals={false}
+              domain={[0, 'auto']}
               width={35}
             />
             <Tooltip content={<CustomTooltip />} />

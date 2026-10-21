@@ -181,6 +181,11 @@ const notificationSchema = new mongoose.Schema({
       'cash_collection_commission',
       'admin_qr_settlement',
       'admin_alert',
+      // Admin broadcasts
+      'system_announcement',
+      'weather_alert',
+      'maintenance',
+      'promotion',
       'refund',
       'referral_reward',
       'referral_reversed',

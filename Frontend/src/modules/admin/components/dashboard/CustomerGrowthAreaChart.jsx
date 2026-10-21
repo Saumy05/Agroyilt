@@ -10,6 +10,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { formatDate, filterByDateRange, getDateRange } from '../../utils/adminHelpers';
+import { formatCountAxis } from '../../utils/adminHelpers';
 
 const getCustomerKey = (booking) => {
   const phone = booking?.user?.phone;
@@ -113,7 +114,8 @@ const CustomerGrowthAreaChart = ({ timelineData = [], bookings = [], period = 'm
               fontSize={10}
               tickLine={false}
               axisLine={false}
-              tickFormatter={(v) => `${Math.round(Number(v || 0) / 1000)}k`}
+              tickFormatter={formatCountAxis}
+              allowDecimals={false}
               width={50}
             />
             <Tooltip content={<CustomTooltip />} />

@@ -10,6 +10,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { filterByDateRange, getDateRange, formatDate, formatCurrency } from '../../utils/adminHelpers';
+import { formatRupeeAxis } from '../../utils/adminHelpers';
 
 const RevenueLineChart = ({ data, period = 'month' }) => {
   const filteredData = useMemo(() => {
@@ -80,8 +81,10 @@ const RevenueLineChart = ({ data, period = 'month' }) => {
               fontSize={10}
               tickLine={false}
               axisLine={false}
-              tickFormatter={(v) => `₹${Math.round(v / 1000)}k`}
-              width={50}
+              tickFormatter={formatRupeeAxis}
+              domain={[0, 'auto']}
+              allowDecimals
+              width={56}
             />
             <Tooltip content={<CustomTooltip />} />
             <Area

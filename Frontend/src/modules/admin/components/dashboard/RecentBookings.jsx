@@ -2,6 +2,7 @@
 import { motion } from 'framer-motion';
 import { FiEye } from 'react-icons/fi';
 import { formatCurrency } from '../../utils/adminHelpers';
+import { formatDateTimeDDMMYYYY } from '../../../../utils/formatDate';
 
 const statusBadge = (status) => {
   const s = (status || 'OTHER').toUpperCase();
@@ -61,7 +62,7 @@ const RecentBookings = ({ bookings = [], onViewBooking }) => {
               </div>
               <p className="text-sm text-gray-600 truncate">{b.user?.name || 'Farmer'}</p>
               <p className="text-xs text-gray-500 mt-1">
-                {new Date(b.createdAt || b.acceptedAt || b.assignedAt || b.visitedAt || b.completedAt || Date.now()).toLocaleString()} ?{' '}
+                {formatDateTimeDDMMYYYY(b.createdAt || b.acceptedAt || b.assignedAt || b.visitedAt || b.completedAt || Date.now())} •{' '}
                 {b.serviceType || 'Equipment'}
               </p>
             </div>

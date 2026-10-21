@@ -31,6 +31,17 @@ import { toastManager } from '../../../../utils/toastManager';
 import authStorage from '../../../../utils/authStorage';
 import api from '../../../../services/api';
 
+// Saved notifications carry no targetRole, so the admin role they concern is worked out from the type.
+const getNotificationRole = (n) => {
+  if (n.targetRole) return n.targetRole;
+  const t = (n.type || '').toLowerCase();
+  if (/payment|withdraw|payout|settlement|dues|wallet|refund|cash_limit|cash_collected|earnings/.test(t)) return 'Finance Admin';
+  if (t.startsWith('worker')) return 'Worker Admin';
+  if (t.startsWith('vendor') || t.startsWith('equipment')) return 'Vendor Admin';
+  if (/^(booking|extension|job|service_timer|journey|visit|work_)/.test(t)) return 'Booking Admin';
+  return '';
+};
+
 // Demo notifications tagged with targetRole & modulePermission for role-based filtering
 const INITIAL_DEMO_NOTIFICATIONS = [
   {
@@ -166,7 +177,7 @@ const Notifications = () => {
 
     try {
       setSendingBroadcast(true);
-      const res = await api.post('/notifications/broadcast', broadcastForm).catch(() => null);
+      const res = await api.post('/notifications/broadcast', broadcastForm);
 
       const targetLabelMap = {
         all: 'All Users & Admins',
@@ -175,7 +186,8 @@ const Notifications = () => {
         workers: 'All Workers',
         finance: 'Finance Admins',
         vendor_admin: 'Vendor Admins',
-        booking_admin: 'Booking Admins'
+        booking_admin: 'Booking Admins',
+        worker_admin: 'Worker Admins'
       };
 
       const recipientText = res?.data?.recipientCount
@@ -207,7 +219,7 @@ const Notifications = () => {
       setShowBroadcastModal(false);
     } catch (error) {
       console.error('Error sending broadcast notification:', error);
-      toastManager.error('Failed to send broadcast announcement.');
+      toastManager.error(error?.response?.data?.message || 'Failed to send broadcast announcement.');
     } finally {
       setSendingBroadcast(false);
     }
@@ -380,7 +392,7 @@ const Notifications = () => {
 
       // 3. Target Role Filter
       if (targetRoleFilter !== 'all') {
-        const role = (n.targetRole || '').toLowerCase();
+        const role = getNotificationRole(n).toLowerCase();
         if (targetRoleFilter === 'finance' && !role.includes('finance')) return false;
         if (targetRoleFilter === 'vendor_admin' && !role.includes('vendor')) return false;
         if (targetRoleFilter === 'booking_admin' && !role.includes('booking')) return false;
@@ -418,7 +430,7 @@ const Notifications = () => {
         const q = searchQuery.toLowerCase();
         const titleMatch = (n.title || '').toLowerCase().includes(q);
         const msgMatch = (n.message || '').toLowerCase().includes(q);
-        const roleMatch = (n.targetRole || '').toLowerCase().includes(q);
+        const roleMatch = getNotificationRole(n).toLowerCase().includes(q);
         if (!titleMatch && !msgMatch && !roleMatch) return false;
       }
 
@@ -670,9 +682,9 @@ const Notifications = () => {
                       </p>
 
                       {/* Target Role Tag */}
-                      {notification.targetRole && (
-                        <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded border ${getRoleBadgeColor(notification.targetRole)} ml-1`}>
-                          👤 {notification.targetRole}
+                      {getNotificationRole(notification) && (
+                        <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded border ${getRoleBadgeColor(getNotificationRole(notification))} ml-1`}>
+                          👤 {getNotificationRole(notification)}
                         </span>
                       )}
                     </div>
@@ -767,6 +779,7 @@ const Notifications = () => {
                     <option value="finance">💰 Finance Admins Only</option>
                     <option value="vendor_admin">📋 Vendor Operations Admins</option>
                     <option value="booking_admin">🚜 Booking Dispatch Admins</option>
+                    <option value="worker_admin">👷 Worker Admins</option>
                   </select>
                 </div>
 

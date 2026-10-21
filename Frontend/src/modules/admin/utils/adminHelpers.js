@@ -34,3 +34,26 @@ export const filterByDateRange = (data, start, end) => {
 };
 
 
+
+// ── Chart axis labels ─────────────────────────────────────────────────────────
+const trim = (n, digits) => String(Number(n.toFixed(digits)));
+
+/**
+ * Rupee amount for a chart's y-axis, in the Indian style: ₹0, ₹250, ₹1.5k, ₹2.4L, ₹1.2Cr.
+ * Small amounts stay as they are (rounding everything to thousands made a quiet day read "₹0k" on every tick).
+ */
+export const formatRupeeAxis = (value) => {
+  const v = Number(value) || 0;
+  const abs = Math.abs(v);
+  const sign = v < 0 ? '-' : '';
+  if (abs >= 1e7) return `${sign}₹${trim(abs / 1e7, 2)}Cr`;
+  if (abs >= 1e5) return `${sign}₹${trim(abs / 1e5, 2)}L`;
+  if (abs >= 1e3) return `${sign}₹${trim(abs / 1e3, 1)}k`;
+  return `${sign}₹${abs < 10 ? trim(abs, 2) : Math.round(abs)}`;
+};
+
+/** A plain count (customers, bookings) for a chart's y-axis: 0, 5, 12, 1.5k */
+export const formatCountAxis = (value) => {
+  const v = Number(value) || 0;
+  return Math.abs(v) >= 1000 ? `${trim(v / 1000, 1)}k` : String(Math.round(v));
+};

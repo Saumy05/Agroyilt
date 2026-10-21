@@ -511,49 +511,91 @@ const broadcastNotification = async (req, res) => {
     const Worker = require('../../models/Worker');
     const Admin = require('../../models/Admin');
 
-    let recipientCount = 0;
+    // Admin sub-audiences are the admins who hold the matching permission (super admins always included)
+    const adminAudiences = {
+      finance: ['settlements.view', 'payments.view', 'payouts.view'],
+      vendor_admin: ['vendors.view'],
+      booking_admin: ['bookings.view'],
+      worker_admin: ['workers.view']
+    };
+    const everyone = targetAudience === 'all';
+    const wants = (audience) => everyone || targetAudience === audience;
+
     const notificationsToCreate = [];
-
-    if (targetAudience === 'all' || targetAudience === 'users') {
-      const users = await User.find({ isActive: { $ne: false } }).select('_id');
-      users.forEach(u => {
-        notificationsToCreate.push({ userId: u._id, title, message, type });
+    const pushTargets = [];
+    const add = (field, ids, push) => {
+      ids.forEach(({ _id }) => {
+        notificationsToCreate.push({ [field]: _id, title, message, type });
+        pushTargets.push({ field, id: _id, push });
       });
-      recipientCount += users.length;
+    };
+
+    if (wants('users')) {
+      add('userId', await User.find({ isActive: { $ne: false } }).select('_id'), sendNotificationToUser);
+    }
+    if (wants('vendors')) {
+      add('vendorId', await Vendor.find({ approvalStatus: 'approved', isActive: { $ne: false } }).select('_id'), sendNotificationToVendor);
+    }
+    if (wants('workers')) {
+      add('workerId', await Worker.find({ approvalStatus: 'approved', isActive: { $ne: false } }).select('_id'), sendNotificationToWorker);
     }
 
-    if (targetAudience === 'all' || targetAudience === 'vendors') {
-      const vendors = await Vendor.find({ isApproved: true }).select('_id');
-      vendors.forEach(v => {
-        notificationsToCreate.push({ vendorId: v._id, title, message, type });
-      });
-      recipientCount += vendors.length;
+    if (everyone || targetAudience === 'admins' || adminAudiences[targetAudience]) {
+      const { sendNotificationToAdmin } = require('../../services/firebaseAdmin');
+      const admins = await Admin.find({ isActive: { $ne: false } }).select('_id role permissions');
+      const wanted = adminAudiences[targetAudience];
+      const recipients = wanted
+        ? admins.filter((a) => a.role === 'super_admin' || wanted.some((key) => a.permissions && a.permissions[key]))
+        : admins;
+      add('adminId', recipients, sendNotificationToAdmin);
     }
 
-    if (targetAudience === 'all' || targetAudience === 'workers') {
-      const workers = await Worker.find({ isApproved: true }).select('_id');
-      workers.forEach(w => {
-        notificationsToCreate.push({ workerId: w._id, title, message, type });
+    if (notificationsToCreate.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No recipients found for this audience.'
       });
-      recipientCount += workers.length;
     }
 
-    if (targetAudience === 'all' || targetAudience === 'admins' || targetAudience.includes('admin')) {
-      const admins = await Admin.find({ isActive: { $ne: false } }).select('_id');
-      admins.forEach(a => {
-        notificationsToCreate.push({ adminId: a._id, title, message, type });
-      });
-      recipientCount += admins.length;
-    }
+    const created = await Notification.insertMany(notificationsToCreate);
+    const recipientCount = created.length;
 
-    if (notificationsToCreate.length > 0) {
-      await Notification.insertMany(notificationsToCreate);
+    // Live update for anyone who has the app open
+    try {
+      const { getIO } = require('../../sockets');
+      const io = getIO();
+      if (io) {
+        created.forEach((n) => {
+          const room = n.userId ? `user_${n.userId}` : n.vendorId ? `vendor_${n.vendorId}` : n.workerId ? `worker_${n.workerId}` : `admin_${n.adminId}`;
+          io.to(room).emit('notification', n);
+        });
+      }
+    } catch (e) {
+      console.log('Broadcast socket emit failed:', e.message);
     }
 
     res.status(200).json({
       success: true,
       message: `Broadcast announcement dispatched successfully to ${recipientCount} recipient(s).`,
       recipientCount
+    });
+
+    // Push goes out after the response so a large audience does not hold the admin's request open
+    setImmediate(async () => {
+      const BATCH = 25;
+      for (let i = 0; i < pushTargets.length; i += BATCH) {
+        await Promise.allSettled(
+          pushTargets.slice(i, i + BATCH).map(({ id, push }, k) => {
+            const notification = created[i + k];
+            return push(id, {
+              title,
+              body: message,
+              priority,
+              data: { type, notificationId: String(notification._id), relatedId: '', relatedType: '' }
+            });
+          })
+        );
+      }
     });
   } catch (error) {
     console.error('Broadcast notification error:', error);
