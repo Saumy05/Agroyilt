@@ -33,7 +33,8 @@ import {
   FiCheckSquare,
   FiDollarSign,
   FiRefreshCw,
-  FiTruck
+  FiTruck,
+  FiShield
 } from 'react-icons/fi';
 import { FaRupeeSign } from 'react-icons/fa';
 import { bookingService } from '../../../../services/bookingService';
@@ -2254,6 +2255,18 @@ const BookingDetails = () => {
                       </div>
                     )}
 
+                    {/* Platform Fee (admin-set % of the service price, platform revenue) */}
+                    {(Number(bill?.platformFee) > 0 || Number(booking.platformFee) > 0) && (
+                      <div className="mt-2 pt-2 border-t border-gray-100">
+                        <div className="flex justify-between text-xs font-bold text-gray-600">
+                          <span className="flex items-center gap-2 uppercase tracking-wide">
+                            <FiShield className="w-3.5 h-3.5 text-blue-400" /> Platform Fee{(bill?.payoutConfig?.platformFeePercentage || booking.platformFeePercentage) ? ` (${bill?.payoutConfig?.platformFeePercentage || booking.platformFeePercentage}%)` : ''}
+                          </span>
+                          <span className="font-mono">₹{Number(bill ? (bill.platformFee || 0) : booking.platformFee).toFixed(2)}</span>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Transport Charges */}
                     {bill?.transportCharges > 0 && (
                       <div className="mt-2 pt-2 border-t border-gray-100">
@@ -2615,6 +2628,13 @@ const BookingDetails = () => {
                           <span className="block text-[10px] text-gray-400">Paid to the vendor in full</span>
                         </span>
                         <span className="font-medium text-gray-900">₹{Number(booking.travelCharge).toLocaleString('en-IN')}</span>
+                      </div>
+                    )}
+
+                    {booking.paymentMethod !== 'plan_benefit' && Number(booking.platformFee) > 0 && (
+                      <div className="flex justify-between items-center text-gray-600">
+                        <span>Platform Fee{booking.platformFeePercentage ? ` (${booking.platformFeePercentage}%)` : ''}</span>
+                        <span className="font-medium text-gray-900">₹{Number(booking.platformFee).toLocaleString('en-IN')}</span>
                       </div>
                     )}
 

@@ -266,8 +266,10 @@ const getGSTRReport = async (req, res) => {
 
       // Fallback if no bill exists
       if (!bill && b.finalAmount > 0) {
-        taxableValue = b.finalAmount / (1 + (gstRate / 100));
-        taxAmount = b.finalAmount - taxableValue;
+        // the platform fee inside the total carries no GST
+        const taxableTotal = b.finalAmount - (Number(b.platformFee) || 0);
+        taxableValue = taxableTotal / (1 + (gstRate / 100));
+        taxAmount = taxableTotal - taxableValue;
       }
 
       return {

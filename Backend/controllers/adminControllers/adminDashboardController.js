@@ -40,7 +40,12 @@ const platformEarningStages = (settings) => {
                 { $ifNull: [{ $arrayElemAt: ['$bill.totalGST', 0] }, 0] }
               ]
             },
-            { $multiply: [{ $ifNull: ['$finalAmount', 0] }, fallbackRate] }
+            {
+              $add: [
+                { $multiply: [{ $subtract: [{ $ifNull: ['$finalAmount', 0] }, { $ifNull: ['$platformFee', 0] }] }, fallbackRate] },
+                { $ifNull: ['$platformFee', 0] }
+              ]
+            }
           ]
         }
       }

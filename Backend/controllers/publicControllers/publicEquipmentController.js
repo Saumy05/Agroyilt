@@ -2,6 +2,7 @@ const VendorEquipment = require('../../models/VendorEquipment');
 const Vendor = require('../../models/Vendor');
 const Settings = require('../../models/Settings');
 const { parseTimeToMinutes, parseSlotInterval, isIntervalOverlapping } = require('../../utils/timeSlotHelper');
+const { getPlatformFeePercentage, computePlatformFee } = require('../../utils/vendorPayout');
 
 /**
  * Public Equipment Controllers (For Farmers)
@@ -325,6 +326,7 @@ exports.findQualifiedVendors = async (req, res) => {
     const settings = await Settings.findOne({ type: 'global' });
     const visitingCharges = (settings && typeof settings.visitedCharges === 'number') ? settings.visitedCharges : 49;
     const gstPercentage = typeof settings?.rentalGstPercentage === 'number' ? settings.rentalGstPercentage : 5;
+    const platformFeePercentage = getPlatformFeePercentage(settings);
 
     // 1. Calculate Multiplier and Normalized Interval
     const reqInterval = parseSlotInterval(timeSlot, null, rental_type);
@@ -573,7 +575,8 @@ exports.findQualifiedVendors = async (req, res) => {
       const implementTotal = eqDistancePricing ? 0 : Math.round(implementUnitRate * multiplier);
       const basePrice = tractorTotal + implementTotal;
       const tax = Math.round(basePrice * (gstPercentage / 100));
-      const totalAmount = basePrice + tax + visitingCharges;
+      const platformFee = computePlatformFee(basePrice, platformFeePercentage);
+      const totalAmount = basePrice + tax + visitingCharges + platformFee;
 
       qualifiedVendors.push({
         vendor: {
@@ -606,6 +609,8 @@ exports.findQualifiedVendors = async (req, res) => {
           ...(eqDistancePricing ? { distancePricing: eqDistancePricing, isEstimate: true } : {}),
           tax,
           gstPercentage,
+          platformFee,
+          platformFeePercentage,
           visitingCharges,
           totalAmount
         },
@@ -631,7 +636,8 @@ exports.findQualifiedVendors = async (req, res) => {
         rental_type,
         multiplier,
         visitingCharges,
-        gstPercentage
+        gstPercentage,
+        platformFeePercentage
       }
     });
   } catch (error) {

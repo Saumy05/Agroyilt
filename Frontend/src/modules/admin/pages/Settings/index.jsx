@@ -28,6 +28,7 @@ const AdminSettings = () => {
     bookingCommissionPercentage: 10,
     workerCommissionPercentage: 10,
     workerPlatformChargePercentage: 1,
+    machineryPlatformFeePercentage: 0,
     landLeaseCommissionPercentage: 2,
     rentalGstPercentage: 5,
     minWithdrawalAmount: 300
@@ -70,7 +71,6 @@ const AdminSettings = () => {
     extensionExpiryMinutes: 30,
     maxWorkerDues: 500,
     supportMaxOpenClaims: 5,
-    workerCashPaymentEnabled: true,
     workerJourneyWindowMinutes: 120,
     workerEarlyStartMinutes: 30
   });
@@ -356,6 +356,7 @@ const AdminSettings = () => {
             bookingCommissionPercentage: res.settings.bookingCommissionPercentage ?? 10,
             workerCommissionPercentage: res.settings.workerCommissionPercentage ?? 10,
             workerPlatformChargePercentage: res.settings.workerPlatformChargePercentage ?? 1,
+            machineryPlatformFeePercentage: res.settings.machineryPlatformFeePercentage ?? 0,
             landLeaseCommissionPercentage: res.settings.landLeaseCommissionPercentage ?? 2,
             rentalGstPercentage: res.settings.rentalGstPercentage ?? 5,
             minWithdrawalAmount: res.settings.minWithdrawalAmountPaise ? Math.round(res.settings.minWithdrawalAmountPaise / 100) : (res.settings.minWithdrawalAmount || 300)
@@ -389,7 +390,6 @@ const AdminSettings = () => {
             extensionExpiryMinutes: res.settings.extensionExpiryMinutes ?? 30,
             maxWorkerDues: res.settings.maxWorkerDues ?? 500,
             supportMaxOpenClaims: res.settings.supportMaxOpenClaims ?? 5,
-            workerCashPaymentEnabled: res.settings.workerCashPaymentEnabled ?? true,
             workerJourneyWindowMinutes: res.settings.workerJourneyWindowMinutes ?? 120,
             workerEarlyStartMinutes: res.settings.workerEarlyStartMinutes ?? 30
           });
@@ -494,8 +494,7 @@ const AdminSettings = () => {
         workerPenaltyFreeMinutes: Number(systemSettings.workerPenaltyFreeMinutes) || 0,
         workerPenaltyMaxAmount: Number(systemSettings.workerPenaltyMaxAmount) || 0,
         workerPenaltyPercentage: Number(systemSettings.workerPenaltyPercentage) || 0,
-        maxWorkerDues: Math.max(0, Number(systemSettings.maxWorkerDues) || 0),
-        workerCashPaymentEnabled: Boolean(systemSettings.workerCashPaymentEnabled)
+        maxWorkerDues: Math.max(0, Number(systemSettings.maxWorkerDues) || 0)
       });
       toastManager.success('Financial settings updated');
     } catch (error) {
@@ -1223,8 +1222,23 @@ const AdminSettings = () => {
                       <p className="text-[10px] text-gray-400 mt-1">Deducted from the landowner's share of every rent installment and crop-share settlement. Applies to new leases only.</p>
                     </div>
 
+                    {/* Vendor (machinery) Platform Fee */}
+                    <div className="md:col-span-1">
+                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Vendor Booking Platform Fee (%)</label>
+                      <input
+                        type="number" name="machineryPlatformFeePercentage"
+                        value={financialSettings.machineryPlatformFeePercentage}
+                        onChange={handleFinancialChange}
+                        min="0" max="100" step="0.01"
+                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all font-bold text-gray-800"
+                      />
+                      <p className="text-[10px] text-gray-400 mt-1">
+                        Charged to the farmer on top of a vendor's machinery booking (before GST) and kept entirely by the platform. The vendor's earnings don't change. 0 = no fee. Applies to new bookings; bookings already made keep their rate.
+                      </p>
+                    </div>
+
                     {/* Worker Platform Charge */}
-                    <div className="md:col-span-2">
+                    <div className="md:col-span-1">
                       <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Worker Booking Platform Fee (%)</label>
                       <input
                         type="number" name="workerPlatformChargePercentage"
@@ -1233,6 +1247,7 @@ const AdminSettings = () => {
                         min="0" max="100"
                         className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all font-bold text-gray-800"
                       />
+                      <p className="text-[10px] text-gray-400 mt-1">Charged to the farmer on top of the workers' rates. 0 = no fee.</p>
                     </div>
 
                     <h3 className="md:col-span-2 text-xs font-bold text-gray-700 uppercase tracking-wider pb-1 border-b border-gray-100 mt-2">Taxes</h3>
@@ -1381,14 +1396,6 @@ const AdminSettings = () => {
                         className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all" />
                       <p className="text-[10px] text-gray-400 mt-1">A worker who owes more than this (platform fees, commission, penalties) cannot take new jobs until they pay. Unblocked automatically once back under it.</p>
                     </div>
-                    <label className="flex items-start gap-3 cursor-pointer pt-5">
-                      <input type="checkbox" name="workerCashPaymentEnabled" checked={Boolean(systemSettings.workerCashPaymentEnabled)} onChange={handleSystemChange}
-                        className="w-5 h-5 mt-0.5 accent-green-600" />
-                      <span>
-                        <span className="block text-sm font-semibold text-gray-800">Allow cash payment for worker bookings</span>
-                        <span className="block text-[10px] text-gray-500">When off, farmers must pay online when booking workers.</span>
-                      </span>
-                    </label>
                     {/* Minimum Withdrawal Amount */}
                     <div className="md:col-span-2">
                       <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">

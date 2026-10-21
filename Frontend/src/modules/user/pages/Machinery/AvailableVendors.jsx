@@ -45,7 +45,7 @@ const AvailableVendors = () => {
   // Per-km jobs: approx bill for the farmer's estimated distance (the real bill uses the driven distance)
   const getApproxBill = (item) => (
     rentalType === 'distance_based'
-      ? estimateDistanceBill(item?.pricing?.distancePricing, estimatedKm, item?.pricing?.gstPercentage ?? 5)
+      ? estimateDistanceBill(item?.pricing?.distancePricing, estimatedKm, item?.pricing?.gstPercentage ?? 5, item?.pricing?.platformFeePercentage ?? 0)
       : null
   );
   const getDisplayTotal = (item) => getApproxBill(item)?.total ?? (item?.pricing?.totalAmount || 0);
@@ -182,6 +182,8 @@ const AvailableVendors = () => {
           tax: item.pricing.tax,
           visitingCharges: item.pricing.visitingCharges,
           gstPercentage: item.pricing.gstPercentage ?? 5,
+          platformFee: item.pricing.platformFee ?? 0,
+          platformFeePercentage: item.pricing.platformFeePercentage ?? 0,
           distancePricing: item.pricing.distancePricing || null,
           estimatedKm: rentalType === 'distance_based' ? estimatedKm : undefined,
           total: item.pricing.totalAmount,

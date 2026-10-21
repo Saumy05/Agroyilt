@@ -39,6 +39,7 @@ const MachineryCheckout = () => {
     const [submitting, setSubmitting] = useState(false);
     const [showPaymentConfirmModal, setShowPaymentConfirmModal] = useState(false);
     const [adminRentalGst, setAdminRentalGst] = useState(null);
+    const [adminPlatformFeePct, setAdminPlatformFeePct] = useState(0);
     const [travel, setTravel] = useState(null); // travel charge for the vendor coming to the chosen address
 
     useEffect(() => {
@@ -50,6 +51,7 @@ const MachineryCheckout = () => {
                     if (typeof res.settings.rentalGstPercentage === 'number') {
                         setAdminRentalGst(res.settings.rentalGstPercentage);
                     }
+                    setAdminPlatformFeePct(Number(res.settings.machineryPlatformFeePercentage) || 0);
                 }
             } catch (e) {
                 console.error('Failed to load dynamic settings in MachineryCheckout:', e);
@@ -113,6 +115,8 @@ const MachineryCheckout = () => {
         tractorTotal,
         implementTotal,
         gstPercentage: passedGstPercentage,
+        platformFee: passedPlatformFee,
+        platformFeePercentage: passedPlatformFeePct,
         estimatedKm
     } = bookingData;
 
@@ -132,15 +136,23 @@ const MachineryCheckout = () => {
         ? initialTax 
         : Math.round(calculatedBasePrice * (activeGstPercentage / 100));
 
+    // Platform fee (admin: Settings > Machinery Platform Fee), on the service price before GST. A total that came from the
+    // vendor search already includes it; otherwise it is added here. The server recomputes it when the booking is made.
+    const platformFeePct = typeof passedPlatformFeePct === 'number' ? passedPlatformFeePct : adminPlatformFeePct;
+    const platformFee = typeof passedPlatformFee === 'number'
+        ? passedPlatformFee
+        : Math.round(calculatedBasePrice * platformFeePct) / 100;
+    const totalIncludesFee = typeof passedPlatformFee === 'number';
+
     const calculatedTotal = (typeof initialTotal === 'number' && initialTotal > 0)
-        ? initialTotal
-        : (calculatedBasePrice + calculatedTax + (visitingCharges || 0));
+        ? initialTotal + (totalIncludesFee ? 0 : platformFee)
+        : (calculatedBasePrice + calculatedTax + (visitingCharges || 0) + platformFee);
 
     const travelCharge = Number(travel?.total) || 0;
     const payableTotal = Math.round((calculatedTotal + travelCharge) * 100) / 100; // what the farmer actually pays
     // Per-km jobs: approx final bill for the farmer's estimated distance (the real bill uses the GPS-measured distance)
     const approxBill = rateType === 'distance_based'
-        ? estimateDistanceBill(bookingData.distancePricing, estimatedKm, activeGstPercentage)
+        ? estimateDistanceBill(bookingData.distancePricing, estimatedKm, activeGstPercentage, platformFeePct)
         : null;
     const approxTotal = approxBill ? Math.round((approxBill.total + travelCharge) * 100) / 100 : null;
     // Per-km jobs are billed on the distance driven, so nothing is paid at booking: the farmer pays once the trip ends and the bill is ready
@@ -613,6 +625,16 @@ const MachineryCheckout = () => {
                           </span>
                           <span className="font-bold text-slate-700 text-xs">+ ₹{payAfterTrip ? (approxBill?.tax ?? 0) : (calculatedTax || 0)}</span>
                         </div>
+
+                        {/* Platform fee */}
+                        {(payAfterTrip ? (approxBill?.platformFee ?? 0) : platformFee) > 0 && (
+                          <div className="flex justify-between items-center text-xs pt-0.5">
+                            <span className="font-bold text-slate-500 text-[11px]">
+                              Platform Fee ({platformFeePct}%)
+                            </span>
+                            <span className="font-bold text-slate-700 text-xs">+ ₹{payAfterTrip ? approxBill.platformFee : platformFee}</span>
+                          </div>
+                        )}
 
                         {/* Total Highlight */}
                         <div className="flex justify-between items-center pt-2 border-t border-slate-200">

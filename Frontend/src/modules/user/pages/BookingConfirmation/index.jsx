@@ -787,6 +787,14 @@ const BookingConfirmation = () => {
                 )}
               </div>
 
+              {/* Platform Fee */}
+              {booking.paymentMethod !== 'plan_benefit' && Number(booking.platformFee) > 0 && (
+                <div className="flex justify-between items-center text-slate-600">
+                  <span>Platform Fee{booking.platformFeePercentage ? ` (${booking.platformFeePercentage}%)` : ''}</span>
+                  <span className="font-semibold text-slate-900">₹{Number(booking.platformFee).toLocaleString('en-IN')}</span>
+                </div>
+              )}
+
               {/* Total */}
               <div className="border-t border-slate-100 pt-2.5 mt-1 flex justify-between items-center">
                 <span className="font-bold text-slate-900 text-sm">

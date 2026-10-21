@@ -57,6 +57,7 @@ exports.updateSettings = async (req, res, next) => {
       workerCommissionPercentage,
       landLeaseCommissionPercentage,
       workerPlatformChargePercentage,
+      machineryPlatformFeePercentage,
       maxIndependentWorkerRequest,
       workerSearchRadiusKm,
       workerAlertTimeoutSeconds,
@@ -95,6 +96,7 @@ exports.updateSettings = async (req, res, next) => {
         partsPayoutPercentage,
         tdsPercentage,
         platformFeePercentage,
+        machineryPlatformFeePercentage,
         vendorCashLimit, // Add this
         cancellationPenalty,
         bookingCommissionPercentage,
@@ -179,6 +181,13 @@ exports.updateSettings = async (req, res, next) => {
         if (!isNaN(val) && val >= 0 && val <= 100) {
           settings.landLeaseCommissionPercentage = val;
         }
+      }
+      if (machineryPlatformFeePercentage !== undefined) {
+        const val = Number(machineryPlatformFeePercentage);
+        if (isNaN(val) || val < 0 || val > 100) {
+          return res.status(400).json({ success: false, message: 'Machinery platform fee must be between 0 and 100' });
+        }
+        settings.machineryPlatformFeePercentage = val;
       }
       if (workerPlatformChargePercentage !== undefined) {
         const val = Number(workerPlatformChargePercentage);
@@ -313,7 +322,7 @@ exports.updateSettings = async (req, res, next) => {
 // Get Public Settings (Visited Charges, GST, Branding)
 exports.getPublicSettings = async (req, res, next) => {
   try {
-    let settings = await Settings.findOne({ type: 'global' }).select('visitedCharges serviceGstPercentage partsGstPercentage rentalGstPercentage supportEmail supportPhone supportWhatsapp cancellationPenalty bookingCommissionPercentage appName appTagline appLogo appFavicon workerAlertTimeoutSeconds');
+    let settings = await Settings.findOne({ type: 'global' }).select('visitedCharges serviceGstPercentage partsGstPercentage rentalGstPercentage machineryPlatformFeePercentage supportEmail supportPhone supportWhatsapp cancellationPenalty bookingCommissionPercentage appName appTagline appLogo appFavicon workerAlertTimeoutSeconds');
 
     // Default if not found (fallback values)
     if (!settings) {

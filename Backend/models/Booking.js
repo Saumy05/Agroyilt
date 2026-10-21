@@ -180,6 +180,10 @@ const bookingSchema = new mongoose.Schema({
     type: Number,
     default: null
   },
+  // Platform fee the farmer pays on top of a machinery booking (Settings > Machinery Platform Fee).
+  // Part of finalAmount; all of it is platform revenue (no GST, no vendor share). The rate is frozen at booking time.
+  platformFee: { type: Number, default: 0, min: 0 },
+  platformFeePercentage: { type: Number, default: null },
   visitingCharges: {
     type: Number,
     default: 0,

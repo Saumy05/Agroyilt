@@ -1286,6 +1286,20 @@ export default function BookingDetails() {
               </div>
             )}
 
+            {/* Platform Fee: paid by the farmer on top, kept by the platform (not part of the vendor's earnings) */}
+            {Number(bill?.platformFee) > 0 && (
+              <div className="mt-4">
+                <h4 className="font-bold text-gray-900 flex items-center gap-2 mb-2 pb-2 border-b border-gray-100">
+                  <span className="w-6 h-6 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center text-xs"><FiInfo /></span>
+                  Platform Fee
+                </h4>
+                <div className="flex justify-between pl-2 font-bold text-gray-800">
+                  <span>Charged to the farmer, kept by the platform</span>
+                  <span>₹{Number(bill.platformFee).toFixed(2)}</span>
+                </div>
+              </div>
+            )}
+
             {/* Transport Charges */}
             {bill?.transportCharges > 0 && (
               <div className="mt-4">

@@ -87,6 +87,8 @@ const vendorBillSchema = new mongoose.Schema({
   transportCharges: { type: Number, default: 0 },
   // Travel charge passed through to the vendor in full (not in GST base, not in company revenue)
   travelCharge: { type: Number, default: 0 },
+  // Platform fee paid by the farmer on top of the service base: all company revenue, never shared with the vendor
+  platformFee: { type: Number, default: 0 },
 
   // GST breakdown
   originalGST: { type: Number, default: 0 },
@@ -113,7 +115,8 @@ const vendorBillSchema = new mongoose.Schema({
     serviceSplitPercentage: { type: Number, default: 70 },  // vendor gets 70%
     partsSplitPercentage: { type: Number, default: 10 },  // vendor gets 10%
     serviceGstPercentage: { type: Number, default: 18 },
-    partsGstPercentage: { type: Number, default: 18 }
+    partsGstPercentage: { type: Number, default: 18 },
+    platformFeePercentage: { type: Number, default: 0 }
   },
 
   /** Vendor earnings (calculated on BASE prices, never on GST) */

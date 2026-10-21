@@ -19,12 +19,38 @@ const round2 = (n) => Math.round(Number(n) * 100) / 100;
  */
 const getPlatformEarning = (bill, booking, settings) => {
   if (bill) return round2((bill.companyRevenue || 0) - (bill.totalGST || 0));
-  return round2(((booking?.finalAmount || 0) * (100 - getVendorPayoutPercentage(settings))) / 100);
+  // no bill yet: the platform fee inside the total is the platform's in full, the commission applies to the rest
+  const fee = Number(booking?.platformFee) || 0;
+  return round2((((booking?.finalAmount || 0) - fee) * (100 - getVendorPayoutPercentage(settings))) / 100 + fee);
 };
 
 const getVendorEarning = (bill, booking, settings) => {
   if (bill) return bill.vendorTotalEarning || 0;
-  return round2(((booking?.finalAmount || 0) * getVendorPayoutPercentage(settings)) / 100);
+  return round2((((booking?.finalAmount || 0) - (Number(booking?.platformFee) || 0)) * getVendorPayoutPercentage(settings)) / 100);
 };
 
-module.exports = { getVendorPayoutPercentage, getPlatformEarning, getVendorEarning };
+/**
+ * Platform fee (%) the farmer pays on top of a machinery booking, from "Machinery Platform Fee" in admin settings.
+ * 0 when unset, so nothing is charged until the admin turns it on.
+ */
+const getPlatformFeePercentage = (settings) => {
+  const pct = Number(settings?.machineryPlatformFeePercentage);
+  return Number.isFinite(pct) && pct > 0 && pct <= 100 ? pct : 0;
+};
+
+/** The platform fee is a share of the service base (before GST, excluding visiting / travel / penalty charges). */
+const computePlatformFee = (serviceBase, pct) => round2(((Number(serviceBase) || 0) * (Number(pct) || 0)) / 100);
+
+/**
+ * Rate frozen on the booking when it was made. Bookings made before the fee existed carry no rate and are never charged
+ * (changing the setting must not add a fee to a job the farmer already booked).
+ */
+const getBookingPlatformFeePercentage = (booking) => {
+  const pct = Number(booking?.platformFeePercentage);
+  return Number.isFinite(pct) && pct > 0 ? pct : 0;
+};
+
+module.exports = {
+  getVendorPayoutPercentage, getPlatformEarning, getVendorEarning,
+  getPlatformFeePercentage, computePlatformFee, getBookingPlatformFeePercentage
+};

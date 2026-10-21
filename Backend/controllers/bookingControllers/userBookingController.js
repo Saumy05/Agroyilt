@@ -16,6 +16,7 @@ const { validationResult } = require('express-validator');
 const { BOOKING_STATUS, PAYMENT_STATUS } = require('../../utils/constants');
 const { createNotification } = require('../notificationControllers/notificationController');
 const { dispatchVendorRequest } = require('../../services/bookingSettlementService');
+const { getPlatformFeePercentage, computePlatformFee } = require('../../utils/vendorPayout');
 const { sendNotificationToUser, sendNotificationToVendor, sendNotificationToWorker } = require('../../services/firebaseAdmin');
 const { sendNewBookingNotification } = require('../../services/firebaseNotificationService');
 const { parseTimeToMinutes, parseSlotInterval, isIntervalOverlapping, validateSchedule } = require('../../utils/timeSlotHelper');
@@ -557,6 +558,8 @@ const createBooking = async (req, res) => {
     // -------------------------------------------------------------------------
 
     let planWaivesTravel = false; // a plan with free transport also waives the vendor's travel charge
+    let platformFee = 0;          // machinery platform fee (Settings > Machinery Platform Fee); plan bookings pay none
+    let platformFeePct = 0;
 
     // 1. Determine if we can use Plan Benefits
     let usePlanBenefits = false;
@@ -683,8 +686,10 @@ const createBooking = async (req, res) => {
         discount = 0; // Standard flow has no discount unless added by admin/coupons (TBD)
         visitingCharges = 0; // Agri/equipment bookings have FREE conveyance/mobilization!
         tax = Math.round(basePrice * gstDecMultiplier);
-        finalAmount = basePrice - discount + tax + visitingCharges + pendingPenalty;
-        console.log(`[CreateBooking] Backend calculated Agri Price: Base=${basePrice}, Tax=${tax}, Total=${finalAmount}`);
+        platformFeePct = getPlatformFeePercentage(settings);
+        platformFee = computePlatformFee(basePrice - discount, platformFeePct);
+        finalAmount = basePrice - discount + tax + visitingCharges + pendingPenalty + platformFee;
+        console.log(`[CreateBooking] Backend calculated Agri Price: Base=${basePrice}, Tax=${tax}, PlatformFee=${platformFee}, Total=${finalAmount}`);
       } else {
         // Standard Services (Wait until we migrate these to full backend authoritativeness too)
         // For now, doing a safer recalculation
@@ -884,6 +889,7 @@ const createBooking = async (req, res) => {
       visitingCharges,
       penalty: pendingPenalty || 0,
       ...(travelCharge > 0 ? { travelCharge, travelDistanceKm, travelBreakdown } : {}),
+      ...(platformFee > 0 || platformFeePct > 0 ? { platformFee, platformFeePercentage: platformFeePct } : {}),
       finalAmount,
       userPayableAmount: finalAmount,
       districtId: user?.districtId || address?.districtId || null,
@@ -2473,7 +2479,9 @@ const calculatePrice = async (req, res) => {
     const basePrice = isAgriService ? totalServiceValue : (totalServiceValue || unitRate);
     const discount = 0;
     const tax = Math.round(basePrice * gstDecMultiplier);
-    const finalAmount = basePrice - discount + tax + visitingCharges;
+    const platformFeePercentage = isAgriService ? getPlatformFeePercentage(settings) : 0;
+    const platformFee = computePlatformFee(basePrice - discount, platformFeePercentage);
+    const finalAmount = basePrice - discount + tax + visitingCharges + platformFee;
 
     res.status(200).json({
       success: true,
@@ -2482,6 +2490,8 @@ const calculatePrice = async (req, res) => {
         discount,
         tax,
         visitingCharges,
+        platformFee,
+        platformFeePercentage,
         finalAmount,
         unitRate,
         multiplier,

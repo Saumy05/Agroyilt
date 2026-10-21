@@ -18,7 +18,7 @@ const User = require('../models/User');
 const Transaction = require('../models/Transaction');
 const Settings = require('../models/Settings');
 const { BOOKING_STATUS, PAYMENT_STATUS, BILL_STATUS } = require('../utils/constants');
-const { getVendorPayoutPercentage } = require('../utils/vendorPayout');
+const { getVendorPayoutPercentage, computePlatformFee, getBookingPlatformFeePercentage } = require('../utils/vendorPayout');
 
 const OTP_MAX_ATTEMPTS = 5;
 const OTP_LOCK_MINUTES = 15;
@@ -326,7 +326,9 @@ const ensureBill = async (booking) => {
   const { gstPct, payoutPct } = await getRentalSettings();
   // the travel charge inside the total is neither taxed nor shared: it all goes to the vendor
   const travel = round2(Math.min(total, Number(booking.travelCharge) || 0));
-  const taxable = round2(total - travel);
+  // the platform fee the farmer paid on top is all company revenue: not taxed, not shared
+  const platformFee = round2(Math.min(total - travel, Number(booking.platformFee) || 0));
+  const taxable = round2(total - travel - platformFee);
   const base = round2(taxable / (1 + gstPct / 100));
   const gst = round2(taxable - base);
   const earning = round2((base * payoutPct) / 100);
@@ -342,8 +344,9 @@ const ensureBill = async (booking) => {
     totalServiceBase: base,
     totalGST: gst,
     travelCharge: travel,
+    platformFee,
     grandTotal: total,
-    payoutConfig: { serviceSplitPercentage: payoutPct, serviceGstPercentage: gstPct },
+    payoutConfig: { serviceSplitPercentage: payoutPct, serviceGstPercentage: gstPct, platformFeePercentage: getBookingPlatformFeePercentage(booking) },
     vendorServiceEarning: earning,
     vendorTotalEarning: round2(earning + travel),
     companyRevenue: round2(total - earning - travel),
@@ -675,7 +678,10 @@ const finalizeMachineryBilling = async (booking, { service = null, equipment = n
   const penalty = round2(booking.penalty || 0);
   // Travel charge: paid by the farmer on top, passed to the vendor in full (no GST, no commission, not company revenue)
   const travel = round2(booking.travelCharge || 0);
-  const grandTotal = round2(base + gst + penalty + travel);
+  // Platform fee: the rate frozen when the farmer booked, on the service base. All company revenue (no GST, no vendor share).
+  const platformFeePct = booking.paymentMethod === 'plan_benefit' ? 0 : getBookingPlatformFeePercentage(booking);
+  const platformFee = computePlatformFee(base, platformFeePct);
+  const grandTotal = round2(base + gst + penalty + travel + platformFee);
   const vendorEarning = round2((base * payoutPct) / 100);
   const vendorTotalEarning = round2(vendorEarning + travel);
 
@@ -697,8 +703,9 @@ const finalizeMachineryBilling = async (booking, { service = null, equipment = n
         totalGST: gst,
         penaltyCharges: penalty,
         travelCharge: travel,
+        platformFee,
         grandTotal,
-        payoutConfig: { serviceSplitPercentage: payoutPct, serviceGstPercentage: gstPct },
+        payoutConfig: { serviceSplitPercentage: payoutPct, serviceGstPercentage: gstPct, platformFeePercentage: platformFeePct },
         vendorServiceEarning: vendorEarning,
         vendorTotalEarning,
         companyRevenue: round2(grandTotal - vendorTotalEarning),

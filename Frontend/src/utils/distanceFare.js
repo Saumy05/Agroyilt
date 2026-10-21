@@ -9,10 +9,11 @@ export const calcDistanceFare = (pricing, km) => {
   return round2(baseCharge + Math.max(0, dist - baseKm) * perKm);
 };
 
-// Approx bill the farmer would see before booking: fare for the estimated km plus GST. Never charged as-is.
-export const estimateDistanceBill = (pricing, km, gstPercentage = 5) => {
+// Approx bill the farmer would see before booking: fare for the estimated km plus GST and the platform fee. Never charged as-is.
+export const estimateDistanceBill = (pricing, km, gstPercentage = 5, platformFeePercentage = 0) => {
   if (!pricing || !(Number(km) > 0)) return null;
   const fare = calcDistanceFare(pricing, km);
   const tax = Math.round(fare * (Number(gstPercentage) || 0) / 100);
-  return { fare, tax, total: fare + tax };
+  const platformFee = round2(fare * (Number(platformFeePercentage) || 0) / 100);
+  return { fare, tax, platformFee, total: round2(fare + tax + platformFee) };
 };

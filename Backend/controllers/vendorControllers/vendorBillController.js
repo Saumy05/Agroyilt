@@ -4,7 +4,7 @@ const { generateInvoicePDF } = require('../../utils/invoiceGenerator');
 
 const Settings = require('../../models/Settings');
 const { BILL_STATUS } = require('../../utils/constants');
-const { getVendorPayoutPercentage } = require('../../utils/vendorPayout');
+const { getVendorPayoutPercentage, computePlatformFee, getBookingPlatformFeePercentage } = require('../../utils/vendorPayout');
 
 /**
  * Create or Update Vendor Bill
@@ -198,7 +198,10 @@ const createOrUpdateBill = async (req, res) => {
     const totalGST = parseFloat((originalGST + vendorServiceGST + partsGST).toFixed(2));
     const finalTransportCharges = Number(transportCharges) || 0;
     const travelCharge = parseFloat((Number(booking.travelCharge) || 0).toFixed(2)); // passed to the vendor in full
-    const grandTotal = parseFloat((totalServiceBaseForBill + totalPartsBase + totalGST + visitingCharges + finalTransportCharges + travelCharge).toFixed(2));
+    // Platform fee the farmer pays on top (rate frozen at booking time): all company revenue, no GST, no vendor share
+    const platformFeePct = isPlanBooking ? 0 : getBookingPlatformFeePercentage(booking);
+    const platformFee = computePlatformFee(totalServiceBaseForBill, platformFeePct);
+    const grandTotal = parseFloat((totalServiceBaseForBill + totalPartsBase + totalGST + visitingCharges + finalTransportCharges + travelCharge + platformFee).toFixed(2));
 
     // ═══════════════════════════════════════
     // 5. REVENUE SPLIT (% applied on BASE only)
@@ -249,12 +252,14 @@ const createOrUpdateBill = async (req, res) => {
       visitingCharges,
       transportCharges: finalTransportCharges,
       travelCharge,
+      platformFee,
       grandTotal,
       payoutConfig: {
         serviceSplitPercentage: serviceSplitPct,
         partsSplitPercentage: partsSplitPct,
         serviceGstPercentage: serviceGstPct,
-        partsGstPercentage: partsGstPct
+        partsGstPercentage: partsGstPct,
+        platformFeePercentage: platformFeePct
       },
       vendorServiceEarning,
       vendorPartsEarning,

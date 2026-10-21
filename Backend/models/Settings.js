@@ -72,6 +72,12 @@ const settingsSchema = new mongoose.Schema({
     min: 0,
     max: 100
   },
+  machineryPlatformFeePercentage: {
+    type: Number,
+    default: 0, // % platform fee the farmer pays on top of a machinery booking's service base (0 = no fee)
+    min: 0,
+    max: 100
+  },
   workerPlatformChargePercentage: {
     type: Number,
     default: 1, // 1% default platform fee for worker booking
