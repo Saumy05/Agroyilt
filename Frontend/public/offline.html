@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>No internet connection</title>
+  <style>
+    html,body{margin:0;height:100%}
+    body{display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;text-align:center;
+      font-family:'Inter','Segoe UI',system-ui,sans-serif;color:#fff;
+      background:linear-gradient(160deg,#1B5E20 0%,#2E7D32 35%,#388E3C 65%,#43A047 100%)}
+    .icon{width:96px;height:96px;border-radius:50%;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;margin:0 auto 24px}
+    h1{margin:0 0 8px;font-size:1.4rem;font-weight:800}
+    p{margin:0 auto 10px;font-size:.92rem;opacity:.9;max-width:320px;line-height:1.5}
+    .hi{opacity:.8;margin-bottom:28px}
+    button{background:#fff;color:#1B5E20;border:0;border-radius:999px;padding:12px 28px;font-size:.95rem;font-weight:800;cursor:pointer}
+  </style>
+</head>
+<body>
+  <main>
+    <div class="icon" aria-hidden="true">
+      <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="1" y1="1" x2="23" y2="23"></line>
+        <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"></path>
+        <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"></path>
+        <path d="M10.71 5.05A16 16 0 0 1 22.58 9"></path>
+        <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"></path>
+        <path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path>
+        <line x1="12" y1="20" x2="12.01" y2="20"></line>
+      </svg>
+    </div>
+    <h1>No internet connection</h1>
+    <p>Check your Wi-Fi or mobile data, then try again.</p>
+    <p class="hi">इंटरनेट कनेक्शन नहीं है। कृपया इंटरनेट जाँचें और फिर से कोशिश करें।</p>
+    <button id="retry" type="button">Try again</button>
+  </main>
+  <script>
+    document.getElementById('retry').addEventListener('click', function () { location.reload(); });
+    // as soon as the connection is back, load the real page
+    window.addEventListener('online', function () { location.reload(); });
+  </script>
+</body>
+</html>

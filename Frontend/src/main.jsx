@@ -34,6 +34,14 @@ window.addEventListener('vite:preloadError', (event) => {
   reloadForNewVersion();
 });
 
+// Registers the worker that shows a friendly offline page (instead of the browser's error page) when the site is
+// opened or reloaded with no internet. It is the same worker file and scope the push notifications use.
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' }).catch(() => { /* not available here */ });
+  });
+}
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <HelmetProvider>

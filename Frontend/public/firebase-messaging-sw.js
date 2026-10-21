@@ -287,16 +287,42 @@ self.addEventListener('push', (event) => {
   }
 });
 
+// ── Offline page ───────────────────────────────────────────────────────────────
+// Opening or reloading the site with no internet would show the browser's own "webpage not available" page.
+// Only page navigations are handled here (network first, the saved offline page when the network fails);
+// app files are never cached, so a deploy can never leave an old version behind.
+const OFFLINE_CACHE = 'agroyilt-offline-v1';
+const OFFLINE_URL = '/offline.html';
+
 // Install event
 self.addEventListener('install', (event) => {
   console.log('[SW] 📦 Service Worker installing...');
+  event.waitUntil(
+    caches.open(OFFLINE_CACHE)
+      .then((cache) => cache.add(new Request(OFFLINE_URL, { cache: 'reload' })))
+      .catch((err) => console.warn('[SW] Offline page not cached:', err))
+  );
   self.skipWaiting();
 });
 
 // Activate event
 self.addEventListener('activate', (event) => {
   console.log('[SW] ✅ Service Worker activated');
-  event.waitUntil(clients.claim());
+  event.waitUntil(
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((k) => k.startsWith('agroyilt-offline-') && k !== OFFLINE_CACHE).map((k) => caches.delete(k))))
+      .then(() => clients.claim())
+  );
+});
+
+self.addEventListener('fetch', (event) => {
+  if (event.request.mode !== 'navigate') return;
+  event.respondWith(
+    fetch(event.request).catch(async () => {
+      const cached = await caches.match(OFFLINE_URL);
+      return cached || new Response('No internet connection', { status: 503, headers: { 'Content-Type': 'text/plain' } });
+    })
+  );
 });
 
 // Message event for skipWaiting
