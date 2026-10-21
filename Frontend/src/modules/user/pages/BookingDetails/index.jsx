@@ -268,7 +268,8 @@ const BookingDetails = () => {
 
   const socket = useAppNotifications();
 
-  const isPaid = getPaymentState(booking).isPaid;
+  const payState = getPaymentState(booking);
+  const isPaid = payState.isPaid;
   const isBookingCompleted = booking?.status?.toLowerCase() === 'completed';
   const showCompletionExit = Boolean(isBookingCompleted && isPaid && !isFromHistory && !stayOnPage);
   // Worker bookings never leave on their own: the farmer must be able to check the final amount
@@ -2699,11 +2700,13 @@ const BookingDetails = () => {
             {/* Payment Status Footer */}
             <div className="bg-gray-50 px-5 py-3 border-t border-gray-100 flex justify-between items-center">
               <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">Payment Status</span>
-              <span className={`px-2.5 py-1 rounded-md text-xs font-bold capitalize ${booking.paymentStatus === 'success' ? 'bg-green-100 text-green-700' :
+              <span className={`px-2.5 py-1 rounded-md text-xs font-bold capitalize ${isPaid ? 'bg-green-100 text-green-700' :
+                payState.state === 'refunded' ? 'bg-blue-100 text-blue-700' :
                 booking.paymentStatus === 'partial' ? 'bg-amber-100 text-amber-800' :
                 booking.paymentStatus === 'pending' || booking.paymentStatus === 'plan_covered' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
                 }`}>
-                {booking.paymentStatus === 'success' ? 'Paid' :
+                {isPaid ? payState.label :
+                  payState.state === 'refunded' ? 'Refunded to your wallet' :
                   booking.paymentStatus === 'partial' ? 'Partially Paid (Balance Due)' :
                   booking.paymentStatus === 'plan_covered' ? 'Processing Bill' :
                     booking.paymentStatus || 'Pending'}
@@ -2712,7 +2715,7 @@ const BookingDetails = () => {
           </section>
 
           {/* Action Card for Payment — shows when online payment is pending or bill is awaiting payment */}
-          {booking.paymentStatus !== 'success' && booking.paymentMethod !== 'plan_benefit' && !['cancelled', 'rejected'].includes(booking.status) && (
+          {!isPaid && payState.state !== 'refunded' && booking.paymentMethod !== 'plan_benefit' && !['completed', 'returned', 'cancelled', 'rejected'].includes(booking.status?.toLowerCase()) && !(Number(booking.finalAmount) === 0 && Number(booking.advancePaidAmount) > 0) && (
             booking.status === 'awaiting_payment' || 
             booking.status === 'work_done' ||
             ['online', 'razorpay'].includes(booking.paymentMethod)
