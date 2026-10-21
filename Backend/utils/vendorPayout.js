@@ -50,7 +50,15 @@ const getBookingPlatformFeePercentage = (booking) => {
   return Number.isFinite(pct) && pct > 0 ? pct : 0;
 };
 
+/**
+ * What the vendor is expected to earn on a booking that has no final bill yet: the commission split applies to the
+ * service price before GST; the travel charge is the vendor's in full; GST and the platform fee are not the vendor's.
+ */
+const estimateVendorEarning = (booking, payoutPct) => round2(
+  ((Number(booking?.basePrice) || 0) * (Number(payoutPct) || 0)) / 100 + (Number(booking?.travelCharge) || 0)
+);
+
 module.exports = {
-  getVendorPayoutPercentage, getPlatformEarning, getVendorEarning,
+  getVendorPayoutPercentage, getPlatformEarning, getVendorEarning, estimateVendorEarning,
   getPlatformFeePercentage, computePlatformFee, getBookingPlatformFeePercentage
 };

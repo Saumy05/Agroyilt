@@ -10,7 +10,7 @@ const Settings = require('../../models/Settings');
 const Vendor = require('../../models/Vendor');
 const Service = require('../../models/Service'); // Using Service as ref by Booking.js
 const { BILL_STATUS } = require('../../utils/constants');
-const { getVendorPayoutPercentage } = require('../../utils/vendorPayout');
+const { getVendorPayoutPercentage, estimateVendorEarning } = require('../../utils/vendorPayout');
 const {
   generateOtp,
   generateDistinctOtp,
@@ -96,9 +96,21 @@ const getVendorBookings = async (req, res) => {
       .limit(limitN);
     const total = await Booking.countDocuments(query);
 
+    // The vendor's own earning on each booking: the final bill's figure, else an estimate from the service price
+    const payoutPct = getVendorPayoutPercentage(await Settings.findOne({ type: 'global' }).lean());
+    const bills = await VendorBill.find({ bookingId: { $in: bookings.map(b => b._id) } }).select('bookingId vendorTotalEarning').lean();
+    const billByBooking = Object.fromEntries(bills.map(b => [String(b.bookingId), b]));
+
     res.status(200).json({
       success: true,
-      data: bookings.map(b => maskUnassignedPii(toProviderView(b))),
+      data: bookings.map((b) => {
+        const bill = billByBooking[String(b._id)];
+        return {
+          ...maskUnassignedPii(toProviderView(b)),
+          vendorEarnings: bill ? bill.vendorTotalEarning : estimateVendorEarning(b, payoutPct),
+          vendorEarningIsEstimate: !bill
+        };
+      }),
       pagination: { page: pageN, limit: limitN, total, pages: Math.ceil(total / limitN) }
     });
   } catch (error) {
@@ -136,7 +148,16 @@ const getBookingById = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Booking not found' });
     }
 
-    res.status(200).json({ success: true, data: maskUnassignedPii(toProviderView(booking)) });
+    const bill = await VendorBill.findOne({ bookingId: booking._id }).select('vendorTotalEarning').lean();
+    const payoutPct = getVendorPayoutPercentage(await Settings.findOne({ type: 'global' }).lean());
+    res.status(200).json({
+      success: true,
+      data: {
+        ...maskUnassignedPii(toProviderView(booking)),
+        vendorEarnings: bill ? bill.vendorTotalEarning : estimateVendorEarning(booking, payoutPct),
+        vendorEarningIsEstimate: !bill
+      }
+    });
   } catch (error) {
     console.error('Get booking error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch booking. Please try again.' });

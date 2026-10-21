@@ -45,6 +45,7 @@ import flutterBridge from '../../../../utils/flutterBridge';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from '../../../../utils/formatDate';
 import authStorage from '../../../../utils/authStorage';
 import { configService } from '../../../../services/configService'; // For commission %
+import { getPaymentState, getActualTimeRange } from '../../../../utils/bookingDisplay';
 
 
 const getScheduledDateTime = (b) => {
@@ -1001,11 +1002,11 @@ export default function BookingDetails() {
           <div className="mt-2.5 pt-2 border-t border-dashed border-gray-100 flex items-center justify-between text-xs text-gray-600">
             <div className="flex items-center gap-1.5">
               <FiCalendar className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              <span className="font-medium text-gray-800">{booking.timeSlot?.date || 'Today'}</span>
+              <span className="font-medium text-gray-800">{(getActualTimeRange(booking) && booking.startedAt ? formatDateDDMMYYYY(booking.startedAt) : booking.timeSlot?.date) || 'Today'}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <FiClock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-              <span className="font-medium text-gray-800">{booking.timeSlot?.time || 'Flexible'}</span>
+              <span className="font-medium text-gray-800">{getActualTimeRange(booking) || booking.timeSlot?.time || 'Flexible'}</span>
             </div>
           </div>
         </div>
@@ -1129,8 +1130,8 @@ export default function BookingDetails() {
             <h2 className="text-2xl font-black">₹{finalTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h2>
             <div className="mt-1">
               {(() => {
-                const pStatus = (booking.paymentStatus || '').toLowerCase();
-                const isPaid = ['success', 'paid', 'collected_by_vendor', 'collected_by_worker'].includes(pStatus) || Boolean(booking.cashCollected);
+                const payState = getPaymentState(booking);
+                const isPaid = payState.isPaid;
                 return (
                   <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
                     isPaid
@@ -1138,7 +1139,7 @@ export default function BookingDetails() {
                       : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                   }`}>
                     <FiDollarSign className="w-2.5 h-2.5" />
-                    <span>Payment: {isPaid ? (pStatus === 'collected_by_vendor' || booking.cashCollected ? 'Received (Cash Collected)' : 'Received (Verified)') : 'Pending'}</span>
+                    <span>Payment: {payState.state === 'refunded' ? 'Refunded to farmer' : isPaid ? (payState.isCash ? 'Received (Cash Collected)' : 'Received (Verified)') : 'Pending'}</span>
                   </span>
                 );
               })()}
@@ -1179,6 +1180,19 @@ export default function BookingDetails() {
                     <span className="font-medium text-gray-900">₹{originalBase.toFixed(2)}</span>
                   )}
                 </div>
+
+                {/* How the service amount was worked out (rate × time / area / distance), recorded on the bill */}
+                {!isPlanBenefit && Array.isArray(bill?.serviceBreakdown) && bill.serviceBreakdown.length > 0 && (
+                  <div className="ml-2 pl-2.5 border-l-2 border-emerald-100 space-y-1">
+                    <p className="text-[9px] font-black uppercase tracking-wider text-emerald-700">How this was calculated</p>
+                    {bill.serviceBreakdown.map((line, i) => (
+                      <div key={i} className="flex justify-between text-[11px] text-gray-500">
+                        <span>{line.label}</span>
+                        <span className="font-mono text-gray-700">₹{Number(line.amount || 0).toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {services.map((s, i) => (
                   <div key={i} className="flex justify-between text-gray-600">
@@ -1568,9 +1582,6 @@ export default function BookingDetails() {
                     <p className="font-bold text-sm">Request Declined</p>
                     <p className="text-[10px] opacity-80">Operator is unavailable.</p>
                   </div>
-                  <button onClick={handleAssignWorker} className="px-3 py-1 bg-white border border-red-200 rounded shadow-sm text-xs font-bold text-red-600 hover:bg-red-50">
-                    Reassign
-                  </button>
                 </div>
               )}
             </div>

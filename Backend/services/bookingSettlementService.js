@@ -553,7 +553,16 @@ const computeMachineryBase = ({ booking, service, equipment, workUnits, now }) =
     const { calcDistanceFare } = require('./distanceTripService');
     const d = booking.distanceTrip || {};
     const distanceKm = round2(d.totalDistanceKm || 0);
-    return { base: calcDistanceFare(d.pricing, distanceKm), hasTimer: false, isDistance: true, distanceKm, pricing: d.pricing };
+    const dp = d.pricing || {};
+    const baseKm = Number(dp.baseKm) || 0;
+    const baseCharge = Number(dp.baseCharge) || 0;
+    const perKm = Number(dp.perKmRate) || 0;
+    const extraKm = round2(Math.max(0, distanceKm - baseKm));
+    const lines = [
+      ...(baseCharge > 0 ? [{ label: `Base charge (first ${baseKm} km)`, amount: round2(baseCharge) }] : []),
+      ...(extraKm > 0 ? [{ label: `${extraKm} km × ₹${perKm}/km`, quantity: extraKm, unit: 'km', rate: perKm, amount: round2(extraKm * perKm) }] : [])
+    ];
+    return { base: calcDistanceFare(d.pricing, distanceKm), hasTimer: false, isDistance: true, distanceKm, pricing: d.pricing, lines, note: `Distance driven: ${distanceKm} km` };
   }
 
   const isRental = Boolean(
@@ -571,7 +580,11 @@ const computeMachineryBase = ({ booking, service, equipment, workUnits, now }) =
     const adminBase = t.adminBaseCharge || booking.visitingCharges || 0;
     const rate = t.ratePerMinute || 15;
     const timeCharge = round2(totalActiveMinutes * rate);
-    return { base: round2(adminBase + timeCharge), hasTimer: true, totalActiveMinutes, adminBase, timeCharge };
+    const lines = [
+      ...(adminBase > 0 ? [{ label: 'Mobilization / base charge', amount: round2(adminBase) }] : []),
+      { label: `${totalActiveMinutes} min worked × ₹${rate}/min`, quantity: totalActiveMinutes, unit: 'min', rate, amount: timeCharge }
+    ];
+    return { base: round2(adminBase + timeCharge), hasTimer: true, totalActiveMinutes, adminBase, timeCharge, lines };
   }
 
   const durationMs = now - (booking.startedAt || now);
@@ -594,22 +607,44 @@ const computeMachineryBase = ({ booking, service, equipment, workUnits, now }) =
   }
 
   let base;
+  const lines = [];
+  // By-the-piece rental (e.g. pipes): the rate is per piece, so everything scales with how many were booked (as at booking time)
+  const pieces = Number(booking.unitsBooked) > 0 ? Number(booking.unitsBooked) : 0;
+  const qty = pieces || 1;
+  const perPiece = pieces ? `${pieces} pcs × ` : '';
   switch (booking.rental_type) {
-    case 'hourly': base = (hourly || booking.basePrice || 0) * hours; break;
-    case 'land_based': base = (land || booking.basePrice || 0) * units; break;
-    case 'daily': base = (daily || booking.basePrice || 0) * days; break;
-    case 'monthly': base = service?.monthly_price || booking.basePrice || 0; break;
-    default: base = booking.basePrice || 0;
+    case 'hourly': {
+      const rate = hourly || booking.basePrice || 0; base = rate * hours * qty;
+      lines.push({ label: `${perPiece}${hours} hr × ₹${rate}/hr`, quantity: hours * qty, unit: 'hr', rate, amount: round2(base) });
+      break;
+    }
+    case 'land_based': {
+      const rate = land || booking.basePrice || 0; base = rate * units * qty;
+      lines.push({ label: `${perPiece}${units} acre × ₹${rate}/acre`, quantity: units * qty, unit: 'acre', rate, amount: round2(base) });
+      break;
+    }
+    case 'daily': {
+      const rate = daily || booking.basePrice || 0; base = rate * days * qty;
+      lines.push({ label: `${perPiece}${days} day × ₹${rate}/day`, quantity: days * qty, unit: 'day', rate, amount: round2(base) });
+      break;
+    }
+    case 'monthly': base = service?.monthly_price || booking.basePrice || 0; lines.push({ label: 'Monthly rental', amount: round2(base) }); break;
+    default: base = booking.basePrice || 0; lines.push({ label: 'Service charge', amount: round2(base) });
   }
   for (const impl of attachmentInRate ? [] : (booking.selectedImplements || [])) {
     const p = impl.pricing || {};
-    if (booking.rental_type === 'hourly' && p.hourly?.isEnabled) base += (p.hourly.price || 0) * hours;
-    else if (booking.rental_type === 'land_based' && p.land_based?.isEnabled) base += (p.land_based.price || 0) * units;
-    else if (booking.rental_type === 'daily' && p.daily?.isEnabled) base += (p.daily.price || 0) * days;
+    const name = impl.title || impl.name || 'Attachment';
+    let add = 0; let unit = '';
+    if (booking.rental_type === 'hourly' && p.hourly?.isEnabled) { add = (p.hourly.price || 0) * hours * qty; unit = `${perPiece}${hours} hr × ₹${p.hourly.price || 0}/hr`; }
+    else if (booking.rental_type === 'land_based' && p.land_based?.isEnabled) { add = (p.land_based.price || 0) * units * qty; unit = `${perPiece}${units} acre × ₹${p.land_based.price || 0}/acre`; }
+    else if (booking.rental_type === 'daily' && p.daily?.isEnabled) { add = (p.daily.price || 0) * days * qty; unit = `${perPiece}${days} day × ₹${p.daily.price || 0}/day`; }
+    if (add > 0) { base += add; lines.push({ label: `${name}: ${unit}`, amount: round2(add) }); }
   }
   // Visiting charge was part of the up-front estimate; keep the final bill comparable to it.
-  base += Number(booking.visitingCharges) || 0;
-  return { base: round2(base), hasTimer: false };
+  const visiting = Number(booking.visitingCharges) || 0;
+  if (visiting > 0) lines.push({ label: 'Visiting charge', amount: round2(visiting) });
+  base += visiting;
+  return { base: round2(base), hasTimer: false, lines };
 };
 
 /**
@@ -707,6 +742,7 @@ const finalizeMachineryBilling = async (booking, { service = null, equipment = n
         totalServiceBase: base,
         totalGST: gst,
         penaltyCharges: penalty,
+        serviceBreakdown: calc.lines || [],
         travelCharge: travel,
         platformFee,
         grandTotal,

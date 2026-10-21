@@ -16,6 +16,8 @@ import BottomNav from '../../components/layout/BottomNav';
 import { getBookings } from '../../services/bookingService';
 import { ConfirmDialog } from '../../components/common';
 import { useVendorDashboard } from '../../../../context/VendorDashboardContext';
+import { getPaymentState, getActualTimeRange } from '../../../../utils/bookingDisplay';
+import { formatDateDDMMYYYY } from '../../../../utils/formatDate';
 
 const ActiveJobs = memo(() => {
   const navigate = useNavigate();
@@ -181,12 +183,8 @@ const ActiveJobs = memo(() => {
       const response = await getBookings();
       const jobsData = response.data || [];
       const mappedJobs = jobsData.map((job) => {
-        const rawEarnings =
-          job.vendorEarnings ||
-          (job.finalAmount ? job.finalAmount * 0.9 : 0) ||
-          (job.totalAmount ? job.totalAmount * 0.9 : 0) ||
-          job.price ||
-          0;
+        // the vendor's own earning on this booking, worked out by the server (final bill, else an estimate)
+        const rawEarnings = Number(job.vendorEarnings || 0);
 
         return {
           id: job._id || job.id,
@@ -206,14 +204,9 @@ const ActiveJobs = memo(() => {
           finalSettlementStatus: job.finalSettlementStatus,
           assignedTo: job.workerId ? { name: job.workerId.name } : job.assignedAt ? { name: 'You (Self)' } : null,
           timeSlot: {
-            date: job.scheduledDate
-              ? new Date(job.scheduledDate).toLocaleDateString('en-IN', {
-                  day: 'numeric',
-                  month: 'short',
-                  year: 'numeric',
-                })
-              : 'Date',
-            time: job.scheduledTime || 'Slot',
+            date: (getActualTimeRange(job) && job.startedAt ? formatDateDDMMYYYY(job.startedAt) : formatDateDDMMYYYY(job.scheduledDate)) || 'Date',
+            // once the work has started the real start / end time replaces the booked slot
+            time: getActualTimeRange(job) || job.scheduledTime || 'Slot',
           },
           rental_type: job.rental_type,
           estimatedDuration: job.estimatedDuration,
@@ -426,13 +419,8 @@ const ActiveJobs = memo(() => {
             {filteredJobs.map((job) => {
               const statusConfig = getStatusConfig(job.status);
               const durationLabel = getDurationLabel(job);
-              const pStatus = (job.paymentStatus || '').toLowerCase();
-              const isPaid =
-                ['success', 'paid', 'collected_by_vendor', 'collected_by_worker'].includes(pStatus) ||
-                Boolean(job.cashCollected) ||
-                Boolean(job._raw?.cashCollected) ||
-                job.paymentMethod === 'plan_benefit' ||
-                job._raw?.paymentMethod === 'plan_benefit';
+              const payState = getPaymentState({ ...job._raw, ...job });
+              const isPaid = payState.isPaid;
               const isCompleted = job.status?.toUpperCase() === 'COMPLETED';
               const isCancelled = ['CANCELLED', 'REJECTED'].includes(job.status?.toUpperCase());
 
@@ -557,9 +545,7 @@ const ActiveJobs = memo(() => {
                             <span
                               className={`w-1.5 h-1.5 rounded-full ${isPaid ? 'bg-emerald-500' : 'bg-amber-500'}`}
                             />
-                            {isPaid
-                              ? (pStatus === 'collected_by_vendor' || job.cashCollected ? 'Cash Collected' : 'Payment Received')
-                              : 'Payment Pending'}
+                            {payState.state === 'refunded' ? 'Refunded to farmer' : (payState.vendorLabel || payState.label)}
                           </span>
                         </div>
 

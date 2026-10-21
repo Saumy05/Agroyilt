@@ -53,6 +53,7 @@ import api from '../../../../services/api';
 import LiveServiceTimer from '../../../../components/common/LiveServiceTimer';
 import RentalHandoverCard from '../../../../components/rental/RentalHandoverCard';
 import rentalService from '../../../../services/rentalService';
+import { getPaymentState, getActualTimeRange, formatTimeOfDay } from '../../../../utils/bookingDisplay';
 
 const toAssetUrl = (url) => {
   if (!url) return '';
@@ -267,7 +268,7 @@ const BookingDetails = () => {
 
   const socket = useAppNotifications();
 
-  const isPaid = ['success', 'paid', 'collected_by_vendor'].includes(booking?.paymentStatus?.toLowerCase());
+  const isPaid = getPaymentState(booking).isPaid;
   const isBookingCompleted = booking?.status?.toLowerCase() === 'completed';
   const showCompletionExit = Boolean(isBookingCompleted && isPaid && !isFromHistory && !stayOnPage);
   // Worker bookings never leave on their own: the farmer must be able to check the final amount
@@ -1290,18 +1291,20 @@ const BookingDetails = () => {
               {/* Scheduled Timing & Return Deadline */}
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div className="bg-indigo-50/60 rounded-xl p-2.5 border border-indigo-100/80">
-                  <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-wide">Pickup Time</p>
+                  <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-wide">{booking.startedAt ? 'Picked Up' : 'Pickup Time'}</p>
                   <p className="font-black text-gray-900 mt-0.5">
-                    {formatDate(booking.scheduledDate)}
+                    {formatDate(booking.startedAt || booking.scheduledDate)}
                   </p>
                   <p className="text-[11px] text-gray-600 font-medium">
-                    {booking.scheduledTime || booking.timeSlot?.start || '12:00 PM'}
+                    {booking.startedAt ? formatTimeOfDay(booking.startedAt) : (booking.scheduledTime || booking.timeSlot?.start || '12:00 PM')}
                   </p>
                 </div>
                 <div className="bg-amber-50/60 rounded-xl p-2.5 border border-amber-100/80">
-                  <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wide">Return Deadline</p>
+                  <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wide">{booking.completedAt && ['completed', 'work_done', 'returned'].includes(booking.status?.toLowerCase()) ? 'Returned' : 'Return Deadline'}</p>
                   <p className="font-black text-gray-900 mt-0.5">
-                    {booking.startedAt
+                    {booking.completedAt && ['completed', 'work_done', 'returned'].includes(booking.status?.toLowerCase())
+                      ? formatDate(booking.completedAt)
+                      : booking.startedAt
                       ? (() => {
                           const start = new Date(booking.startedAt).getTime();
                           const durMs = (booking.estimatedDuration || 1) * (booking.rental_type === 'daily' ? 86400000 : 3600000);
@@ -1312,7 +1315,9 @@ const BookingDetails = () => {
                     }
                   </p>
                   <p className="text-[11px] text-gray-600 font-medium">
-                    {booking.startedAt
+                    {booking.completedAt && ['completed', 'work_done', 'returned'].includes(booking.status?.toLowerCase())
+                      ? formatTimeOfDay(booking.completedAt)
+                      : booking.startedAt
                       ? (() => {
                           const start = new Date(booking.startedAt).getTime();
                           const durMs = (booking.estimatedDuration || 1) * (booking.rental_type === 'daily' ? 86400000 : 3600000);
@@ -1958,7 +1963,7 @@ const BookingDetails = () => {
                   <p className="text-sm font-medium text-gray-900">
                     {formatDate(booking.scheduledDate)}
                   </p>
-                  <p className="text-sm text-gray-500">{booking.scheduledTime || booking.timeSlot?.start || 'N/A'}</p>
+                  <p className="text-sm text-gray-500">{getActualTimeRange(booking) || booking.scheduledTime || booking.timeSlot?.start || 'N/A'}</p>
 
                   {/* Rental Type Details */}
                   {booking.rental_type && booking.rental_type !== 'hourly' && (

@@ -19,6 +19,8 @@ import { motion } from 'framer-motion';
 import { bookingService } from '../../../../services/bookingService';
 import { apiCache } from '../../../../utils/apiCache';
 import workerBookingService from '../../../../services/workerBookingService';
+import { getPaymentState, getActualTimeRange } from '../../../../utils/bookingDisplay';
+import { formatDateDDMMYYYY } from '../../../../utils/formatDate';
 
 const FILTERS = [
   { id: 'all', label: 'All Orders' },
@@ -208,15 +210,7 @@ const MyBookings = () => {
     navigate(`/user/booking/${booking._id || booking.id}`);
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric'
-    });
-  };
+  const formatDate = (dateString) => formatDateDDMMYYYY(dateString) || 'N/A';
 
   const getAddressString = (address) => {
     if (typeof address === 'string') return address;
@@ -391,15 +385,11 @@ const MyBookings = () => {
   const renderBookingCard = (booking) => {
     const statusConfig = getUnifiedStatusConfig(booking.status);
     const isCancelled = ['cancelled', 'rejected'].includes((booking.status || '').toLowerCase());
-    const isPaid = (booking.farmerAmount?.status === 'paid') || ['paid', 'success'].includes((booking.paymentStatus || '').toLowerCase());
-    const isCash = booking.farmerAmount?.paymentMethod === 'cash' || booking.paymentMethod === 'cash';
-    
+    const paymentState = getPaymentState(booking);
+    const isPaid = paymentState.isPaid;
     const amountVal = booking.farmerAmount?.total ?? (booking.finalAmount || booking.totalAmount || 0);
-    const paymentSubtitle = isCancelled
-      ? 'Cancelled'
-      : isPaid
-      ? (isCash ? 'Paid in Cash' : 'Paid Online')
-      : (isCash ? 'Pay in Cash' : 'Payment Pending');
+    const paymentSubtitle = paymentState.label;
+    const actualTimes = getActualTimeRange(booking);
 
     const durationLabel = booking.rental_type === 'daily'
       ? `${booking.estimatedDuration || 1} Day${Number(booking.estimatedDuration) > 1 ? 's' : ''}`
@@ -475,8 +465,10 @@ const MyBookings = () => {
             <div className="flex items-center gap-1.5 text-slate-600 truncate">
               <FiCalendar className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
               <span className="truncate">
-                {formatDate(booking.scheduledDate)}
-                {booking.scheduledTime || booking.timeSlot?.start ? ` • ${booking.scheduledTime || booking.timeSlot?.start}` : ''}
+                {formatDate(actualTimes && booking.startedAt ? booking.startedAt : booking.scheduledDate)}
+                {actualTimes
+                  ? ` • ${actualTimes}`
+                  : (booking.scheduledTime || booking.timeSlot?.start ? ` • ${booking.scheduledTime || booking.timeSlot?.start}` : '')}
               </span>
             </div>
             {durationLabel && (
@@ -505,7 +497,7 @@ const MyBookings = () => {
                   isCancelled ? 'bg-slate-400' : isPaid ? 'bg-emerald-500' : 'bg-amber-500'
                 }`}
               />
-              {isCancelled ? 'Order Cancelled' : isPaid ? (isCash ? 'Paid in Cash' : 'Paid Online') : (isCash ? 'Pay in Cash' : 'Payment Pending')}
+              {isCancelled ? 'Booking Cancelled' : paymentState.label}
             </span>
           </div>
           <span className="text-slate-400 text-[10px] flex items-center gap-0.5">
@@ -539,7 +531,7 @@ const MyBookings = () => {
               <FiArrowLeft className="w-4 h-4 text-slate-700" />
             </button>
             <div>
-              <h1 className="text-base font-bold text-slate-900 tracking-tight leading-tight">My Farm Orders</h1>
+              <h1 className="text-base font-bold text-slate-900 tracking-tight leading-tight">My Farm Bookings</h1>
               <p className="text-[11px] text-slate-500 font-medium">Track your machinery & workers</p>
             </div>
           </div>

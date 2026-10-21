@@ -3,7 +3,7 @@ const VendorBill = require('../../models/VendorBill');
 const Worker = require('../../models/Worker');
 const Service = require('../../models/Service');
 const Settings = require('../../models/Settings');
-const { getVendorPayoutPercentage } = require('../../utils/vendorPayout');
+const { getVendorPayoutPercentage, estimateVendorEarning } = require('../../utils/vendorPayout');
 const { getVendorCategoryNames } = require('../../utils/vendorCategories');
 const { BOOKING_STATUS, PAYMENT_STATUS, WORKER_STATUS } = require('../../utils/constants');
 
@@ -162,8 +162,7 @@ const getDashboardStats = async (req, res) => {
     const billByBooking = Object.fromEntries(recentBills.map(b => [String(b.bookingId), b]));
     const recentWithEarnings = recentBookings.map((b) => {
       const bill = billByBooking[String(b._id)];
-      const estimate = Math.round((((Number(b.basePrice) || 0) * servicePayoutPercentage) / 100 + (Number(b.travelCharge) || 0)) * 100) / 100;
-      return { ...b, vendorEarnings: bill ? bill.vendorTotalEarning : estimate, vendorEarningIsEstimate: !bill };
+      return { ...b, vendorEarnings: bill ? bill.vendorTotalEarning : estimateVendorEarning(b, servicePayoutPercentage), vendorEarningIsEstimate: !bill };
     });
 
     res.status(200).json({

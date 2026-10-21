@@ -85,6 +85,8 @@ const vendorBillSchema = new mongoose.Schema({
 
   // Transport Charges
   transportCharges: { type: Number, default: 0 },
+  // How the service amount was worked out, line by line: [{ label, quantity?, unit?, rate?, amount }]
+  serviceBreakdown: { type: [mongoose.Schema.Types.Mixed], default: [] },
   // Travel charge passed through to the vendor in full (not in GST base, not in company revenue)
   travelCharge: { type: Number, default: 0 },
   // Platform fee paid by the farmer on top of the service base: all company revenue, never shared with the vendor
