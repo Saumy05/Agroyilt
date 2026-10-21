@@ -40,7 +40,11 @@ const TripFlowModal = ({ isOpen, onClose, mode = 'start', onSubmit, rentalType, 
             // Flutter app ke andar → native camera khulega
             try {
                 const file = await flutterBridge.openCamera();
-                if (!file) return;
+                if (!file) {
+                    // Native camera gave nothing (permission denied, closed, or not supported): try the browser's camera instead
+                    fileInputRef.current?.click();
+                    return;
+                }
                 const reader = new FileReader();
                 if (target === 'km') {
                     setPhotoFile(file);
@@ -53,7 +57,8 @@ const TripFlowModal = ({ isOpen, onClose, mode = 'start', onSubmit, rentalType, 
                 flutterBridge.hapticFeedback('success');
             } catch (err) {
                 console.error('[TripFlowModal] Native camera failed:', err);
-                toastManager.error('Camera khulne mein dikkat hui, dobara try karein');
+                toastManager.error('Could not open the camera. Please allow camera access and try again.');
+                fileInputRef.current?.click();
             }
         } else {
             // Normal web browser → HTML file input (capture="environment")
@@ -324,9 +329,10 @@ const TripFlowModal = ({ isOpen, onClose, mode = 'start', onSubmit, rentalType, 
                                         type="file"
                                         accept="image/*"
                                         capture="environment"
-                                        className="hidden"
+                                        className="sr-only"
                                         onChange={handlePhotoCapture}
                                     />
+
 
                                     <button
                                         onClick={handleProceed}
@@ -391,9 +397,10 @@ const TripFlowModal = ({ isOpen, onClose, mode = 'start', onSubmit, rentalType, 
                                         type="file"
                                         accept="image/*"
                                         capture="environment"
-                                        className="hidden"
+                                        className="sr-only"
                                         onChange={(e) => handlePhotoCapture(e, 'evidence')}
                                     />
+
 
                                     <div className="flex gap-3 pt-2">
                                         <button onClick={() => setStep(1)}

@@ -42,6 +42,7 @@ import ReportNonPaymentModal from '../../../../components/common/ReportNonPaymen
 import disputeService from '../../../../services/disputeService'; // NEW
 import LogoLoader from '../../../../components/common/LogoLoader'; // NEW
 import flutterBridge from '../../../../utils/flutterBridge';
+import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from '../../../../utils/formatDate';
 import authStorage from '../../../../utils/authStorage';
 import { configService } from '../../../../services/configService'; // For commission %
 
@@ -226,7 +227,7 @@ export default function BookingDetails() {
           price: (apiData.vendorEarnings || (apiData.finalAmount ? apiData.finalAmount - (apiData.commission || 0) : 0)).toFixed(2),
 
           timeSlot: {
-            date: apiData.scheduledDate ? new Date(apiData.scheduledDate).toLocaleDateString() : 'Today',
+            date: apiData.scheduledDate ? formatDateDDMMYYYY(apiData.scheduledDate) : 'Today',
             time: apiData.scheduledTime || apiData.timeSlot?.start ? `${apiData.timeSlot?.start} - ${apiData.timeSlot?.end}` : 'Flexible'
           },
           status: apiData.status,
@@ -596,7 +597,7 @@ export default function BookingDetails() {
   };
 
   const handleViewTimeline = () => {
-    flutterBridge.navigateTo(`/vendor/booking/${booking.id}/timeline`, navigate);
+    navigate(`/vendor/booking/${booking.id || id}/timeline`);
   };
 
 
@@ -630,7 +631,7 @@ export default function BookingDetails() {
       setConfirmDialog({
         isOpen: true,
         title: 'Start Journey Early?',
-        message: `This booking is scheduled for ${booking.scheduledTime} on ${new Date(booking.scheduledDate).toLocaleDateString()}. Are you sure you want to start the journey now?`,
+        message: `This booking is scheduled for ${booking.scheduledTime} on ${formatDateDDMMYYYY(booking.scheduledDate)}. Are you sure you want to start the journey now?`,
         type: 'warning',
         onConfirm: () => {
           setConfirmDialog(prev => ({ ...prev, isOpen: false }));
@@ -839,12 +840,7 @@ export default function BookingDetails() {
                 </p>
                 {booking.cancelledAt && (
                   <p className="text-[10px] text-red-500 font-semibold mt-1.5">
-                    Cancelled on {new Date(booking.cancelledAt).toLocaleString('en-IN', {
-                      day: 'numeric',
-                      month: 'short',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
+                    Cancelled on {formatDateTimeDDMMYYYY(booking.cancelledAt)}
                   </p>
                 )}
               </div>
@@ -903,6 +899,11 @@ export default function BookingDetails() {
                   </span>
                 )}
               </div>
+              {booking.bookingNumber && (
+                <p className="text-[10px] font-bold text-gray-400 tracking-wider mb-0.5 select-all">
+                  Booking ID: <span className="text-gray-700">#{booking.bookingNumber}</span>
+                </p>
+              )}
               <h2 className="text-base font-black text-gray-900 truncate leading-snug">
                 {booking.serviceType || 'Equipment Service'}
               </h2>
@@ -1287,7 +1288,7 @@ export default function BookingDetails() {
             )}
 
             {/* Platform Fee: paid by the farmer on top, kept by the platform (not part of the vendor's earnings) */}
-            {Number(bill?.platformFee) > 0 && (
+            {Number(bill ? bill.platformFee : booking.platformFee) > 0 && (
               <div className="mt-4">
                 <h4 className="font-bold text-gray-900 flex items-center gap-2 mb-2 pb-2 border-b border-gray-100">
                   <span className="w-6 h-6 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center text-xs"><FiInfo /></span>
@@ -1295,7 +1296,7 @@ export default function BookingDetails() {
                 </h4>
                 <div className="flex justify-between pl-2 font-bold text-gray-800">
                   <span>Charged to the farmer, kept by the platform</span>
-                  <span>₹{Number(bill.platformFee).toFixed(2)}</span>
+                  <span>₹{Number(bill ? bill.platformFee : booking.platformFee).toFixed(2)}</span>
                 </div>
               </div>
             )}

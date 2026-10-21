@@ -38,6 +38,7 @@ import {
 } from 'react-icons/fi';
 import { FaRupeeSign } from 'react-icons/fa';
 import { bookingService } from '../../../../services/bookingService';
+import { formatDateDDMMYYYY } from '../../../../utils/formatDate';
 import { paymentService } from '../../../../services/paymentService';
 import { cartService } from '../../../../services/cartService';
 import RatingModal from '../../components/booking/RatingModal';
@@ -812,16 +813,7 @@ const BookingDetails = () => {
     );
   }
 
-  const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-IN', {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric'
-    });
-  };
+  const formatDate = (dateString) => formatDateDDMMYYYY(dateString) || 'N/A';
 
   // --- Payment Breakdown Calculations ---
   // Default values from booking (fallback)
@@ -1314,7 +1306,7 @@ const BookingDetails = () => {
                           const start = new Date(booking.startedAt).getTime();
                           const durMs = (booking.estimatedDuration || 1) * (booking.rental_type === 'daily' ? 86400000 : 3600000);
                           const deadline = new Date(start + durMs);
-                          return deadline.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+                          return formatDateDDMMYYYY(deadline);
                         })()
                       : formatDate(booking.scheduledDate)
                     }
@@ -1978,11 +1970,11 @@ const BookingDetails = () => {
                         <p className="text-sm font-semibold text-gray-700">
                           📅 {booking.estimatedDuration} Day{booking.estimatedDuration > 1 ? 's' : ''}
                           {booking.endDate ? (
-                            <span className="text-gray-500"> · Ends {new Date(booking.endDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                            <span className="text-gray-500"> · Ends {formatDateDDMMYYYY(booking.endDate)}</span>
                           ) : booking.scheduledDate && booking.estimatedDuration > 1 ? (() => {
                             const end = new Date(booking.scheduledDate);
                             end.setDate(end.getDate() + Number(booking.estimatedDuration) - 1);
-                            return <span className="text-gray-500"> · Ends {end.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>;
+                            return <span className="text-gray-500"> · Ends {formatDateDDMMYYYY(end)}</span>;
                           })() : null}
                         </p>
                       )}
@@ -1990,7 +1982,7 @@ const BookingDetails = () => {
                         <p className="text-sm font-semibold text-gray-700">
                           📅 1 Month
                           {booking.endDate && (
-                            <span className="text-gray-500"> · Ends {new Date(booking.endDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                            <span className="text-gray-500"> · Ends {formatDateDDMMYYYY(booking.endDate)}</span>
                           )}
                         </p>
                       )}
