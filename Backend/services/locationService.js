@@ -29,17 +29,14 @@ const calculateDistance = (coord1, coord2) => {
 /**
  * Geocode address to coordinates using Google Maps API
  * @param {string} address - Full address string
- * @returns {Promise<Object>} {lat, lng} coordinates
+ * @returns {Promise<Object|null>} {lat, lng}, or null when the address could not be located.
+ *   Never a made-up position: a wrong place would send the job to the wrong vendors and price the trip to the wrong spot.
  */
 const geocodeAddress = async (address) => {
   try {
     if (!GOOGLE_MAPS_API_KEY) {
-      console.warn('Google Maps API key not configured, using mock coordinates');
-      // Return mock coordinates for testing
-      return {
-        lat: 22.7196,
-        lng: 75.8577
-      };
+      console.warn('Google Maps API key not configured: address not geocoded');
+      return null;
     }
 
     const response = await axios.get(`${GOOGLE_MAPS_API_URL}/geocode/json`, {
@@ -60,11 +57,7 @@ const geocodeAddress = async (address) => {
     throw new Error(`Geocoding failed: ${response.data.status}`);
   } catch (error) {
     console.error('Geocoding error:', error);
-    // Return mock coordinates as fallback
-    return {
-      lat: 22.7196,
-      lng: 75.8577
-    };
+    return null;
   }
 };
 

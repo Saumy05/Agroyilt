@@ -675,8 +675,8 @@ const BookingTrack = () => {
       isValidCoord(w.currentLocation?.lat, w.currentLocation?.lng)
     );
     return {
-      lat: safeNum(destination?.lat, null) || safeNum(firstWorkerWithLoc?.currentLocation?.lat, null) || 22.7196,
-      lng: safeNum(destination?.lng, null) || safeNum(firstWorkerWithLoc?.currentLocation?.lng, null) || 75.8577
+      lat: safeNum(destination?.lat, null) || safeNum(firstWorkerWithLoc?.currentLocation?.lat, null) || 20.5937, // no location known: centre of India, not a made-up city
+      lng: safeNum(destination?.lng, null) || safeNum(firstWorkerWithLoc?.currentLocation?.lng, null) || 78.9629
     };
   }, [destination, workersList]);
 

@@ -80,7 +80,7 @@ const AddressSelectionModal = ({ isOpen, onClose, address = '', houseNumber = ''
     }, 250);
   };
 
-  // Trigger search via Google Places Autocomplete or Nominatim fallback
+  // Trigger search via Google Places Autocomplete
   const performSearch = useCallback(async (queryText) => {
     const q = (queryText || '').trim();
     if (!q || q.length < 2) {
@@ -91,48 +91,6 @@ const AddressSelectionModal = ({ isOpen, onClose, address = '', houseNumber = ''
 
     setIsSearching(true);
     setIsDropdownOpen(true);
-
-    const fallbackToNominatim = async () => {
-      try {
-        const osmResp = await fetch(
-          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&countrycodes=in&limit=6&addressdetails=1`,
-          { headers: { 'Accept-Language': 'en' } }
-        );
-        if (osmResp.ok) {
-          const osmData = await osmResp.json();
-          if (Array.isArray(osmData) && osmData.length > 0) {
-            const mapped = osmData.map(item => ({
-              place_id: `osm_${item.place_id}`,
-              description: item.display_name,
-              structured_formatting: {
-                main_text: item.display_name.split(',')[0],
-                secondary_text: item.display_name.split(',').slice(1).join(', ').trim()
-              },
-              _geocodeResult: {
-                geometry: {
-                  location: {
-                    lat: () => parseFloat(item.lat),
-                    lng: () => parseFloat(item.lon)
-                  }
-                },
-                formatted_address: item.display_name,
-                address_components: [
-                  item.address?.city || item.address?.town || item.address?.village ? { types: ['locality'], long_name: item.address?.city || item.address?.town || item.address?.village } : null,
-                  item.address?.state ? { types: ['administrative_area_level_1'], long_name: item.address?.state } : null,
-                  item.address?.postcode ? { types: ['postal_code'], long_name: item.address?.postcode } : null,
-                ].filter(Boolean)
-              }
-            }));
-            setSuggestions(mapped);
-            setIsSearching(false);
-            return true;
-          }
-        }
-      } catch (err) {
-        console.warn('[AddressSearch] Nominatim search error:', err);
-      }
-      return false;
-    };
 
     if (autocompleteServiceRef.current || window.google?.maps?.places?.AutocompleteService) {
       if (!autocompleteServiceRef.current) {
@@ -154,8 +112,7 @@ const AddressSelectionModal = ({ isOpen, onClose, address = '', houseNumber = ''
                 setIsSearching(false);
                 setSuggestions(predictions);
               } else {
-                const found = await fallbackToNominatim();
-                if (!found) setSuggestions([]);
+                setSuggestions([]);
                 setIsSearching(false);
               }
             }
@@ -167,10 +124,7 @@ const AddressSelectionModal = ({ isOpen, onClose, address = '', houseNumber = ''
       }
     }
 
-    const found = await fallbackToNominatim();
-    if (!found) {
-      setSuggestions([]);
-    }
+    setSuggestions([]);
     setIsSearching(false);
   }, []);
 

@@ -58,40 +58,13 @@ const GoogleMapPicker = ({ onLocationSelect, initialPosition = null }) => {
     }
   }, [initialPosition, isLoaded, map]);
 
-  // Reverse geocode to get address from coordinates with Nominatim fallback
+  // Reverse geocode to get address from coordinates (Google)
   const reverseGeocode = async (position) => {
     if (!position || typeof position.lat !== 'number' || typeof position.lng !== 'number') return;
     setLoading(true);
 
-    const fallbackNominatimOrCoords = async () => {
-      try {
-        const resp = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.lat}&lon=${position.lng}&zoom=18&addressdetails=1`,
-          { headers: { 'Accept-Language': 'en' } }
-        );
-        if (resp.ok) {
-          const data = await resp.json();
-          if (data && data.display_name) {
-            const city = data.address?.city || data.address?.town || data.address?.village || data.address?.suburb || '';
-            const state = data.address?.state || '';
-            const pincode = data.address?.postcode || '';
-            if (onLocationSelect) {
-              onLocationSelect({
-                lat: position.lat,
-                lng: position.lng,
-                address: data.display_name,
-                city,
-                state,
-                pincode
-              });
-            }
-            return;
-          }
-        }
-      } catch (e) {
-        console.warn('Nominatim fallback failed:', e);
-      }
-
+    // Google could not name this spot: keep the pin so the vendor is never blocked
+    const pinnedLocationFallback = async () => {
       if (onLocationSelect) {
         onLocationSelect({
           lat: position.lat,
@@ -137,7 +110,7 @@ const GoogleMapPicker = ({ onLocationSelect, initialPosition = null }) => {
               });
             }
           } else {
-            await fallbackNominatimOrCoords();
+            await pinnedLocationFallback();
             setLoading(false);
           }
         });
@@ -147,7 +120,7 @@ const GoogleMapPicker = ({ onLocationSelect, initialPosition = null }) => {
       }
     }
 
-    await fallbackNominatimOrCoords();
+    await pinnedLocationFallback();
     setLoading(false);
   };
 

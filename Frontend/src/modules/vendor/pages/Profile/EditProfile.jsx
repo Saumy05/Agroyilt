@@ -13,6 +13,7 @@ import { getDobError, toDateInputValue } from '../../../../utils/age';
 import flutterBridge from '../../../../utils/flutterBridge';
 import authStorage from '../../../../utils/authStorage';
 import { locationParamsFromVendor } from '../../../../utils/geoParams';
+import api from '../../../../services/api';
 
 // Zod schema
 const vendorProfileSchema = z.object({
@@ -78,6 +79,61 @@ const EditProfile = () => {
   // The vendor's own state / district / city, so categories made for their area (not only all-India ones) are listed
   const [categoryLocation, setCategoryLocation] = useState(null);
 
+  // ── Service area: State → District → Sub-district dropdowns (admin-managed lists) ──
+  const nameKey = (s) => String(s || '').replace(/\(.*?\)/g, ' ').replace(/\b(tahsil|tehsil|taluka|block|district)\b/gi, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+  const [areaIds, setAreaIds] = useState({ stateId: '', districtId: '', subDistrictId: '' });
+  const [areaTouched, setAreaTouched] = useState(false); // only send the area when the vendor changed it
+  const [areaHint, setAreaHint] = useState(null);        // names from a freshly picked map address, used to pre-select
+  const [geoStates, setGeoStates] = useState([]);
+  const [geoDistricts, setGeoDistricts] = useState([]);
+  const [geoSubDistricts, setGeoSubDistricts] = useState([]);
+
+  const idStr = (v) => (v && typeof v === 'object' ? String(v._id || v.id || '') : String(v || ''));
+  const applyAreaFromVendor = (v) => setAreaIds({ stateId: idStr(v?.stateId), districtId: idStr(v?.districtId), subDistrictId: idStr(v?.subDistrictId) });
+
+  useEffect(() => {
+    api.get('/public/states').then(r => setGeoStates(r.data?.states || [])).catch(() => setGeoStates([]));
+  }, []);
+
+  useEffect(() => {
+    setGeoDistricts([]);
+    if (!areaIds.stateId) return;
+    api.get(`/public/states/${areaIds.stateId}/districts`).then(r => setGeoDistricts(r.data?.districts || [])).catch(() => setGeoDistricts([]));
+  }, [areaIds.stateId]);
+
+  useEffect(() => {
+    setGeoSubDistricts([]);
+    if (!areaIds.districtId) return;
+    api.get(`/public/districts/${areaIds.districtId}/sub-districts`).then(r => setGeoSubDistricts(r.data?.subDistricts || [])).catch(() => setGeoSubDistricts([]));
+  }, [areaIds.districtId]);
+
+  // A newly picked map address pre-selects the matching state / district / sub-district; the vendor can still change them
+  useEffect(() => {
+    if (!areaHint) return;
+    if (!areaIds.stateId && geoStates.length) {
+      const m = geoStates.find(s => nameKey(s.name) === nameKey(areaHint.state));
+      if (m) setAreaIds(prev => ({ ...prev, stateId: String(m._id) }));
+    } else if (areaIds.stateId && !areaIds.districtId && geoDistricts.length) {
+      const wanted = [areaHint.district, areaHint.city].map(nameKey).filter(Boolean);
+      const m = geoDistricts.find(d => wanted.includes(nameKey(d.name)));
+      if (m) setAreaIds(prev => ({ ...prev, districtId: String(m._id) }));
+    } else if (areaIds.districtId && !areaIds.subDistrictId && geoSubDistricts.length) {
+      const wanted = [areaHint.subDistrict].map(nameKey).filter(Boolean);
+      const m = geoSubDistricts.find(s => wanted.includes(nameKey(s.name)));
+      if (m) setAreaIds(prev => ({ ...prev, subDistrictId: String(m._id) }));
+    }
+  }, [areaHint, geoStates, geoDistricts, geoSubDistricts, areaIds.stateId, areaIds.districtId, areaIds.subDistrictId]);
+
+  const changeArea = (level, value) => {
+    setAreaTouched(true);
+    setAreaHint(null); // a manual choice wins over any auto pre-selection
+    setAreaIds(prev => (
+      level === 'state' ? { stateId: value, districtId: '', subDistrictId: '' }
+        : level === 'district' ? { ...prev, districtId: value, subDistrictId: '' }
+        : { ...prev, subDistrictId: value }
+    ));
+  };
+
   useEffect(() => {
     if (categoryLocation === null) return; // wait until the profile has told us where the vendor is
     const loadServiceCategories = async () => {
@@ -141,6 +197,7 @@ const EditProfile = () => {
           });
 
           setCategoryLocation(locationParamsFromVendor(v));
+          applyAreaFromVendor(v);
 
           // Update tab-isolated vendor session
           authStorage.updateUserData('vendor', v);
@@ -148,6 +205,7 @@ const EditProfile = () => {
           // Fallback to tab-isolated session storage if API fails
           const storedData = authStorage.getUserData('vendor') || {};
           setCategoryLocation(locationParamsFromVendor(storedData));
+          applyAreaFromVendor(storedData);
 
           if (Object.keys(storedData).length > 0) {
             // ... existing fallback logic ...
@@ -186,6 +244,8 @@ const EditProfile = () => {
     let state = '';
     let pincode = '';
     let addressLine2 = '';
+    let district = '';
+    let subDistrict = '';
 
     // Parse Google Maps address components
     if (location.components) {
@@ -194,10 +254,17 @@ const EditProfile = () => {
         if (comp.types.includes('administrative_area_level_1')) state = comp.long_name;
         if (comp.types.includes('postal_code')) pincode = comp.long_name;
         if (comp.types.includes('sublocality')) addressLine2 = comp.long_name;
+        if (comp.types.includes('administrative_area_level_2')) district = comp.long_name;     // district
+        if (comp.types.includes('administrative_area_level_3')) subDistrict = comp.long_name;  // tehsil / sub-district
       });
     }
 
     // Update FormData with structured address object
+    // New place picked: re-derive the area from it (the dropdowns below then show it, editable)
+    setAreaTouched(true);
+    setAreaIds({ stateId: '', districtId: '', subDistrictId: '' });
+    setAreaHint({ state, district, subDistrict, city });
+
     setFormData(prev => ({
       ...prev,
       address: {
@@ -208,6 +275,8 @@ const EditProfile = () => {
         city: city,
         state: state,
         pincode: pincode,
+        district,
+        subDistrict,
         lat: location.lat,
         lng: location.lng
       }
@@ -360,7 +429,8 @@ const EditProfile = () => {
         address: formData.address,
         serviceCategory: formData.serviceCategories,
         profilePhoto: photoUrl,
-        aadharDocument: aadharUrl
+        aadharDocument: aadharUrl,
+        ...(areaTouched ? { stateId: areaIds.stateId, districtId: areaIds.districtId, subDistrictId: areaIds.subDistrictId } : {})
       };
 
       try {
@@ -621,6 +691,32 @@ const EditProfile = () => {
             </button>
 
             {errors.address && <p className="text-red-500 text-sm mt-1">{errors.address}</p>}
+          </div>
+
+          {/* Service area: State → District → Sub-district */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">Your service area</label>
+            <p className="text-xs text-gray-500 mb-3">Picked from the map address when it matches. You can change it. Farmers and categories are matched to this area.</p>
+            <div className="space-y-2.5">
+              {[
+                { key: 'state', label: 'State', value: areaIds.stateId, options: geoStates, disabled: false, placeholder: 'Select state' },
+                { key: 'district', label: 'District', value: areaIds.districtId, options: geoDistricts, disabled: !areaIds.stateId, placeholder: areaIds.stateId ? 'Select district' : 'Select a state first' },
+                { key: 'subDistrict', label: 'Sub-district', value: areaIds.subDistrictId, options: geoSubDistricts, disabled: !areaIds.districtId || geoSubDistricts.length === 0, placeholder: !areaIds.districtId ? 'Select a district first' : (geoSubDistricts.length === 0 ? 'No sub-districts listed yet' : 'Select sub-district') }
+              ].map(f => (
+                <div key={f.key}>
+                  <span className="block text-xs font-semibold text-gray-500 mb-1">{f.label}</span>
+                  <select
+                    value={f.value}
+                    disabled={f.disabled}
+                    onChange={(e) => changeArea(f.key, e.target.value)}
+                    className="w-full px-4 py-3 bg-white rounded-xl border border-gray-200 text-sm text-gray-800 outline-none focus:border-blue-300 disabled:bg-gray-50 disabled:text-gray-400"
+                  >
+                    <option value="">{f.placeholder}</option>
+                    {f.options.map(o => <option key={o._id} value={o._id}>{o.name}</option>)}
+                  </select>
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* Service Categories (multi-select): tap to add or remove */}

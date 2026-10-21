@@ -65,37 +65,7 @@ const LocationPicker = ({ onLocationSelect, initialPosition = null, flyToPositio
     if (!position || typeof position.lat !== 'number' || typeof position.lng !== 'number') return;
     setLoading(true);
 
-    const fallbackNominatimOrCoords = async () => {
-      try {
-        const resp = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.lat}&lon=${position.lng}&zoom=18&addressdetails=1`,
-          { headers: { 'Accept-Language': 'en' } }
-        );
-        if (resp.ok) {
-          const data = await resp.json();
-          if (data && data.display_name) {
-            const comps = [];
-            if (data.address) {
-              const locality = data.address.city || data.address.town || data.address.village || data.address.suburb;
-              if (locality) comps.push({ types: ['locality'], long_name: locality });
-              if (data.address.state) comps.push({ types: ['administrative_area_level_1'], long_name: data.address.state });
-              if (data.address.postcode) comps.push({ types: ['postal_code'], long_name: data.address.postcode });
-            }
-            if (onLocationSelect) {
-              onLocationSelect({
-                lat: position.lat,
-                lng: position.lng,
-                address: data.display_name,
-                components: comps,
-              });
-            }
-            return;
-          }
-        }
-      } catch (e) {
-        console.warn('Nominatim reverse geocode fallback failed:', e);
-      }
-
+    const pinnedLocationFallback = async () => {
       // Final coordinate fallback so user is NEVER blocked from completing booking!
       if (onLocationSelect) {
         onLocationSelect({
@@ -122,8 +92,8 @@ const LocationPicker = ({ onLocationSelect, initialPosition = null, flyToPositio
               });
             }
           } else {
-            console.warn(`[LocationPicker] Google Geocoder status: ${status}. Falling back to Nominatim.`);
-            await fallbackNominatimOrCoords();
+            console.warn(`[LocationPicker] Google Geocoder status: ${status}. Keeping the pinned location.`);
+            await pinnedLocationFallback();
             setLoading(false);
           }
         });
@@ -133,7 +103,7 @@ const LocationPicker = ({ onLocationSelect, initialPosition = null, flyToPositio
       }
     }
 
-    await fallbackNominatimOrCoords();
+    await pinnedLocationFallback();
     setLoading(false);
   }, [onLocationSelect]);
 

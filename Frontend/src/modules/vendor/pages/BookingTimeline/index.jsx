@@ -791,8 +791,13 @@ const BookingTimeline = () => {
   // Arrival is confirmed by the customer's visit OTP (BookingDetails / map flow) — never by a plain status
   // update, which the server now refuses. This button only opens directions.
   async function handleVisitSite() {
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${booking.location?.lat || 22.7196},${booking.location?.lng || 75.8577}`;
-    window.open(url, '_blank');
+    const lat = booking.location?.lat ?? booking.address?.lat;
+    const lng = booking.location?.lng ?? booking.address?.lng;
+    if (lat == null || lng == null) {
+      toastManager.error('The farmer did not pin an exact location for this booking.');
+      return;
+    }
+    window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, '_blank');
   }
 
   // Work is finished by generating the bill (Complete Work) or ending the trip with the end OTP;

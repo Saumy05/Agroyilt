@@ -17,6 +17,15 @@ const getProfile = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Vendor not found' });
     }
 
+    // A vendor who typed or picked their own address has no state / district record yet: match it from the address
+    // (needed for the category lists). Saved with updateOne so older profiles that fail full validation still work.
+    try {
+      const filled = await require('../../services/vendorAreaService').fillMissingVendorArea(vendor);
+      if (Object.keys(filled).length) await Vendor.updateOne({ _id: vendorId }, { $set: filled });
+    } catch (areaErr) {
+      console.warn('[getProfile] area match skipped:', areaErr.message);
+    }
+
     // Use stored rating if available (and > 0), otherwise calculate
     let rating = vendor.rating || 0;
 
@@ -90,7 +99,7 @@ const updateProfile = async (req, res) => {
     }
 
     const vendorId = req.user.id;
-    const { name, businessName, address, profilePhoto, serviceCategory, skills, aadharNumber, aadharDocument, panNumber, panDocument, gender, dateOfBirth } = req.body;
+    const { name, businessName, address, profilePhoto, serviceCategory, skills, aadharNumber, aadharDocument, panNumber, panDocument, gender, dateOfBirth, stateId, districtId, subDistrictId } = req.body;
 
     const vendor = await Vendor.findById(vendorId);
 
@@ -99,6 +108,15 @@ const updateProfile = async (req, res) => {
         success: false,
         message: 'Vendor not found'
       });
+    }
+
+    // The vendor's own State / District / Sub-district choice (dropdowns). Each must belong to the one above it.
+    if (stateId !== undefined || districtId !== undefined || subDistrictId !== undefined) {
+      const picked = await require('../../services/vendorAreaService').resolvePickedArea({ stateId, districtId, subDistrictId });
+      if (!picked.ok) {
+        return res.status(400).json({ success: false, message: picked.message });
+      }
+      Object.assign(vendor, picked.fields);
     }
 
     // Update fields
@@ -165,6 +183,17 @@ const updateProfile = async (req, res) => {
           vendor.cityId = null;
         }
       }
+    }
+
+    // Link the saved address to its State / District records (only fills what is still empty).
+    // Skipped when the vendor chose their area from the dropdowns: that choice stands.
+    const choseAreaExplicitly = stateId !== undefined || districtId !== undefined || subDistrictId !== undefined;
+    if (!choseAreaExplicitly) try {
+      // the picked place's district / tehsil as Google reported them (not stored, only used for matching)
+      const areaHints = (address && typeof address === 'object') ? { district: address.district, subDistrict: address.subDistrict } : {};
+      await require('../../services/vendorAreaService').fillMissingVendorArea(vendor, areaHints);
+    } catch (areaErr) {
+      console.warn('[updateProfile] area match skipped:', areaErr.message);
     }
 
     // Update profile photo - upload to Cloudinary if it's a base64 string
@@ -318,6 +347,12 @@ const updateAddress = async (req, res) => {
       type: 'Point',
       coordinates: [parseFloat(lng), parseFloat(lat)]
     };
+
+    try {
+      await require('../../services/vendorAreaService').fillMissingVendorArea(vendor);
+    } catch (areaErr) {
+      console.warn('[updateAddress] area match skipped:', areaErr.message);
+    }
 
     await vendor.save();
 

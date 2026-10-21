@@ -449,6 +449,12 @@ const createBooking = async (req, res) => {
         `${address.addressLine1}, ${address.city}, ${address.state} ${address.pincode}`
       );
       console.log('Geocoded address for provider search:', bookingLocation);
+      if (!bookingLocation) {
+        return res.status(400).json({
+          success: false,
+          message: 'We could not find this address on the map. Please pick the exact location on the map and try again.'
+        });
+      }
     }
 
     // Determine provider type

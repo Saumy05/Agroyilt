@@ -7,6 +7,8 @@
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { INDIAN_STATES } from './indianStates';
+import GooglePlaceList from './GooglePlaceList';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toastManager } from '../../../../utils/toastManager';
 import { stateService, districtService, subDistrictService } from '../../services/geoService';
@@ -143,14 +145,19 @@ const GeographicManagement = () => {
   }, [activeTab]);
 
   // ── State CRUD ─────────────────────────────────────────────────────────────
+  const [stateCustom, setStateCustom] = useState(false); // true: type a name instead of picking from the list
   const openStateModal = (state = null) => {
     setEditingState(state);
     setStateForm(state
       ? { name: state.name, code: state.code || '', isActive: state.isActive }
       : { name: '', code: '', isActive: true }
     );
+    setStateCustom(false);
     setStateModal(true);
   };
+
+  // States not added yet, for the Add State dropdown
+  const addableStates = INDIAN_STATES.filter(s => !states.some(x => String(x.name).trim().toLowerCase() === s.name.toLowerCase()));
 
   const handleStateSubmit = async (e) => {
     e.preventDefault();
@@ -363,7 +370,7 @@ const GeographicManagement = () => {
         {TABS.map(tab => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => { setActiveTab(tab.id); setSearchParams({ tab: tab.id }, { replace: true }); }}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
               activeTab === tab.id
                 ? 'bg-white text-gray-900 shadow-sm'
@@ -488,14 +495,34 @@ const GeographicManagement = () => {
         <form onSubmit={handleStateSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">State Name *</label>
-            <input
-              type="text"
-              required
-              value={stateForm.name}
-              onChange={e => setStateForm(p => ({ ...p, name: e.target.value }))}
-              placeholder="e.g. Madhya Pradesh"
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400"
-            />
+            {editingState || stateCustom ? (
+              <input
+                type="text"
+                required
+                value={stateForm.name}
+                onChange={e => setStateForm(p => ({ ...p, name: e.target.value }))}
+                placeholder="e.g. Madhya Pradesh"
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400"
+              />
+            ) : (
+              <select
+                required
+                value={stateForm.name}
+                onChange={e => {
+                  if (e.target.value === '__other__') { setStateCustom(true); setStateForm(p => ({ ...p, name: '', code: '' })); return; }
+                  const picked = INDIAN_STATES.find(s => s.name === e.target.value);
+                  setStateForm(p => ({ ...p, name: picked?.name || '', code: picked?.code || '' }));
+                }}
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400"
+              >
+                <option value="">Select a state or union territory</option>
+                {addableStates.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
+                <option value="__other__">Other (type a name)…</option>
+              </select>
+            )}
+            {!editingState && !stateCustom && addableStates.length === 0 && (
+              <p className="text-xs text-gray-500 mt-1">Every state and union territory is already added.</p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">State Code (optional)</label>
@@ -538,17 +565,6 @@ const GeographicManagement = () => {
       >
         <form onSubmit={handleDistrictSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">District Name *</label>
-            <input
-              type="text"
-              required
-              value={districtForm.name}
-              onChange={e => setDistrictForm(p => ({ ...p, name: e.target.value }))}
-              placeholder="e.g. Indore"
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400"
-            />
-          </div>
-          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">State *</label>
             <select
               required
@@ -561,6 +577,19 @@ const GeographicManagement = () => {
                 <option key={s._id} value={s._id}>{s.name}</option>
               ))}
             </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">District Name *</label>
+            <GooglePlaceList
+              required
+              level="district"
+              editing={Boolean(editingDistrict)}
+              value={districtForm.name}
+              onChange={name => setDistrictForm(p => ({ ...p, name }))}
+              stateName={states.find(s => s._id === districtForm.stateId)?.name || ''}
+              existingNames={districts.filter(d => (d.stateId?._id || d.stateId) === districtForm.stateId).map(d => d.name)}
+              placeholder="e.g. Indore"
+            />
           </div>
           <label className="flex items-center gap-2 cursor-pointer">
             <input
@@ -591,17 +620,6 @@ const GeographicManagement = () => {
         title={editingSubDistrict ? 'Edit Sub-District' : 'Add Sub-District'}
       >
         <form onSubmit={handleSubDistrictSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Sub-District Name *</label>
-            <input
-              type="text"
-              required
-              value={subDistrictForm.name}
-              onChange={e => setSubDistrictForm(p => ({ ...p, name: e.target.value }))}
-              placeholder="e.g. Depalpur"
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400"
-            />
-          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Filter by State (Optional)</label>
             <select
@@ -637,6 +655,20 @@ const GeographicManagement = () => {
                 </option>
               ))}
             </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Sub-District Name *</label>
+            <GooglePlaceList
+              required
+              level="subdistrict"
+              editing={Boolean(editingSubDistrict)}
+              value={subDistrictForm.name}
+              onChange={name => setSubDistrictForm(p => ({ ...p, name }))}
+              districtName={districts.find(d => d._id === subDistrictForm.districtId)?.name || ''}
+              stateName={districts.find(d => d._id === subDistrictForm.districtId)?.stateName || states.find(s => s._id === stateFilterForSubDist)?.name || ''}
+              existingNames={subDistricts.filter(sd => (sd.districtId?._id || sd.districtId) === subDistrictForm.districtId).map(sd => sd.name)}
+              placeholder="e.g. Depalpur"
+            />
           </div>
           <label className="flex items-center gap-2 cursor-pointer">
             <input
