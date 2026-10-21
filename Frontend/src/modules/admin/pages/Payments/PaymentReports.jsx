@@ -16,6 +16,7 @@ import {
   FiCheck
 } from 'react-icons/fi';
 import api from '../../../../services/api';
+import { toastManager } from '../../../../utils/toastManager';
 
 // Report Card Component
 const ReportCard = ({ title, description, icon: Icon, color, status, onGenerate, loading }) => {
@@ -251,7 +252,7 @@ const PaymentReports = () => {
       }
     } catch (error) {
       console.error('Failed to fetch report:', error);
-      toast.error('Failed to load report data');
+      toastManager.error('Failed to load report data');
     } finally {
       setReportLoading(false);
     }
@@ -294,10 +295,10 @@ const PaymentReports = () => {
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
 
-      toast.success('Report downloaded successfully!');
+      toastManager.success('Report downloaded successfully!');
     } catch (error) {
       console.error('Download failed:', error);
-      toast.error('Failed to download report');
+      toastManager.error('Failed to download report');
     } finally {
       setDownloadingReport(null);
     }

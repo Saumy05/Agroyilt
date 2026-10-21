@@ -3798,6 +3798,7 @@ exports.getWorkerBookingTrackingData = async (req, res) => {
     }
 
     // Fetch extensions for this booking
+    const IndWorkerExtension = require('../../models/IndWorkerExtension');
     const extensions = await IndWorkerExtension.find({
       parentRequestId: request._id
     }).populate('workerExtensions.workerId', 'name phone profilePicture').sort({ createdAt: -1 });

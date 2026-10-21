@@ -255,6 +255,19 @@ const Checkout = () => {
     }
   };
 
+  // Reloads the cart for this checkout's category (used after an item is removed)
+  const loadCart = async () => {
+    const cartResponse = await cartService.getCart();
+    if (cartResponse.success) {
+      let items = cartResponse.data || [];
+      if (category) {
+        const normalizedCategory = category.toLowerCase().trim();
+        items = items.filter(item => (item.category || 'Other').toLowerCase().trim() === normalizedCategory);
+      }
+      setCartItems(items);
+    }
+  };
+
   const handleRemoveItem = async (itemId) => {
     try {
       const response = await cartService.removeItem(itemId);
@@ -394,11 +407,7 @@ const Checkout = () => {
         cropType: cropType || '',
         chemicalUsed: chemicalUsed || '',
         estimatedDuration: estimatedDuration || 1,
-        selectedImplements: selectedImplements.map(impl => ({
-          subCategoryId: impl._id,
-          title: impl.title,
-          pricing: impl.pricing || {}
-        }))
+        selectedImplements: [] // a single-service booking carries no attachments (cart bookings build theirs from the cart)
       });
 
       if (response.success) {
@@ -644,7 +653,7 @@ const Checkout = () => {
       });
 
       if (!bookingResponse.success) {
-        toast.dismiss();
+        toastManager.dismissAll();
         toastManager.error(bookingResponse.message || (isWorkerBooking ? 'Failed to search for workers' : 'Failed to search for vendors'));
         setCurrentStep('details');
         setSearchingVendors(false);
@@ -654,7 +663,7 @@ const Checkout = () => {
 
       const booking = bookingResponse.data;
       setBookingRequest(booking);
-      toast.dismiss();
+      toastManager.dismissAll();
 
       // Clear cart immediately as search starts (consumes items) - ONLY if vendors found
       if (!bookingResponse.noVendorsFound) {
@@ -672,7 +681,7 @@ const Checkout = () => {
 
       // If no vendors found, redirect to confirmation page immediately
       if (bookingResponse.noVendorsFound) {
-        toast.dismiss();
+        toastManager.dismissAll();
         const bookingId = booking?._id || booking?.id;
 
         // Ensure we stop searching and close the modal
@@ -702,7 +711,7 @@ const Checkout = () => {
       // The cart is already cleared in server database by the backend and previous API call.
 
     } catch (error) {
-      toast.dismiss();
+      toastManager.dismissAll();
       console.error('Search vendors error:', error);
       toastManager.error(isWorkerBooking ? 'Failed to search for workers. Please try again.' : 'Failed to search for vendors. Please try again.');
       setCurrentStep('details');
@@ -732,13 +741,13 @@ const Checkout = () => {
       const orderResponse = await paymentService.createOrder(target._id);
 
       if (!orderResponse.success) {
-        toast.dismiss();
+        toastManager.dismissAll();
         toastManager.error(orderResponse.message || 'Failed to create payment order');
         bail();
         return;
       }
 
-      toast.dismiss();
+      toastManager.dismissAll();
 
       // Get Razorpay key
       const razorpayKey = import.meta.env.VITE_RAZORPAY_KEY_ID;
@@ -770,7 +779,7 @@ const Checkout = () => {
               razorpay_signature: response.razorpay_signature
             });
 
-            toast.dismiss();
+            toastManager.dismissAll();
 
             if (verifyResponse.success) {
               toastManager.success('Payment successful!');
@@ -801,7 +810,7 @@ const Checkout = () => {
               toastManager.error(verifyResponse.message || 'Payment verification failed');
             }
           } catch (error) {
-            toast.dismiss();
+            toastManager.dismissAll();
             toastManager.error('Failed to verify payment');
           }
         },
@@ -826,13 +835,13 @@ const Checkout = () => {
 
       const razorpay = new window.Razorpay(options);
       razorpay.on('payment.failed', function (response) {
-        toast.dismiss();
+        toastManager.dismissAll();
         toastManager.error(`Payment failed: ${response.error.description || 'Unknown error'}`);
       });
       razorpay.open();
 
     } catch (error) {
-      toast.dismiss();
+      toastManager.dismissAll();
       toastManager.error('Failed to process payment');
       bail();
     }
@@ -843,7 +852,7 @@ const Checkout = () => {
       if (!bookingRequest) return;
       toastManager.info('Confirming booking...');
       const response = await paymentService.confirmPayAtHome(bookingRequest._id);
-      toast.dismiss();
+      toastManager.dismissAll();
 
       if (response.success) {
         toastManager.success('Booking confirmed!');
@@ -865,7 +874,7 @@ const Checkout = () => {
         toastManager.error(response.message || 'Failed to confirm booking');
       }
     } catch (error) {
-      toast.dismiss();
+      toastManager.dismissAll();
       toastManager.error('Failed to process request');
     }
   };

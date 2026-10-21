@@ -1,4 +1,5 @@
 import React from 'react';
+import { isChunkLoadError, reloadForNewVersion } from '../../../../utils/chunkReload';
 import { FiAlertTriangle, FiRefreshCw, FiHome } from 'react-icons/fi';
 
 class ErrorBoundary extends React.Component {
@@ -13,6 +14,7 @@ class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, errorInfo) {
     console.error('[Admin Error Boundary caught error]:', error, errorInfo);
+    if (isChunkLoadError(error)) reloadForNewVersion(); // an older tab after a deploy: load the new version
   }
 
   render() {

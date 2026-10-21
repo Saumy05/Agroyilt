@@ -110,7 +110,7 @@ const ManageAddresses = () => {
       // Call API
       toastManager.info('Saving address...');
       const response = await userAuthService.updateProfile({ addresses: updatedAddresses });
-      toast.dismiss();
+      toastManager.dismissAll();
 
       if (response.success) {
         setAddresses(response.user.addresses || updatedAddresses);
@@ -121,7 +121,7 @@ const ManageAddresses = () => {
       }
 
     } catch (error) {
-      toast.dismiss();
+      toastManager.dismissAll();
       toastManager.error('Something went wrong');
     }
   };
@@ -132,7 +132,7 @@ const ManageAddresses = () => {
 
       toastManager.info('Deleting address...');
       const response = await userAuthService.updateProfile({ addresses: updatedAddresses });
-      toast.dismiss();
+      toastManager.dismissAll();
 
       if (response.success) {
         setAddresses(response.user.addresses || updatedAddresses);
@@ -142,7 +142,7 @@ const ManageAddresses = () => {
         toastManager.error('Failed to delete address');
       }
     } catch (error) {
-      toast.dismiss();
+      toastManager.dismissAll();
       toastManager.error('Failed to delete address');
     }
   };

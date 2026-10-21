@@ -104,7 +104,7 @@ const Profile = () => {
               skills: localWorkerData.skills || [],
               photo: localWorkerData.profilePhoto || null
             });
-            toast.info('Loaded profile from local storage (API failed)');
+            toastManager.info('Loaded profile from local storage (API failed)');
           }
         }
       } catch (err) {
@@ -126,7 +126,7 @@ const Profile = () => {
             skills: localWorkerData.skills || [],
             photo: localWorkerData.profilePhoto || null
           });
-          toast.info('Loaded profile from local storage (API failed)');
+          toastManager.info('Loaded profile from local storage (API failed)');
         }
       } finally {
         setIsLoading(false);

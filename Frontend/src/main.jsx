@@ -4,6 +4,7 @@ import { HelmetProvider } from 'react-helmet-async'
 import { LanguageProvider } from './context/LanguageContext'
 import './index.css'
 import App from './App.jsx'
+import { reloadForNewVersion } from './utils/chunkReload'
 
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
@@ -26,6 +27,12 @@ if (typeof window !== 'undefined') {
     autoRefreshEvents: 'visibilitychange,DOMContentLoaded,load', // No resize event
   });
 }
+
+// A code file from an older version is gone after a deploy: load the new version instead of showing an error
+window.addEventListener('vite:preloadError', (event) => {
+  event.preventDefault();
+  reloadForNewVersion();
+});
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

@@ -288,9 +288,10 @@ const Settings = () => {
           {/* Diagnostic Test Button */}
           <button
             onClick={async () => {
+              let toastId; // used by the catch below as well, so it lives outside the try
               try {
                 const { registerFCMToken, isFlutterWebView } = await import('../../../../services/pushNotificationService');
-                const toastId = toastManager.info('Attempting to register for notifications...');
+                toastId = toastManager.info('Attempting to register for notifications...');
                 const inWebView = isFlutterWebView();
 
                 // 1. Register Token (Optional inside WebView)

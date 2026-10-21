@@ -2,6 +2,7 @@ import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FiBell, FiVolume2, FiGlobe, FiLogOut, FiShield } from 'react-icons/fi';
 import { toastManager } from '../../../../utils/toastManager';
+import authStorage from '../../../../utils/authStorage';
 import { workerTheme as themeColors } from '../../../../theme';
 import { workerAuthService } from '../../../../services/authService';
 import Header from '../../components/layout/Header';

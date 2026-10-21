@@ -1,4 +1,5 @@
 import React from 'react';
+import { isChunkLoadError, reloadForNewVersion } from '../../../../utils/chunkReload';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -13,6 +14,7 @@ class ErrorBoundary extends React.Component {
   componentDidCatch(error, errorInfo) {
     this.setState({ error, errorInfo });
     console.error('[ErrorBoundary] Caught error:', error, errorInfo);
+    if (isChunkLoadError(error)) reloadForNewVersion(); // an older tab after a deploy: load the new version
   }
 
   render() {

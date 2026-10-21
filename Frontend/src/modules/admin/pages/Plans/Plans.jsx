@@ -190,7 +190,6 @@ const Plans = () => {
     setIsModalOpen(true);
     // Reset selections
     setSelectedCategory('');
-    setSelectedService('');
   };
 
   return (
@@ -252,8 +251,8 @@ const Plans = () => {
                       {plan.freeServices && plan.freeServices.length > 0 && (
                         <div className={`flex flex-col gap-1 text-xs ${style.text}`}>
                           {plan.freeServices.map((svcRef, idx) => {
-                            const svcId = String(svcRef?._id || svcRef);
-                            const svc = servicesList.find(s => String(s.id || s._id) === svcId);
+                            // the plan carries the equipment type itself when the server populated it; otherwise a generic label is shown
+                            const svc = svcRef && typeof svcRef === 'object' ? svcRef : null;
 
                             let displayTitle = 'Free Equipment';
                             if (svc) {
