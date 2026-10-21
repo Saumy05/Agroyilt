@@ -13,6 +13,7 @@ import vendorService from '../../../../services/vendorService';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import { FormContainer, FormSection } from '../../../../components/common';
 import api from '../../../../services/api';
+import { locationParamsFromVendor } from '../../../../utils/geoParams';
 
 // Older service listings stored attachment rates as add-ons on top of the machine's rate. The form now works with the
 // price the farmer actually pays for the attachment, so fold the add-on into it (same price, nothing changes for farmers).
@@ -89,17 +90,17 @@ const AddEquipment = () => {
       setLoading(true);
 
       // 1. Get Vendor Profile for City-based filtering
-      let vendorCityId = null;
+      let vendorLocation = {};
       try {
         const profileRes = await vendorService.getProfile();
-        vendorCityId = profileRes.data?.address?.cityId || profileRes.data?.cityId;
+        vendorLocation = locationParamsFromVendor(profileRes.data);
       } catch (e) {
         console.warn('Profile city fetch skipped:', e);
       }
 
       let allTypes = [];
       try {
-        const res = await vendorEquipmentService.getMachineTypes(vendorCityId);
+        const res = await vendorEquipmentService.getMachineTypes(vendorLocation);
         if (res.success && Array.isArray(res.data)) {
           setMachineTypes(res.data);
           allTypes = res.data;

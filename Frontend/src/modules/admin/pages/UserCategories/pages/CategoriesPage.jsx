@@ -1009,7 +1009,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
                         <span className={`text-[10px] font-black px-2 py-0.5 rounded w-fit ${c.trackingType === 'timestamp' ? 'bg-indigo-100 text-indigo-700' : c.trackingType === 'odometer' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-500'}`}>
                           {c.trackingType?.toUpperCase() || 'NONE'}
                         </span>
-                        {c.requiresDriver && <span className="text-[9px] text-rose-600 font-black uppercase">● Driver Required</span>}
+                        {c.requiresDriver && <span className="text-[9px] text-rose-600 font-black uppercase" title="Operator-led job flow: vendor assigns an operator, reaches the farm, then starts the work with the farmer's OTP">● Operator-led job</span>}
                         {c.adminBaseCharge > 0 && <span className="text-[9px] text-emerald-700 font-black bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">Base: ₹{c.adminBaseCharge}</span>}
                       </div>
                     </td>
@@ -1528,7 +1528,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
                   onChange={e => setForm({ ...form, requiresDriver: e.target.checked })}
                   className="h-5 w-5 accent-orange-500"
                 />
-                <label htmlFor="reqDriver" className="text-sm font-bold text-orange-800 uppercase cursor-pointer">Requires Driver</label>
+                <label htmlFor="reqDriver" className="text-sm font-bold text-orange-800 uppercase cursor-pointer" title="Tick for service jobs where the vendor sends an operator with the machine (assign operator, reach the farm, start with OTP). Leave off for hand-over rentals.">Operator-led job (vendor sends an operator)</label>
               </div>
             </div>
           </div>

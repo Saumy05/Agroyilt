@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { FiArrowLeft, FiMapPin } from 'react-icons/fi';
 import { Helmet } from 'react-helmet-async';
 import { publicCatalogService } from '../../../../services/catalogService';
+import { useGeo } from '../../../../context/GeoContext';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import CategoryCard from '../../components/common/CategoryCard';
 
@@ -16,14 +17,22 @@ const toAssetUrl = (url) => {
 
 const AllMachineryCategories = () => {
   const navigate = useNavigate();
+  const { selectedState, selectedDistrict, selectedSubDistrict, currentCity, loading: geoLoading } = useGeo();
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (geoLoading) return;
     const fetchCategories = async () => {
       try {
         setLoading(true);
-        const res = await publicCatalogService.getCategories({ all: true });
+        // The farmer's own area, so categories made for their state / district show here like they do after picking a category
+        const geoParams = { all: true };
+        if (selectedState?._id) geoParams.stateId = selectedState._id;
+        if (selectedDistrict?._id) geoParams.districtId = selectedDistrict._id;
+        if (selectedSubDistrict?._id) geoParams.subDistrictId = selectedSubDistrict._id;
+        if (currentCity?._id) geoParams.cityId = currentCity._id;
+        const res = await publicCatalogService.getCategories(geoParams);
         if (res.success && Array.isArray(res.categories)) {
           // Filter to only show main categories (isAlwaysMain or has no parent)
           const mains = res.categories.filter(c => {
@@ -42,7 +51,7 @@ const AllMachineryCategories = () => {
       }
     };
     fetchCategories();
-  }, []);
+  }, [selectedState, selectedDistrict, selectedSubDistrict, currentCity, geoLoading]);
 
   const handleCategoryClick = (category) => {
     // Admin-marked rental categories go to the rental catalog, not the booking flow
@@ -71,7 +80,7 @@ const AllMachineryCategories = () => {
           <div>
             <h1 className="text-xl font-black text-slate-800 tracking-tight">All Categories</h1>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
-              <FiMapPin className="text-orange-500" /> All India
+              <FiMapPin className="text-orange-500" /> {selectedState?.name || 'All India'}
             </p>
           </div>
         </div>

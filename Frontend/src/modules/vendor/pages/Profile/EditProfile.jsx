@@ -13,6 +13,7 @@ import DobInput from '../../../../components/common/DobInput';
 import { getDobError, toDateInputValue } from '../../../../utils/age';
 import flutterBridge from '../../../../utils/flutterBridge';
 import authStorage from '../../../../utils/authStorage';
+import { locationParamsFromVendor } from '../../../../utils/geoParams';
 
 // Zod schema
 const vendorProfileSchema = z.object({
@@ -75,10 +76,14 @@ const EditProfile = () => {
     }
   };
 
+  // The vendor's own state / district / city, so categories made for their area (not only all-India ones) are listed
+  const [categoryLocation, setCategoryLocation] = useState(null);
+
   useEffect(() => {
+    if (categoryLocation === null) return; // wait until the profile has told us where the vendor is
     const loadServiceCategories = async () => {
       try {
-        const catRes = await publicCatalogService.getCategories();
+        const catRes = await publicCatalogService.getCategories(categoryLocation);
         if (catRes.success) {
           setCategories(catRes.categories || []);
         }
@@ -88,7 +93,7 @@ const EditProfile = () => {
     };
 
     loadServiceCategories();
-  }, []);
+  }, [categoryLocation]);
 
   useLayoutEffect(() => {
     const html = document.documentElement;
@@ -136,11 +141,14 @@ const EditProfile = () => {
             aadharDocument: v.aadharDocument || (v.aadhar && v.aadhar.document) || '',
           });
 
+          setCategoryLocation(locationParamsFromVendor(v));
+
           // Update tab-isolated vendor session
           authStorage.updateUserData('vendor', v);
         } else {
           // Fallback to tab-isolated session storage if API fails
           const storedData = authStorage.getUserData('vendor') || {};
+          setCategoryLocation(locationParamsFromVendor(storedData));
 
           if (Object.keys(storedData).length > 0) {
             // ... existing fallback logic ...
@@ -167,6 +175,8 @@ const EditProfile = () => {
         }
       } catch (error) {
         console.error('Error loading profile:', error);
+      } finally {
+        setCategoryLocation(prev => prev || {});
       }
     };
     loadProfile();

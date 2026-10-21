@@ -36,10 +36,10 @@ export const vendorEquipmentService = {
   },
 
   // Fetch machinery types for the dropdown (Main Categories like Tractor)
-  getMachineTypes: async (cityId = null) => {
-    const response = await api.get('/public/categories', {
-      params: cityId ? { cityId } : {}
-    });
+  // `location` is a cityId or { stateId, districtId, subDistrictId, cityId }: state / district scoped categories only show when sent
+  getMachineTypes: async (location = null) => {
+    const params = typeof location === 'string' ? { cityId: location } : (location || {});
+    const response = await api.get('/public/categories', { params });
     if (response.data.success && Array.isArray(response.data.categories)) {
       const excludeSlugs = [
         'lab-soil-testing',
