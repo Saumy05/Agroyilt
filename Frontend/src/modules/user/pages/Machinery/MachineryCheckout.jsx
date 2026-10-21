@@ -132,21 +132,28 @@ const MachineryCheckout = () => {
         ? initialBasePrice 
         : (calculatedTractorTotal + (implementTotal || 0));
 
-    const calculatedTax = (typeof initialTax === 'number' && initialTax > 0)
-        ? initialTax 
-        : Math.round(calculatedBasePrice * (activeGstPercentage / 100));
+    // The vendor search passes a total that already includes GST (it also passes the tax); the machine detail page passes
+    // only the service subtotal. Treat the total as GST-inclusive only in the first case, so GST is never left out.
+    const totalIncludesTax = typeof initialTax === 'number';
+    const taxableBase = (!totalIncludesTax && typeof initialTotal === 'number' && initialTotal > 0)
+        ? initialTotal
+        : calculatedBasePrice;
 
-    // Platform fee (admin: Settings > Machinery Platform Fee), on the service price before GST. A total that came from the
+    const calculatedTax = (typeof initialTax === 'number' && initialTax > 0)
+        ? initialTax
+        : Math.round(taxableBase * (activeGstPercentage / 100));
+
+    // Platform fee (admin: Settings > Vendor Booking Platform Fee), on the service price before GST. A total that came from the
     // vendor search already includes it; otherwise it is added here. The server recomputes it when the booking is made.
     const platformFeePct = typeof passedPlatformFeePct === 'number' ? passedPlatformFeePct : adminPlatformFeePct;
     const platformFee = typeof passedPlatformFee === 'number'
         ? passedPlatformFee
-        : Math.round(calculatedBasePrice * platformFeePct) / 100;
+        : Math.round(taxableBase * platformFeePct) / 100;
     const totalIncludesFee = typeof passedPlatformFee === 'number';
 
-    const calculatedTotal = (typeof initialTotal === 'number' && initialTotal > 0)
+    const calculatedTotal = (totalIncludesTax && typeof initialTotal === 'number' && initialTotal > 0)
         ? initialTotal + (totalIncludesFee ? 0 : platformFee)
-        : (calculatedBasePrice + calculatedTax + (visitingCharges || 0) + platformFee);
+        : (taxableBase + calculatedTax + (visitingCharges || 0) + platformFee);
 
     const travelCharge = Number(travel?.total) || 0;
     const payableTotal = Math.round((calculatedTotal + travelCharge) * 100) / 100; // what the farmer actually pays
