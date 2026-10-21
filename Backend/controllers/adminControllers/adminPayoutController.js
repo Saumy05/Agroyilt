@@ -3,6 +3,7 @@ const PayoutRequest = require('../../models/PayoutRequest');
 const Wallet = require('../../models/Wallet');
 const WalletTransaction = require('../../models/WalletTransaction');
 const PaymentWebhookLog = require('../../models/PaymentWebhookLog');
+const { notifySafe } = require('../../services/adminActionNotifier');
 
 exports.getPendingPayouts = async (req, res) => {
   try {
@@ -60,6 +61,11 @@ exports.approvePayout = async (req, res) => {
     await session.commitTransaction();
     session.endSession();
 
+    await notifySafe({
+      vendorId: payoutReq.vendorId, type: 'payout_processed', relatedId: payoutReq._id, relatedType: 'payout',
+      title: 'Payout approved', message: `Your payout of ₹${payoutReq.amount} was approved and is being sent to your account.`
+    });
+
     // STUB: RazorpayX Payout API call should happen asynchronously here in a worker queue.
     // Stubbing this for now until RazorpayX is activated.
     setTimeout(async () => {
@@ -93,6 +99,11 @@ exports.rejectPayout = async (req, res) => {
     );
 
     if (!payoutReq) return res.status(404).json({ success: false, message: 'Payout not found or not pending' });
+
+    await notifySafe({
+      vendorId: payoutReq.vendorId, type: 'payout_rejected', relatedId: payoutReq._id, relatedType: 'payout',
+      title: 'Payout not approved', message: `Your payout of ₹${payoutReq.amount} was not approved. Reason: ${payoutReq.rejectionReason}`
+    });
 
     res.status(200).json({ success: true, message: 'Payout rejected successfully' });
   } catch (err) {

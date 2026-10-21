@@ -36,12 +36,22 @@ const syncDuesRestriction = async (workerId) => {
   const w = await Worker.findById(workerId).select('outstandingDues isRestricted restrictionReason');
   if (!w) return;
   const dues = Number(w.outstandingDues) || 0;
+  const { notifySafe } = require('./adminActionNotifier');
   if (dues > max && !w.isRestricted) {
-    await Worker.updateOne({ _id: workerId, isRestricted: { $ne: true } }, {
+    const r = await Worker.updateOne({ _id: workerId, isRestricted: { $ne: true } }, {
       $set: { isRestricted: true, restrictionReason: `Outstanding dues (₹${dues}) exceeded allowed limit (₹${max})` }
     });
+    if (r.modifiedCount > 0) {
+      await notifySafe({
+        workerId, type: 'worker_restricted', title: 'You cannot take new jobs',
+        message: `Your dues (₹${dues}) are above the allowed limit (₹${max}). Pay them to start taking jobs again.`
+      });
+    }
   } else if (dues <= max && w.isRestricted && (!w.restrictionReason || DUES_REASON.test(w.restrictionReason))) {
-    await Worker.updateOne({ _id: workerId, isRestricted: true }, { $set: { isRestricted: false, restrictionReason: null } });
+    const r = await Worker.updateOne({ _id: workerId, isRestricted: true }, { $set: { isRestricted: false, restrictionReason: null } });
+    if (r.modifiedCount > 0) {
+      await notifySafe({ workerId, type: 'worker_restriction_lifted', title: 'You can take jobs again', message: 'Your dues are back under the limit. You can accept new jobs now.' });
+    }
   }
 };
 
@@ -130,6 +140,12 @@ const applyDuesPayment = async (paymentId, { fromStatus, set = {} }) => {
 
   await syncDuesRestriction(claimed.workerId);
   emitWallet(claimed.workerId, 'dues_paid');
+  const left = Math.max(0, round2((Number(before?.outstandingDues) || 0) - appliedToDues));
+  await require('./adminActionNotifier').notifySafe({
+    workerId: claimed.workerId, type: 'dues_payment_approved', relatedId: claimed._id, relatedType: 'dues_payment',
+    title: 'Dues payment received',
+    message: `Your payment of ₹${amount} was received. Dues left: ₹${left}.${excessToWallet > 0 ? ` ₹${excessToWallet} extra was added to your wallet.` : ''}`
+  });
   return { applied: true, payment: await WorkerDuesPayment.findById(claimed._id) };
 };
 

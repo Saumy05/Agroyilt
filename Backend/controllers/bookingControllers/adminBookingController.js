@@ -2,6 +2,7 @@ const Booking = require('../../models/Booking');
 const { validationResult } = require('express-validator');
 const { BOOKING_STATUS } = require('../../utils/constants');
 const { buildAdminScopeFilter, verifyResourceScope } = require('../../utils/adminScopeHelper');
+const { notifySafe } = require('../../services/adminActionNotifier');
 
 /**
  * Get all bookings with filters and search
@@ -219,6 +220,15 @@ const cancelBooking = async (req, res) => {
     booking.cancellationReason = cancellationReason || 'Cancelled by admin';
 
     await booking.save();
+
+    // Everyone on the job learns it is off, with the reason
+    const reasonText = booking.cancellationReason ? ` Reason: ${booking.cancellationReason}` : '';
+    const common = { type: 'booking_cancelled', relatedId: booking._id, relatedType: 'booking', data: { bookingId: String(booking._id) } };
+    await Promise.all([
+      notifySafe({ ...common, userId: booking.userId, title: 'Your booking was cancelled', message: `Booking #${booking.bookingNumber} was cancelled by the admin.${reasonText}` }),
+      booking.vendorId && notifySafe({ ...common, vendorId: booking.vendorId, title: 'A booking was cancelled', message: `Booking #${booking.bookingNumber} was cancelled by the admin.${reasonText}` }),
+      booking.workerId && notifySafe({ ...common, workerId: booking.workerId, title: 'A booking was cancelled', message: `Booking #${booking.bookingNumber} was cancelled by the admin.${reasonText}` })
+    ].filter(Boolean));
 
     res.status(200).json({
       success: true,

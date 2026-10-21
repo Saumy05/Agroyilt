@@ -5,6 +5,7 @@ const Withdrawal = require('../../models/Withdrawal');
 const mongoose = require('mongoose');
 const { recordSettlement, recordWithdrawal } = require('../../services/earningTrackerService');
 const withdrawalService = require('../../services/withdrawalService');
+const { notifySafe } = require('../../services/adminActionNotifier');
 
 /**
  * Get all vendors with their wallet balances
@@ -228,7 +229,9 @@ const approveSettlement = async (req, res) => {
     vendor.wallet.dues = Math.max(0, currentDues - settlement.amount);
 
     // Auto-unblock if dues drop below limit
+    let unblocked = false;
     if (vendor.wallet.isBlocked && vendor.wallet.dues <= (vendor.wallet.cashLimit || 10000)) {
+      unblocked = true;
       vendor.wallet.isBlocked = false;
       vendor.wallet.blockedAt = null;
       vendor.wallet.blockReason = null;
@@ -250,6 +253,12 @@ const approveSettlement = async (req, res) => {
 
     // Record this settlement in the earning tracker
     recordSettlement(new Date(), settlement.amount);
+
+    await notifySafe({
+      vendorId: vendor._id, type: 'settlement_approved', relatedId: settlement._id, relatedType: 'settlement',
+      title: 'Settlement approved',
+      message: `Your settlement of ₹${settlement.amount} was approved. Dues left: ₹${vendor.wallet.dues}.${unblocked ? ' Your account is active again and you can take bookings.' : ''}`
+    });
 
     res.status(200).json({
       success: true,
@@ -304,6 +313,12 @@ const rejectSettlement = async (req, res) => {
     settlement.processedAt = new Date();
     settlement.rejectionReason = rejectionReason;
     await settlement.save();
+
+    await notifySafe({
+      vendorId: settlement.vendorId, type: 'settlement_rejected', relatedId: settlement._id, relatedType: 'settlement',
+      title: 'Settlement not approved',
+      message: `Your settlement of ₹${settlement.amount} was not approved. Reason: ${rejectionReason}`
+    });
 
     res.status(200).json({
       success: true,
@@ -461,6 +476,11 @@ const blockVendor = async (req, res) => {
     vendor.wallet.blockReason = reason || 'Blocked by admin due to pending dues.';
     await vendor.save();
 
+    await notifySafe({
+      vendorId: vendor._id, type: 'vendor_blocked', title: 'You cannot take new bookings',
+      message: `${String(vendor.wallet.blockReason).replace(/[.\s]+$/, '')}. Clear your dues or contact support to get back to work.`
+    });
+
     res.status(200).json({ success: true, message: 'Vendor blocked successfully' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -481,6 +501,8 @@ const unblockVendor = async (req, res) => {
     vendor.wallet.blockedAt = null;
     vendor.wallet.blockReason = null;
     await vendor.save();
+
+    await notifySafe({ vendorId: vendor._id, type: 'vendor_unblocked', title: 'You can take bookings again', message: 'Your account has been unblocked by the admin. You can accept new bookings now.' });
 
     res.status(200).json({ success: true, message: 'Vendor unblocked successfully' });
   } catch (error) {
@@ -506,13 +528,19 @@ const updateCashLimit = async (req, res) => {
     vendor.wallet.cashLimit = limit;
 
     // Auto unblock if new limit covers dues
+    let unblockedByLimit = false;
     if (vendor.wallet.isBlocked && (vendor.wallet.dues || 0) <= limit) {
+      unblockedByLimit = true;
       vendor.wallet.isBlocked = false;
       vendor.wallet.blockedAt = null;
       vendor.wallet.blockReason = null;
     }
 
     await vendor.save();
+
+    if (unblockedByLimit) {
+      await notifySafe({ vendorId: vendor._id, type: 'vendor_unblocked', title: 'You can take bookings again', message: `Your cash limit was raised to ₹${limit}, which covers your dues. You can accept new bookings now.` });
+    }
 
     res.status(200).json({ success: true, message: 'Cash limit updated successfully', limit });
   } catch (error) {

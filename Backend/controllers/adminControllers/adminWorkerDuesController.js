@@ -66,6 +66,10 @@ exports.rejectWorkerDuesPayment = async (req, res) => {
     );
     if (!rejected) return res.status(409).json({ success: false, message: 'This payment is no longer waiting for review.' });
     duesSvc.emitWallet(rejected.workerId, 'dues_payment_rejected');
+    await require('../../services/adminActionNotifier').notifySafe({
+      workerId: rejected.workerId, type: 'dues_payment_rejected', relatedId: rejected._id, relatedType: 'dues_payment',
+      title: 'Dues payment not accepted', message: `Your payment of ₹${rejected.amount} was not accepted. Reason: ${reason}`
+    });
     return res.json({ success: true, message: 'Payment rejected', data: rejected });
   } catch (error) {
     console.error('[rejectWorkerDuesPayment]', error);

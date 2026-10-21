@@ -138,7 +138,7 @@ const Notifications = () => {
       navigate('/worker/group-requests');
     } else if (['worker_booking_request', 'new_booking_request', 'job_request', 'extra_worker_dispatch'].includes(type)) {
       navigate('/worker/booking-requests');
-    } else if (type.includes('wallet') || ['assignment_settled', 'earnings_credit', 'payment_received', 'payout_processed', 'cash_collected'].includes(type)) {
+    } else if (type.includes('wallet') || type.startsWith('dues_payment') || type.startsWith('worker_restrict') || ['assignment_settled', 'earnings_credit', 'payment_received', 'payout_processed', 'cash_collected'].includes(type)) {
       navigate('/worker/wallet');
     } else if (type.includes('support') || relatedType.includes('support')) {
       navigate('/worker/help-support');

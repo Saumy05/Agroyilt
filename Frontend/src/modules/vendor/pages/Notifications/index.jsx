@@ -147,7 +147,7 @@ const Notifications = () => {
       else navigate('/vendor/jobs');
     } else if (type.includes('soil')) {
       navigate('/vendor/soil-tests');
-    } else if (type.includes('payment') || type.includes('wallet') || type.includes('payout')) {
+    } else if (type.includes('payment') || type.includes('wallet') || type.includes('payout') || type.includes('settlement') || type === 'vendor_blocked' || type === 'vendor_unblocked') {
       navigate('/vendor/wallet');
     } else if (type.includes('compliance')) {
       navigate('/vendor/compliance');

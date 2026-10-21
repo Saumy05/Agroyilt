@@ -70,6 +70,15 @@ const notificationSchema = new mongoose.Schema({
       'equipment_approved',   // Admin approved a vendor's machine listing
       'equipment_rejected',   // Admin rejected it (with a reason)
       'equipment_reopened',   // Admin moved a rejected listing back to review
+      'vendor_blocked',       // Vendor stopped from taking bookings (admin, or cash limit passed)
+      'vendor_unblocked',
+      'settlement_approved',  // Admin accepted a vendor's dues settlement
+      'settlement_rejected',
+      'payout_rejected',
+      'dues_payment_approved', // Worker's dues payment received
+      'dues_payment_rejected',
+      'worker_restricted',    // Worker stopped from taking jobs because of dues
+      'worker_restriction_lifted',
       'farmer_approved',
       'farmer_rejected',
       'farmer_approval_request',

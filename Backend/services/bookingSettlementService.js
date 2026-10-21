@@ -410,6 +410,10 @@ const settleVendorCash = async (bookingId, { collectorRole, collectorId }) => {
           'wallet.blockReason': `Cash limit exceeded. Net owed: ₹${netOwed.toFixed(2)}, Limit: ₹${limit}`
         }
       });
+      require('./adminActionNotifier').notifySafe({
+        vendorId, type: 'vendor_blocked', title: 'You cannot take new bookings',
+        message: `The cash you hold has passed your limit (you owe ₹${netOwed.toFixed(2)}, limit ₹${limit}). Settle your dues to get back to work.`
+      });
     }
 
     const planCovered = claimed.paymentMethod === 'plan_benefit';
