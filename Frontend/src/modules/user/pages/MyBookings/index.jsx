@@ -206,8 +206,9 @@ const MyBookings = () => {
     }
   };
 
-  const handleBookingClick = (booking) => {
-    navigate(`/user/booking/${booking._id || booking.id}`);
+  // fromHistory: a farmer who opened a finished booking from the list is not sent back to the home page after a few seconds
+  const handleBookingClick = (booking, extraState = {}) => {
+    navigate(`/user/booking/${booking._id || booking.id}`, { state: { fromHistory: true, ...extraState } });
   };
 
   const formatDate = (dateString) => formatDateDDMMYYYY(dateString) || 'N/A';
@@ -500,9 +501,19 @@ const MyBookings = () => {
               {isCancelled ? 'Booking Cancelled' : paymentState.label}
             </span>
           </div>
-          <span className="text-slate-400 text-[10px] flex items-center gap-0.5">
-            View details →
-          </span>
+          {String(booking.status || '').toLowerCase() === 'completed' && !booking.rating ? (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); handleBookingClick(booking, { openRating: true }); }}
+              className="text-[11px] font-bold text-orange-600 bg-orange-50 border border-orange-200 px-2.5 py-1 rounded-full flex items-center gap-1 active:scale-95 transition-transform"
+            >
+              ★ Rate & review
+            </button>
+          ) : (
+            <span className="text-slate-400 text-[10px] flex items-center gap-0.5">
+              View details →
+            </span>
+          )}
         </div>
       </div>
     );

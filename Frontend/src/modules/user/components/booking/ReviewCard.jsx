@@ -2,16 +2,10 @@
 import { FiStar } from 'react-icons/fi';
 
 const ReviewCard = ({ booking, onWriteReview }) => {
-  // Logic to determine if card should be shown
-  // Show if status is work_done/completed OR if there is already a rating
-  const isCompleted = ['work_done', 'completed', 'COMPLETED'].includes(booking.status);
-  const isPaid = ['success', 'paid', 'collected_by_vendor'].includes(booking.paymentStatus?.toLowerCase());
+  // Offered on every completed booking, whatever the payment route (online, cash, wallet, plan): the server accepts a review
+  // once a booking is completed, and nothing else. A rating already given is always shown.
+  const canReview = String(booking.status || '').toLowerCase() === 'completed';
   const hasRating = !!booking.rating;
-
-  // For machinery (work_done), allow review even if payment is still pending
-  // For other services, require payment to be completed first
-  const isMachineryWorkDone = booking.status === 'work_done';
-  const canReview = isCompleted && (isPaid || isMachineryWorkDone);
 
   if (!hasRating && !canReview) {
     return null;

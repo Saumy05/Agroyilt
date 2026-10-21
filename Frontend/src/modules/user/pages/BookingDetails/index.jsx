@@ -273,7 +273,8 @@ const BookingDetails = () => {
   const isBookingCompleted = booking?.status?.toLowerCase() === 'completed';
   const showCompletionExit = Boolean(isBookingCompleted && isPaid && !isFromHistory && !stayOnPage);
   // Worker bookings never leave on their own: the farmer must be able to check the final amount
-  const autoRedirect = showCompletionExit && booking?.providerType !== 'WORKER';
+  // never leave the page while the farmer is rating (the popup would vanish mid-way)
+  const autoRedirect = showCompletionExit && booking?.providerType !== 'WORKER' && !showRatingModal;
 
   const isAgri = useMemo(() => {
     if (!booking) return false;
@@ -402,12 +403,14 @@ const BookingDetails = () => {
   useEffect(() => {
     if (booking) {
       const isCompleted = booking.status?.toLowerCase() === 'completed';
-      const isPaid = ['success', 'paid', 'collected_by_vendor'].includes(booking.paymentStatus?.toLowerCase()) || booking.cashCollected === true;
+      const pay = getPaymentState(booking);
+      const isSettled = pay.isPaid || pay.state === 'refunded';
       const isRated = !!booking.rating;
       const isDismissed = localStorage.getItem(`rating_dismissed_${id}`);
 
-      // Show rating modal only if completed AND paid AND not yet rated or dismissed
-      if (isCompleted && isPaid && !isRated && !isDismissed) {
+      // Ask once, when the booking is completed and settled and not yet rated or dismissed.
+      // "Rate & review" on the bookings list always opens it, even after it was dismissed once.
+      if (isCompleted && !isRated && ((isSettled && !isDismissed) || location.state?.openRating)) {
         setShowRatingModal(true);
       }
     }
