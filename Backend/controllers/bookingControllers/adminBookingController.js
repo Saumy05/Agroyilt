@@ -156,10 +156,14 @@ const getBookingById = async (req, res) => {
     // The final bill is the source of truth for what was actually charged and how it was split
     const VendorBill = require('../../models/VendorBill');
     const bill = await VendorBill.findOne({ bookingId: booking._id }).lean();
+    // When money moved: the farmer's payments and refunds, for the timeline
+    const Transaction = require('../../models/Transaction');
+    const moneyEvents = await Transaction.find({ bookingId: booking._id, type: { $in: ['payment', 'refund'] }, status: 'completed' })
+      .select('type amount paymentMethod description createdAt').sort({ createdAt: 1 }).lean();
 
     res.status(200).json({
       success: true,
-      data: { ...booking.toObject(), bill: bill || null }
+      data: { ...booking.toObject(), bill: bill || null, moneyEvents }
     });
   } catch (error) {
     console.error('Get booking error:', error);

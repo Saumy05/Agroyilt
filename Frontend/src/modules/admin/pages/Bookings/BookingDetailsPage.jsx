@@ -176,7 +176,11 @@ const BookingDetailsPage = () => {
                                 { at: booking.completedAt, label: booking.fulfillmentMode === 'rental' ? 'Equipment returned' : 'Work completed', dot: 'bg-green-500' },
                                 { at: booking.cashCollectedAt, label: 'Cash collected by vendor', dot: 'bg-green-500' },
                                 { at: booking.reviewedAt, label: `Farmer rated the service${booking.rating ? ` (${booking.rating}/5)` : ''}`, dot: 'bg-yellow-500' },
-                                { at: booking.cancelledAt, label: `Cancelled${cancelledBy}`, note: booking.cancellationReason, dot: 'bg-red-500' }
+                                { at: booking.cancelledAt, label: `Cancelled${cancelledBy}`, note: booking.cancellationReason, dot: 'bg-red-500' },
+                                // money in and out, from the farmer's payment and refund records
+                                ...(booking.moneyEvents || []).map(t => (t.type === 'refund'
+                                    ? { at: t.createdAt, label: `Refunded ₹${Number(t.amount).toLocaleString('en-IN')} to the farmer's wallet`, note: t.description, dot: 'bg-blue-500' }
+                                    : { at: t.createdAt, label: `Farmer paid ₹${Number(t.amount).toLocaleString('en-IN')}${t.paymentMethod ? ` (${String(t.paymentMethod).replace(/_/g, ' ')})` : ''}`, dot: 'bg-green-500' }))
                             ].filter(e => e.at && !Number.isNaN(new Date(e.at).getTime()))
                              .sort((x, y) => new Date(x.at) - new Date(y.at));
                             return (
@@ -251,7 +255,10 @@ const BookingDetailsPage = () => {
                         const money = (v) => `₹${n(v).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
                         const feePct = bill?.payoutConfig?.platformFeePercentage || booking.platformFeePercentage;
                         const gstPct = bill?.payoutConfig?.serviceGstPercentage ?? booking.gstPercentage;
-                        const rows = bill ? [
+                        const billTotal = bill ? n(bill.grandTotal) : n(booking.finalAmount ?? booking.totalAmount ?? booking.agreedRate ?? booking.basePrice);
+                        // Nothing was billed (a refunded booking): show what was quoted and taxed instead of a column of zeros
+                        const showQuote = !bill || (billTotal === 0 && n(booking.advancePaidAmount) > 0);
+                        const rows = !showQuote ? [
                             { label: 'Service charges', value: n(bill.totalServiceBase) },
                             { label: 'Parts & materials', value: n(bill.totalPartsBase), hideZero: true },
                             { label: `GST${gstPct != null ? ` (${gstPct}%)` : ''}`, value: n(bill.totalGST) },
@@ -268,14 +275,16 @@ const BookingDetailsPage = () => {
                             { label: `Platform fee${feePct ? ` (${feePct}%)` : ''}`, value: n(booking.platformFee), hideZero: true },
                             { label: 'Cancellation penalty', value: n(booking.penalty), hideZero: true }
                         ];
-                        const total = bill ? n(bill.grandTotal) : n(booking.finalAmount ?? booking.totalAmount ?? booking.agreedRate ?? booking.basePrice);
+                        const total = showQuote
+                            ? n(booking.basePrice) - n(booking.discount) + n(booking.tax) + n(booking.platformFee) + n(booking.visitingCharges) + n(booking.travelCharge) + n(booking.penalty)
+                            : billTotal;
                         const platformEarning = bill ? n(bill.companyRevenue) - n(bill.totalGST) : 0;
                         return (
                             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
                                 <h2 className="font-bold text-gray-800 flex items-center gap-2 mb-1">
                                     <FiCreditCard className="text-primary-600" /> Payment Summary
                                 </h2>
-                                <p className="text-[11px] text-gray-400 mb-4">{bill ? 'From the final bill' : 'Quoted at booking (no final bill yet)'}</p>
+                                <p className="text-[11px] text-gray-400 mb-4">{!showQuote ? 'From the final bill' : bill ? 'Quoted at booking. Nothing was billed (see below)' : 'Quoted at booking (no final bill yet)'}</p>
                                 <div className="space-y-3">
                                     {rows.filter(r => !(r.hideZero && r.value === 0)).map(r => (
                                         <div key={r.label} className="flex justify-between text-sm text-gray-500">
@@ -284,16 +293,31 @@ const BookingDetailsPage = () => {
                                         </div>
                                     ))}
                                     <div className="pt-3 border-t border-gray-50 flex justify-between font-bold text-lg text-gray-900">
-                                        <span>Total</span>
+                                        <span>{showQuote && bill ? 'Quoted total' : 'Total'}</span>
                                         <span>{money(total)}</span>
                                     </div>
 
-                                    {bill && (
+                                    {bill && !showQuote && (
                                         <div className="mt-2 rounded-lg p-3 border border-emerald-100 bg-emerald-50/50 space-y-1.5 text-xs">
                                             <p className="text-[10px] uppercase tracking-wider text-emerald-700 font-bold">Who gets what</p>
                                             <div className="flex justify-between text-gray-600"><span>Vendor earning</span><span className="font-semibold text-gray-800">{money(bill.vendorTotalEarning)}</span></div>
                                             <div className="flex justify-between text-gray-600"><span>Platform earning (commission + fee)</span><span className="font-semibold text-gray-800">{money(platformEarning)}</span></div>
                                             <div className="flex justify-between text-gray-600"><span>GST collected</span><span className="font-semibold text-gray-800">{money(bill.totalGST)}</span></div>
+                                        </div>
+                                    )}
+
+                                    {(n(booking.advancePaidAmount) > 0 || n(booking.refundedAmount) > 0) && (
+                                        <div className="mt-2 rounded-lg p-3 border border-blue-100 bg-blue-50/50 space-y-1.5 text-xs">
+                                            <p className="text-[10px] uppercase tracking-wider text-blue-700 font-bold">Quote, bill & refund</p>
+                                            <div className="flex justify-between text-gray-600"><span>Quoted at booking (service + GST{n(booking.platformFee) > 0 ? ' + fee' : ''})</span><span className="font-semibold text-gray-800">{money(n(booking.basePrice) - n(booking.discount) + n(booking.tax) + n(booking.platformFee) + n(booking.visitingCharges) + n(booking.travelCharge))}</span></div>
+                                            <div className="flex justify-between text-gray-600"><span>Paid by the farmer</span><span className="font-semibold text-gray-800">{money(booking.advancePaidAmount)}</span></div>
+                                            <div className="flex justify-between text-gray-600"><span>Final bill</span><span className="font-semibold text-gray-800">{money(billTotal)}</span></div>
+                                            {bill && billTotal === 0 && (
+                                                <p className="text-[11px] text-amber-700">No billable work was recorded, so nothing was charged.</p>
+                                            )}
+                                            {n(booking.refundedAmount) > 0 && (
+                                                <div className="flex justify-between font-bold text-blue-700"><span>Refunded to the farmer</span><span>{money(booking.refundedAmount)}</span></div>
+                                            )}
                                         </div>
                                     )}
 

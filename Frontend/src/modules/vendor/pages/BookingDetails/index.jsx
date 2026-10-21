@@ -1194,6 +1194,11 @@ export default function BookingDetails() {
                   </div>
                 )}
 
+                {/* Bills made before the calculation was recorded: the bill's own service line says how it was billed */}
+                {!isPlanBenefit && !(bill?.serviceBreakdown?.length) && originalServiceFromBill?.name && /\(.*(min|km|day|hr|acre).*\)|\d+\s*(min|km|day|hr|acre)/i.test(originalServiceFromBill.name) && (
+                  <p className="ml-2 pl-2.5 border-l-2 border-emerald-100 text-[11px] text-gray-500">Billed as: {originalServiceFromBill.name}</p>
+                )}
+
                 {services.map((s, i) => (
                   <div key={i} className="flex justify-between text-gray-600">
                     <span>{s.name} x {s.quantity}</span>
@@ -1378,6 +1383,50 @@ export default function BookingDetails() {
             </div>
           )}
         </div>
+
+        {/* What was quoted, what the farmer paid, what was billed and what went back: shown once money has moved (refunds too) */}
+        {(Number(booking.advancePaidAmount) > 0 || Number(booking.refundedAmount) > 0) && !['requested', 'pending', 'searching'].includes(booking.status?.toLowerCase()) && (() => {
+          const n = (v) => Number(v) || 0;
+          const rs = (v) => `₹${n(v).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+          const billed = n(bill ? bill.grandTotal : booking.finalAmount);
+          const refunded = n(booking.refundedAmount);
+          const noWork = hasBill && billed === 0;
+          const quoteRows = [
+            { label: 'Service price', value: n(booking.basePrice) },
+            { label: 'GST', value: n(booking.tax) },
+            { label: 'Platform fee', value: n(booking.platformFee), hideZero: true },
+            { label: 'Visiting charge', value: n(booking.visitingCharges), hideZero: true },
+            { label: 'Travel charge', value: n(booking.travelCharge), hideZero: true }
+          ].filter(r => !(r.hideZero && r.value === 0));
+          return (
+            <div className="bg-white rounded-xl p-3.5 mb-2.5 shadow-sm border border-gray-100/90 text-xs space-y-2.5">
+              <h4 className="font-bold text-gray-900 flex items-center gap-1.5 text-xs">
+                <span className="w-5 h-5 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-[10px]"><FiDollarSign /></span>
+                Quote, bill & refund
+              </h4>
+              <div className="space-y-1">
+                <p className="text-[9px] font-black uppercase tracking-wider text-gray-400">Quoted when the farmer booked</p>
+                {quoteRows.map(r => (
+                  <div key={r.label} className="flex justify-between text-gray-600"><span>{r.label}</span><span className="font-mono">{rs(r.value)}</span></div>
+                ))}
+                <div className="flex justify-between font-bold text-gray-800 border-t border-dashed border-gray-100 pt-1"><span>Paid by farmer in advance</span><span className="font-mono">{rs(booking.advancePaidAmount)}</span></div>
+              </div>
+              <div className="space-y-1 pt-1 border-t border-gray-100">
+                <p className="text-[9px] font-black uppercase tracking-wider text-gray-400">Final bill</p>
+                <div className="flex justify-between text-gray-600"><span>Billed for the work done</span><span className="font-mono">{rs(billed)}</span></div>
+                {noWork && (
+                  <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-1.5 leading-snug">
+                    No billable work was recorded (the live timer ran 0 minutes), so the quoted amount was not charged.
+                  </p>
+                )}
+                {refunded > 0 && (
+                  <div className="flex justify-between font-bold text-blue-700"><span>Refunded to farmer</span><span className="font-mono">{rs(refunded)}</span></div>
+                )}
+                <div className="flex justify-between font-bold text-emerald-700"><span>Your earning</span><span className="font-mono">{rs(bill ? bill.vendorTotalEarning : booking.vendorEarnings)}</span></div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Work Photos (after completion) */}
         {booking.workPhotos && booking.workPhotos.length > 0 && booking.assignedTo?.name !== 'You (Self)' && (
