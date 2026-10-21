@@ -152,9 +152,13 @@ const getBookingById = async (req, res) => {
       });
     }
 
+    // The final bill is the source of truth for what was actually charged and how it was split
+    const VendorBill = require('../../models/VendorBill');
+    const bill = await VendorBill.findOne({ bookingId: booking._id }).lean();
+
     res.status(200).json({
       success: true,
-      data: booking
+      data: { ...booking.toObject(), bill: bill || null }
     });
   } catch (error) {
     console.error('Get booking error:', error);

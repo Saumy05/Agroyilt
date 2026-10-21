@@ -254,8 +254,10 @@ export const VendorDashboardProvider = ({ children }) => {
       serviceType: booking.serviceId?.title || 'Service',
       customerName: booking.userId?.name || 'Farmer',
       location: booking.address?.addressLine1 || 'Address not available',
-      price: (booking.vendorEarnings > 0 ? booking.vendorEarnings : (booking.finalAmount ? booking.finalAmount * 0.9 : 0)).toFixed(2),
+      // the vendor's own earning on this booking, worked out by the server (final bill, else an estimate)
+      price: Number(booking.vendorEarnings || 0).toFixed(2),
       vendorEarnings: booking.vendorEarnings,
+      vendorEarningIsEstimate: Boolean(booking.vendorEarningIsEstimate),
       timeSlot: {
         date: new Date(booking.scheduledDate).toLocaleDateString(),
         time: booking.scheduledTime || 'Time not set'

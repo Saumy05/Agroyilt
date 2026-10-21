@@ -194,34 +194,75 @@ const BookingDetailsPage = () => {
                         </div>
                     </div>
 
-                    {/* Payment Summary */}
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-                        <h2 className="font-bold text-gray-800 flex items-center gap-2 mb-4">
-                            <FiCreditCard className="text-primary-600" /> Payment Summary
-                        </h2>
-                        <div className="space-y-3">
-                            <div className="flex justify-between text-sm text-gray-500">
-                                <span>Subtotal</span>
-                                <span className="font-semibold text-gray-800">₹{booking.basePrice?.toLocaleString()}</span>
+                    {/* Payment Summary: from the final bill when there is one, else from the booking's quote */}
+                    {(() => {
+                        const bill = booking.bill;
+                        const n = (v) => Number(v) || 0;
+                        const money = (v) => `₹${n(v).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+                        const feePct = bill?.payoutConfig?.platformFeePercentage || booking.platformFeePercentage;
+                        const gstPct = bill?.payoutConfig?.serviceGstPercentage ?? booking.gstPercentage;
+                        const rows = bill ? [
+                            { label: 'Service charges', value: n(bill.totalServiceBase) },
+                            { label: 'Parts & materials', value: n(bill.totalPartsBase), hideZero: true },
+                            { label: `GST${gstPct != null ? ` (${gstPct}%)` : ''}`, value: n(bill.totalGST) },
+                            { label: 'Visiting charges', value: n(bill.visitingCharges), hideZero: true },
+                            { label: 'Transport charges', value: n(bill.transportCharges), hideZero: true },
+                            { label: 'Travel charge (to vendor)', value: n(bill.travelCharge), hideZero: true },
+                            { label: `Platform fee${feePct ? ` (${feePct}%)` : ''}`, value: n(bill.platformFee), hideZero: true },
+                            { label: 'Cancellation penalty', value: n(bill.penaltyCharges), hideZero: true }
+                        ] : [
+                            { label: 'Service charges', value: n(booking.basePrice) - n(booking.discount) },
+                            { label: `GST${gstPct != null ? ` (${gstPct}%)` : ''}`, value: n(booking.tax) },
+                            { label: 'Visiting charges', value: n(booking.visitingCharges), hideZero: true },
+                            { label: 'Travel charge (to vendor)', value: n(booking.travelCharge), hideZero: true },
+                            { label: `Platform fee${feePct ? ` (${feePct}%)` : ''}`, value: n(booking.platformFee), hideZero: true },
+                            { label: 'Cancellation penalty', value: n(booking.penalty), hideZero: true }
+                        ];
+                        const total = bill ? n(bill.grandTotal) : n(booking.finalAmount ?? booking.totalAmount ?? booking.agreedRate ?? booking.basePrice);
+                        const platformEarning = bill ? n(bill.companyRevenue) - n(bill.totalGST) : 0;
+                        return (
+                            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                                <h2 className="font-bold text-gray-800 flex items-center gap-2 mb-1">
+                                    <FiCreditCard className="text-primary-600" /> Payment Summary
+                                </h2>
+                                <p className="text-[11px] text-gray-400 mb-4">{bill ? 'From the final bill' : 'Quoted at booking (no final bill yet)'}</p>
+                                <div className="space-y-3">
+                                    {rows.filter(r => !(r.hideZero && r.value === 0)).map(r => (
+                                        <div key={r.label} className="flex justify-between text-sm text-gray-500">
+                                            <span>{r.label}</span>
+                                            <span className="font-semibold text-gray-800">{money(r.value)}</span>
+                                        </div>
+                                    ))}
+                                    <div className="pt-3 border-t border-gray-50 flex justify-between font-bold text-lg text-gray-900">
+                                        <span>Total</span>
+                                        <span>{money(total)}</span>
+                                    </div>
+
+                                    {bill && (
+                                        <div className="mt-2 rounded-lg p-3 border border-emerald-100 bg-emerald-50/50 space-y-1.5 text-xs">
+                                            <p className="text-[10px] uppercase tracking-wider text-emerald-700 font-bold">Who gets what</p>
+                                            <div className="flex justify-between text-gray-600"><span>Vendor earning</span><span className="font-semibold text-gray-800">{money(bill.vendorTotalEarning)}</span></div>
+                                            <div className="flex justify-between text-gray-600"><span>Platform earning (commission + fee)</span><span className="font-semibold text-gray-800">{money(platformEarning)}</span></div>
+                                            <div className="flex justify-between text-gray-600"><span>GST collected</span><span className="font-semibold text-gray-800">{money(bill.totalGST)}</span></div>
+                                        </div>
+                                    )}
+
+                                    <div className="mt-2 bg-gray-50 rounded-lg p-3 border border-gray-100 space-y-1.5 text-xs">
+                                        <div className="flex justify-between"><span className="text-gray-500">Payment status</span><span className="font-bold text-gray-800 uppercase">{(booking.paymentStatus || 'pending').replace(/_/g, ' ')}</span></div>
+                                        {booking.paymentMethod && (
+                                            <div className="flex justify-between"><span className="text-gray-500">Method</span><span className="font-bold text-gray-800 uppercase">{String(booking.paymentMethod).replace(/_/g, ' ')}</span></div>
+                                        )}
+                                        {n(booking.advancePaidAmount) > 0 && (
+                                            <div className="flex justify-between"><span className="text-gray-500">Paid in advance</span><span className="font-bold text-gray-800">{money(booking.advancePaidAmount)}</span></div>
+                                        )}
+                                        {n(booking.refundedAmount) > 0 && (
+                                            <div className="flex justify-between"><span className="text-gray-500">Refunded to farmer</span><span className="font-bold text-gray-800">{money(booking.refundedAmount)}</span></div>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
-                            <div className="flex justify-between text-sm text-gray-500">
-                                <span>Taxes</span>
-                                <span className="font-semibold text-gray-800">₹{booking.tax?.toLocaleString() || 0}</span>
-                            </div>
-                            <div className="flex justify-between text-sm text-gray-500">
-                                <span>Service Fee</span>
-                                <span className="font-semibold text-gray-800">₹{booking.visitingCharges?.toLocaleString() || 0}</span>
-                            </div>
-                            <div className="pt-3 border-t border-gray-50 flex justify-between font-bold text-lg text-gray-900">
-                                <span>Total Paid</span>
-                                <span>₹{Number(booking.finalAmount ?? booking.totalAmount ?? booking.agreedRate ?? booking.basePrice ?? 0).toLocaleString('en-IN')}</span>
-                            </div>
-                            <div className="mt-4 bg-gray-50 rounded-lg p-3 border border-gray-100">
-                                <p className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-1">Status</p>
-                                <p className="text-xs font-bold text-gray-800 uppercase">{booking.paymentStatus || 'Paid'}</p>
-                            </div>
-                        </div>
-                    </div>
+                        );
+                    })()}
                 </div>
             </div>
         </motion.div>

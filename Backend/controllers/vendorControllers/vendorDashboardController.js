@@ -156,6 +156,16 @@ const getDashboardStats = async (req, res) => {
     const globalSettings = await Settings.findOne({ type: 'global' });
     const servicePayoutPercentage = getVendorPayoutPercentage(globalSettings);
 
+    // What the vendor earns on each recent booking: the final bill's figure, else an estimate from the service price
+    // (commission applies to the price before GST; the travel charge is the vendor's in full; the platform fee and GST are not).
+    const recentBills = await VendorBill.find({ bookingId: { $in: recentBookings.map(b => b._id) } }).select('bookingId vendorTotalEarning').lean();
+    const billByBooking = Object.fromEntries(recentBills.map(b => [String(b.bookingId), b]));
+    const recentWithEarnings = recentBookings.map((b) => {
+      const bill = billByBooking[String(b._id)];
+      const estimate = Math.round((((Number(b.basePrice) || 0) * servicePayoutPercentage) / 100 + (Number(b.travelCharge) || 0)) * 100) / 100;
+      return { ...b, vendorEarnings: bill ? bill.vendorTotalEarning : estimate, vendorEarningIsEstimate: !bill };
+    });
+
     res.status(200).json({
       success: true,
       data: {
@@ -171,7 +181,7 @@ const getDashboardStats = async (req, res) => {
           complianceAlerts, // Add this
           servicePayoutPercentage
         },
-        recentBookings
+        recentBookings: recentWithEarnings
       }
     });
   } catch (error) {
