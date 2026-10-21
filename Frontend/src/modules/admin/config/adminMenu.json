@@ -74,7 +74,7 @@
   },
   {
     "category": "OPERATIONS",
-    "title": "Equipment Catalog",
+    "title": "Catalog Setup",
     "route": "/admin/equipment-catalog",
     "allowedRoles": [
       "super_admin",
@@ -83,7 +83,7 @@
     "children": [
       "Home",
       "Manage Categories",
-      "Manage Equipment Types"
+      "Manage Machinery Types"
     ]
   },
   {
@@ -99,15 +99,13 @@
   },
   {
     "category": "OPERATIONS",
-    "title": "Machinery Management",
+    "title": "Machinery Listings",
     "route": "/admin/products",
     "allowedRoles": [
       "super_admin",
       "admin"
     ],
-    "children": [
-      "Equipment Approval"
-    ]
+    "children": []
   },
   {
     "category": "FINANCE & PAYOUTS",

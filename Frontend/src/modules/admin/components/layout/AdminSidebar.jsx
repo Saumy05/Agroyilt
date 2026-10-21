@@ -59,8 +59,8 @@ const iconMap = {
   "Soil Testing": FiActivity,
   "Land Leases": FiMap,
   Disputes: FiAlertTriangle,
-  "Equipment Catalog": FiGrid,
-  "Machinery Management": FiPackage,
+  "Catalog Setup": FiGrid,
+  "Machinery Listings": FiPackage,
   "Manage Website": FiGlobe,
   "Kisan Suvidha & Mandi": FiTrendingUp,
   "Machinery Approvals": FiTruck,
@@ -218,7 +218,7 @@ const AdminSidebar = ({ isOpen, onClose }) => {
       });
     }
 
-    // Special case for Equipment Catalog to prevent false active state on sub-routes
+    // Special case for Catalog Setup to prevent false active state on sub-routes
     if (route === "/admin/equipment-catalog") {
       if (location.pathname.startsWith("/admin/equipment-catalog/vendor-")) {
         return false;

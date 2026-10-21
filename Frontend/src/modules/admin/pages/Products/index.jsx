@@ -308,7 +308,7 @@ const ManageProducts = () => {
                     await adminEquipmentService.update(catalogFormData.vendorEqId, updatePayload);
                     fetchData(); // Refresh list to remove the button
                 }
-                toastManager.success("Added to Equipment Catalog successfully!");
+                toastManager.success("Added to Machinery Listings successfully!");
                 setShowCatalogModal(false);
             } else {
                 toastManager.error(res.message || "Failed to add to catalog");
@@ -443,7 +443,7 @@ const ManageProducts = () => {
         <div className="py-6 bg-slate-50 min-h-screen">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 px-6">
                 <div>
-                    <h1 className="text-2xl font-black text-slate-800">Machinery Management</h1>
+                    <h1 className="text-2xl font-black text-slate-800">Machinery Listings</h1>
                     <p className="text-sm text-slate-500 font-medium">Manage Equipment & Heavy Machinery Approvals</p>
                 </div>
                 <button
@@ -1003,7 +1003,7 @@ const ManageProducts = () => {
                                     <div className="flex items-center gap-2">
                                         <span className="text-xs font-black text-orange-700 uppercase tracking-wider">⚙ Machinery Classification</span>
                                     </div>
-                                    <p className="text-[10px] text-orange-600 font-medium leading-tight">Only set this for Equipment Catalog categories. Leave as "None" for Soil Testing or E-commerce.</p>
+                                    <p className="text-[10px] text-orange-600 font-medium leading-tight">Only set this for machinery categories (Catalog Setup). Leave as "None" for Soil Testing or E-commerce.</p>
                                     <div className="flex flex-col sm:flex-row gap-4 items-center">
                                         <div className="flex-1 w-full space-y-1">
                                             <label className="text-[10px] font-black text-orange-700 uppercase">Tracking Type</label>

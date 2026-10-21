@@ -69,7 +69,7 @@ export const PERMISSION_GROUPS = [
     ]
   },
   {
-    group: 'Machinery Management',
+    group: 'Machinery Listings',
     icon: '🔧',
     color: 'cyan',
     keys: [

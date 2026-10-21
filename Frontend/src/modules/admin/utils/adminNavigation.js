@@ -27,7 +27,7 @@ export const getChildRoute = (parentRoute, childName) => {
     "/admin/equipment-catalog": {
       "Home": "/admin/equipment-catalog/home",
       "Manage Categories": "/admin/equipment-catalog/categories",
-      "Manage Equipment Types": "/admin/equipment-catalog/sections",
+      "Manage Machinery Types": "/admin/equipment-catalog/sections",
       "Machinery Approvals": "/admin/equipment-approvals"
     },
     "/admin/payments": {
@@ -60,9 +60,6 @@ export const getChildRoute = (parentRoute, childName) => {
       "History": "/admin/settlements/history",
       "Worker Dues": "/admin/settlements/worker-dues",
     },
-    "/admin/products": {
-      "Equipment Approval": "/admin/products",
-    },
     "/admin/manage-website": {
       "Blogs": "/admin/manage-website/blogs",
       "Articles": "/admin/manage-website/articles",
@@ -91,9 +88,9 @@ export const MENU_PERMISSION_MAP = {
   'Payments': 'payments.view',
   'Withdrawals': 'settlements.view',
   'Settlements': 'settlements.view',
-  'Equipment Catalog': 'services.view',
+  'Catalog Setup': 'services.view',
   'Machinery Approvals': 'machinery.approvals.view',
-  'Machinery Management': 'machinery.view',
+  'Machinery Listings': 'machinery.view',
   'Reports': 'reports.view',
   'Reviews': 'reviews.view',
   'Soil Testing': 'soiltest.view',

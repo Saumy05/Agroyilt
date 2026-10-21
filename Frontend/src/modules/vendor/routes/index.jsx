@@ -98,7 +98,9 @@ const VendorRoutes = () => {
     location.pathname.endsWith('/map') ||
     location.pathname.includes('/booking-alert/') ||
     location.pathname.includes('/billing') ||
-    location.pathname.includes('/bank-details/edit');
+    location.pathname.includes('/bank-details/edit') ||
+    location.pathname === '/vendor/profile/edit' ||
+    location.pathname.startsWith('/vendor/equipment/edit/');
 
   const shouldShowBottomNav = !shouldHideBottomNav;
 

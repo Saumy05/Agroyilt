@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiSave, FiUser, FiBriefcase, FiPhone, FiMail, FiMapPin, FiChevronDown, FiCamera, FiUpload } from 'react-icons/fi';
+import { FiSave, FiUser, FiBriefcase, FiPhone, FiMail, FiMapPin, FiCamera, FiUpload, FiSearch, FiCheck, FiX } from 'react-icons/fi';
 import { vendorTheme as themeColors } from '../../../../theme';
 import Header from '../../components/layout/Header';
-import BottomNav from '../../components/layout/BottomNav';
 import { publicCatalogService } from '../../../../services/catalogService';
 import { vendorAuthService } from '../../../../services/authService';
 import AddressSelectionModal from '../../../user/pages/Checkout/components/AddressSelectionModal';
@@ -60,7 +59,7 @@ const EditProfile = () => {
 
   // Load service categories from admin config (dynamic)
   const [categories, setCategories] = useState([]);
-  const [isCategoryOpen, setIsCategoryOpen] = useState(false);
+  const [categorySearch, setCategorySearch] = useState('');
   const [errors, setErrors] = useState({});
 
   const handleNativeCamera = async (target = 'photo') => {
@@ -624,74 +623,97 @@ const EditProfile = () => {
             {errors.address && <p className="text-red-500 text-sm mt-1">{errors.address}</p>}
           </div>
 
-          {/* Service Category (Multi-Select) */}
+          {/* Service Categories (multi-select): tap to add or remove */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-              <div
-                className="p-2 rounded-lg"
-                style={{
-                  background: `linear-gradient(135deg, ${themeColors.icon}25 0%, ${themeColors.icon}15 100%)`,
-                }}
-              >
-                <FiBriefcase className="w-4 h-4" style={{ color: themeColors.icon }} />
-              </div>
-              <span>Service Categories <span className="text-red-500">*</span></span>
-            </label>
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setIsCategoryOpen(!isCategoryOpen)}
-                className="w-full px-4 py-3 bg-white rounded-xl border border-gray-200 flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-blue-100"
-              >
-                <div className="flex flex-wrap gap-2 overflow-hidden">
-                  {formData.serviceCategories.length > 0 ? (
-                    formData.serviceCategories.map((cat, idx) => (
-                      <span key={idx} className="text-sm bg-blue-50 text-blue-700 px-2 py-1 rounded-md">
-                        {cat}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="text-gray-400">Select Categories</span>
-                  )}
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                <div
+                  className="p-2 rounded-lg"
+                  style={{
+                    background: `linear-gradient(135deg, ${themeColors.icon}25 0%, ${themeColors.icon}15 100%)`,
+                  }}
+                >
+                  <FiBriefcase className="w-4 h-4" style={{ color: themeColors.icon }} />
                 </div>
-                <FiChevronDown className={`w-5 h-5 text-gray-500 transition-transform ${isCategoryOpen ? 'rotate-180' : ''}`} />
-              </button>
-
-              {isCategoryOpen && (
-                <>
-                  <div
-                    className="fixed inset-0 z-10 bg-transparent"
-                    onClick={() => setIsCategoryOpen(false)}
-                  />
-                  <div className="absolute z-20 w-full mt-2 bg-white rounded-xl shadow-xl border border-gray-100 max-h-60 overflow-y-auto">
-                    {categories.length > 0 ? (
-                      categories.map((cat, index) => {
-                        const isSelected = formData.serviceCategories.includes(cat.title);
-                        return (
-                          <button
-                            key={cat._id || index}
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation(); // Prevent closing dropdown immediately
-                              handleCategoryChange(cat.title);
-                            }}
-                            className="w-full text-left px-4 py-3 hover:bg-gray-50 font-medium text-gray-700 border-b border-gray-50 last:border-0 flex items-center justify-between"
-                          >
-                            {cat.title}
-                            <div className={`w-5 h-5 rounded border flex items-center justify-center ${isSelected ? 'bg-blue-500 border-blue-500' : 'border-gray-300'}`}>
-                              {isSelected && <span className="text-white text-xs">✓</span>}
-                            </div>
-                          </button>
-                        );
-                      })
-                    ) : (
-                      <div className="px-4 py-3 text-gray-400 text-sm">No categories found</div>
-                    )}
-                  </div>
-                </>
-              )}
+                <span>Service Categories <span className="text-red-500">*</span></span>
+              </label>
+              <span
+                className={`text-xs font-bold px-2.5 py-1 rounded-full ${formData.serviceCategories.length > 0 ? 'text-white' : 'bg-gray-100 text-gray-500'}`}
+                style={formData.serviceCategories.length > 0 ? { backgroundColor: themeColors.button } : {}}
+              >
+                {formData.serviceCategories.length} selected
+              </span>
             </div>
-            {errors.serviceCategories && <p className="text-red-500 text-sm mt-1">{errors.serviceCategories}</p>}
+            <p className="text-xs text-gray-500 mb-3 ml-1">Pick every kind of work you do. Farmers looking for these will find you.</p>
+
+            <div className="rounded-2xl border border-gray-200 bg-white p-3 space-y-3">
+              {/* Selected: shown first, one tap to remove. Also lists old choices that are no longer in the catalog. */}
+              {formData.serviceCategories.length > 0 && (
+                <div className="flex flex-wrap gap-2 pb-3 border-b border-gray-100">
+                  {formData.serviceCategories.map((title) => (
+                    <button
+                      key={title}
+                      type="button"
+                      onClick={() => handleCategoryChange(title)}
+                      className="inline-flex items-center gap-1.5 pl-3 pr-2 py-1.5 rounded-full text-sm font-semibold text-white shadow-sm active:scale-95 transition-transform"
+                      style={{ backgroundColor: themeColors.button }}
+                      aria-label={`Remove ${title}`}
+                    >
+                      {title}
+                      <FiX className="w-3.5 h-3.5 opacity-80" />
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {categories.length > 6 && (
+                <div className="relative">
+                  <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    value={categorySearch}
+                    onChange={(e) => setCategorySearch(e.target.value)}
+                    placeholder="Search categories"
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm outline-none focus:border-blue-300"
+                  />
+                </div>
+              )}
+
+              {(() => {
+                const q = categorySearch.trim().toLowerCase();
+                const options = categories.filter(c => !q || (c.title || '').toLowerCase().includes(q));
+                if (categories.length === 0) {
+                  return <p className="text-sm text-gray-400 py-2 text-center">No categories found for your area yet.</p>;
+                }
+                if (options.length === 0) {
+                  return <p className="text-sm text-gray-400 py-2 text-center">No category matches "{categorySearch}".</p>;
+                }
+                return (
+                  <div className="flex flex-wrap gap-2 max-h-56 overflow-y-auto pr-1">
+                    {options.map((cat, index) => {
+                      const isSelected = formData.serviceCategories.includes(cat.title);
+                      return (
+                        <button
+                          key={cat._id || cat.id || index}
+                          type="button"
+                          onClick={() => handleCategoryChange(cat.title)}
+                          aria-pressed={isSelected}
+                          className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-sm font-medium border transition-all active:scale-95 ${
+                            isSelected
+                              ? 'bg-blue-50 border-blue-400 text-blue-700'
+                              : 'bg-white border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                          }`}
+                        >
+                          {isSelected && <FiCheck className="w-3.5 h-3.5" />}
+                          {cat.title}
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+            {errors.serviceCategories && <p className="text-red-500 text-sm mt-2">{errors.serviceCategories}</p>}
           </div>
 
           {/* Aadhar Document Upload */}
@@ -795,7 +817,6 @@ const EditProfile = () => {
         onSave={handleAddressSave}
       />
 
-      <BottomNav />
     </div>
   );
 };

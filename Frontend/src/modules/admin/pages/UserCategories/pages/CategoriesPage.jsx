@@ -772,7 +772,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
                 href="/admin/equipment-catalog/sections"
                 className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-md shrink-0 transition-colors"
               >
-                Manage Equipment Types →
+                Manage Machinery Types →
               </a>
             </div>
           )}
@@ -1495,7 +1495,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
             <div className="flex items-center gap-2">
               <span className="text-sm font-black text-orange-700 uppercase tracking-wider">⚙ Machinery Classification</span>
             </div>
-            <p className="text-xs text-orange-600 font-medium">Only set this for Equipment Catalog categories. Leave as "None" for Soil Testing or E-commerce.</p>
+            <p className="text-xs text-orange-600 font-medium">Only set this for machinery categories (Catalog Setup). Leave as "None" for Soil Testing or E-commerce.</p>
             <div className="flex flex-col sm:flex-row gap-4 items-center">
               <div className="flex-1 w-full">
                 <label className="block text-xs font-bold text-orange-700 mb-1 uppercase tracking-tighter">Tracking Type</label>

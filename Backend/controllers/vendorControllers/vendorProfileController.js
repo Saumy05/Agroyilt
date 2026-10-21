@@ -49,6 +49,10 @@ const getProfile = async (req, res) => {
         skills: vendor.skills || [],
         address: vendor.address || null,
         cityId: vendor.cityId || null,
+        // the vendor's area: the category lists use it to include state / district scoped categories
+        stateId: vendor.stateId || null,
+        districtId: vendor.districtId || null,
+        subDistrictId: vendor.subDistrictId || null,
         rating: rating > 0 ? parseFloat(rating.toFixed(1)) : 0,
         totalJobs,
         completionRate,

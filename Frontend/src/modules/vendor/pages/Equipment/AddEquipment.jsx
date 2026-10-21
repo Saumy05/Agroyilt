@@ -93,7 +93,7 @@ const AddEquipment = () => {
       let vendorLocation = {};
       try {
         const profileRes = await vendorService.getProfile();
-        vendorLocation = locationParamsFromVendor(profileRes.data);
+        vendorLocation = locationParamsFromVendor(profileRes.vendor || profileRes.data);
       } catch (e) {
         console.warn('Profile city fetch skipped:', e);
       }
