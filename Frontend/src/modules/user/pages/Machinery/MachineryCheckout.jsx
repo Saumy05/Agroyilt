@@ -535,6 +535,15 @@ const MachineryCheckout = () => {
                         </div>
                     </div>
 
+                    {/* By-the-piece rental: how many the farmer wants (the vendor's stock is not shown to the farmer) */}
+                    {Number(units) > 0 && (
+                        <div className="rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-2 mb-2.5 text-xs">
+                            <span className="font-black text-amber-900">
+                                📦 You want: {units} {equipment.categoryId?.unitLabel || 'piece'}{Number(units) > 1 ? 's' : ''}
+                            </span>
+                        </div>
+                    )}
+
                     {approxBill && (
                         <div className="rounded-xl border border-teal-200 bg-teal-50/70 p-3 space-y-0.5">
                             <p className="text-[9.5px] font-black text-teal-800 uppercase tracking-wider">Approx. final bill</p>

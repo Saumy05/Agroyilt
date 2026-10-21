@@ -60,9 +60,8 @@ exports.updateEquipmentStatus = async (req, res) => {
     let categoryUpdate = {};
     let createdCategoryTitle = null;
     let finalStatus = status;
-    let waitingForStock = null; // by-the-piece category, but the vendor has not said how many pieces they have
     if (status === 'approved') {
-      const existing = await VendorEquipment.findById(id).select('categoryId requestedCategoryName listingType totalUnits vendorId name');
+      const existing = await VendorEquipment.findById(id).select('categoryId requestedCategoryName listingType vendorId name');
       let category = null;
       if (existing && !existing.categoryId && existing.requestedCategoryName) {
         const title = existing.requestedCategoryName.trim();
@@ -101,11 +100,6 @@ exports.updateEquipmentStatus = async (req, res) => {
         category = await Category.findById(existing.categoryId).select('rentByUnit unitLabel');
       }
 
-      // By-the-piece category: the machine goes live only once the vendor has entered their stock
-      if (category?.rentByUnit && !existing.totalUnits) {
-        finalStatus = 'pending';
-        waitingForStock = category.unitLabel || 'piece';
-      }
     }
 
     const before = await VendorEquipment.findById(id).select('status').lean();
@@ -140,28 +134,11 @@ exports.updateEquipmentStatus = async (req, res) => {
       }
     }
 
-    if (waitingForStock) {
-      try {
-        await require('../notificationControllers/notificationController').createNotification({
-          vendorId: equipment.vendorId,
-          type: 'general',
-          title: 'One more step to list your machine',
-          message: `"${equipment.name}" is in a category rented by the ${waitingForStock}. Open it and enter how many ${waitingForStock}s you have; we will then approve it.`,
-          relatedId: equipment._id,
-          relatedType: 'equipment'
-        });
-      } catch (e) {
-        console.error('Stock-needed notification failed:', e.message);
-      }
-    }
-
     res.status(200).json({
       success: true,
-      message: waitingForStock
-        ? `${createdCategoryTitle ? `Category "${createdCategoryTitle}" created. ` : ''}Not approved yet: the vendor must first enter how many ${waitingForStock}s they have.`
-        : createdCategoryTitle
-          ? `Equipment approved. New category "${createdCategoryTitle}" was created.`
-          : `Equipment ${status} successfully`,
+      message: createdCategoryTitle
+        ? `Equipment approved. New category "${createdCategoryTitle}" was created.`
+        : `Equipment ${status} successfully`,
       data: equipment
     });
   } catch (error) {

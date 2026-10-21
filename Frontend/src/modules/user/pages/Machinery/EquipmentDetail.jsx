@@ -191,9 +191,10 @@ const EquipmentDetail = () => {
     : (equipment.pricing?.land_based?.price || 0);
 
   // Rented by the piece: the rate is per piece, so everything scales with how many the farmer takes
-  const pieceMode = equipment.totalUnits > 0;
+  const pieceMode = Boolean(equipment.categoryId?.rentByUnit);
   const unitName = equipment.categoryId?.unitLabel || 'piece';
-  const pieces = pieceMode ? Math.min(units, equipment.totalUnits) : 1;
+  const MAX_PIECES = 10000; // no stock count: the vendor accepts or declines the request
+  const pieces = pieceMode ? Math.min(MAX_PIECES, Math.max(1, Number(units) || 1)) : 1;
   const implementAddon = getImplementAddon() * pieces;
   const baseTotal = currentRate * quantity * pieces;
   const total = baseTotal + implementAddon;
@@ -700,7 +701,7 @@ const EquipmentDetail = () => {
           <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200/80 flex items-center justify-between gap-3">
             <div>
               <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">How many {unitName}s?</h3>
-              <p className="text-[10px] font-semibold text-slate-400">Rate is per {unitName}. Up to {equipment.totalUnits} available.</p>
+              <p className="text-[10px] font-semibold text-slate-400">Rate is per {unitName}.</p>
             </div>
             <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200/60">
               <button
@@ -711,10 +712,19 @@ const EquipmentDetail = () => {
               >
                 <FiMinus size={13} />
               </button>
-              <span className="text-sm font-black text-slate-900 min-w-8 text-center px-1">{pieces}</span>
+              <input
+                type="number"
+                min="1"
+                max={MAX_PIECES}
+                inputMode="numeric"
+                value={pieces}
+                onChange={e => setUnits(Math.min(MAX_PIECES, Math.max(1, parseInt(e.target.value, 10) || 1)))}
+                className="w-14 text-sm font-black text-slate-900 text-center bg-transparent outline-none"
+                aria-label={`Number of ${unitName}s`}
+              />
               <button
                 type="button"
-                onClick={() => setUnits(Math.min(equipment.totalUnits, pieces + 1))}
+                onClick={() => setUnits(Math.min(MAX_PIECES, pieces + 1))}
                 className="w-8 h-8 bg-white rounded-lg flex items-center justify-center font-bold text-slate-700 shadow-xs active:scale-90"
                 aria-label={`More ${unitName}s`}
               >

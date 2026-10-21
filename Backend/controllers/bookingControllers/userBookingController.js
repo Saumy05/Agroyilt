@@ -262,13 +262,15 @@ const createBooking = async (req, res) => {
         equipmentObj = await VendorEquipment.findById(equipmentId);
       }
 
-      if (equipmentObj?.totalUnits > 0) {
+      // By-the-piece category (e.g. pipes): the farmer says how many. There is no stock count: the vendor gets every request.
+      const pieceCategory = equipmentObj?.categoryId ? await Category.findById(equipmentObj.categoryId).select('rentByUnit').lean() : null;
+      if (pieceCategory?.rentByUnit) {
         unitsBooked = Number(requestedUnits);
         if (!Number.isInteger(unitsBooked) || unitsBooked < 1) {
           return res.status(400).json({ success: false, message: 'Choose how many pieces you need.' });
         }
-        if (unitsBooked > equipmentObj.totalUnits) {
-          return res.status(400).json({ success: false, message: `This vendor has only ${equipmentObj.totalUnits} available.` });
+        if (unitsBooked > 10000) {
+          return res.status(400).json({ success: false, message: 'That quantity is too large. Please enter a smaller number.' });
         }
       }
 

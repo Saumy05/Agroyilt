@@ -971,15 +971,9 @@ const findVendorSlotConflict = async (target, vendorId, { excludeId = null, stat
   const mine = parseSlotInterval(target.timeSlot, target.scheduledTime, target.rental_type);
   const targetIsRental = target.fulfillmentMode === 'rental';
 
-  // Rented by the piece: the slot is only "taken" when the pieces already booked plus these would exceed the vendor's stock
-  const wanted = Number(target.unitsBooked) || 0;
-  let capacity = 0;
-  if (wanted > 0 && targetIsRental && target.equipmentId) {
-    const eq = await require('../models/VendorEquipment').findById(target.equipmentId).select('totalUnits').lean();
-    capacity = Number(eq?.totalUnits) || 0;
-  }
-  let taken = 0;
-  let lastOverlap = null;
+  // Rented by the piece: there is no stock count, so a piece booking never clashes with another. The vendor receives every
+  // request and accepts or declines it himself.
+  if (targetIsRental && (Number(target.unitsBooked) || 0) > 0) return null;
 
   for (const other of others) {
     const otherIsRental = other.fulfillmentMode === 'rental';
@@ -1000,13 +994,9 @@ const findVendorSlotConflict = async (target, vendorId, { excludeId = null, stat
       const earlier = t < beatenBy.at || (t.getTime() === beatenBy.at.getTime() && other._id.toString() < beatenBy.id.toString());
       if (!earlier) continue;
     }
-    if (isIntervalOverlapping(parseSlotInterval(other.timeSlot, other.scheduledTime, other.rental_type), mine)) {
-      if (!capacity) return other;
-      taken += other.unitsBooked || 1;
-      lastOverlap = other;
-    }
+    if (isIntervalOverlapping(parseSlotInterval(other.timeSlot, other.scheduledTime, other.rental_type), mine)) return other;
   }
-  return capacity > 0 && lastOverlap && taken + wanted > capacity ? lastOverlap : null;
+  return null;
 };
 
 /** Flushes any open running/paused interval and marks the timer finished. */

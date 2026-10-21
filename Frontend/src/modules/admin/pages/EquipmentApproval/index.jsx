@@ -193,11 +193,6 @@ const EquipmentApproval = () => {
                         {item.status === 'rejected' && <FiXCircle className="w-2.5 h-2.5" />}
                         {item.status}
                       </div>
-                      {item.status === 'pending' && item.categoryId?.rentByUnit && !item.totalUnits && (
-                        <p className="text-[9px] font-bold text-amber-600 mt-1.5 max-w-[170px] leading-snug">
-                          Waiting for the vendor to enter how many {(item.categoryId.unitLabel || 'piece').toLowerCase()}s they have. It goes live once they do.
-                        </p>
-                      )}
                     </td>
                     <td className="px-6 py-6">
                       <div className="flex items-center justify-center gap-2">
@@ -343,10 +338,6 @@ const EquipmentApproval = () => {
                       )
                     ))}
                   </div>
-
-                  {selectedItem.totalUnits > 0 && (
-                    <p className="text-sm font-bold text-slate-600">Stock: {selectedItem.totalUnits} {selectedItem.categoryId?.unitLabel || 'piece'}(s)</p>
-                  )}
 
                   {selectedItem.status === 'pending' && needsCategoryChoice(selectedItem) && (
                     <div className="p-5 rounded-3xl bg-purple-50 border border-purple-100 space-y-3">

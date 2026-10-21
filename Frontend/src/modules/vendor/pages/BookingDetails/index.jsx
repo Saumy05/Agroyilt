@@ -936,7 +936,7 @@ export default function BookingDetails() {
               )}
               {booking.unitsBooked > 0 && (
                 <span className="text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200/60 px-2 py-0.5 rounded-md">
-                  📦 {booking.unitsBooked} {booking.categoryId?.unitLabel || 'pcs'}
+                  📦 {booking.unitsBooked} {booking.categoryId?.unitLabel || 'pcs'} requested
                 </span>
               )}
               {booking.estimatedDuration && (
