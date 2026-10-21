@@ -41,7 +41,9 @@ const EquipmentApproval = () => {
     try {
       const res = await adminEquipmentService.updateStatus(id, { status, remarks, ...extra });
       if (res.success) {
-        toastManager.success(`Machine ${status}`);
+        // The server keeps a by-the-piece listing pending until the vendor enters their stock: say so instead of "approved"
+        if (status === 'approved' && res.data?.status !== 'approved') toastManager.info(res.message || 'Not approved yet');
+        else toastManager.success(`Machine ${status}`);
         refreshAdminCounts();
         fetchEquipment();
         setSelectedItem(null);
@@ -180,6 +182,11 @@ const EquipmentApproval = () => {
                         {item.status === 'rejected' && <FiXCircle className="w-2.5 h-2.5" />}
                         {item.status}
                       </div>
+                      {item.status === 'pending' && item.categoryId?.rentByUnit && !item.totalUnits && (
+                        <p className="text-[9px] font-bold text-amber-600 mt-1.5 max-w-[170px] leading-snug">
+                          Waiting for the vendor to enter how many {(item.categoryId.unitLabel || 'piece').toLowerCase()}s they have. It goes live once they do.
+                        </p>
+                      )}
                     </td>
                     <td className="px-6 py-6">
                       <div className="flex items-center justify-center gap-2">
