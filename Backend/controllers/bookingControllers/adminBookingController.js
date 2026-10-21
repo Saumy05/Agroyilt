@@ -213,27 +213,75 @@ const cancelBooking = async (req, res) => {
       });
     }
 
-    // Update booking
-    booking.status = BOOKING_STATUS.CANCELLED;
-    booking.cancelledAt = new Date();
-    booking.cancelledBy = 'admin';
-    booking.cancellationReason = cancellationReason || 'Cancelled by admin';
+    const reason = cancellationReason || 'Cancelled by admin';
+    const User = require('../../models/User');
+    const { announceCancellation } = require('../workerControllers/farmerWorkerRequestController');
+    let refundAmount = 0;
+    let cancelledDoc = booking;
 
-    await booking.save();
+    // Independent-worker booking: its own cancel service does the refund and frees the workers
+    const WorkerBookingRequest = require('../../models/WorkerBookingRequest');
+    const parentRequest = booking.workerRequestId
+      ? await WorkerBookingRequest.findById(booking.workerRequestId).select('_id')
+      : await WorkerBookingRequest.findOne({ $or: [{ finalBookingIds: booking._id }, { finalBookingId: booking._id }] }).select('_id');
 
-    // Everyone on the job learns it is off, with the reason
-    const reasonText = booking.cancellationReason ? ` Reason: ${booking.cancellationReason}` : '';
-    const common = { type: 'booking_cancelled', relatedId: booking._id, relatedType: 'booking', data: { bookingId: String(booking._id) } };
-    await Promise.all([
-      notifySafe({ ...common, userId: booking.userId, title: 'Your booking was cancelled', message: `Booking #${booking.bookingNumber} was cancelled by the admin.${reasonText}` }),
-      booking.vendorId && notifySafe({ ...common, vendorId: booking.vendorId, title: 'A booking was cancelled', message: `Booking #${booking.bookingNumber} was cancelled by the admin.${reasonText}` }),
-      booking.workerId && notifySafe({ ...common, workerId: booking.workerId, title: 'A booking was cancelled', message: `Booking #${booking.bookingNumber} was cancelled by the admin.${reasonText}` })
-    ].filter(Boolean));
+    if (parentRequest) {
+      const result = await require('../../services/workerBookingCancelService').cancelWorkerBooking({
+        requestId: parentRequest._id, actor: 'admin', actorId: req.user?.id || null, reason
+      });
+      if (!result.ok) return res.status(result.code).json({ success: false, message: result.reason });
+      refundAmount = result.refundAmount || 0;
+      await Booking.updateOne({ _id: booking._id, status: { $ne: BOOKING_STATUS.CANCELLED } }, { $set: { status: BOOKING_STATUS.CANCELLED, cancelledAt: new Date(), cancelledBy: 'admin', cancellationReason: reason } });
+      // tells the farmer (with the refund) and every worker, and updates their open screens
+      await announceCancellation({ request: result.request, workerIds: result.workerIds, refundAmount, wasConfirmed: result.wasConfirmed, by: 'admin' });
+      cancelledDoc = await Booking.findById(booking._id);
+    } else {
+      // Machinery / vendor booking: one atomic cancel that stops the timer, closes open vendor alerts, frees the vendor
+      // and refunds the farmer's whole advance (the farmer did nothing wrong, so no cancellation fee)
+      const settlementSvc = require('../../services/bookingSettlementService');
+      const result = await settlementSvc.cancelBookingWithRefund(booking._id, {
+        allowedStatuses: Object.values(BOOKING_STATUS).filter(st => ![BOOKING_STATUS.CANCELLED, BOOKING_STATUS.COMPLETED].includes(st)),
+        by: 'admin',
+        reason
+      });
+      if (!result.booking) {
+        return res.status(409).json({ success: false, message: 'The booking changed while cancelling. Please refresh and try again.' });
+      }
+      cancelledDoc = result.booking;
+      refundAmount = result.refunded || 0;
+
+      // A cancellation fee that was baked into this unpaid booking goes back onto the farmer's account
+      if (settlementSvc.getAdvancePaid(cancelledDoc) <= 0 && Number(cancelledDoc.penalty) > 0) {
+        await User.updateOne({ _id: cancelledDoc.userId }, { $inc: { 'wallet.penalty': cancelledDoc.penalty } });
+      }
+
+      // Everyone on the job learns it is off, with the reason
+      const reasonText = ` Reason: ${String(reason).replace(/[.\s]+$/, '')}.`;
+      const common = { type: 'booking_cancelled', relatedId: booking._id, relatedType: 'booking', data: { bookingId: String(booking._id) } };
+      await Promise.all([
+        notifySafe({
+          ...common, userId: booking.userId, title: refundAmount > 0 ? 'Booking cancelled and refunded' : 'Your booking was cancelled',
+          message: `Booking #${booking.bookingNumber} was cancelled by the admin.${reasonText}${refundAmount > 0 ? ` ₹${refundAmount} has been refunded to your wallet.` : ''}`
+        }),
+        booking.vendorId && notifySafe({ ...common, vendorId: booking.vendorId, title: 'A booking was cancelled', message: `Booking #${booking.bookingNumber} was cancelled by the admin.${reasonText}` }),
+        booking.workerId && notifySafe({ ...common, workerId: booking.workerId, title: 'A booking was cancelled', message: `Booking #${booking.bookingNumber} was cancelled by the admin.${reasonText}` })
+      ].filter(Boolean));
+
+      // Live screens: every vendor that was alerted, and the farmer's booking list
+      try {
+        const io = req.app?.get ? req.app.get('io') : null;
+        if (io) {
+          [...new Set([...(booking.notifiedVendors || []).map(String), booking.vendorId && String(booking.vendorId)].filter(Boolean))].forEach(v =>
+            io.to(`vendor_${v}`).emit('booking_cancelled', { bookingId: String(booking._id), message: `Booking ${booking.bookingNumber} has been cancelled by the admin.` }));
+          io.to(`user_${booking.userId}`).emit('userBookingsUpdated', {});
+        }
+      } catch (e) { /* live updates are best-effort */ }
+    }
 
     res.status(200).json({
       success: true,
-      message: 'Booking cancelled successfully',
-      data: booking
+      message: refundAmount > 0 ? `Booking cancelled. ₹${refundAmount} refunded to the farmer's wallet.` : 'Booking cancelled successfully',
+      data: cancelledDoc
     });
   } catch (error) {
     console.error('Cancel booking error:', error);

@@ -3169,7 +3169,7 @@ const cancelSvc = require('../../services/workerBookingCancelService');
 /** Notifications + socket fan-out after a cancellation (shared by the farmer endpoint and the no-show sweeper). */
 const announceCancellation = async ({ request, workerIds, refundAmount, wasConfirmed, by = 'farmer' }) => {
   const farmerId = request.farmerId;
-  const who = by === 'system' ? 'automatically (the worker did not show up)' : by === 'worker' ? 'because the worker withdrew' : 'by the farmer';
+  const who = by === 'system' ? 'automatically (the worker did not show up)' : by === 'worker' ? 'because the worker withdrew' : by === 'admin' ? 'by the admin' : 'by the farmer';
 
   if (wasConfirmed) {
     await notify({
