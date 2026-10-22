@@ -9,6 +9,7 @@ import Logo from '../../../components/common/Logo';
 import { compressImage } from '../../../utils/imageCompression';
 import { uploadSignupDocument, isRemoteUrl } from '../../../services/signupUploadService';
 import ReferralInput from '../../../components/common/ReferralInput';
+import { clearSavedReferral } from '../../../utils/referralStorage';
 import DobInput from '../../../components/common/DobInput';
 import { getDobError } from '../../../utils/age';
 
@@ -342,6 +343,7 @@ const VendorSignup = () => {
 
         if (response.success) {
           localStorage.removeItem('vendor_signup_form_data');
+        clearSavedReferral('vendor');
           toastManager.success(
             <div className="flex flex-col">
               <span className="font-bold">Successfully Registered!</span>
@@ -460,6 +462,7 @@ const VendorSignup = () => {
 
       if (response.success) {
         localStorage.removeItem('vendor_signup_form_data');
+        clearSavedReferral('vendor');
         toastManager.success('Successfully Registered! Pending admin approval.');
         navigate('/vendor/settings/mpin-setup', { state: { isFirstTime: true } });
       } else {

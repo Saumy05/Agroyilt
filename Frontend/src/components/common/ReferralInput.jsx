@@ -3,8 +3,10 @@ import { useSearchParams } from 'react-router-dom';
 import { FiCheckCircle, FiAlertCircle, FiLoader, FiGift } from 'react-icons/fi';
 import referralService from '../../services/referralService';
 import useReferralEnabled from '../../hooks/useReferralEnabled';
+import { readSavedReferral, saveReferral } from '../../utils/referralStorage';
 
 const ReferralInputField = ({
+  role,
   referralCode,
   setReferralCode,
   isVerified,
@@ -13,8 +15,9 @@ const ReferralInputField = ({
   setReferrerDetails
 }) => {
   const [searchParams] = useSearchParams();
-  const [hasCode, setHasCode] = useState(false);
-  const [inputCode, setInputCode] = useState('');
+  // Restored from the session so the code survives a visit to Terms / Privacy; the debounced check below re-verifies it
+  const [inputCode, setInputCode] = useState(() => readSavedReferral(role));
+  const [hasCode, setHasCode] = useState(() => !!readSavedReferral(role));
   const [isValidating, setIsValidating] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -28,6 +31,10 @@ const ReferralInputField = ({
       handleValidate(cleanRef);
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    saveReferral(role, hasCode ? inputCode : '');
+  }, [inputCode, hasCode, role]);
 
   // Keep input synchronized if parent sets it
   useEffect(() => {
@@ -136,7 +143,7 @@ const ReferralInputField = ({
               placeholder="e.g. AGRO7K4P9"
               maxLength={15}
               disabled={isValidating}
-              className={`flex-1 px-3 py-2 text-sm uppercase font-mono font-bold tracking-wider rounded-xl border transition-all outline-none ${
+              className={`flex-1 min-w-0 px-3 py-2 text-sm uppercase font-mono font-bold tracking-wider rounded-xl border transition-all outline-none ${
                 isVerified
                   ? 'border-emerald-500 bg-emerald-50/50 text-emerald-900 focus:ring-1 focus:ring-emerald-500'
                   : errorMsg
@@ -149,7 +156,7 @@ const ReferralInputField = ({
               id="referral-apply-btn"
               onClick={() => handleValidate(inputCode)}
               disabled={isValidating || !inputCode.trim() || isVerified}
-              className={`px-4 py-2 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
+              className={`shrink-0 whitespace-nowrap px-3 sm:px-4 py-2 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
                 isVerified
                   ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 cursor-default'
                   : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm disabled:opacity-50 disabled:cursor-not-allowed'
@@ -197,7 +204,7 @@ const ReferralInputField = ({
 const ReferralInput = ({ role, ...props }) => {
   const { enabled } = useReferralEnabled(role);
   if (!enabled) return null;
-  return <ReferralInputField {...props} />;
+  return <ReferralInputField role={role} {...props} />;
 };
 
 export default ReferralInput;

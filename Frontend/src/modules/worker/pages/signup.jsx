@@ -7,6 +7,7 @@ import { workerAuthService } from '../../../services/authService';
 import { uploadSignupDocument, isRemoteUrl } from '../../../services/signupUploadService';
 import Logo from '../../../components/common/Logo';
 import ReferralInput from '../../../components/common/ReferralInput';
+import { clearSavedReferral } from '../../../utils/referralStorage';
 import DobInput from '../../../components/common/DobInput';
 import { getDobError } from '../../../utils/age';
 
@@ -299,6 +300,7 @@ const WorkerSignup = () => {
         if (response.success) {
           toastManager.success('Registration details saved! Please set your MPIN to complete your profile.');
           try { sessionStorage.removeItem('worker_signup_form_data'); sessionStorage.removeItem('worker_signup_uploaded_urls'); } catch (e) { /* ignore */ }
+          clearSavedReferral('worker');
           navigate('/worker/settings/mpin-setup', {
             state: {
               isFirstTime: true,
@@ -399,6 +401,7 @@ const WorkerSignup = () => {
       if (response.success) {
         toastManager.success('Registration details saved! Please set your MPIN to complete your profile.');
         try { sessionStorage.removeItem('worker_signup_form_data'); sessionStorage.removeItem('worker_signup_uploaded_urls'); } catch (e) { /* ignore */ }
+          clearSavedReferral('worker');
         navigate('/worker/settings/mpin-setup', {
           state: {
             isFirstTime: true,

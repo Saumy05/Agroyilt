@@ -7,6 +7,7 @@ import { userAuthService } from '../../../services/authService';
 import Logo from '../../../components/common/Logo';
 import LogoLoader from '../../../components/common/LogoLoader';
 import ReferralInput from '../../../components/common/ReferralInput';
+import { clearSavedReferral } from '../../../utils/referralStorage';
 
 import { z } from "zod";
 
@@ -143,6 +144,7 @@ const Signup = () => {
             { icon: <FiCheckCircle className="text-green-500" /> }
           );
           try { sessionStorage.removeItem('user_signup_form_data'); } catch (e) { /* ignore */ }
+          clearSavedReferral('farmer');
           navigate('/user/settings/mpin-setup', { state: { isFirstTime: true } });
         } else {
           toastManager.error(response.message || 'Registration failed');
@@ -250,6 +252,7 @@ const Signup = () => {
           { icon: <FiCheckCircle className="text-green-500" /> }
         );
         try { sessionStorage.removeItem('user_signup_form_data'); } catch (e) { /* ignore */ }
+          clearSavedReferral('farmer');
         navigate('/user/settings/mpin-setup', { 
           state: { 
             isFirstTime: true, 
