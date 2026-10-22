@@ -7,7 +7,7 @@ import {
 import { vendorTheme as themeColors } from '../../../../theme';
 import withdrawalService from '../../../../services/withdrawalService';
 import { toastManager } from '../../../../utils/toastManager';
-import { IFSC_REGEX, normalizeIfsc } from '../../../../utils/ifsc';
+import { IFSC_REGEX, IFSC_INPUT_PROPS, NUMERIC_SECRET_PROPS, normalizeIfsc } from '../../../../utils/ifsc';
 
 const EditBankDetails = () => {
   const navigate = useNavigate();
@@ -299,12 +299,14 @@ const EditBankDetails = () => {
                 </label>
                 <div className="relative">
                   <input
-                    type={showAccountNumber ? "text" : "password"}
+                    type="text"
+                    inputMode="numeric"
                     name="accountNumber"
                     value={formData.accountNumber}
                     onChange={handleChange}
                     placeholder="Enter account number"
-                    autoComplete="new-password"
+                    {...NUMERIC_SECRET_PROPS}
+                    style={{ WebkitTextSecurity: showAccountNumber ? 'none' : 'disc' }}
                     className={`w-full p-3 pr-10 bg-slate-50 border rounded-xl text-xs sm:text-sm font-mono font-bold outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all ${
                       formErrors.accountNumber ? 'border-rose-400 bg-rose-50/20' : 'border-slate-200'
                     }`}
@@ -329,12 +331,14 @@ const EditBankDetails = () => {
                 </label>
                 <div className="relative">
                   <input
-                    type={showConfirmAccountNumber ? "text" : "password"}
+                    type="text"
+                    inputMode="numeric"
                     name="confirmAccountNumber"
                     value={formData.confirmAccountNumber}
                     onChange={handleChange}
                     placeholder="Re-enter account number"
-                    autoComplete="new-password"
+                    {...NUMERIC_SECRET_PROPS}
+                    style={{ WebkitTextSecurity: showConfirmAccountNumber ? 'none' : 'disc' }}
                     className={`w-full p-3 pr-10 bg-slate-50 border rounded-xl text-xs sm:text-sm font-mono font-bold outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all ${
                       formErrors.confirmAccountNumber ? 'border-rose-400 bg-rose-50/20' : 'border-slate-200'
                     }`}
@@ -373,6 +377,7 @@ const EditBankDetails = () => {
                 onChange={handleChange}
                 placeholder="e.g. SBIN0001234 or HDFC0000001"
                 maxLength={11}
+                {...IFSC_INPUT_PROPS}
                 className={`w-full p-3 bg-slate-50 border rounded-xl text-xs sm:text-sm font-mono font-bold uppercase outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all ${
                   formErrors.ifsc ? 'border-rose-400 bg-rose-50/20' : 'border-slate-200'
                 }`}

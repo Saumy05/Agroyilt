@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { FiCreditCard, FiEdit2, FiCheck, FiAlertCircle, FiLock, FiX, FiEye, FiEyeOff } from 'react-icons/fi';
 import withdrawalService from '../../services/withdrawalService';
 import { toastManager } from '../../utils/toastManager';
-import { IFSC_REGEX, normalizeIfsc } from '../../utils/ifsc';
+import { IFSC_REGEX, IFSC_INPUT_PROPS, NUMERIC_SECRET_PROPS, normalizeIfsc } from '../../utils/ifsc';
 
 /**
  * BankDetailsSection
@@ -129,6 +129,8 @@ export const BankDetailsSection = ({
     let formatted = value;
     if (name === 'ifsc') {
       formatted = normalizeIfsc(value);
+    } else if (name === 'accountNumber' || name === 'confirmAccountNumber') {
+      formatted = value.replace(/[^0-9]/g, '');
     }
     setFormData(prev => ({ ...prev, [name]: formatted }));
     if (formErrors[name]) {
@@ -242,12 +244,14 @@ export const BankDetailsSection = ({
           </label>
           <div className="relative">
             <input
-              type={showAccountNumber ? "text" : "password"}
+              type="text"
+              inputMode="numeric"
               name="accountNumber"
               value={formData.accountNumber}
               onChange={handleChange}
               placeholder="Enter account number"
-              autoComplete="new-password"
+              {...NUMERIC_SECRET_PROPS}
+              style={{ WebkitTextSecurity: showAccountNumber ? 'none' : 'disc' }}
               className={`w-full p-2.5 pr-10 bg-gray-50 border rounded-xl text-xs outline-none focus:ring-2 focus:ring-green-500 font-mono ${
                 formErrors.accountNumber ? 'border-red-500' : 'border-gray-200'
               }`}
@@ -272,11 +276,14 @@ export const BankDetailsSection = ({
           </label>
           <div className="relative">
             <input
-              type={showConfirmAccountNumber ? "text" : "password"}
+              type="text"
+              inputMode="numeric"
               name="confirmAccountNumber"
               value={formData.confirmAccountNumber}
               onChange={handleChange}
               placeholder="Re-enter account number"
+              {...NUMERIC_SECRET_PROPS}
+              style={{ WebkitTextSecurity: showConfirmAccountNumber ? 'none' : 'disc' }}
               className={`w-full p-2.5 pr-10 bg-gray-50 border rounded-xl text-xs outline-none focus:ring-2 focus:ring-green-500 font-mono ${
                 formErrors.confirmAccountNumber ? 'border-red-500' : 'border-gray-200'
               }`}
@@ -308,6 +315,7 @@ export const BankDetailsSection = ({
             onChange={handleChange}
             maxLength={11}
             placeholder="e.g. SBIN0001234"
+            {...IFSC_INPUT_PROPS}
             className={`w-full p-2.5 bg-gray-50 border rounded-xl text-xs outline-none focus:ring-2 focus:ring-green-500 uppercase font-mono ${
               formErrors.ifsc ? 'border-red-500' : 'border-gray-200'
             }`}
