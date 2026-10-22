@@ -20,19 +20,19 @@ const ServiceCategories = React.memo(({
   subtitle = "EXPLORE EQUIPMENT & SERVICES",
   showViewAll = true
 }) => {
-  if (!Array.isArray(categories) || categories.length === 0) {
-    return null;
-  }
-
   // Filter categories (excluding rental categories)
   const filteredCategories = useMemo(() => {
-    return (categories || []).filter(c => {
+    return (Array.isArray(categories) ? categories : []).filter(c => {
       const mode = (c.fulfillmentMode || c.mode || '').toLowerCase();
       if (mode === 'rental' || c.isRental === true) return false;
       if ((c.slug || '').toLowerCase().includes('rental')) return false;
       return true;
     });
   }, [categories]);
+
+  if (!Array.isArray(categories) || categories.length === 0) {
+    return null;
+  }
 
   const displayLimit = 7;
   const showMore = filteredCategories.length > displayLimit;

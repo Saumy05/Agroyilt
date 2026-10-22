@@ -54,17 +54,12 @@ export const getEarningsHistory = async (filters = {}) => {
  * @returns {Promise<Array>} Earnings breakdown
  */
 export const getEarningsByServiceType = async (filters = {}) => {
-  try {
-    // TODO: Replace with actual API call
-    // const response = await fetch(`${API_BASE_URL}/earnings/by-service?${new URLSearchParams(filters)}`);
-    // return await response.json();
+  // TODO: Replace with actual API call
+  // const response = await fetch(`${API_BASE_URL}/earnings/by-service?${new URLSearchParams(filters)}`);
+  // return await response.json();
 
-    // Mock implementation
-    return [];
-  } catch (error) {
-    console.error('Error fetching earnings by service type:', error);
-    throw error;
-  }
+  // Mock implementation
+  return [];
 };
 
 /**
@@ -73,17 +68,12 @@ export const getEarningsByServiceType = async (filters = {}) => {
  * @returns {Promise<Array>} Earnings breakdown by worker
  */
 export const getEarningsByWorker = async (filters = {}) => {
-  try {
-    // TODO: Replace with actual API call
-    // const response = await fetch(`${API_BASE_URL}/earnings/by-worker?${new URLSearchParams(filters)}`);
-    // return await response.json();
+  // TODO: Replace with actual API call
+  // const response = await fetch(`${API_BASE_URL}/earnings/by-worker?${new URLSearchParams(filters)}`);
+  // return await response.json();
 
-    // Mock implementation
-    return [];
-  } catch (error) {
-    console.error('Error fetching earnings by worker:', error);
-    throw error;
-  }
+  // Mock implementation
+  return [];
 };
 
 /**
@@ -92,21 +82,16 @@ export const getEarningsByWorker = async (filters = {}) => {
  * @returns {Promise<Object>} Payout details
  */
 export const getPayoutBreakdown = async (filters = {}) => {
-  try {
-    // TODO: Replace with actual API call
-    // const response = await fetch(`${API_BASE_URL}/earnings/payout?${new URLSearchParams(filters)}`);
-    // return await response.json();
+  // TODO: Replace with actual API call
+  // const response = await fetch(`${API_BASE_URL}/earnings/payout?${new URLSearchParams(filters)}`);
+  // return await response.json();
 
-    // Mock implementation
-    return {
-      totalEarnings: 0,
-      servicePayoutPercentage: 90,
-      partsPayoutPercentage: 100,
-      netEarnings: 0,
-    };
-  } catch (error) {
-    console.error('Error fetching payout breakdown:', error);
-    throw error;
-  }
+  // Mock implementation
+  return {
+    totalEarnings: 0,
+    servicePayoutPercentage: 90,
+    partsPayoutPercentage: 100,
+    netEarnings: 0,
+  };
 };
 

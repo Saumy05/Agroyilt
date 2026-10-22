@@ -1828,7 +1828,7 @@ const LandLeasePage = () => {
                   </div>
                   <div>
                     <span className="text-xs font-extrabold text-gray-900 block">
-                      {Boolean(selectedLandDetail.isOwner || (currentUser && String(selectedLandDetail.ownerId?._id || selectedLandDetail.ownerId) === String(currentUser._id || currentUser.id)))
+                      {(selectedLandDetail.isOwner || (currentUser && String(selectedLandDetail.ownerId?._id || selectedLandDetail.ownerId) === String(currentUser._id || currentUser.id)))
                         ? 'Your Listing'
                         : (selectedLandDetail.owner?.name || 'Verified Landowner')}
                     </span>
@@ -1836,7 +1836,7 @@ const LandLeasePage = () => {
                   </div>
                 </div>
 
-                {Boolean(selectedLandDetail.isOwner || (currentUser && String(selectedLandDetail.ownerId?._id || selectedLandDetail.ownerId) === String(currentUser._id || currentUser.id))) ? (
+                {(selectedLandDetail.isOwner || (currentUser && String(selectedLandDetail.ownerId?._id || selectedLandDetail.ownerId) === String(currentUser._id || currentUser.id))) ? (
                   <button
                     onClick={() => {
                       setSelectedLandDetail(null);

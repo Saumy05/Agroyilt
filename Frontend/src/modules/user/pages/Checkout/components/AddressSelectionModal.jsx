@@ -617,13 +617,13 @@ const AddressSelectionModal = ({ isOpen, onClose, address = '', houseNumber = ''
             type="button"
             onClick={() => {
               const effectiveAddr = mapAddress || searchQuery.trim();
-              const loc = selectedLocation || {
+              const base = selectedLocation || {
                 address: effectiveAddr,
                 lat: flyToPosition?.lat || 28.6139,
                 lng: flyToPosition?.lng || 77.2090,
                 components: [{ types: ['locality'], long_name: effectiveAddr.split(',')[0] || '' }]
               };
-              if (!loc.components) loc.components = [];
+              const loc = { ...base, components: base.components || [] };
               onSave(houseNumber, loc);
             }}
             disabled={!mapAddress && !searchQuery.trim()}

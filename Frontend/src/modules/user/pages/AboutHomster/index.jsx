@@ -106,7 +106,7 @@ const AboutAgroyilt = () => {
     html = html.replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>');
     
     // Bullet points (handle * or -)
-    html = html.replace(/^[\*\-]\s+(.*$)/gim, '<li class="ml-5 list-disc mb-2 pl-1">$1</li>');
+    html = html.replace(/^[*-]\s+(.*$)/gim, '<li class="ml-5 list-disc mb-2 pl-1">$1</li>');
     
     // Group list items into ul
     html = html.replace(/(<li.*?>.*?<\/li>\n?)+/gim, '<ul class="mb-5 mt-2">$&</ul>');

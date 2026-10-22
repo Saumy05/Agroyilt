@@ -55,6 +55,10 @@ import RentalHandoverCard from '../../../../components/rental/RentalHandoverCard
 import rentalService from '../../../../services/rentalService';
 import { getPaymentState, getActualTimeRange, formatTimeOfDay } from '../../../../utils/bookingDisplay';
 
+
+// The independent-worker amount cards are switched off; flip to bring them back.
+const SHOW_LEGACY_WORKER_AMOUNT_CARDS = false;
+
 const toAssetUrl = (url) => {
   if (!url) return '';
   if (url.startsWith('data:')) return url;
@@ -1434,7 +1438,7 @@ const BookingDetails = () => {
                       <FiStar className="w-2.5 h-2.5 text-yellow-500 fill-current" />
                       <span className="text-[10px] font-bold text-yellow-700">
                         {(booking.workerId?.rating || booking.assignedTo?.rating || booking.vendorId?.rating || 0) > 0
-                          ? (booking.workerId?.rating || booking.assignedTo?.rating || booking.vendorId?.rating).toFixed(1)
+                          ? (booking.workerId?.rating || booking.assignedTo?.rating || booking.vendorId?.rating || 0).toFixed(1)
                           : 'New'}
                       </span>
                     </div>
@@ -2788,7 +2792,7 @@ const BookingDetails = () => {
           )}
 
           {/* If farmer confirmed amount but work not done yet, show waiting message */}
-          {false && ['visited', 'in_progress', 'journey_started'].includes(booking.status) && !booking.vendorId && booking.workerId && booking.finalAmount > 0 && !isEditingAmount && (
+          {SHOW_LEGACY_WORKER_AMOUNT_CARDS && ['visited', 'in_progress', 'journey_started'].includes(booking.status) && !booking.vendorId && booking.workerId && booking.finalAmount > 0 && !isEditingAmount && (
             <div className="bg-blue-50 border border-blue-200 rounded-3xl p-6 text-center">
               <div className="w-14 h-14 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
                 <FiClock className="w-7 h-7 text-blue-600 animate-spin" style={{ animationDuration: '4s' }} />
@@ -2810,7 +2814,7 @@ const BookingDetails = () => {
           )}
 
           {/* Action Card for Confirming Final Amount (Independent Worker) */}
-          {false && ['visited', 'in_progress', 'journey_started', 'accepted', 'confirmed'].includes(booking.status) && !booking.vendorId && booking.workerId && (!booking.finalAmount || isEditingAmount) && (
+          {SHOW_LEGACY_WORKER_AMOUNT_CARDS && ['visited', 'in_progress', 'journey_started', 'accepted', 'confirmed'].includes(booking.status) && !booking.vendorId && booking.workerId && (!booking.finalAmount || isEditingAmount) && (
             <div className="bg-white rounded-3xl shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-gray-100 p-6 space-y-4">
               <div className="text-center mb-4">
                 <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">

@@ -189,24 +189,19 @@ export const updateProfile = async (profileData) => {
  * @returns {Promise<boolean>} Success status
  */
 export const changePassword = async (passwordData) => {
-  try {
-    // TODO: Replace with actual API call
-    // const response = await fetch(`${API_BASE_URL}/auth/change-password`, {
-    //   method: 'POST',
-    //   headers: {
-    //     'Content-Type': 'application/json',
-    //     'Authorization': `Bearer ${localStorage.getItem('vendorToken')}`,
-    //   },
-    //   body: JSON.stringify(passwordData),
-    // });
-    // return await response.json();
+  // TODO: Replace with actual API call
+  // const response = await fetch(`${API_BASE_URL}/auth/change-password`, {
+  //   method: 'POST',
+  //   headers: {
+  //     'Content-Type': 'application/json',
+  //     'Authorization': `Bearer ${localStorage.getItem('vendorToken')}`,
+  //   },
+  //   body: JSON.stringify(passwordData),
+  // });
+  // return await response.json();
 
-    // Mock implementation
-    return { success: true };
-  } catch (error) {
-    console.error('Error changing password:', error);
-    throw error;
-  }
+  // Mock implementation
+  return { success: true };
 };
 
 /**
@@ -215,21 +210,16 @@ export const changePassword = async (passwordData) => {
  * @returns {Promise<boolean>} Success status
  */
 export const requestPasswordReset = async (email) => {
-  try {
-    // TODO: Replace with actual API call
-    // const response = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify({ email }),
-    // });
-    // return await response.json();
+  // TODO: Replace with actual API call
+  // const response = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+  //   method: 'POST',
+  //   headers: { 'Content-Type': 'application/json' },
+  //   body: JSON.stringify({ email }),
+  // });
+  // return await response.json();
 
-    // Mock implementation
-    return { success: true, message: 'Password reset email sent' };
-  } catch (error) {
-    console.error('Error requesting password reset:', error);
-    throw error;
-  }
+  // Mock implementation
+  return { success: true, message: 'Password reset email sent' };
 };
 
 /**

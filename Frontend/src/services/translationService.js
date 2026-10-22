@@ -59,22 +59,23 @@ const processQueue = async (targetLang, sourceLang = 'en') => {
  * Core Translation Function
  */
 export const translateText = (text, targetLang, sourceLang = 'en') => {
-    return new Promise(async (resolve) => {
-        if (!text || text.trim() === '') return resolve(text);
-        if (targetLang === sourceLang) return resolve(text);
+    if (!text || text.trim() === '') return Promise.resolve(text);
+    if (targetLang === sourceLang) return Promise.resolve(text);
 
-        // Check Cache first
-        const cached = await getFromCache(sourceLang, targetLang, text);
-        if (cached) return resolve(cached);
+    // A cache failure must never block the translation itself
+    return getFromCache(sourceLang, targetLang, text).catch(() => null).then((cached) => {
+        if (cached) return cached;
 
-        // Add to batching queue
-        requestQueue.push({ text, resolve });
+        return new Promise((resolve) => {
+            // Add to batching queue
+            requestQueue.push({ text, resolve });
 
-        // Wait for other requests before processing
-        if (batchTimeout) clearTimeout(batchTimeout);
-        batchTimeout = setTimeout(() => {
-            processQueue(targetLang, sourceLang);
-        }, BATCH_WAIT_MS);
+            // Wait for other requests before processing
+            if (batchTimeout) clearTimeout(batchTimeout);
+            batchTimeout = setTimeout(() => {
+                processQueue(targetLang, sourceLang);
+            }, BATCH_WAIT_MS);
+        });
     });
 };
 

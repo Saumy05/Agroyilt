@@ -36,25 +36,25 @@ const CustomerGrowthAreaChart = ({ timelineData = [], bookings = [], period = 'm
     const seen = new Set();
     let cumulative = 0;
 
-    return filteredDays.map((d) => {
-      const dayBookings = byDate.get(d.date) || [];
+    const series = [];
+    for (const d of filteredDays) {
       let newCustomers = 0;
-      dayBookings.forEach((b) => {
+      for (const b of byDate.get(d.date) || []) {
         const k = getCustomerKey(b);
-        if (!k) return;
-        if (!seen.has(k)) {
+        if (k && !seen.has(k)) {
           seen.add(k);
           newCustomers += 1;
         }
-      });
+      }
       cumulative += newCustomers;
-      return {
+      series.push({
         date: d.date,
         dateLabel: formatDate(d.date, { month: 'short', day: 'numeric' }),
         customers: cumulative,
         newCustomers,
-      };
-    });
+      });
+    }
+    return series;
   }, [timelineData, bookings, period]);
 
   const CustomTooltip = ({ active, payload, label }) => {

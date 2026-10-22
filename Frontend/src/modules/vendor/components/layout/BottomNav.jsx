@@ -52,12 +52,11 @@ const BottomNav = memo(({ isGlobal = false }) => {
   const { isKeyboardOpen, keyboardHeight } = useKeyboardVisibility();
 
   if (isGlobal) {
+    // Deliberate render-time flag: local navs must see it on their first render to hide themselves
+    // eslint-disable-next-line react-hooks/immutability
     window.__hasGlobalBottomNav = true;
   }
-
-  if (!isGlobal && window.__hasGlobalBottomNav) {
-    return null;
-  }
+  const hiddenByGlobalNav = !isGlobal && window.__hasGlobalBottomNav;
 
   // Load pending jobs count from localStorage
   useEffect(() => {
@@ -135,7 +134,7 @@ const BottomNav = memo(({ isGlobal = false }) => {
     (location.pathname.includes('/map') || location.pathname.includes('/alert/'))
   );
 
-  if (shouldHideNav) {
+  if (hiddenByGlobalNav || shouldHideNav) {
     return null;
   }
 

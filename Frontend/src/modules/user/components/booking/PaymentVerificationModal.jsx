@@ -72,7 +72,6 @@ const PaymentVerificationModal = ({ isOpen, onClose, booking, onPayOnline }) => 
   // Tax Logic
   // Use bill.originalGST if available
   const originalGST = bill ? (bill.originalGST || 0) : (originalBase * 0.18);
-  const totalGST = originalGST + extraServiceGST + partsGST;
 
   const serviceGstPercent = bill
     ? (bill.payoutConfig?.serviceGstPercentage ?? bill.services?.[0]?.gstPercentage ?? 18)

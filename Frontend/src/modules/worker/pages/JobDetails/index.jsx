@@ -220,7 +220,6 @@ const getDurationInfo = (job) => {
   if (job.workSubmittedAt) end = new Date(job.workSubmittedAt);
   else if (job.completedAt) end = new Date(job.completedAt);
   else if (job.workDoneAt) end = new Date(job.workDoneAt);
-  else if (job.workSubmittedAt) end = new Date(job.workSubmittedAt);
   else if (job.updatedAt && ['completed', 'work_done'].includes(job.status?.toLowerCase())) end = new Date(job.updatedAt);
 
   if (start && end && end >= start) {
