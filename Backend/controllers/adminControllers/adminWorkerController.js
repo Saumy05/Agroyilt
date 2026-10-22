@@ -656,7 +656,7 @@ const getAllWorkerJobs = async (req, res) => {
     }
 
     const jobs = await Booking.find(query)
-      .populate('workerId', 'name phone profilePhoto profileImage workerType skills serviceCategories address rating')
+      .populate('workerId', 'name phone email gender dateOfBirth profilePhoto profileImage workerType skills serviceCategories address rating totalJobs completedJobs experienceYears hourlyRate dailyRate approvalStatus isOfflineMember')
       .populate('userId', 'name phone email address')
       .populate('serviceId', 'title iconUrl serviceCategory')
       .sort({ createdAt: -1 })

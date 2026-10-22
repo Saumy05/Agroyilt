@@ -143,8 +143,8 @@ const BookingDetailsPage = () => {
                                                 )}
                                             </div>
                                             <div className="text-right">
-                                                <p className="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Quoted</p>
-                                                <p className="font-bold text-gray-900">₹{Number(booking.basePrice || 0).toLocaleString('en-IN')}</p>
+                                                <p className="text-[10px] uppercase tracking-wider text-gray-400 font-bold">{booking.providerType === 'WORKER' ? 'Worker wage' : 'Quoted'}</p>
+                                                <p className="font-bold text-gray-900">₹{Number(booking.basePrice || booking.workerPayment?.grossAmount || booking.finalAmount || 0).toLocaleString('en-IN')}</p>
                                             </div>
                                         </div>
                                         {lines.length > 1 && lines.slice(1).map((it, idx) => (
@@ -251,6 +251,7 @@ const BookingDetailsPage = () => {
                     {/* Payment Summary: from the final bill when there is one, else from the booking's quote */}
                     {(() => {
                         const bill = booking.bill;
+                        const wp = booking.providerType === 'WORKER' ? booking.workerPayment : null; // worker bookings: the wage split, no vendor bill
                         const n = (v) => Number(v) || 0;
                         const money = (v) => `₹${n(v).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
                         const feePct = bill?.payoutConfig?.platformFeePercentage || booking.platformFeePercentage;
@@ -258,7 +259,12 @@ const BookingDetailsPage = () => {
                         const billTotal = bill ? n(bill.grandTotal) : n(booking.finalAmount ?? booking.totalAmount ?? booking.agreedRate ?? booking.basePrice);
                         // Nothing was billed (a refunded booking): show what was quoted and taxed instead of a column of zeros
                         const showQuote = !bill || (billTotal === 0 && n(booking.advancePaidAmount) > 0);
-                        const rows = !showQuote ? [
+                        const rows = wp ? [
+                            { label: `Agreed rate (per ${String(wp.rateUnit || '').toLowerCase().startsWith('hour') ? 'hour' : 'day'})`, value: n(wp.agreedRate) },
+                            { label: 'Worker wage (gross)', value: n(wp.grossAmount) },
+                            { label: `Platform commission${wp.commissionRate ? ` (${wp.commissionRate}%)` : ''}`, value: n(wp.commissionAmount) },
+                            { label: 'Worker earns (net)', value: n(wp.netEarning) }
+                        ] : !showQuote ? [
                             { label: 'Service charges', value: n(bill.totalServiceBase) },
                             { label: 'Parts & materials', value: n(bill.totalPartsBase), hideZero: true },
                             { label: `GST${gstPct != null ? ` (${gstPct}%)` : ''}`, value: n(bill.totalGST) },
@@ -275,7 +281,7 @@ const BookingDetailsPage = () => {
                             { label: `Platform fee${feePct ? ` (${feePct}%)` : ''}`, value: n(booking.platformFee), hideZero: true },
                             { label: 'Cancellation penalty', value: n(booking.penalty), hideZero: true }
                         ];
-                        const total = showQuote
+                        const total = wp ? n(wp.grossAmount) : showQuote
                             ? n(booking.basePrice) - n(booking.discount) + n(booking.tax) + n(booking.platformFee) + n(booking.visitingCharges) + n(booking.travelCharge) + n(booking.penalty)
                             : billTotal;
                         const platformEarning = bill ? n(bill.companyRevenue) - n(bill.totalGST) : 0;

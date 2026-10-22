@@ -161,9 +161,24 @@ const getBookingById = async (req, res) => {
     const moneyEvents = await Transaction.find({ bookingId: booking._id, type: { $in: ['payment', 'refund'] }, status: 'completed' })
       .select('type amount paymentMethod description createdAt').sort({ createdAt: 1 }).lean();
 
+    // Worker bookings have no vendor bill: show the worker's wage split (what the booking was for) instead
+    let workerPayment = null;
+    if (booking.providerType === 'WORKER') {
+      try {
+        const IndWorkerAssignment = require('../../models/IndWorkerAssignment');
+        const assignment = await IndWorkerAssignment.findOne({
+          workerId: booking.workerId?._id || booking.workerId,
+          $or: [{ legacyBookingId: booking._id }, ...(booking.workerRequestId ? [{ parentRequestId: booking.workerRequestId }] : [])]
+        });
+        workerPayment = require('../../services/workerFinancialService').buildWorkerPaymentSummary(assignment, booking);
+      } catch (e) {
+        console.warn('[admin getBookingById] worker payment skipped:', e.message);
+      }
+    }
+
     res.status(200).json({
       success: true,
-      data: { ...booking.toObject(), bill: bill || null, moneyEvents }
+      data: { ...booking.toObject(), bill: bill || null, moneyEvents, workerPayment }
     });
   } catch (error) {
     console.error('Get booking error:', error);

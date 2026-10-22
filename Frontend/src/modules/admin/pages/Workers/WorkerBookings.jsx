@@ -26,6 +26,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import workerService from '../../services/workerService';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import { toastManager } from '../../../../utils/toastManager';
+import { to12HourText } from '../../../../utils/bookingDisplay';
 
 // What a farmer's open request is waiting on
 const OPEN_REQUEST_STATUS = {
@@ -677,6 +678,41 @@ const WorkerBookings = () => {
                       <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
                         <FiPhone size={12} className="text-slate-400" /> {selectedBooking.workerId?.phone || 'N/A'}
                       </p>
+                      {selectedBooking.workerId?.email && (
+                        <p className="text-xs text-slate-500 mt-0.5 truncate">{selectedBooking.workerId.email}</p>
+                      )}
+                      <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px]">
+                        {selectedBooking.workerId?.rating > 0 && (
+                          <div><dt className="text-slate-400 font-medium">Rating</dt><dd className="font-bold text-slate-800">{Number(selectedBooking.workerId.rating).toFixed(1)} / 5</dd></div>
+                        )}
+                        {(selectedBooking.workerId?.completedJobs != null || selectedBooking.workerId?.totalJobs != null) && (
+                          <div><dt className="text-slate-400 font-medium">Jobs</dt><dd className="font-bold text-slate-800">{selectedBooking.workerId.completedJobs ?? 0} done · {selectedBooking.workerId.totalJobs ?? 0} total</dd></div>
+                        )}
+                        {selectedBooking.workerId?.experienceYears > 0 && (
+                          <div><dt className="text-slate-400 font-medium">Experience</dt><dd className="font-bold text-slate-800">{selectedBooking.workerId.experienceYears} yr</dd></div>
+                        )}
+                        {selectedBooking.workerId?.gender && (
+                          <div><dt className="text-slate-400 font-medium">Gender</dt><dd className="font-bold text-slate-800 capitalize">{String(selectedBooking.workerId.gender).toLowerCase()}</dd></div>
+                        )}
+                        {(selectedBooking.workerId?.hourlyRate > 0 || selectedBooking.workerId?.dailyRate > 0) && (
+                          <div><dt className="text-slate-400 font-medium">Own rates</dt><dd className="font-bold text-slate-800">{[selectedBooking.workerId.hourlyRate > 0 && `₹${selectedBooking.workerId.hourlyRate}/hr`, selectedBooking.workerId.dailyRate > 0 && `₹${selectedBooking.workerId.dailyRate}/day`].filter(Boolean).join(' · ')}</dd></div>
+                        )}
+                        {selectedBooking.workerId?.approvalStatus && (
+                          <div><dt className="text-slate-400 font-medium">Approval</dt><dd className="font-bold text-slate-800 capitalize">{selectedBooking.workerId.approvalStatus}</dd></div>
+                        )}
+                      </dl>
+                      {selectedBooking.workerId?.isOfflineMember && (
+                        <p className="mt-2 text-[10px] font-black uppercase tracking-wide text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-md px-2 py-1 inline-block">Offline member (no app)</p>
+                      )}
+                      {(selectedBooking.workerId?.address?.fullAddress || selectedBooking.workerId?.address?.city) && (
+                        <p className="text-[11px] text-slate-500 mt-2 flex items-start gap-1">
+                          <FiMapPin className="text-slate-400 mt-0.5 shrink-0" size={12} />
+                          {selectedBooking.workerId.address.fullAddress || [selectedBooking.workerId.address.addressLine1, selectedBooking.workerId.address.city, selectedBooking.workerId.address.state, selectedBooking.workerId.address.pincode].filter(Boolean).join(', ')}
+                        </p>
+                      )}
+                      {selectedBooking.workerId?.serviceCategories?.length > 0 && (
+                        <p className="text-[11px] text-slate-500 mt-1.5">Categories: {selectedBooking.workerId.serviceCategories.map(c => c?.title || c?.name || c).join(', ')}</p>
+                      )}
                       {selectedBooking.workerId?.skills?.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-2">
                           {selectedBooking.workerId.skills.map((sk, idx) => (
@@ -708,16 +744,23 @@ const WorkerBookings = () => {
                     </div>
                     <div>
                       <span className="text-slate-400 block font-medium">Time Slot</span>
-                      <span className="font-bold text-slate-800">{selectedBooking.scheduledTime || 'Day Shift'}</span>
+                      <span className="font-bold text-slate-800">
+                        {selectedBooking.timeSlot?.start && selectedBooking.timeSlot?.end
+                          ? `${to12HourText(selectedBooking.timeSlot.start)} - ${to12HourText(selectedBooking.timeSlot.end)}`
+                          : (to12HourText(selectedBooking.scheduledTime) || 'Day Shift')}
+                      </span>
                     </div>
+                    {/* Worker bookings are priced by the hour or the day: no land size or crop (those belong to machinery jobs) */}
                     <div>
-                      <span className="text-slate-400 block font-medium">Crop Type</span>
-                      <span className="font-bold text-slate-800">{selectedBooking.cropType || 'General Farm'}</span>
+                      <span className="text-slate-400 block font-medium">Booking Type</span>
+                      <span className="font-bold text-slate-800">{String(selectedBooking.rateUnit || selectedBooking.rental_type || '').toLowerCase().startsWith('hour') ? 'Hourly' : 'Daily'}</span>
                     </div>
-                    <div>
-                      <span className="text-slate-400 block font-medium">Land Size</span>
-                      <span className="font-bold text-slate-800">{selectedBooking.landSize || 'N/A'}</span>
-                    </div>
+                    {selectedBooking.agreedRate > 0 && (
+                      <div>
+                        <span className="text-slate-400 block font-medium">Agreed Rate</span>
+                        <span className="font-bold text-slate-800">₹{Number(selectedBooking.agreedRate).toLocaleString('en-IN')} / {String(selectedBooking.rateUnit || '').toLowerCase().startsWith('hour') ? 'hr' : 'day'}</span>
+                      </div>
+                    )}
                     <div>
                       <span className="text-slate-400 block font-medium">Payment Method</span>
                       <span className="font-bold text-slate-800 uppercase">{selectedBooking.paymentMethod || 'Online'}</span>
