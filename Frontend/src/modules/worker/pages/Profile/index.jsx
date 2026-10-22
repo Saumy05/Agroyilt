@@ -5,6 +5,7 @@ import { toastManager } from '../../../../utils/toastManager';
 import { workerTheme as themeColors, vendorTheme } from '../../../../theme';
 import { workerAuthService } from '../../../../services/authService';
 import workerService from '../../../../services/workerService';
+import { canonicalServices } from '../../../../constants/workerServices';
 import Header from '../../components/layout/Header';
 import BottomNav from '../../components/layout/BottomNav';
 import LogoLoader from '../../../../components/common/LogoLoader';
@@ -78,7 +79,7 @@ const Profile = () => {
             totalJobs: workerData.totalJobs || 0,
             completedJobs: workerData.completedJobs || 0,
             serviceCategories: workerData.serviceCategories || (workerData.serviceCategory ? [workerData.serviceCategory] : []),
-            skills: workerData.skills || [],
+            skills: canonicalServices(workerData.skills),
             photo: workerData.profilePhoto || null,
             status: ((String(workerData.status || '').toUpperCase() === 'ONLINE') || (String(workerData.status || '').toUpperCase() === 'AVAILABLE') || (String(workerData.status || '').toUpperCase() === 'ACTIVE')) ? 'ONLINE' : 'OFFLINE',
             isPhoneVerified: workerData.isPhoneVerified || false,
@@ -101,7 +102,7 @@ const Profile = () => {
               totalJobs: localWorkerData.totalJobs || 0,
               completedJobs: localWorkerData.completedJobs || 0,
               serviceCategories: localWorkerData.serviceCategories || (localWorkerData.serviceCategory ? [localWorkerData.serviceCategory] : []),
-              skills: localWorkerData.skills || [],
+              skills: canonicalServices(localWorkerData.skills),
               photo: localWorkerData.profilePhoto || null
             });
             toastManager.info('Loaded profile from local storage (API failed)');
@@ -123,7 +124,7 @@ const Profile = () => {
             totalJobs: localWorkerData.totalJobs || 0,
             completedJobs: localWorkerData.completedJobs || 0,
             serviceCategories: localWorkerData.serviceCategories || (localWorkerData.serviceCategory ? [localWorkerData.serviceCategory] : []),
-            skills: localWorkerData.skills || [],
+            skills: canonicalServices(localWorkerData.skills),
             photo: localWorkerData.profilePhoto || null
           });
           toastManager.info('Loaded profile from local storage (API failed)');
@@ -367,11 +368,13 @@ const Profile = () => {
                   </button>
                 </div>
 
-                {profile.serviceCategories && profile.serviceCategories.length > 0 && (
-                  <p className="text-emerald-100 text-xs font-medium truncate mt-0.5">
-                    {profile.serviceCategories.join(' • ')}
-                  </p>
-                )}
+                {/* The services the worker chose: the same work types a farmer asks for */}
+                {(() => {
+                  const line = profile.skills?.length ? profile.skills : profile.serviceCategories;
+                  return line && line.length > 0 ? (
+                    <p className="text-emerald-100 text-xs font-medium truncate mt-0.5">{line.join(' • ')}</p>
+                  ) : null;
+                })()}
 
                 {/* Status Toggle Pill */}
                 <div className="mt-2">

@@ -19,6 +19,7 @@ const getProfile = async (req, res) => {
       });
     }
 
+    const jobCounts = await require('../../services/workerJobCounts').workerJobCounts(worker);
     res.status(200).json({
       success: true,
       worker: {
@@ -35,8 +36,7 @@ const getProfile = async (req, res) => {
         customRates: worker.customRates || [],
         address: worker.address || null,
         rating: worker.rating || 0,
-        totalJobs: worker.totalJobs || 0,
-        completedJobs: worker.completedJobs || 0,
+        ...jobCounts,
         status: (worker.status === 'ONLINE') ? 'ONLINE' : 'OFFLINE',
         isOnline: Boolean(worker.isOnline),
         profilePhoto: worker.profilePhoto || null,
@@ -186,6 +186,7 @@ const updateProfile = async (req, res) => {
       }
     }
 
+    const jobCounts = await require('../../services/workerJobCounts').workerJobCounts(worker);
     res.status(200).json({
       success: true,
       message: 'Profile updated successfully',
@@ -203,8 +204,7 @@ const updateProfile = async (req, res) => {
         customRates: worker.customRates,
         address: worker.address,
         rating: worker.rating,
-        totalJobs: worker.totalJobs,
-        completedJobs: worker.completedJobs,
+        ...jobCounts,
         status: worker.status,
         isOnline: Boolean(worker.isOnline),
         profilePhoto: worker.profilePhoto,

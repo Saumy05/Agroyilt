@@ -3,7 +3,8 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { FiCreditCard, FiEdit2, FiCheck, FiAlertCircle, FiLock, FiX, FiEye, FiEyeOff } from 'react-icons/fi';
 import withdrawalService from '../../services/withdrawalService';
 import { toastManager } from '../../utils/toastManager';
-import { IFSC_REGEX, IFSC_INPUT_PROPS, NUMERIC_SECRET_PROPS, normalizeIfsc } from '../../utils/ifsc';
+import { IFSC_INPUT_PROPS, NUMERIC_SECRET_PROPS, normalizeIfsc } from '../../utils/ifsc';
+import { validateBankDetails, validateBankField } from '../../utils/bankValidation';
 
 /**
  * BankDetailsSection
@@ -139,33 +140,20 @@ export const BankDetailsSection = ({
   };
 
   const validate = () => {
-    const errors = {};
-    if (!formData.accountHolderName.trim()) {
-      errors.accountHolderName = 'Account holder name is required';
-    }
-
-    if (!formData.accountNumber) {
-      errors.accountNumber = 'Account number is required';
-    } else if (!/^\d{9,18}$/.test(formData.accountNumber)) {
-      errors.accountNumber = 'Valid account number (9 to 18 digits) is required';
-    }
-
-    if (formData.accountNumber !== formData.confirmAccountNumber) {
-      errors.confirmAccountNumber = 'Account numbers do not match';
-    }
-
-    if (!formData.ifsc) {
-      errors.ifsc = 'IFSC code is required';
-    } else if (!IFSC_REGEX.test(normalizeIfsc(formData.ifsc))) {
-      errors.ifsc = 'Invalid IFSC: 11 characters, 4 letters + 0 + 6 letters/digits (e.g. SBIN0001234)';
-    }
-
-    if (!formData.bankName.trim()) {
-      errors.bankName = 'Bank name is required';
-    }
-
+    const errors = validateBankDetails(formData);
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
+  };
+
+  // check a field as soon as the person leaves it
+  const handleBlur = (e) => {
+    const { name } = e.target;
+    const message = validateBankField(name, formData[name], formData);
+    setFormErrors(prev => ({ ...prev, [name]: message || null }));
+    // the confirmation depends on the account number: re-check it when that one changes
+    if (name === 'accountNumber' && formData.confirmAccountNumber) {
+      setFormErrors(prev => ({ ...prev, confirmAccountNumber: validateBankField('confirmAccountNumber', formData.confirmAccountNumber, formData) || null }));
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -225,8 +213,10 @@ export const BankDetailsSection = ({
         <input
           type="text"
           name="accountHolderName"
+          maxLength={60}
           value={formData.accountHolderName}
           onChange={handleChange}
+          onBlur={handleBlur}
           placeholder="Name as registered with bank"
           className={`w-full p-2.5 bg-gray-50 border rounded-xl text-xs outline-none focus:ring-2 focus:ring-green-500 ${
             formErrors.accountHolderName ? 'border-red-500' : 'border-gray-200'
@@ -247,8 +237,10 @@ export const BankDetailsSection = ({
               type="text"
               inputMode="numeric"
               name="accountNumber"
+          maxLength={18}
               value={formData.accountNumber}
               onChange={handleChange}
+          onBlur={handleBlur}
               placeholder="Enter account number"
               {...NUMERIC_SECRET_PROPS}
               style={{ WebkitTextSecurity: showAccountNumber ? 'none' : 'disc' }}
@@ -279,8 +271,10 @@ export const BankDetailsSection = ({
               type="text"
               inputMode="numeric"
               name="confirmAccountNumber"
+          maxLength={18}
               value={formData.confirmAccountNumber}
               onChange={handleChange}
+          onBlur={handleBlur}
               placeholder="Re-enter account number"
               {...NUMERIC_SECRET_PROPS}
               style={{ WebkitTextSecurity: showConfirmAccountNumber ? 'none' : 'disc' }}
@@ -313,6 +307,7 @@ export const BankDetailsSection = ({
             name="ifsc"
             value={formData.ifsc}
             onChange={handleChange}
+          onBlur={handleBlur}
             maxLength={11}
             placeholder="e.g. SBIN0001234"
             {...IFSC_INPUT_PROPS}
@@ -332,8 +327,10 @@ export const BankDetailsSection = ({
           <input
             type="text"
             name="bankName"
+          maxLength={60}
             value={formData.bankName}
             onChange={handleChange}
+          onBlur={handleBlur}
             placeholder="e.g. State Bank of India"
             className={`w-full p-2.5 bg-gray-50 border rounded-xl text-xs outline-none focus:ring-2 focus:ring-green-500 ${
               formErrors.bankName ? 'border-red-500' : 'border-gray-200'
@@ -353,11 +350,14 @@ export const BankDetailsSection = ({
           <input
             type="text"
             name="branchName"
+          maxLength={60}
             value={formData.branchName}
             onChange={handleChange}
+          onBlur={handleBlur}
             placeholder="e.g. Main Branch"
-            className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-green-500"
+            className={`w-full p-2.5 bg-gray-50 border rounded-xl text-xs outline-none focus:ring-2 focus:ring-green-500 ${formErrors.branchName ? 'border-red-500' : 'border-gray-200'}`}
           />
+          {formErrors.branchName && <p className="text-[10px] text-red-600 mt-1">{formErrors.branchName}</p>}
         </div>
 
         <div>
@@ -367,11 +367,17 @@ export const BankDetailsSection = ({
           <input
             type="text"
             name="upiId"
+          maxLength={100}
             value={formData.upiId}
             onChange={handleChange}
+          onBlur={handleBlur}
             placeholder="e.g. name@okhdfcbank"
-            className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-green-500 font-mono"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            className={`w-full p-2.5 bg-gray-50 border rounded-xl text-xs outline-none focus:ring-2 focus:ring-green-500 font-mono ${formErrors.upiId ? 'border-red-500' : 'border-gray-200'}`}
           />
+          {formErrors.upiId && <p className="text-[10px] text-red-600 mt-1">{formErrors.upiId}</p>}
         </div>
       </div>
 

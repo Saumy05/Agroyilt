@@ -206,13 +206,14 @@ const updateBankDetails = async (arg1, arg2, bankData) => {
   const rawIfsc = bankData.ifscCode || bankData.ifsc || '';
 
   // Validation
-  if (!accountHolderName || typeof accountHolderName !== 'string' || accountHolderName.trim().length < 2) {
-    throw new Error('Account holder name must be at least 2 characters');
+  // Same rules as the forms (Frontend/src/utils/bankValidation.js)
+  if (!accountHolderName || typeof accountHolderName !== 'string' || !/^[\p{L}][\p{L} .'-]{2,59}$/u.test(accountHolderName.trim())) {
+    throw new Error('Account holder name must be 3 to 60 letters (spaces, dots and hyphens are fine)');
   }
 
   const cleanAcc = (accountNumber || '').toString().trim();
-  if (!/^\d{9,18}$/.test(cleanAcc)) {
-    throw new Error('Account number must be between 9 and 18 digits');
+  if (!/^\d{9,18}$/.test(cleanAcc) || /^(\d)\1+$/.test(cleanAcc)) {
+    throw new Error('Account number must be 9 to 18 digits');
   }
 
   // The 5th IFSC character is always the digit 0; a typed letter O is a common slip
@@ -221,14 +222,18 @@ const updateBankDetails = async (arg1, arg2, bankData) => {
     throw new Error('Invalid IFSC code: 11 characters, 4 letters + 0 + 6 letters/digits (e.g., SBIN0001234)');
   }
 
-  if (!bankName || typeof bankName !== 'string' || bankName.trim().length < 2) {
-    throw new Error('Bank name is required');
+  if (!bankName || typeof bankName !== 'string' || !/^[\p{L}][\p{L}0-9 &.()'-]{2,59}$/u.test(bankName.trim())) {
+    throw new Error('Enter the bank name using 3 to 60 letters');
+  }
+
+  if (branchName && (typeof branchName !== 'string' || !/^[\p{L}0-9][\p{L}0-9 &.,()/'-]{1,59}$/u.test(branchName.trim()))) {
+    throw new Error('Branch name can have letters, numbers and spaces only (2 to 60 characters)');
   }
 
   let cleanUpi = null;
   if (upiId && typeof upiId === 'string' && upiId.trim() !== '') {
     cleanUpi = upiId.trim().toLowerCase();
-    if (!/^[\w.-]+@[\w.-]+$/.test(cleanUpi)) {
+    if (!/^[a-z0-9._-]{2,256}@[a-z]{2,64}$/.test(cleanUpi)) {
       throw new Error('Invalid UPI ID format (e.g., username@bank)');
     }
   }

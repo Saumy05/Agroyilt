@@ -110,10 +110,7 @@ const getDashboardStats = async (req, res) => {
     });
 
     // 4. Count Completed Jobs
-    const completedJobsCount = await Booking.countDocuments({
-      workerId: worker._id,
-      status: { $in: [BOOKING_STATUS.COMPLETED, BOOKING_STATUS.WORK_DONE] }
-    });
+    const { completedJobs: completedJobsCount } = await require('../../services/workerJobCounts').workerJobCounts(worker);
 
     // 5. Calculate Average Rating
     const ratingStats = await Booking.aggregate([

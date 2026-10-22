@@ -9,6 +9,7 @@ import {
 import toast from 'react-hot-toast';
 import workerBookingService from '../../../../services/workerBookingService';
 import LocationPicker from '../Checkout/components/LocationPicker';
+import { WORKER_SERVICES } from '../../../../constants/workerServices';
 
 // Work categories with rich metadata and templates for auto-filling
 const WORK_CATEGORY_DATA = {
@@ -76,7 +77,7 @@ const WORK_CATEGORY_DATA = {
     icon: '🚜',
     title: 'Tractor Operation',
     description: 'Need skilled operator for tractor ploughing and farm equipment handling.',
-    skill: 'Tractor Driving'
+    skill: 'Tractor Operation'
   },
   'General Farm Labour': {
     icon: '👨‍🌾',
@@ -94,11 +95,8 @@ const WORK_CATEGORY_DATA = {
 
 const WORK_CATEGORIES = Object.keys(WORK_CATEGORY_DATA);
 
-const COMMON_SKILLS = [
-  'Harvesting', 'Sowing', 'Planting', 'Irrigation',
-  'Weeding', 'Fertilizing', 'Pesticide Spraying',
-  'Tractor Driving', 'General Farm Labour', 'Threshing'
-];
+// the same list workers pick their services from on their profile
+const COMMON_SKILLS = WORKER_SERVICES;
 
 const WorkCategorySelect = ({ value, onChange, error, categories, categoryData }) => {
   const [isOpen, setIsOpen] = useState(false);

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { FiX, FiCreditCard, FiUser } from 'react-icons/fi';
 import workerWalletService from '../../../../services/workerWalletService';
 import { toastManager } from '../../../../utils/toastManager';
@@ -90,9 +91,10 @@ const PayDuesSheet = ({ isOpen, onClose, dues, hasPendingOffline, onDone }) => {
     }
   };
 
-  return (
+  // Rendered on <body>: the worker pages sit inside an animated wrapper, which would otherwise pin this "fixed" sheet to the page instead of the screen
+  return createPortal(
     <div className="fixed inset-0 z-[10000] flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4" onClick={close}>
-      <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-5 space-y-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] space-y-4 max-h-[90dvh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-lg font-black text-gray-900">Pay your dues</h3>
@@ -170,7 +172,8 @@ const PayDuesSheet = ({ isOpen, onClose, dues, hasPendingOffline, onDone }) => {
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

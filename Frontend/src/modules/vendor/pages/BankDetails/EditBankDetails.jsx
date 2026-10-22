@@ -7,7 +7,8 @@ import {
 import { vendorTheme as themeColors } from '../../../../theme';
 import withdrawalService from '../../../../services/withdrawalService';
 import { toastManager } from '../../../../utils/toastManager';
-import { IFSC_REGEX, IFSC_INPUT_PROPS, NUMERIC_SECRET_PROPS, normalizeIfsc } from '../../../../utils/ifsc';
+import { IFSC_INPUT_PROPS, NUMERIC_SECRET_PROPS, normalizeIfsc } from '../../../../utils/ifsc';
+import { validateBankDetails, validateBankField } from '../../../../utils/bankValidation';
 
 const EditBankDetails = () => {
   const navigate = useNavigate();
@@ -117,37 +118,19 @@ const EditBankDetails = () => {
   };
 
   const validate = () => {
-    const errors = {};
-    if (!formData.accountHolderName.trim()) {
-      errors.accountHolderName = 'Account holder name is required';
-    } else if (formData.accountHolderName.trim().length < 3) {
-      errors.accountHolderName = 'Name must be at least 3 characters';
-    }
-
-    if (!formData.accountNumber) {
-      errors.accountNumber = 'Account number is required';
-    } else if (!/^\d{9,18}$/.test(formData.accountNumber)) {
-      errors.accountNumber = 'Account number must be between 9 and 18 digits';
-    }
-
-    if (!formData.confirmAccountNumber) {
-      errors.confirmAccountNumber = 'Please re-enter your account number';
-    } else if (formData.accountNumber !== formData.confirmAccountNumber) {
-      errors.confirmAccountNumber = 'Account numbers do not match';
-    }
-
-    if (!formData.ifsc.trim()) {
-      errors.ifsc = 'IFSC code is required';
-    } else if (!IFSC_REGEX.test(normalizeIfsc(formData.ifsc))) {
-      errors.ifsc = 'Invalid IFSC: 11 characters, 4 letters + 0 + 6 letters/digits (e.g. SBIN0001234)';
-    }
-
-    if (!formData.bankName.trim()) {
-      errors.bankName = 'Bank name is required';
-    }
-
+    const errors = validateBankDetails(formData);
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
+  };
+
+  // check a field as soon as the person leaves it
+  const handleBlur = (e) => {
+    const { name } = e.target;
+    setFormErrors(prev => ({ ...prev, [name]: validateBankField(name, formData[name], formData) || null }));
+    // the confirmation depends on the account number: re-check it when that one changes
+    if (name === 'accountNumber' && formData.confirmAccountNumber) {
+      setFormErrors(prev => ({ ...prev, confirmAccountNumber: validateBankField('confirmAccountNumber', formData.confirmAccountNumber, formData) || null }));
+    }
   };
 
   const handleBack = () => {
@@ -279,8 +262,10 @@ const EditBankDetails = () => {
               <input
                 type="text"
                 name="accountHolderName"
+                maxLength={60}
                 value={formData.accountHolderName}
                 onChange={handleChange}
+                onBlur={handleBlur}
                 placeholder="Full name as registered with bank"
                 className={`w-full p-3 bg-slate-50 border rounded-xl text-xs sm:text-sm font-semibold outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all ${
                   formErrors.accountHolderName ? 'border-rose-400 bg-rose-50/20' : 'border-slate-200'
@@ -302,8 +287,10 @@ const EditBankDetails = () => {
                     type="text"
                     inputMode="numeric"
                     name="accountNumber"
+                maxLength={18}
                     value={formData.accountNumber}
                     onChange={handleChange}
+                onBlur={handleBlur}
                     placeholder="Enter account number"
                     {...NUMERIC_SECRET_PROPS}
                     style={{ WebkitTextSecurity: showAccountNumber ? 'none' : 'disc' }}
@@ -334,8 +321,10 @@ const EditBankDetails = () => {
                     type="text"
                     inputMode="numeric"
                     name="confirmAccountNumber"
+                maxLength={18}
                     value={formData.confirmAccountNumber}
                     onChange={handleChange}
+                onBlur={handleBlur}
                     placeholder="Re-enter account number"
                     {...NUMERIC_SECRET_PROPS}
                     style={{ WebkitTextSecurity: showConfirmAccountNumber ? 'none' : 'disc' }}
@@ -375,6 +364,7 @@ const EditBankDetails = () => {
                 name="ifsc"
                 value={formData.ifsc}
                 onChange={handleChange}
+                onBlur={handleBlur}
                 placeholder="e.g. SBIN0001234 or HDFC0000001"
                 maxLength={11}
                 {...IFSC_INPUT_PROPS}
@@ -396,8 +386,10 @@ const EditBankDetails = () => {
                 <input
                   type="text"
                   name="bankName"
+                maxLength={60}
                   value={formData.bankName}
                   onChange={handleChange}
+                onBlur={handleBlur}
                   placeholder="e.g. State Bank of India"
                   className={`w-full p-3 bg-slate-50 border rounded-xl text-xs sm:text-sm font-semibold outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all ${
                     formErrors.bankName ? 'border-rose-400 bg-rose-50/20' : 'border-slate-200'
@@ -415,11 +407,16 @@ const EditBankDetails = () => {
                 <input
                   type="text"
                   name="branchName"
+                maxLength={60}
                   value={formData.branchName}
                   onChange={handleChange}
+                onBlur={handleBlur}
                   placeholder="e.g. Main Branch"
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                  className={`w-full p-3 bg-slate-50 border rounded-xl text-xs sm:text-sm font-semibold outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all ${formErrors.branchName ? 'border-rose-400 bg-rose-50/20' : 'border-slate-200'}`}
                 />
+                {formErrors.branchName && (
+                  <p className="text-[10px] font-bold text-rose-600 mt-1">{formErrors.branchName}</p>
+                )}
               </div>
             </div>
 
@@ -431,11 +428,19 @@ const EditBankDetails = () => {
               <input
                 type="text"
                 name="upiId"
+                maxLength={100}
                 value={formData.upiId}
                 onChange={handleChange}
+                onBlur={handleBlur}
                 placeholder="e.g. mobile@upi or name@okaxis"
-                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-mono font-medium outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                className={`w-full p-3 bg-slate-50 border rounded-xl text-xs sm:text-sm font-mono font-medium outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all ${formErrors.upiId ? 'border-rose-400 bg-rose-50/20' : 'border-slate-200'}`}
               />
+              {formErrors.upiId && (
+                <p className="text-[10px] font-bold text-rose-600 mt-1">{formErrors.upiId}</p>
+              )}
               <p className="text-[10px] text-slate-400 mt-1">
                 Optional: Used for instant micro-settlements and incentive deposits.
               </p>

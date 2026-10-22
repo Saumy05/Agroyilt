@@ -700,12 +700,36 @@ const normalizeSkills = (skills) => {
 };
 
 /**
+ * Work types workers saved under older names. A request for one also reaches workers who saved the old name,
+ * so unifying the lists never makes an existing worker miss requests.
+ */
+const SKILL_SYNONYMS = {
+  'tractor operation': ['drive tractor', 'tractor driving'],
+  'land preparation': ['ploughing', 'plowing'],
+  'sowing': ['sowing / seeding'],
+  'harvesting': ['harvesting (crop cutting)', 'drive harvester'],
+  'pesticide spraying': ['crop spraying'],
+  'loading & unloading': ['loading / unloading'],
+  'general farm labour': ['general farm helper']
+};
+const expandSkillSynonyms = (skills) => {
+  if (!Array.isArray(skills)) return skills;
+  const out = [];
+  skills.forEach((s) => {
+    out.push(s);
+    (SKILL_SYNONYMS[String(s).trim().toLowerCase()] || []).forEach((alt) => out.push(alt));
+  });
+  return [...new Set(out)];
+};
+
+/**
  * Check if worker skills match required skills.
  * If worker has 'ALL' (case-insensitive), it matches any required skills!
  * Otherwise, if requiredSkills is empty or any required skill matches worker skills / service categories, it matches.
  */
 const isWorkerSkillMatch = (workerSkills = [], requiredSkills = [], workerCategories = []) => {
   if (!requiredSkills || requiredSkills.length === 0) return true;
+  requiredSkills = expandSkillSynonyms(requiredSkills);
   const wSkills = Array.isArray(workerSkills) ? workerSkills.map(s => String(s).trim().toLowerCase()) : [];
   if (wSkills.includes('all')) return true;
 
@@ -1287,6 +1311,7 @@ async function getLiveTeamCapacity(leaderId, bookingType, schedule) {
  * Build a MongoDB query for Workers matching required skills.
  */
 function buildSkillQuery(requiredSkills, extra = {}) {
+  requiredSkills = expandSkillSynonyms(requiredSkills);
   const base = {
     $or: [
       { approvalStatus: { $in: ['approved', 'APPROVED', 'pending', 'PENDING'] } },

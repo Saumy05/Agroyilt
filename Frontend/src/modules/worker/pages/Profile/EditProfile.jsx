@@ -19,6 +19,7 @@ import { getDobError, toDateInputValue } from '../../../../utils/age';
 // Zod schema
 import flutterBridge from '../../../../utils/flutterBridge';
 import authStorage from '../../../../utils/authStorage';
+import { WORKER_SERVICES, canonicalServices } from '../../../../constants/workerServices';
 
 const workerProfileSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -119,7 +120,7 @@ const EditProfile = () => {
               fullAddress: fullAddr || ''
             },
             serviceCategories: w.serviceCategories || (w.serviceCategory ? [w.serviceCategory] : []),
-            skills: w.skills || [],
+            skills: canonicalServices(w.skills), // older names are shown (and saved) under the current names
             hourlyRate: w.hourlyRate || '',
             dailyRate: w.dailyRate || '',
             landRate: w.landRate || '',
@@ -430,18 +431,8 @@ const EditProfile = () => {
            /labour|labor|worker|manpower|service|shramik|majdoor|crop|planting|field|harvest|pruning/i.test(slug);
   });
 
-  // Hardcoded farming skills as requested
-  const uniqueAvailableSkills = [
-    "Drive Tractor",
-    "Drive Harvester",
-    "Ploughing",
-    "Sowing / Seeding",
-    "Harvesting (Crop Cutting)",
-    "Crop Spraying",
-    "Weeding",
-    "Loading / Unloading",
-    "General Farm Helper"
-  ];
+  // The same work types a farmer picks from when asking for workers
+  const uniqueAvailableSkills = WORKER_SERVICES;
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
