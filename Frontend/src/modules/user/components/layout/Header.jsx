@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { HiLocationMarker, HiMenuAlt2 } from 'react-icons/hi';
 import { gsap } from 'gsap';
 import LocationSelector from '../common/LocationSelector';
+import { splitLocation } from '../common/splitLocation';
 import { animateLogo } from '../../../../utils/gsapAnimations';
 import Logo from '../../../../components/common/Logo';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
@@ -91,7 +92,7 @@ const Header = ({ location, onLocationClick }) => {
                     WebkitBackgroundClip: 'text',
                     WebkitTextFillColor: 'transparent',
                   }}>
-                    {location && location !== '...' ? location.split('-')[0].trim() : 'Select Location'}
+                    {(location !== '...' && splitLocation(location).primary) || 'Select Location'}
                   </span>
                 </div>
                 <LocationSelector
