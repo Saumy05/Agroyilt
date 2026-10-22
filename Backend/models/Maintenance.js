@@ -9,7 +9,7 @@ const maintenanceSchema = new mongoose.Schema({
     },
     equipmentId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Service',
+        ref: 'VendorEquipment',
         required: true,
         index: true
     },

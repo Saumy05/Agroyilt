@@ -1,5 +1,5 @@
 const Maintenance = require('../../models/Maintenance');
-const Service = require('../../models/Service');
+const VendorEquipment = require('../../models/VendorEquipment');
 const { validationResult } = require('express-validator');
 
 /**
@@ -9,7 +9,7 @@ const getMaintenanceSchedules = async (req, res) => {
     try {
         const vendorId = req.user.id;
         const schedules = await Maintenance.find({ vendorId, status: 'active' })
-            .populate('equipmentId', 'title')
+            .populate('equipmentId', 'name')
             .sort({ startDate: 1 });
 
         res.status(200).json({
@@ -29,6 +29,18 @@ const addMaintenanceSchedule = async (req, res) => {
     try {
         const vendorId = req.user.id;
         const { equipmentId, startDate, endDate, reason, note } = req.body;
+
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        if (!equipmentId || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+            return res.status(400).json({ success: false, message: 'Select equipment and a valid date range' });
+        }
+
+        // Only the vendor's own machines can be scheduled
+        const owned = await VendorEquipment.exists({ _id: equipmentId, vendorId });
+        if (!owned) {
+            return res.status(404).json({ success: false, message: 'Equipment not found' });
+        }
 
         // Basic overlap check
         const overlap = await Maintenance.findOne({

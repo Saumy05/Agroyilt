@@ -5,7 +5,7 @@ import Header from '../../components/layout/Header';
 import BottomNav from '../../components/layout/BottomNav';
 import { vendorTheme as themeColors } from '../../../../theme';
 import maintenanceService from '../../services/maintenanceService';
-import vendorServiceService from '../../services/vendorServiceService';
+import { vendorEquipmentService } from '../../../../services/vendorEquipmentService';
 import { toastManager } from '../../../../utils/toastManager';
 import { format } from 'date-fns';
 
@@ -34,7 +34,7 @@ const MaintenanceIndex = () => {
             setLoading(true);
             const [schedRes, equipRes] = await Promise.all([
                 maintenanceService.getSchedules(),
-                vendorServiceService.getVendorServices()
+                vendorEquipmentService.getMyEquipment()
             ]);
             setSchedules(schedRes.data || []);
             setEquipments(equipRes.data || []);
@@ -100,7 +100,7 @@ const MaintenanceIndex = () => {
                                         <FiClock className="w-6 h-6" />
                                     </div>
                                     <div>
-                                        <h3 className="font-bold text-gray-800">{item.equipmentId?.title}</h3>
+                                        <h3 className="font-bold text-gray-800">{item.equipmentId?.name || 'Equipment removed'}</h3>
                                         <p className="text-xs text-gray-500 font-medium">
                                             {format(new Date(item.startDate), 'dd MMM')} - {format(new Date(item.endDate), 'dd MMM, yyyy')}
                                         </p>
@@ -139,7 +139,7 @@ const MaintenanceIndex = () => {
                                     onChange={e => setFormData({ ...formData, equipmentId: e.target.value })}
                                 >
                                     <option value="">Select Machine...</option>
-                                    {equipments.map(e => <option key={e._id} value={e._id}>{e.title}</option>)}
+                                    {equipments.map(e => <option key={e._id} value={e._id}>{e.name}</option>)}
                                 </select>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
