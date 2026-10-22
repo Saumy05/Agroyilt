@@ -20,7 +20,7 @@ function isIOS() {
   return /iP(hone|od|ad)/i.test(navigator.userAgent);
 }
 
-const LogoLoader = ({ fullScreen = false, overlay = false, inline = false, size = "w-20 h-20", delay = 0 }) => {
+const LogoLoader = ({ fullScreen, overlay = false, inline = false, size = "w-20 h-20", delay = 0 }) => {
   const [isVisible, setIsVisible] = React.useState(delay === 0);
 
   React.useEffect(() => {
@@ -41,7 +41,11 @@ const LogoLoader = ({ fullScreen = false, overlay = false, inline = false, size 
       : "fixed inset-0 flex items-center justify-center bg-white/80 backdrop-blur-sm z-[100]"
     : inline
       ? "flex items-center justify-center"
-      : "flex items-center justify-center w-full min-h-[60vh] pb-20"; // Leave space for bottom nav
+      : fullScreen === undefined
+        // Page-level load: centred on the screen, under the bottom nav, never blocks taps
+        ? "fixed inset-0 z-10 flex items-center justify-center pointer-events-none"
+        // Explicit fullScreen={false}: sits inside its own section
+        : "flex items-center justify-center w-full min-h-[60vh] pb-20";
 
   // On iOS: show a simple native spinner — no logo animation
   // This avoids App Store Guideline 4.2 rejection (web-wrapper detection)

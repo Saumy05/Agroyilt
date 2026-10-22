@@ -89,7 +89,7 @@ const LandLease = lazyLoad(() => import('../pages/LandLease'));
 
 // Lightweight loading fallback - no logo to avoid iOS rejection
 const LoadingFallback = () => (
-  <div className="flex items-center justify-center min-h-[50vh]">
+  <div className="fixed inset-0 z-10 flex items-center justify-center pointer-events-none">
     <div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin" />
   </div>
 );
