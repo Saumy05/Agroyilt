@@ -776,7 +776,7 @@ const respondCompletion = async (res, assignment, r) => {
       emitSafe(room, 'assignment_completion_otp_verified', eventData);
       emitSafe(room, 'assignment_settled', eventData);
       emitSafe(room, 'worker_work_completed', eventData);
-      emitSafe(room, 'booking_completed', eventData);
+      // No 'booking_completed' here: this is one worker finishing. The whole-booking event is sent by finishParent once the LAST worker settles.
     }
     await notify({
       recipientType: 'worker', recipientId: a.workerId, type: 'assignment_settled', title: 'Payment Credited to Wallet!',

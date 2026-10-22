@@ -438,9 +438,8 @@ const BookingTrack = () => {
     };
 
     // G. Booking Completed / Parent Completed
-    const handleBookingCompleted = (data) => {
-      setTrackingData(prev => prev ? ({ ...prev, isParentCompleted: true, parentStatus: 'completed' }) : prev);
-      toastManager.success('Booking completed and payments settled!');
+    // The server decides whether the whole booking is done: reload instead of assuming it, so one finished worker never flips everyone to "completed"
+    const handleBookingCompleted = () => {
       fetchSnapshot(false);
     };
 

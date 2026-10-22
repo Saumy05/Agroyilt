@@ -178,6 +178,28 @@ const BookedRequestView = ({ request, onRefresh }) => {
     setModal(null);
   };
 
+  // One rating for every finished worker that has not been rated yet; each still gets their own rating record
+  const rateAllWorkers = async (data) => {
+    const targets = workers.filter(w => w.journeyStatus === 'COMPLETED' && !rated[w.bookingId]);
+    const next = { ...rated };
+    const failed = [];
+    for (const w of targets) {
+      try {
+        const res = await bookingService.addReview(w.bookingId, data);
+        if (res?.success === false) throw new Error(res.message || 'failed');
+        next[w.bookingId] = true;
+      } catch {
+        failed.push(w.workerName);
+      }
+    }
+    setRated(next);
+    try { localStorage.setItem(`rated_workers_${id}`, JSON.stringify(next)); } catch { /* per-device memory only */ }
+    if (failed.length === 0) toast.success(`Thanks for rating ${targets.length === 1 ? targets[0].workerName : `all ${targets.length} workers`}`);
+    else if (failed.length < targets.length) toast.error(`Rated ${targets.length - failed.length} workers. Could not rate: ${failed.join(', ')}`);
+    else { toast.error('Could not save the rating. Please try again.'); return; }
+    setModal(null);
+  };
+
   const raiseProblem = async (data) => {
     const { bookingId: _ignored, ...rest } = data;
     const res = await disputeService.raiseDispute({ ...rest, workerRequestId: id });
@@ -329,14 +351,22 @@ const BookedRequestView = ({ request, onRefresh }) => {
           )}
         </div>
 
-        {/* Rate prompt once everyone is done */}
-        {allDone && unrated.length > 0 && (
+        {/* Rate prompt: once everyone is done, or as soon as two or more workers have finished */}
+        {unrated.length > 0 && (allDone || unrated.length > 1) && (
           <div className="rounded-3xl border border-amber-200 bg-amber-50 p-4 flex items-center justify-between gap-3">
             <div>
               <p className="font-black text-amber-900">How did the work go?</p>
-              <p className="text-xs text-amber-800">Rate {unrated.length === 1 ? unrated[0].workerName : `your ${unrated.length} workers`} — it helps other farmers.</p>
+              <p className="text-xs text-amber-800">
+                {unrated.length === 1
+                  ? `Rate ${unrated[0].workerName} — it helps other farmers.`
+                  : `Rate all ${unrated.length} finished workers at once, or rate each one on their own below.`}
+              </p>
             </div>
-            <button type="button" onClick={() => setModal({ rate: unrated[0] })} className="px-4 py-2.5 rounded-xl bg-amber-500 text-white text-sm font-black shrink-0">Rate</button>
+            <button type="button"
+              onClick={() => setModal(unrated.length === 1 ? { rate: unrated[0] } : { rateAll: true })}
+              className="px-4 py-2.5 rounded-xl bg-amber-500 text-white text-sm font-black shrink-0">
+              {unrated.length === 1 ? 'Rate' : `Rate all ${unrated.length}`}
+            </button>
           </div>
         )}
 
@@ -550,6 +580,13 @@ const BookedRequestView = ({ request, onRefresh }) => {
         onSubmit={(data) => rateWorker(modal.rate, data)}
         bookingName={request.workTitle}
         workerName={modal?.rate?.workerName}
+      />
+      <RatingModal
+        isOpen={Boolean(modal?.rateAll)}
+        onClose={() => setModal(null)}
+        onSubmit={rateAllWorkers}
+        bookingName={request.workTitle}
+        subtitle={`One rating for all ${unrated.length} finished workers`}
       />
       <FarmerWorkerQrModal
         isOpen={Boolean(qrModal)}
