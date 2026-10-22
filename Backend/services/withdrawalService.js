@@ -215,9 +215,10 @@ const updateBankDetails = async (arg1, arg2, bankData) => {
     throw new Error('Account number must be between 9 and 18 digits');
   }
 
-  const cleanIfsc = (rawIfsc || '').toString().trim().toUpperCase();
+  // The 5th IFSC character is always the digit 0; a typed letter O is a common slip
+  const cleanIfsc = (rawIfsc || '').toString().toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/^([A-Z]{4})O/, '$10');
   if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(cleanIfsc)) {
-    throw new Error('Invalid IFSC code format (e.g., SBIN0001234)');
+    throw new Error('Invalid IFSC code: 11 characters, 4 letters + 0 + 6 letters/digits (e.g., SBIN0001234)');
   }
 
   if (!bankName || typeof bankName !== 'string' || bankName.trim().length < 2) {

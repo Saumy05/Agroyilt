@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { FiCreditCard, FiEdit2, FiCheck, FiAlertCircle, FiLock, FiX, FiEye, FiEyeOff } from 'react-icons/fi';
 import withdrawalService from '../../services/withdrawalService';
 import { toastManager } from '../../utils/toastManager';
+import { IFSC_REGEX, normalizeIfsc } from '../../utils/ifsc';
 
 /**
  * BankDetailsSection
@@ -127,7 +128,7 @@ export const BankDetailsSection = ({
     const { name, value } = e.target;
     let formatted = value;
     if (name === 'ifsc') {
-      formatted = value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      formatted = normalizeIfsc(value);
     }
     setFormData(prev => ({ ...prev, [name]: formatted }));
     if (formErrors[name]) {
@@ -153,8 +154,8 @@ export const BankDetailsSection = ({
 
     if (!formData.ifsc) {
       errors.ifsc = 'IFSC code is required';
-    } else if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(formData.ifsc.toUpperCase())) {
-      errors.ifsc = 'Invalid IFSC code (e.g. SBIN0001234)';
+    } else if (!IFSC_REGEX.test(normalizeIfsc(formData.ifsc))) {
+      errors.ifsc = 'Invalid IFSC: 11 characters, 4 letters + 0 + 6 letters/digits (e.g. SBIN0001234)';
     }
 
     if (!formData.bankName.trim()) {
@@ -174,8 +175,8 @@ export const BankDetailsSection = ({
       const res = await withdrawalService.updateBankDetails({
         accountHolderName: formData.accountHolderName.trim(),
         accountNumber: formData.accountNumber.trim(),
-        ifsc: formData.ifsc.trim().toUpperCase(),
-        ifscCode: formData.ifsc.trim().toUpperCase(),
+        ifsc: normalizeIfsc(formData.ifsc),
+        ifscCode: normalizeIfsc(formData.ifsc),
         bankName: formData.bankName.trim(),
         branchName: formData.branchName.trim(),
         upiId: formData.upiId.trim()

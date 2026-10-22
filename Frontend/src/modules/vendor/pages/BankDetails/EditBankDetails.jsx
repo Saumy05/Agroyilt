@@ -7,6 +7,7 @@ import {
 import { vendorTheme as themeColors } from '../../../../theme';
 import withdrawalService from '../../../../services/withdrawalService';
 import { toastManager } from '../../../../utils/toastManager';
+import { IFSC_REGEX, normalizeIfsc } from '../../../../utils/ifsc';
 
 const EditBankDetails = () => {
   const navigate = useNavigate();
@@ -80,7 +81,7 @@ const EditBankDetails = () => {
     let formattedVal = value;
 
     if (name === 'ifsc') {
-      formattedVal = value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 11);
+      formattedVal = normalizeIfsc(value);
       if (formattedVal.length === 11) {
         lookupIfsc(formattedVal);
       }
@@ -137,8 +138,8 @@ const EditBankDetails = () => {
 
     if (!formData.ifsc.trim()) {
       errors.ifsc = 'IFSC code is required';
-    } else if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(formData.ifsc.trim().toUpperCase())) {
-      errors.ifsc = 'Invalid IFSC format (11 chars, e.g. SBIN0001234)';
+    } else if (!IFSC_REGEX.test(normalizeIfsc(formData.ifsc))) {
+      errors.ifsc = 'Invalid IFSC: 11 characters, 4 letters + 0 + 6 letters/digits (e.g. SBIN0001234)';
     }
 
     if (!formData.bankName.trim()) {
@@ -169,8 +170,8 @@ const EditBankDetails = () => {
       const res = await withdrawalService.updateBankDetails({
         accountHolderName: formData.accountHolderName.trim(),
         accountNumber: formData.accountNumber.trim(),
-        ifsc: formData.ifsc.trim().toUpperCase(),
-        ifscCode: formData.ifsc.trim().toUpperCase(),
+        ifsc: normalizeIfsc(formData.ifsc),
+        ifscCode: normalizeIfsc(formData.ifsc),
         bankName: formData.bankName.trim(),
         branchName: formData.branchName.trim(),
         upiId: formData.upiId.trim()
