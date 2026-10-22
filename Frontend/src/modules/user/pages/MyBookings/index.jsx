@@ -436,7 +436,7 @@ const MyBookings = () => {
               {booking.serviceName || 'Equipment Order'}
             </h3>
             <p className="text-[11px] text-slate-500 font-medium truncate mt-0.5">
-              {itemsSummary ? itemsSummary : `#${bookingNum}`}
+              <span className="font-mono font-bold text-slate-700">#{bookingNum}</span>{itemsSummary ? ` · ${itemsSummary}` : ''}
             </p>
           </div>
 

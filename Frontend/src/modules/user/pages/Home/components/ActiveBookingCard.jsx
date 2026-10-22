@@ -94,7 +94,7 @@ const ActiveBookingCard = () => {
               {itemName}
             </h4>
             <p className="text-[11px] font-semibold text-slate-300 truncate">
-              Booking ID: #{bookingId?.slice(-6).toUpperCase()} • Track details & handover
+              Booking ID: #{activeBooking.bookingNumber || bookingId?.slice(-6).toUpperCase()} • Track details & handover
             </p>
           </div>
 
