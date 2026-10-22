@@ -8,7 +8,8 @@ const {
   generateDistinctOtp,
   verifyBookingOtp,
   closeServiceTimer,
-  finalizeMachineryBilling
+  finalizeMachineryBilling,
+  billableMinutes: billableMinutesFor
 } = require('../../services/bookingSettlementService');
 
 /**
@@ -208,7 +209,7 @@ const getServiceTimerStatus = async (req, res) => {
     }
 
     const activeMinutes = Math.round((liveActiveSeconds / 60) * 100) / 100;
-    const billableMinutes = Math.max(0, Math.ceil(liveActiveSeconds / 60));
+    const billableMinutes = (!status || status === 'NOT_STARTED') ? 0 : billableMinutesFor(liveActiveSeconds); // same minimum as the final bill once the job has started
     const estimatedTimeCharge = Math.round(billableMinutes * ratePerMinute);
     const estimatedTotal = (adminBaseCharge || 0) + estimatedTimeCharge;
 

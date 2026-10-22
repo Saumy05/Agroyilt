@@ -72,7 +72,7 @@ const createOrUpdateBill = async (req, res) => {
         if (booking.serviceTimer.status === 'RUNNING' && booking.serviceTimer.currentSessionStartedAt) {
           activeSec += Math.max(0, Math.floor((now.getTime() - new Date(booking.serviceTimer.currentSessionStartedAt).getTime()) / 1000));
         }
-        const activeMins = Math.max(activeSec > 0 ? 1 : 0, Math.ceil(activeSec / 60));
+        const activeMins = require('../../services/bookingSettlementService').billableMinutes(activeSec);
         const ratePerMin = booking.serviceTimer.ratePerMinute || 15;
         const adminBase = booking.serviceTimer.adminBaseCharge || booking.visitingCharges || 0;
         timingBaseAmount = adminBase + (activeMins * ratePerMin);

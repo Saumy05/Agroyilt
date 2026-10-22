@@ -252,12 +252,24 @@ const PaymentVerificationModal = ({ isOpen, onClose, booking, onPayOnline }) => 
                 </div>
               )}
 
-              {/* Platform Fee (admin-set % of the service price) */}
-              {(Number(bill?.platformFee) > 0 || Number(booking.platformFee) > 0) && (
+              {/* Travel Charge (passed to the provider in full) */}
+              {Number(bill ? bill.travelCharge : booking.travelCharge) > 0 && (
                 <div className="mt-2 pt-2 border-t border-slate-100">
                   <div className="flex justify-between text-xs font-bold text-slate-600">
                     <span className="flex items-center gap-2 uppercase tracking-wide">
-                      <FiInfo className="w-3.5 h-3.5 text-blue-400" /> Platform Fee{(bill?.payoutConfig?.platformFeePercentage || booking.platformFeePercentage) ? ` (${bill?.payoutConfig?.platformFeePercentage || booking.platformFeePercentage}%)` : ''}
+                      <FiInfo className="w-3.5 h-3.5 text-blue-400" /> Travel Charge
+                    </span>
+                    <span className="font-mono">₹{Number(bill ? bill.travelCharge : booking.travelCharge).toFixed(2)}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Platform Fee (admin-set % of the service price) */}
+              {Number(bill ? bill.platformFee : booking.platformFee) > 0 && (
+                <div className="mt-2 pt-2 border-t border-slate-100">
+                  <div className="flex justify-between text-xs font-bold text-slate-600">
+                    <span className="flex items-center gap-2 uppercase tracking-wide">
+                      <FiInfo className="w-3.5 h-3.5 text-blue-400" /> Platform Fee{(bill ? bill.payoutConfig?.platformFeePercentage : booking.platformFeePercentage) ? ` (${bill ? bill.payoutConfig?.platformFeePercentage : booking.platformFeePercentage}%)` : ''}
                     </span>
                     <span className="font-mono">₹{Number(bill ? (bill.platformFee || 0) : booking.platformFee).toFixed(2)}</span>
                   </div>

@@ -16,6 +16,7 @@ const BillingPage = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [booking, setBooking] = useState(null);
+  const [bill, setBill] = useState(null); // generated bill: the single source of truth once it exists
 
   // OTP & QR State
   const [isOtpSent, setIsOtpSent] = useState(false);
@@ -65,6 +66,7 @@ const BillingPage = () => {
 
       // Load settings from backend bill
       const billRes = await vendorBillService.getBill(id);
+      setBill(billRes.success && billRes.bill ? billRes.bill : null);
       if (billRes.success && billRes.bill) {
         if (billRes.bill.payoutConfig) {
           const pc = billRes.bill.payoutConfig;
@@ -105,6 +107,43 @@ const BillingPage = () => {
   // --- CALCULATIONS (Synchronized with Farmer Checkout) ---
   const calculations = useMemo(() => {
     if (!booking) return null;
+
+    // Once the bill exists, every figure comes from it, exactly as the farmer sees it (no re-estimating from the booking)
+    if (bill) {
+      const money = (v) => Number(v) || 0;
+      const pc = bill.payoutConfig || {};
+      const baseAmount = money(bill.totalServiceBase) + money(bill.totalPartsBase);
+      const vendorEarning = money(bill.vendorServiceEarning) + money(bill.vendorPartsEarning);
+      const finalBillAmount = money(bill.grandTotal);
+      const advancePaid = Number(booking.advancePaidAmount || 0);
+      const amountToCollect = (booking.balanceDue !== undefined && booking.balanceDue !== null && Number(booking.balanceDue) > 0)
+        ? Number(booking.balanceDue)
+        : advancePaid > 0
+        ? Math.max(0, parseFloat((finalBillAmount - advancePaid).toFixed(2)))
+        : finalBillAmount;
+      return {
+        fromBill: true,
+        billServices: bill.services || [],
+        originalBase: baseAmount,
+        serviceGstPct: pc.serviceGstPercentage ?? payoutSettings.rentalGstPct,
+        totalServiceGST: money(bill.totalGST),
+        totalGST: money(bill.totalGST),
+        visitingCharges: money(bill.visitingCharges) + money(bill.transportCharges),
+        travelCharge: money(bill.travelCharge),
+        farmerPlatformFee: money(bill.platformFee),
+        farmerPlatformFeePct: pc.platformFeePercentage ?? 0,
+        finalBillAmount,
+        advancePaid,
+        amountToCollect,
+        totalVendorEarnings: money(bill.vendorTotalEarning),
+        vendorServiceEarnings: vendorEarning,
+        servicePayoutPct: pc.serviceSplitPercentage ?? payoutSettings.servicePayoutPct,
+        platformCommission: parseFloat((baseAmount - vendorEarning).toFixed(2)),
+        isAgriService: Boolean(booking.rental_type || booking.equipmentId || booking.selectedImplements?.length > 0),
+        hasServiceTimer: Boolean(booking.serviceTimer?.billingSummary),
+        timerSummary: booking.serviceTimer?.billingSummary || null
+      };
+    }
 
     const { serviceGstPct, rentalGstPct, servicePayoutPct } = payoutSettings;
 
@@ -191,7 +230,7 @@ const BillingPage = () => {
       hasServiceTimer,
       timerSummary: booking.serviceTimer?.billingSummary || null
     };
-  }, [booking, payoutSettings]);
+  }, [booking, bill, payoutSettings]);
 
   const handleSubmit = async () => {
     try {
@@ -230,6 +269,10 @@ const BillingPage = () => {
           customItems: [],
           transportCharges: 0
         });
+        // Show the figures that were just billed, not the booking-time estimate
+        const [freshBooking, freshBill] = await Promise.all([getBookingById(id), vendorBillService.getBill(id)]);
+        setBooking(freshBooking.data || freshBooking);
+        setBill(freshBill.success && freshBill.bill ? freshBill.bill : null);
       }
 
       const res = await vendorWalletService.initiateCashCollection(
@@ -358,7 +401,14 @@ const BillingPage = () => {
 
               {/* Items List */}
               <div className="space-y-1.5">
-                {booking.bookedItems && booking.bookedItems.length > 0 ? (
+                {calculations.fromBill && calculations.billServices.length > 0 ? (
+                  calculations.billServices.map((svc, idx) => (
+                    <div key={idx} className="flex justify-between items-center text-xs py-1 border-b border-slate-100/70 last:border-0">
+                      <p className="font-black text-slate-800 text-xs">{svc.name}{svc.quantity > 1 ? ` x${svc.quantity}` : ''}</p>
+                      <span className="font-black text-slate-900 text-xs">₹{(Number(svc.price) * (Number(svc.quantity) || 1)).toFixed(2)}</span>
+                    </div>
+                  ))
+                ) : booking.bookedItems && booking.bookedItems.length > 0 ? (
                   booking.bookedItems.map((item, idx) => (
                     <div key={idx} className="flex justify-between items-center text-xs py-1 border-b border-slate-100/70 last:border-0">
                       <div>
@@ -407,6 +457,16 @@ const BillingPage = () => {
                   )}
                 </div>
 
+                {calculations.travelCharge > 0 && (
+                  <div className="flex justify-between items-center text-xs pt-0.5">
+                    <span className="font-bold text-slate-500 text-[11px] flex items-center gap-1.5">
+                      <FiTruck className="text-slate-400" size={12} />
+                      Travel Charge
+                    </span>
+                    <span className="font-black text-slate-800 text-xs">+ ₹{calculations.travelCharge.toFixed(2)}</span>
+                  </div>
+                )}
+
                 {/* GST */}
                 <div className="flex justify-between items-center text-xs pt-0.5">
                   <span className="font-bold text-slate-500 text-[11px] flex items-center gap-1.5">
@@ -415,6 +475,16 @@ const BillingPage = () => {
                   </span>
                   <span className="font-black text-slate-800 text-xs">+ ₹{calculations.totalServiceGST.toFixed(2)}</span>
                 </div>
+
+                {calculations.farmerPlatformFee > 0 && (
+                  <div className="flex justify-between items-center text-xs pt-0.5">
+                    <span className="font-bold text-slate-500 text-[11px] flex items-center gap-1.5">
+                      <FiTag className="text-slate-400" size={12} />
+                      Platform Fee{calculations.farmerPlatformFeePct ? ` (${calculations.farmerPlatformFeePct}%)` : ''}
+                    </span>
+                    <span className="font-black text-slate-800 text-xs">+ ₹{calculations.farmerPlatformFee.toFixed(2)}</span>
+                  </div>
+                )}
 
                 {/* Total */}
                 <div className="flex justify-between items-center pt-2 mt-1.5 border-t border-slate-200">
@@ -465,10 +535,23 @@ const BillingPage = () => {
                   <span>GST Remitted for Tax Compliance ({calculations.serviceGstPct}%):</span>
                   <span className="font-semibold text-slate-600">- ₹{calculations.totalServiceGST.toFixed(2)}</span>
                 </div>
+                {calculations.farmerPlatformFee > 0 && (
+                  <div className="flex justify-between text-slate-500">
+                    <span>Farmer Platform Fee{calculations.farmerPlatformFeePct ? ` (${calculations.farmerPlatformFeePct}%)` : ''}:</span>
+                    <span className="font-semibold text-slate-600">- ₹{calculations.farmerPlatformFee.toFixed(2)}</span>
+                  </div>
+                )}
+                {calculations.fromBill && calculations.visitingCharges > 0 && (
+                  <div className="flex justify-between text-slate-500">
+                    <span>Visiting / Transport Charges (platform):</span>
+                    <span className="font-semibold text-slate-600">- ₹{calculations.visitingCharges.toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-slate-500">
-                  <span>Platform Fee ({100 - calculations.servicePayoutPct}%):</span>
+                  <span>Commission ({100 - calculations.servicePayoutPct}%):</span>
                   <span className="font-semibold text-slate-600">- ₹{calculations.platformCommission.toFixed(2)}</span>
                 </div>
+
                 <div className="flex justify-between items-center pt-1.5 border-t border-emerald-200/80 font-black text-emerald-950">
                   <span className="text-[11px] uppercase tracking-wider">Your Net Payout:</span>
                   <span className="text-base text-emerald-800">₹{calculations.totalVendorEarnings.toFixed(2)}</span>

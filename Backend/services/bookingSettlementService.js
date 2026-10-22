@@ -547,6 +547,10 @@ const settleVendorCash = async (bookingId, { collectorRole, collectorId }) => {
  * Computes the base (pre-GST) amount for a machinery booking.
  * Timer-based when a live timer exists, otherwise from the booked rental type.
  */
+/** A timer-billed job is always charged for at least this many minutes, so ending it instantly never produces a ₹0 bill. */
+const MIN_BILLABLE_MINUTES = 1;
+const billableMinutes = (activeSeconds) => Math.max(MIN_BILLABLE_MINUTES, Math.ceil((Number(activeSeconds) || 0) / 60));
+
 const computeMachineryBase = ({ booking, service, equipment, workUnits, now }) => {
   // Distance (trolley) jobs: admin's tier applied to the road distance actually driven
   if (booking.rental_type === 'distance_based') {
@@ -576,7 +580,7 @@ const computeMachineryBase = ({ booking, service, equipment, workUnits, now }) =
   const hasTimer = !isRental && !!t && ((t.accumulatedActiveSeconds || 0) > 0 || ['RUNNING', 'PAUSED', 'COMPLETED'].includes(t.status));
   if (hasTimer) {
     const active = t.accumulatedActiveSeconds || 0;
-    const totalActiveMinutes = Math.max(active > 0 ? 1 : 0, Math.ceil(active / 60));
+    const totalActiveMinutes = billableMinutes(active);
     const adminBase = t.adminBaseCharge || booking.visitingCharges || 0;
     const rate = t.ratePerMinute || 15;
     const timeCharge = round2(totalActiveMinutes * rate);
@@ -767,6 +771,8 @@ module.exports = {
   PAID_STATUSES,
   ACTIVE_JOB_STATUSES,
   round2,
+  MIN_BILLABLE_MINUTES,
+  billableMinutes,
   generateOtp,
   generateDistinctOtp,
   verifyBookingOtp,
