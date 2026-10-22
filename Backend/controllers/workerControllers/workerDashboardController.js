@@ -134,11 +134,30 @@ const getDashboardStats = async (req, res) => {
     const averageRating = ratingStats.length > 0 ? parseFloat(ratingStats[0].avgRating.toFixed(1)) : (worker.rating || 0);
 
     // 6. Get Recent Jobs
-    const recentJobs = await Booking.find(workerFilter)
+    const recentDocs = await Booking.find(workerFilter)
       .sort({ createdAt: -1 })
       .limit(5)
       .populate('userId', 'name')
       .populate('serviceId', 'title');
+
+    // A farmer job's mirror booking keeps the amount and status it was booked with. Once the worker's assignment is settled,
+    // show what was really earned (after time pricing, extensions and the app commission) and mark it completed.
+    const IndWorkerAssignmentRecent = require('../../models/IndWorkerAssignment');
+    const recentJobs = await Promise.all(recentDocs.map(async (doc) => {
+      const job = doc.toObject();
+      if (job.providerType !== 'WORKER' && !job.workerRequestId) return job;
+      try {
+        const a = await IndWorkerAssignmentRecent.findOne({
+          workerId: worker._id,
+          $or: [{ legacyBookingId: doc._id }, ...(job.workerRequestId ? [{ parentRequestId: job.workerRequestId }] : [])]
+        }).select('settlementStatus assignmentStatus netEarning').lean();
+        if (a && (a.settlementStatus === 'SETTLED' || a.assignmentStatus === 'COMPLETED') && a.netEarning != null) {
+          job.status = BOOKING_STATUS.COMPLETED;
+          job.finalAmount = a.netEarning;
+        }
+      } catch (e) { /* keep the booking's own values */ }
+      return job;
+    }));
 
     res.status(200).json({
       success: true,

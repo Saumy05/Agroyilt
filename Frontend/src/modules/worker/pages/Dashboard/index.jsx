@@ -870,9 +870,10 @@ const Dashboard = () => {
 
                         {/* Right Arrow / Price */}
                         <div className="flex flex-col items-end gap-1 shrink-0 ml-1">
-                          {job.price && (
-                            <span className="text-xs font-black text-gray-900">
-                              ₹{job.price}
+                          {job.price != null && job.price !== '' && (
+                            <span className="text-xs font-black text-gray-900 text-right leading-tight">
+                              ₹{Number(job.price).toLocaleString('en-IN')}
+                              {isDone && <span className="block text-[9px] font-bold text-emerald-700">Earned</span>}
                             </span>
                           )}
                           <div className="w-7 h-7 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400 group-hover:text-emerald-700 group-hover:bg-emerald-50 transition-colors">
