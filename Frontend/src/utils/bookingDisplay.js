@@ -33,6 +33,18 @@ export const getPaymentState = (b) => {
   return { state: 'pending', label: method === 'cash' ? 'Pay in Cash' : 'Payment Pending', vendorLabel: 'Payment Pending', isPaid: false, isCash: method === 'cash' };
 };
 
+/**
+ * Turns every 24-hour clock time in a string into the app's 12-hour style: "16:30" -> "4:30 PM",
+ * "16:30 - 17:30" -> "4:30 PM - 5:30 PM". Times already carrying AM/PM, and anything else, are left as they are.
+ */
+export const to12HourText = (text) => {
+  if (text === null || text === undefined || text === '') return text;
+  return String(text).replace(/\b([01]?\d|2[0-3]):([0-5]\d)(?!\s*[AaPp][Mm])(?::[0-5]\d)?\b/g, (_, h, m) => {
+    const hour = Number(h);
+    return `${hour % 12 || 12}:${m} ${hour >= 12 ? 'PM' : 'AM'}`;
+  });
+};
+
 export const formatTimeOfDay = (d) => (d && !Number.isNaN(new Date(d).getTime())
   ? new Date(d).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }).replace(/am|pm/i, (m) => m.toUpperCase())
   : '');

@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import workerBookingService from '../../../../services/workerBookingService'; // Use the main booking service
 import workerService from '../../../../services/workerService';
 import { workerRequestService } from '../../../../services/workerRequestService';
+import { to12HourText } from '../../../../utils/bookingDisplay';
 
 const STATUS_COLORS = {
   pending: 'bg-amber-100 text-amber-700 border-amber-200',
@@ -190,7 +191,7 @@ const WorkerBookingRequests = () => {
             </div>
             <div>
               <p className="text-[10px] text-slate-400 font-bold uppercase mb-1 flex items-center gap-1"><FiClock /> Time</p>
-              <p className="font-black text-slate-700">{req.startTime} - {req.endTime}</p>
+              <p className="font-black text-slate-700">{to12HourText(req.startTime)} - {to12HourText(req.endTime)}</p>
             </div>
             <div className="col-span-2">
               <p className="text-[10px] text-slate-400 font-bold uppercase mb-1 flex items-center gap-1"><FiMapPin /> Location</p>

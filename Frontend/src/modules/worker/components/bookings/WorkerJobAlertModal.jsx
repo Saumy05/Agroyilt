@@ -159,7 +159,7 @@ const WorkerJobAlertModal = ({ isOpen, jobId, onClose, onJobAccepted }) => {
           className="relative w-full max-w-[420px] bg-white rounded-[2rem] sm:rounded-[2.25rem] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.1)_inset] overflow-hidden flex flex-col max-h-[92vh] border border-slate-100/80"
         >
           {/* Header Section */}
-          <div className="relative pt-6 pb-5 px-6 bg-gradient-to-br from-emerald-600 via-teal-700 to-emerald-950 text-white flex flex-col items-center text-center select-none overflow-hidden">
+          <div className="relative shrink-0 pt-6 pb-5 px-6 bg-gradient-to-br from-emerald-600 via-teal-700 to-emerald-950 text-white flex flex-col items-center text-center select-none overflow-hidden">
             {/* Ambient Radial Highlights */}
             <div className="absolute -top-16 -right-16 w-44 h-44 bg-white/15 rounded-full blur-3xl pointer-events-none" />
             <div className="absolute -bottom-16 -left-16 w-44 h-44 bg-teal-400/20 rounded-full blur-2xl pointer-events-none" />
@@ -217,7 +217,7 @@ const WorkerJobAlertModal = ({ isOpen, jobId, onClose, onJobAccepted }) => {
           </div>
 
           {/* Body Section */}
-          <div className="px-5 sm:px-6 py-4 flex flex-col bg-white flex-1 overflow-y-auto min-h-[220px]">
+          <div className="px-5 sm:px-6 py-4 flex flex-col bg-white flex-1 overflow-y-auto min-h-0">
             {loading ? (
               <div className="flex flex-col items-center justify-center py-10 space-y-3">
                 <div className="w-10 h-10 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>

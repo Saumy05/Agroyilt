@@ -36,23 +36,30 @@ const WorkCompletionModal = ({ isOpen, onClose, job, onComplete, loading, onOpen
     }
   };
 
+  // Checked when tapped, not when the page loaded: the app's bridge can appear after the page has started
+  const isInNativeApp = () => typeof window !== 'undefined' && !!window.flutter_inappwebview;
+
   const handleNativeCamera = async () => {
     try {
       setIsUploading(true);
       const file = await flutterBridge.openCamera();
-      if (file) {
-        try {
-          const compressed = await compressImage(file, { maxWidth: 1024, maxHeight: 1024, quality: 0.7 });
-          const base64 = await fileToBase64(compressed);
-          setWorkPhotos(prev => [...prev, base64]);
-        } catch (compErr) {
-          const base64 = await fileToBase64(file);
-          setWorkPhotos(prev => [...prev, base64]);
-        }
-        flutterBridge.hapticFeedback('success');
+      if (!file) {
+        // Native camera gave nothing (permission denied, closed, or not supported): try the browser's camera instead
+        cameraInputRef.current?.click();
+        return;
       }
+      try {
+        const compressed = await compressImage(file, { maxWidth: 1024, maxHeight: 1024, quality: 0.7 });
+        const base64 = await fileToBase64(compressed);
+        setWorkPhotos(prev => [...prev, base64]);
+      } catch (compErr) {
+        const base64 = await fileToBase64(file);
+        setWorkPhotos(prev => [...prev, base64]);
+      }
+      flutterBridge.hapticFeedback('success');
     } catch (error) {
       console.error('Native camera failed:', error);
+      toastManager.error('Could not open the camera. Please allow camera access and try again, or choose from Gallery.');
     } finally {
       setIsUploading(false);
     }
@@ -461,7 +468,7 @@ const WorkCompletionModal = ({ isOpen, onClose, job, onComplete, loading, onOpen
                   type="button"
                   onClick={() => {
                     setShowSourceSheet(false);
-                    if (flutterBridge.isFlutter) {
+                    if (isInNativeApp()) {
                       handleNativeCamera();
                     } else {
                       cameraInputRef.current?.click();

@@ -17,6 +17,7 @@ import { useLocationTracking } from '../../../../hooks/useLocationTracking';
 import authStorage from '../../../../utils/authStorage';
 import flutterBridge from '../../../../utils/flutterBridge';
 import { rupees, paymentLineLabel } from '../../../../utils/workerPayment';
+import { to12HourText } from '../../../../utils/bookingDisplay';
 
 const fmtClock = (ms) => {
   const totalSecs = Math.floor(Math.max(0, ms) / 1000);
@@ -1178,7 +1179,7 @@ const JobDetails = () => {
                     <div className="grid grid-cols-2 gap-2.5 text-xs">
                       <div className="bg-white rounded-xl p-3 border border-emerald-100 shadow-sm">
                         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Scheduled For</p>
-                        <p className="font-black text-gray-800 text-sm mt-0.5">{job.scheduledTime || 'N/A'}</p>
+                        <p className="font-black text-gray-800 text-sm mt-0.5">{to12HourText(job.scheduledTime) || 'N/A'}</p>
                         <p className="text-[10px] text-gray-500 mt-0.5">
                           {job.scheduledDate ? fmtDay(new Date(job.scheduledDate)) : 'N/A'}
                         </p>
@@ -1217,7 +1218,7 @@ const JobDetails = () => {
                     <p className="text-sm text-gray-700 font-medium">
                       {new Date(job.scheduledDate).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
                     </p>
-                    <p className="text-sm font-bold text-blue-600 mt-0.5">{job.scheduledTime}</p>
+                    <p className="text-sm font-bold text-blue-600 mt-0.5">{to12HourText(job.scheduledTime)}</p>
                   </div>
                 </div>
               );

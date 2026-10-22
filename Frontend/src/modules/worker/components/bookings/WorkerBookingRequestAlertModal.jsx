@@ -28,6 +28,7 @@ import workerService from '../../../../services/workerService';
 import workerRequestService from '../../../../services/workerRequestService';
 import api from '../../../../services/api';
 import { toastManager } from '../../../../utils/toastManager';
+import { to12HourText } from '../../../../utils/bookingDisplay';
 
 // Canonical date/time expiry check using Indian Standard Time (IST)
 const isPastScheduledTime = (data) => {
@@ -528,7 +529,7 @@ const WorkerBookingRequestAlertModal = ({ isOpen, requestData, onClose, onReques
           className="relative w-full max-w-[420px] bg-white rounded-[2rem] sm:rounded-[2.25rem] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.1)_inset] overflow-hidden flex flex-col max-h-[92vh] border border-slate-100/80"
         >
           {/* ── TOP HERO HEADER ── */}
-          <div className={`relative overflow-hidden pt-6 pb-5 px-6 flex flex-col items-center text-center select-none ${
+          <div className={`relative overflow-hidden shrink-0 pt-6 pb-5 px-6 flex flex-col items-center text-center select-none ${
             isExpired
               ? 'bg-gradient-to-br from-slate-700 via-zinc-800 to-slate-900 text-white'
               : isTeamInvite 
@@ -639,7 +640,7 @@ const WorkerBookingRequestAlertModal = ({ isOpen, requestData, onClose, onReques
           </div>
 
           {/* ── BODY CONTENT AREA ── */}
-          <div className="px-5 sm:px-6 py-4 flex flex-col bg-white flex-1 overflow-y-auto min-h-[220px]">
+          <div className="px-5 sm:px-6 py-4 flex flex-col bg-white flex-1 overflow-y-auto min-h-0">
             {isTeamInvite ? (
               /* ── DEDICATED TEAM MEMBER INVITATION VIEW ── */
               <div className="space-y-3 mb-2">
@@ -727,7 +728,7 @@ const WorkerBookingRequestAlertModal = ({ isOpen, requestData, onClose, onReques
                       <p className="text-xs font-bold text-slate-800">
                         {requestData.bookingType === 'DAILY'
                           ? `${requestData.numberOfDays || 1} Day(s) • Starts ${requestData.startDate ? new Date(requestData.startDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) : (requestData.scheduledDate ? new Date(requestData.scheduledDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) : 'Soon')}`
-                          : `${requestData.scheduledDate ? new Date(requestData.scheduledDate).toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Today'} • ${requestData.startTime || 'Flexible'}${requestData.endTime ? ` - ${requestData.endTime}` : ''}`}
+                          : `${requestData.scheduledDate ? new Date(requestData.scheduledDate).toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Today'} • ${to12HourText(requestData.startTime) || 'Flexible'}${requestData.endTime ? ` - ${to12HourText(requestData.endTime)}` : ''}`}
                       </p>
                     </div>
                   </div>
@@ -852,7 +853,7 @@ const WorkerBookingRequestAlertModal = ({ isOpen, requestData, onClose, onReques
                             </span>
                           </>
                         ) : (
-                          `${requestData.scheduledDate ? new Date(requestData.scheduledDate).toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Today'} • ${requestData.startTime || 'Flexible'}${requestData.endTime ? ` - ${requestData.endTime}` : ''}`
+                          `${requestData.scheduledDate ? new Date(requestData.scheduledDate).toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Today'} • ${to12HourText(requestData.startTime) || 'Flexible'}${requestData.endTime ? ` - ${to12HourText(requestData.endTime)}` : ''}`
                         )}
                       </p>
                     </div>

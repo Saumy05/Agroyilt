@@ -16,6 +16,7 @@ import { workerTheme as themeColors } from '../../../../theme';
 import Header from '../../components/layout/Header';
 import workerService from '../../../../services/workerService';
 import { SkeletonList } from '../../../../components/common/SkeletonLoaders';
+import { to12HourText } from '../../../../utils/bookingDisplay';
 
 const AssignedJobs = () => {
   const navigate = useNavigate();
@@ -278,7 +279,7 @@ const AssignedJobs = () => {
               }) : (job.createdAt ? new Date(job.createdAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A');
 
               // Time formatting
-              let startTimeStr = job.scheduledTime || '';
+              let startTimeStr = to12HourText(job.scheduledTime) || '';
               let startDate = null;
               if (job.startedAt) startDate = new Date(job.startedAt);
               else if (job.inProgressAt) startDate = new Date(job.inProgressAt);

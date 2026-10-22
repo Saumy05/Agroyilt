@@ -17,6 +17,7 @@ import { checkWorkerProfileCompleteness } from '../../utils/profileCompleteness'
 import LogoLoader from '../../../../components/common/LogoLoader';
 import authStorage from '../../../../utils/authStorage';
 import { toastManager } from '../../../../utils/toastManager';
+import { to12HourText } from '../../../../utils/bookingDisplay';
 
 
 const Dashboard = () => {
@@ -153,7 +154,7 @@ const Dashboard = () => {
             serviceType: job.serviceId?.title || job.serviceName || 'Service',
             customerName: job.userId?.name || 'Customer',
             location: job.address?.city || 'Location N/A',
-            time: job.scheduledTime || 'N/A',
+            time: to12HourText(job.scheduledTime) || 'N/A',
             status: job.status,
             price: job.finalAmount,
           })));

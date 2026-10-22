@@ -10,6 +10,7 @@ import toast from 'react-hot-toast';
 import workerRequestService from '../../../../services/workerRequestService';
 import api from '../../../../services/api';
 import Header from '../../components/layout/Header';
+import { to12HourText } from '../../../../utils/bookingDisplay';
 
 const STATUS_BADGES = {
   pending: 'bg-amber-100 text-amber-800 border-amber-200',
@@ -219,7 +220,7 @@ const WorkerGroupRequests = () => {
             <div>
               <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">Schedule</p>
               <p className="font-bold text-slate-800">{new Date(req.scheduledDate).toDateString()}</p>
-              <p className="text-[11px] text-slate-500">{req.startTime} - {req.endTime}</p>
+              <p className="text-[11px] text-slate-500">{to12HourText(req.startTime)} - {to12HourText(req.endTime)}</p>
             </div>
             <div>
               <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">Workers Needed</p>
@@ -593,7 +594,7 @@ const WorkerGroupRequests = () => {
             <div>
               <p className="text-[10px] text-slate-400 font-bold uppercase">Schedule</p>
               <p className="font-bold text-slate-800">
-                {req.bookingType === 'DAILY' ? `${req.numberOfDays || 1} Day(s)` : `${req.startTime || '00:00'} - ${req.endTime || 'Flexible'}`}
+                {req.bookingType === 'DAILY' ? `${req.numberOfDays || 1} Day(s)` : `${to12HourText(req.startTime || '00:00')} - ${to12HourText(req.endTime) || 'Flexible'}`}
               </p>
             </div>
             <div>
