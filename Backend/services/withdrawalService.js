@@ -416,7 +416,7 @@ const createWithdrawalRequest = async (userIdOrObj, rawRole, amountINR, clientNo
     },
     minimumLimitAtRequestPaise: minConfig.minWithdrawalAmountPaise,
     minimumLimitAtRequest: minConfig.minWithdrawalAmountINR,
-    adminNotes: clientNotes || null,
+    requestNotes: (typeof notes === 'string' && notes.trim()) ? notes.trim().slice(0, 500) : null,
     requestDate: new Date()
   });
 
@@ -535,6 +535,8 @@ const getWithdrawalHistory = async (userId, rawRole, query = {}) => {
     requestDate: w.requestDate || w.createdAt,
     completedAt: w.completedAt,
     rejectionReason: w.rejectionReason,
+    requestNotes: w.requestNotes || null,
+    adminNotes: w.adminNotes || null,
     paymentProof: w.status === 'COMPLETED' || w.status === 'approved' ? w.paymentProof : null,
     paymentReference: w.paymentReference || w.transactionReference,
     bankAccountMasked: w.bankDetailsSnapshot?.accountNumberMasked || maskAccountNumber(w.bankDetailsSnapshot?.accountNumber || w.bankDetails?.accountNumber),
@@ -1008,6 +1010,7 @@ const getAdminWithdrawals = async (query = {}) => {
       rejectionReason: w.rejectionReason,
       paymentProof: w.paymentProof,
       paymentReference: w.paymentReference || w.transactionReference,
+      requestNotes: w.requestNotes || null,
       adminNotes: w.adminNotes,
       minimumLimitAtRequest: w.minimumLimitAtRequest || Math.round((w.minimumLimitAtRequestPaise || 30000) / 100)
     };

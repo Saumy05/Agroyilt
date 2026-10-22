@@ -179,6 +179,12 @@ const withdrawalSchema = new mongoose.Schema({
     type: String, // Legacy alias
     default: null
   },
+  // Note typed by the requester when they raised the request
+  requestNotes: {
+    type: String,
+    default: null
+  },
+  // Note written by the admin while accepting / processing / completing
   adminNotes: {
     type: String,
     default: null

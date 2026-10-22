@@ -158,6 +158,20 @@ export const WithdrawalHistoryList = ({ refreshTrigger = 0 }) => {
                   )}
                 </div>
 
+                {item.requestNotes && (
+                  <div className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-700">
+                    <p className="font-bold text-[11px]">Your note:</p>
+                    <p className="text-[11px] mt-0.5 break-words">{item.requestNotes}</p>
+                  </div>
+                )}
+
+                {item.adminNotes && (
+                  <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800">
+                    <p className="font-bold text-[11px]">Note from admin:</p>
+                    <p className="text-[11px] mt-0.5 break-words">{item.adminNotes}</p>
+                  </div>
+                )}
+
                 {status === 'REJECTED' && (
                   <div className="p-2.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
                     <p className="font-bold text-[11px]">Withdrawal Rejected:</p>

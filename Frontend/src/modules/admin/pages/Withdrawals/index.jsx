@@ -941,6 +941,20 @@ const WithdrawalsPage = () => {
                       </div>
                     </div>
 
+                    {request.requestNotes && (
+                      <div className="bg-amber-50/80 border border-amber-200 rounded-lg p-2 text-[11px] text-amber-800">
+                        <p className="font-bold mb-0.5">Note from requester:</p>
+                        <p className="text-[11px] leading-tight break-words">{request.requestNotes}</p>
+                      </div>
+                    )}
+
+                    {request.adminNotes && (
+                      <div className="bg-blue-50/80 border border-blue-200 rounded-lg p-2 text-[11px] text-blue-800">
+                        <p className="font-bold mb-0.5">Admin note:</p>
+                        <p className="text-[11px] leading-tight break-words">{request.adminNotes}</p>
+                      </div>
+                    )}
+
                     {/* Rejection Note if Rejected */}
                     {status === 'REJECTED' && (
                       <div className="bg-red-50/80 border border-red-200 rounded-lg p-2 text-[11px] text-red-700">
