@@ -133,6 +133,12 @@ const workerService = {
     return response.data;
   },
 
+  // Team Leader withdrawing an offline member from a job that has not started (the server applies the penalty to the leader)
+  withdrawFromAssignment: async (assignmentId, reason = '') => {
+    const response = await api.post(`/workers/assignments/${assignmentId}/cancel`, { reason });
+    return response.data;
+  },
+
   respondToExtension: async (extensionId, response) => {
     const res = await api.post(`/workers/assignments/extension/${extensionId}/respond`, { response });
     return res.data;

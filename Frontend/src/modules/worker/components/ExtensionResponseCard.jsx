@@ -10,7 +10,8 @@ import api from '../../../services/api';
  * Shows extra time/days, extra earnings, and remaining evaluation time.
  * Allows worker to independently Accept or Decline.
  */
-const ExtensionResponseCard = ({ extension, workerId, onResponded }) => {
+// memberId: set when a Team Leader answers for an offline member (no app)
+const ExtensionResponseCard = ({ extension, workerId, memberId, onResponded }) => {
   const [loading, setLoading] = useState(false);
   const [timeLeft, setTimeLeft] = useState('');
   const [isExpired, setIsExpired] = useState(false);
@@ -53,7 +54,8 @@ const ExtensionResponseCard = ({ extension, workerId, onResponded }) => {
     try {
       setLoading(true);
       const res = await api.post(`/workers/assignments/extension/${extension._id || extension.extensionId}/respond`, {
-        response
+        response,
+        ...(memberId ? { memberId } : {})
       });
 
       if (res.data?.success) {

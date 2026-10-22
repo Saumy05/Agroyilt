@@ -306,7 +306,7 @@ exports.createExtension = async (req, res) => {
  */
 exports.respondToExtension = async (req, res) => {
   try {
-    const workerId = req.user._id;
+    let workerId = req.user._id;
     const { extensionId } = req.params;
     const { response } = req.body || {};
 
@@ -317,7 +317,17 @@ exports.respondToExtension = async (req, res) => {
 
     const found = await IndWorkerExtension.findById(extensionId);
     if (!found) return res.status(404).json({ success: false, message: 'Extension not found' });
-    const mine = found.workerExtensions.find(w => String(w.workerId) === String(workerId));
+    let mine = found.workerExtensions.find(w => String(w.workerId) === String(workerId));
+    if (!mine) {
+      // A Team Leader answering for an offline member (no app). body.memberId names the member; without it, only a single pending member is assumed.
+      const managed = (await require('../../services/offlineMemberProxy').managedOfflineMembers(req.user._id)).map(m => String(m._id));
+      const asked = (req.body || {}).memberId
+        ? [String((req.body || {}).memberId)]
+        : found.workerExtensions.filter(w => managed.includes(String(w.workerId)) && w.status === 'REQUESTED').map(w => String(w.workerId));
+      if (asked.length > 1) return res.status(400).json({ success: false, message: 'Several of your offline members were asked. Say which member you are answering for.' });
+      const target = asked.length === 1 && managed.includes(asked[0]) ? found.workerExtensions.find(w => String(w.workerId) === asked[0]) : null;
+      if (target) { workerId = target.workerId; mine = target; }
+    }
     if (!mine) return res.status(403).json({ success: false, message: 'You are not a requested worker for this extension' });
 
     // time-box the evaluation before answering (also finalises a timed-out extension)

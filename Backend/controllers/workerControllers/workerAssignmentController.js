@@ -833,7 +833,7 @@ exports._finalizeDecreasedBetweenDays = finalizeDecreasedBetweenDays;
 exports.workerWithdraw = async (req, res) => {
   try {
     const assignmentId = req.params.id;
-    const workerId = req.user._id;
+    const workerId = await actingWorkerId(req); // an offline member's Team Leader can withdraw them
     const reason = typeof (req.body || {}).reason === 'string' ? req.body.reason.trim().slice(0, 500) : '';
     if (!mongoose.Types.ObjectId.isValid(assignmentId)) return res.status(404).json({ success: false, message: 'Assignment not found.' });
 
@@ -878,7 +878,10 @@ exports.workerWithdraw = async (req, res) => {
       const settings = await getWorkerFinancialSettings();
       const amount = computeWorkerPenalty(settings, { grossAmount: assignment.grossAmount });
       if (settings.workerPenaltyEnabled && amount > 0) {
-        await applyWorkerPenalty(workerId, assignment.legacyBookingId, `cancel_pen_${assignment._id}`, 'cancellation', 'Withdrew from a confirmed job', { amount });
+        // an offline member has no wallet or login: the Team Leader who withdrew them carries the penalty
+        const penalised = String(workerId) === String(req.user._id) ? workerId : req.user._id;
+        await applyWorkerPenalty(penalised, assignment.legacyBookingId, `cancel_pen_${assignment._id}`, 'cancellation',
+          penalised === workerId ? 'Withdrew from a confirmed job' : 'Withdrew an offline member from a confirmed job', { amount });
       }
     } catch (penErr) { console.warn('[workerWithdraw penalty - non-fatal]', penErr.message); }
 

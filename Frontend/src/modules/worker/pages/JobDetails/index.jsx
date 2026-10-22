@@ -497,6 +497,26 @@ const JobDetails = () => {
 
   const statusLower = job?.status?.toLowerCase() || '';
 
+  // Leader withdraws an offline member before the work starts; the penalty (if the admin set one) falls on the leader
+  const withdrawOfflineMember = async () => {
+    const name = job?.offlineMember?.name || 'this member';
+    if (!window.confirm(`Withdraw ${name} from this job? The farmer will be refunded for them, and a cancellation penalty may be charged to you.`)) return;
+    try {
+      setActionLoading(true);
+      const res = await workerService.withdrawFromAssignment(job.assignmentId || job._id, 'Withdrawn by the team leader');
+      if (res?.success) {
+        toastManager.success(res.message || 'Withdrawn from the job');
+        navigate(-1);
+      } else {
+        toastManager.error(res?.message || 'Could not withdraw');
+      }
+    } catch (error) {
+      toastManager.error(error.response?.data?.message || 'Could not withdraw');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   // Auto-redirect to dashboard ONLY if this was an active live completion in the current session
   useEffect(() => {
     if (statusLower === 'completed' && !loading && isLiveCompletion) {
@@ -996,7 +1016,8 @@ const JobDetails = () => {
             <div className="mb-4">
               <ExtensionResponseCard
                 extension={job.activeExtension}
-                workerId={currentWorkerId}
+                workerId={job.offlineMember ? job.offlineMember.id : currentWorkerId}
+                memberId={job.offlineMember?.id}
                 onResponded={() => fetchJobDetails()}
               />
             </div>
@@ -1096,6 +1117,12 @@ const JobDetails = () => {
                 <p className="mt-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-lg px-2.5 py-1.5 inline-block">
                   This job is for {job.offlineMember.name}, who has no app. You start, stop and close it for them with the farmer's codes.
                 </p>
+              )}
+              {job.offlineMember && statusLower === 'confirmed' && (
+                <button type="button" disabled={actionLoading} onClick={withdrawOfflineMember}
+                  className="mt-2 block text-xs font-bold text-rose-600 underline disabled:opacity-50">
+                  Withdraw {job.offlineMember.name} from this job
+                </button>
               )}
             </div>
             {job.userId?.phone && (
