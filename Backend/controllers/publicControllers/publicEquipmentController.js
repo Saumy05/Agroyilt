@@ -382,6 +382,13 @@ exports.findQualifiedVendors = async (req, res) => {
         }
       }
 
+      // A category the admin marked "charged per km": the machine itself is booked per km, with no attachment.
+      // There is no admin tier, so only vendors who set their own per-km rate come through below.
+      if (!found && !implementId && categoryId) {
+        const cat = await require('../../models/Category').findById(categoryId).select('chargedPerKm fulfillmentMode').lean();
+        if (cat?.chargedPerKm && cat.fulfillmentMode !== 'rental') found = { baseKm: 0, baseCharge: 0, perKmRate: 0 };
+      }
+
       if (!found) {
         return res.status(200).json({ success: true, data: [], message: 'Per-km pricing is not available for this attachment.' });
       }

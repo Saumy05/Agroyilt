@@ -43,6 +43,12 @@ const categorySchema = new mongoose.Schema({
     default: null,
     trim: true
   },
+  // Service categories only: the machine itself is charged per km (e.g. an auto). Vendors then enter the machine's own
+  // per-km rate and the farmer books a GPS-metered trip. Set by admin; off for every other category.
+  chargedPerKm: {
+    type: Boolean,
+    default: false
+  },
   slug: {
     type: String,
     required: true,

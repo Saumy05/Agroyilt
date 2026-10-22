@@ -25,7 +25,7 @@ exports.getMyEquipment = async (req, res) => {
   try {
     const vendorId = req.user.id;
     const equipment = await VendorEquipment.find({ vendorId })
-      .populate('categoryId', 'title slug homeIconUrl trackingType requiresDriver rentByUnit unitLabel')
+      .populate('categoryId', 'title slug homeIconUrl trackingType requiresDriver rentByUnit unitLabel chargedPerKm')
       .populate('subCategoryIds', 'title slug')
       .populate('implements.subCategoryId', 'title slug')
       .populate('workerId', 'name phone profilePhoto status')
@@ -53,7 +53,7 @@ exports.getEquipmentById = async (req, res) => {
     const vendorId = req.user.id;
     const { id } = req.params;
     const equipment = await VendorEquipment.findOne({ _id: id, vendorId })
-      .populate('categoryId', 'title slug homeIconUrl trackingType requiresDriver rentByUnit unitLabel')
+      .populate('categoryId', 'title slug homeIconUrl trackingType requiresDriver rentByUnit unitLabel chargedPerKm')
       .populate('subCategoryIds', 'title slug')
       .populate('implements.subCategoryId', 'title slug')
       .populate('workerId', 'name phone profilePhoto status');

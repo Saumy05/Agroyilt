@@ -215,9 +215,20 @@ const MachineryExplorer = () => {
     const implId = selectedImplement?._id || selectedImplement?.id;
     const catId = selectedCat?._id || selectedCat?.id;
     let cancelled = false;
+    // A category the admin marked "charged per km" (e.g. an auto): booked per km, and every vendor sets their own rate
+    const perKmCategory = !!selectedCat?.chargedPerKm;
+    const applyVendorSetPerKm = () => {
+      setDistancePricing({ baseKm: 0, baseCharge: 0, perKmRate: 0, vendorSet: true });
+      setRentalType('distance_based');
+      setQuantity(1);
+    };
     if (!implId) {
-      setDistancePricing(null);
-      setRentalType(prev => (prev === 'distance_based' ? 'hourly' : prev));
+      if (perKmCategory) {
+        applyVendorSetPerKm();
+      } else {
+        setDistancePricing(null);
+        setRentalType(prev => (prev === 'distance_based' ? 'hourly' : prev));
+      }
       return undefined;
     }
     publicEquipmentService.getImplementDistancePricing(implId, catId)
@@ -229,6 +240,8 @@ const MachineryExplorer = () => {
           // Per-km attachments (e.g. Trolley) can only be billed by distance
           setRentalType('distance_based');
           setQuantity(1);
+        } else if (perKmCategory) {
+          applyVendorSetPerKm();
         } else {
           setRentalType(prev => (prev === 'distance_based' ? 'hourly' : prev));
         }
@@ -976,10 +989,18 @@ const MachineryExplorer = () => {
 
                     {rentalType === 'distance_based' && distancePricing ? (
                       <div className="rounded-xl border border-teal-200 bg-teal-50/70 p-3 space-y-1">
-                        <p className="text-sm font-black text-teal-900">
-                          ₹{distancePricing.baseCharge} for the first {distancePricing.baseKm} km
-                        </p>
-                        <p className="text-xs font-bold text-teal-800">then ₹{distancePricing.perKmRate} per extra km</p>
+                        {distancePricing.vendorSet ? (
+                          <p className="text-sm font-black text-teal-900">
+                            Each vendor sets their own per-km rate. You will see the approx bill with every vendor.
+                          </p>
+                        ) : (
+                          <>
+                            <p className="text-sm font-black text-teal-900">
+                              ₹{distancePricing.baseCharge} for the first {distancePricing.baseKm} km
+                            </p>
+                            <p className="text-xs font-bold text-teal-800">then ₹{distancePricing.perKmRate} per extra km</p>
+                          </>
+                        )}
                         <p className="text-[10px] font-semibold text-teal-700/80 pt-1">
                           🛰️ The meter starts when the driver starts the trip and stops when the work is completed. You pay for the actual road distance driven (GST extra).
                         </p>
@@ -1010,7 +1031,7 @@ const MachineryExplorer = () => {
                             ))}
                           </div>
                           {(() => {
-                            const approx = estimateDistanceBill(distancePricing, parseFloat(estimatedKm), 5);
+                            const approx = distancePricing.vendorSet ? null : estimateDistanceBill(distancePricing, parseFloat(estimatedKm), 5);
                             return approx ? (
                               <p className="text-xs font-black text-teal-900 pt-0.5">
                                 Approx. bill for ~{parseFloat(estimatedKm)} km: ₹{approx.fare} <span className="font-semibold text-teal-700/80">+ GST</span>

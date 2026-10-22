@@ -78,7 +78,7 @@ const AddEquipment = () => {
   });
 
   // Tracks the selected category's metadata (trackingType, requiresDriver, fulfillmentMode)
-  const [categoryMeta, setCategoryMeta] = useState({ trackingType: 'none', requiresDriver: false, fulfillmentMode: 'service', rentByUnit: false, unitLabel: '' });
+  const [categoryMeta, setCategoryMeta] = useState({ trackingType: 'none', requiresDriver: false, fulfillmentMode: 'service', rentByUnit: false, unitLabel: '', chargedPerKm: false });
 
   useEffect(() => {
     fetchInitialData();
@@ -215,7 +215,8 @@ const AddEquipment = () => {
             requiresDriver: selected.requiresDriver || false,
             fulfillmentMode: mode,
             rentByUnit: !!selected.rentByUnit,
-            unitLabel: selected.unitLabel || ''
+            unitLabel: selected.unitLabel || '',
+            chargedPerKm: !!selected.chargedPerKm
           });
           setForm(prev => ({
             ...prev,
@@ -262,11 +263,20 @@ const AddEquipment = () => {
           requiresDriver: selected.requiresDriver || false,
           fulfillmentMode: mode,
           rentByUnit: !!selected.rentByUnit,
-          unitLabel: selected.unitLabel || ''
+          unitLabel: selected.unitLabel || '',
+          chargedPerKm: !!selected.chargedPerKm
         });
         setForm(prev => ({
           ...prev,
-          listingType: mode
+          listingType: mode,
+          // A per-km category starts with the per-km rate on and the hourly rate off, so nothing is left at ₹0
+          ...(selected.chargedPerKm && mode !== 'rental' && !prev.pricing?.distance_based?.isEnabled ? {
+            pricing: {
+              ...prev.pricing,
+              hourly: { ...(prev.pricing?.hourly || { price: 0 }), isEnabled: false },
+              distance_based: { ...(prev.pricing?.distance_based || { price: 0, perKmRate: 0 }), isEnabled: true }
+            }
+          } : {})
         }));
       }
     } catch (err) {
@@ -705,7 +715,7 @@ const AddEquipment = () => {
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                     {form.pricing.hourly.isEnabled && (
                                       <div className="flex items-center justify-between bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 focus-within:border-blue-500 transition-colors">
-                                        <span className="text-[11px] text-slate-600 font-medium">{form.listingType === 'rental' ? 'Hourly Add-on' : 'Hourly'}</span>
+                                        <span className="text-[11px] text-slate-600 font-medium">{form.listingType === 'rental' ? 'Hourly Add-on' : 'Per hour (field work)'}</span>
                                         <div className="flex items-center gap-1 w-24">
                                           <span className="text-xs text-slate-400 font-bold">₹</span>
                                           <input
@@ -762,11 +772,11 @@ const AddEquipment = () => {
                                     {(() => {
                                       const isTrolleyImpl = (/trailer|trolley|ट्राली|ट्रॉली/i).test(name);
                                       if (form.listingType === 'rental') return null; // per-km needs an operator and GPS: service only
-                                      if (!form.pricing.distance_based?.isEnabled && !isTrolleyImpl) return null;
+                                      if (!isTrolleyImpl && (categoryMeta.chargedPerKm || !form.pricing.distance_based?.isEnabled)) return null;
                                       return (
                                         <div className="flex items-center justify-between bg-white border border-teal-200/80 rounded-lg px-2.5 py-1.5 focus-within:border-teal-500 transition-colors">
                                           <div className="flex items-center gap-1">
-                                            <span className="text-[11px] text-teal-800 font-bold">Per KM Rate</span>
+                                            <span className="text-[11px] text-teal-800 font-bold">{isTrolleyImpl ? 'Per km (transport trip)' : 'Per KM Rate'}</span>
                                             {isTrolleyImpl && (
                                               <span className="text-[8.5px] bg-teal-100 text-teal-800 px-1 py-0.2 rounded font-bold">Trolley</span>
                                             )}
@@ -810,6 +820,10 @@ const AddEquipment = () => {
                                     })()}
                                   </div>
 
+                                  {form.listingType !== 'rental' && (
+                                    <p className="text-[10px] text-slate-400 leading-snug">The farmer pays exactly these amounts for the job. A blank box uses the machine's own rate.</p>
+                                  )}
+
                                   {/* Live Total Rate Preview */}
                                   <div className="text-[11px] text-slate-500 font-medium flex flex-wrap items-center gap-1.5 pt-0.5">
                                     <span className="text-slate-400">Farmer pays:</span>
@@ -830,7 +844,7 @@ const AddEquipment = () => {
                                     {(() => {
                                       const isTrolleyImpl = (/trailer|trolley|ट्राली|ट्रॉली/i).test(name);
                                       if (form.listingType === 'rental') return null;
-                                      if (!form.pricing.distance_based?.isEnabled && !isTrolleyImpl) return null;
+                                      if (!isTrolleyImpl && (categoryMeta.chargedPerKm || !form.pricing.distance_based?.isEnabled)) return null;
                                       const totalKmRate = Number(implItem.pricing?.distance_based?.price) || Number(form.pricing.distance_based?.price) || 0;
                                       return (
                                         <span className="font-bold text-teal-800 bg-teal-50 border border-teal-200/60 px-1.5 py-0.5 rounded text-[10px]">
@@ -907,7 +921,9 @@ const AddEquipment = () => {
               <p className="text-[11px] text-slate-400 -mt-1 mb-2.5 leading-snug">
                 {form.listingType === 'rental'
                   ? 'Farmer rents the machine and runs it. Charged by the hour or by the day.'
-                  : 'The farmer books a job and you do it at their field. Charged by the hour or per acre. A trolley is charged per km, set on the attachment above.'}
+                  : categoryMeta.chargedPerKm
+                    ? 'The farmer books a trip and you are paid for the road distance driven (GPS tracked), at your per-km rate.'
+                    : 'The farmer books a job and you do it at their field. Charged by the hour or per acre. A trolley is charged per km, set on the attachment above.'}
               </p>
               {categoryMeta.rentByUnit && !isRequestingCategory && (
                 <div className="mb-3 p-3 rounded-xl bg-amber-50/70 border border-amber-200/80">
@@ -919,14 +935,17 @@ const AddEquipment = () => {
                   { key: 'hourly', label: 'Hourly Rate', unit: '/ hr', sub: 'For standard agricultural operations' },
                   { key: 'land_based', label: 'Per Acre Rate', unit: '/ acre', sub: 'Calculated per acre field work' },
                   { key: 'daily', label: 'Daily Rate', unit: '/ day', sub: 'Flat full-day machine rent' },
-                  { key: 'distance_based', label: "Machine's own Per KM Rate", unit: '/ km', sub: 'Live GPS road distance tracking' }
+                  { key: 'distance_based', label: 'Per KM Rate', unit: '/ km', sub: 'Live GPS road distance tracking' }
                 ].filter(({ key }) => {
                   // Only the modes that make sense for this kind of listing; one that is already switched on stays visible
                   if (form.pricing[key]?.isEnabled) return true;
-                  if (key === 'hourly') return true;
-                  if (key === 'land_based') return form.listingType !== 'rental';
+                  // A per-km category is billed on distance only, so hourly / acre are not offered there
+                  const perKmOnly = categoryMeta.chargedPerKm && form.listingType !== 'rental';
+                  if (key === 'hourly') return !perKmOnly;
+                  if (key === 'land_based') return form.listingType !== 'rental' && !perKmOnly;
                   if (key === 'daily') return form.listingType === 'rental';
-                  return false; // per-km is set on the trolley attachment
+                  // per-km: the machine's own rate only in a category the admin marked "charged per km" (trolleys are set on the attachment)
+                  return key === 'distance_based' && categoryMeta.chargedPerKm && form.listingType !== 'rental';
                 }).map(({ key, label, unit }) => {
                   const isEnabled = !!form.pricing[key]?.isEnabled;
                   const price = form.pricing[key]?.price;

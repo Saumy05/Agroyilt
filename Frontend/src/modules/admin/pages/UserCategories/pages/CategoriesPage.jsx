@@ -27,6 +27,7 @@ const categorySchema = z.object({
   bookingType: z.enum(['VENDOR', 'WORKER']).default('VENDOR'),
   fulfillmentMode: z.enum(['service', 'rental']).default('service'),
   rentByUnit: z.boolean().default(false),
+  chargedPerKm: z.boolean().default(false),
   unitLabel: z.string().nullable().optional(),
   scope: z.enum(['GLOBAL', 'GLOBAL_INDIA', 'STATE', 'DISTRICT', 'SUB_DISTRICT']).default('GLOBAL_INDIA'),
   stateId: z.string().nullable().optional(),
@@ -126,6 +127,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
     fulfillmentMode: "service",
     rentByUnit: false,
     unitLabel: "",
+    chargedPerKm: false,
     scope: "GLOBAL_INDIA",
     stateId: "",
     districtId: "",
@@ -408,6 +410,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
           fulfillmentMode: cat.fulfillmentMode || 'service',
           rentByUnit: !!cat.rentByUnit,
           unitLabel: cat.unitLabel || '',
+          chargedPerKm: !!cat.chargedPerKm,
           scope: (!cat.scope || cat.scope === 'GLOBAL') ? 'GLOBAL_INDIA' : cat.scope,
           stateId: cat.stateId || null,
           state: cat.state || null,
@@ -460,7 +463,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
           parentCategories: [], isAlwaysMain: false,
           trackingType: "none", requiresDriver: false,
           adminBaseCharge: 0,
-          sectionType: "General", bookingType: "VENDOR", fulfillmentMode: "service", rentByUnit: false, unitLabel: "",
+          sectionType: "General", bookingType: "VENDOR", fulfillmentMode: "service", rentByUnit: false, unitLabel: "", chargedPerKm: false,
           scope: "GLOBAL_INDIA", stateId: "", districtId: "", subDistrictId: ""
         });
         setGeoSearchFilter("");
@@ -493,6 +496,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
         fulfillmentMode: editing.fulfillmentMode || "service",
         rentByUnit: !!editing.rentByUnit,
         unitLabel: editing.unitLabel || "",
+        chargedPerKm: !!editing.chargedPerKm,
         scope: editScope,
         stateId: targetStateId,
         districtId: targetDistrictId,
@@ -521,7 +525,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
       parentCategories: [], isAlwaysMain: false,
       trackingType: "none", requiresDriver: false,
       adminBaseCharge: 0,
-      sectionType: "General", bookingType: "VENDOR", fulfillmentMode: "service", rentByUnit: false, unitLabel: "",
+      sectionType: "General", bookingType: "VENDOR", fulfillmentMode: "service", rentByUnit: false, unitLabel: "", chargedPerKm: false,
       scope: "GLOBAL_INDIA", stateId: "", districtId: "", subDistrictId: ""
     });
     setGeoSearchFilter("");
@@ -555,6 +559,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
     fulfillmentMode: cat.fulfillmentMode || 'service',
           rentByUnit: !!cat.rentByUnit,
           unitLabel: cat.unitLabel || '',
+          chargedPerKm: !!cat.chargedPerKm,
     scope: (!cat.scope || cat.scope === 'GLOBAL') ? 'GLOBAL_INDIA' : cat.scope,
     stateId: cat.stateId || null,
     state: cat.state || null,
@@ -1429,7 +1434,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
                 />
                 <label htmlFor="rentByUnit" className="text-base font-bold text-gray-900">Rented by the piece</label>
               </div>
-              <p className="text-[11px] text-gray-400 leading-tight pl-7">For many identical items, such as pipes. Vendors enter how many they have, the rate is per piece, and the farmer chooses how many to rent.</p>
+              <p className="text-[11px] text-gray-400 leading-tight pl-7">For many identical items, such as pipes. The rate is per piece, and the farmer chooses how many to rent.</p>
               {form.rentByUnit && (
                 <input
                   type="text"
@@ -1439,6 +1444,22 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
                   className="mt-2 ml-7 w-[calc(100%-1.75rem)] px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 font-semibold text-sm"
                 />
               )}
+            </div>
+          )}
+
+          {form.fulfillmentMode !== 'rental' && (
+            <div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="chargedPerKm"
+                  checked={!!form.chargedPerKm}
+                  onChange={e => setForm({ ...form, chargedPerKm: e.target.checked })}
+                  className="h-4 w-4 accent-primary-600"
+                />
+                <label htmlFor="chargedPerKm" className="text-base font-bold text-gray-900">Charged per km</label>
+              </div>
+              <p className="text-[11px] text-gray-400 leading-tight pl-7">For vehicles that are paid by distance, such as an auto. Vendors enter the machine's own per-km rate, and the farmer books a trip billed on the road distance driven (GPS tracked).</p>
             </div>
           )}
 

@@ -180,7 +180,7 @@ export const ensureIds = (catalog) => {
       adminBaseCharge: Number(c.adminBaseCharge) || 0,
       sectionType: c.sectionType || "General",
       bookingType: c.bookingType || "VENDOR",
-      fulfillmentMode: c.fulfillmentMode || "service", rentByUnit: !!c.rentByUnit, unitLabel: c.unitLabel || '',
+      fulfillmentMode: c.fulfillmentMode || "service", rentByUnit: !!c.rentByUnit, unitLabel: c.unitLabel || '', chargedPerKm: !!c.chargedPerKm,
       scope: (!c.scope || c.scope === 'GLOBAL') ? 'GLOBAL_INDIA' : c.scope,
       stateId: c.stateId || null,
       state: c.state || null,

@@ -57,6 +57,7 @@ const formatCategory = (cat) => ({
   fulfillmentMode: cat.fulfillmentMode || 'service',
   rentByUnit: Boolean(cat.rentByUnit),
   unitLabel: cat.unitLabel || null,
+  chargedPerKm: Boolean(cat.chargedPerKm),
   metaTitle: cat.metaTitle,
   metaDescription: cat.metaDescription,
   createdAt: cat.createdAt,
@@ -405,7 +406,8 @@ const createCategory = async (req, res) => {
       bookingType,
       fulfillmentMode,
       rentByUnit,
-      unitLabel
+      unitLabel,
+      chargedPerKm
     } = req.body;
 
     // Validate geographic scoping hierarchy
@@ -477,6 +479,8 @@ const createCategory = async (req, res) => {
       // by-the-piece applies to rentals only
       rentByUnit: fulfillmentMode === 'rental' && Boolean(rentByUnit),
       unitLabel: fulfillmentMode === 'rental' && rentByUnit ? (String(unitLabel || '').trim() || 'piece') : null,
+      // per-km is for services only
+      chargedPerKm: fulfillmentMode !== 'rental' && Boolean(chargedPerKm),
       createdBy: req.user?._id || req.userId || null
     });
 
@@ -570,7 +574,8 @@ const updateCategory = async (req, res) => {
       bookingType,
       fulfillmentMode,
       rentByUnit,
-      unitLabel
+      unitLabel,
+      chargedPerKm
     } = req.body;
 
     // Check RBAC permission for existing category
@@ -718,6 +723,12 @@ const updateCategory = async (req, res) => {
       }
       category.rentByUnit = nextByUnit;
       category.unitLabel = nextByUnit ? (String(unitLabel !== undefined ? unitLabel : category.unitLabel || '').trim() || 'piece') : null;
+    }
+
+    // Per-km is for services only; unlike by-the-piece it can be switched any time (a vendor's saved per-km rate just stays as it is)
+    if (chargedPerKm !== undefined || fulfillmentMode !== undefined) {
+      category.chargedPerKm = category.fulfillmentMode !== 'rental'
+        && (chargedPerKm !== undefined ? Boolean(chargedPerKm) : Boolean(category.chargedPerKm));
     }
 
     // Apply validated geographic scope
