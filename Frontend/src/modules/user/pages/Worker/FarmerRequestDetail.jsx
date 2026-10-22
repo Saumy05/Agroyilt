@@ -10,6 +10,7 @@ import toast from 'react-hot-toast';
 import workerBookingService from '../../../../services/workerBookingService';
 import WorkerPaymentBill from '../../components/booking/WorkerPaymentBill';
 import BookedRequestView from './components/BookedRequestView';
+import AddOnLinks from './components/AddOnLinks';
 
 const STATUS_CONFIG = {
   pending:                    { color: 'bg-amber-100 text-amber-700 border-amber-200',    label: 'Waiting for Responses' },
@@ -230,7 +231,8 @@ const FarmerRequestDetail = () => {
       </div>
 
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
-        
+        <AddOnLinks request={request} />
+
         {/* Basic Info */}
         <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5 relative overflow-hidden">
           <div className="flex justify-between items-start gap-4">

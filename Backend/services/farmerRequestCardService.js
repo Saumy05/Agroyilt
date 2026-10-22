@@ -9,6 +9,7 @@
 
 const IndWorkerAssignment = require('../models/IndWorkerAssignment');
 const IndWorkerExtension = require('../models/IndWorkerExtension');
+const WorkerBookingRequest = require('../models/WorkerBookingRequest');
 const { buildFarmerBill } = require('./workerFinancialService');
 
 const BOOKED = ['confirmed', 'in_progress', 'partially_completed', 'completed'];
@@ -100,6 +101,12 @@ const attachRequestCards = async (requests = []) => {
         IndWorkerExtension.find({ parentRequestId: { $in: booked }, status: 'CONFIRMED' }).lean()
       ])
     : [[], []];
+  // an add-on (extra workers added to a running booking) says which booking it belongs to
+  const parentIds = [...new Set(requests.filter(r => r.addOnOfRequestId).map(r => String(r.addOnOfRequestId)))];
+  const parents = parentIds.length
+    ? await WorkerBookingRequest.find({ _id: { $in: parentIds } }).select('workTitle').lean().catch(() => [])
+    : [];
+  const parentTitle = new Map(parents.map(p => [String(p._id), p.workTitle]));
   for (const r of requests) {
     const id = String(r._id);
     try {
@@ -111,6 +118,7 @@ const attachRequestCards = async (requests = []) => {
     } catch (e) {
       r.card = { label: r.status, group: 'pending', needsAction: false, amount: null };
     }
+    if (r.addOnOfRequestId) r.card.addOnOf = { id: String(r.addOnOfRequestId), title: parentTitle.get(String(r.addOnOfRequestId)) || null };
   }
   return requests;
 };

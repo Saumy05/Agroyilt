@@ -1932,6 +1932,21 @@ exports.getFarmerRequestById = async (req, res) => {
     requestData.paymentSummary = buildFarmerPaymentSummary(request, assignments, null, confirmedExtensions);
     requestData.confirmedExtensions = confirmedExtensions;
 
+    // Add-on requests (extra workers added later) of this booking, and the booking this one is an add-on of. Display only.
+    try {
+      const { attachRequestCards } = require('../../services/farmerRequestCardService');
+      const addOns = await WorkerBookingRequest.find({ addOnOfRequestId: request._id, farmerId: request.farmerId })
+        .select('workTitle status bookingType numberOfDays startDate requiredWorkers addOnOfRequestId workerOffers dispatchedTo selectedWorkerIds financialSnapshot paymentStatus refundAmount createdAt')
+        .sort({ createdAt: 1 }).lean();
+      requestData.addOns = await attachRequestCards(addOns);
+      if (request.addOnOfRequestId) {
+        const parentDoc = await WorkerBookingRequest.findById(request.addOnOfRequestId).select('workTitle').lean();
+        if (parentDoc) requestData.addOnOf = { id: String(parentDoc._id), title: parentDoc.workTitle };
+      }
+    } catch (addOnErr) {
+      console.warn('[getFarmerRequestById] add-on links skipped:', addOnErr.message);
+    }
+
     return res.json({ success: true, data: requestData });
   } catch (err) {
     console.error('[getFarmerRequestById]', err);

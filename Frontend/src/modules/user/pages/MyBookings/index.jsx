@@ -296,6 +296,9 @@ const MyBookings = () => {
             <h3 className="font-bold text-slate-900 text-sm leading-snug truncate">
               {r.workTitle || 'Worker Hiring'}
             </h3>
+            {r.card?.addOnOf && (
+              <p className="text-[10px] font-bold text-indigo-700 mt-0.5 truncate">Add-on to {r.card.addOnOf.title || 'your booking'}</p>
+            )}
             <p className="text-[11px] text-slate-500 font-medium truncate mt-0.5">
               {r.card?.detail || `${r.numberOfWorkers || 1} worker${(r.numberOfWorkers || 1) > 1 ? 's' : ''}`}
             </p>

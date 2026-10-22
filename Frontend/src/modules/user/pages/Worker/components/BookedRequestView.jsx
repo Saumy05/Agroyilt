@@ -15,8 +15,10 @@ import DisputeModal from '../../../../../components/common/DisputeModal';
 import ExtensionModal from '../../BookingTrack/components/ExtensionModal';
 import AddWorkersModal from '../../BookingTrack/components/AddWorkersModal';
 import DecreaseWorkerModal from '../../BookingTrack/components/DecreaseWorkerModal';
+import ReplaceWorkerModal from '../../BookingTrack/components/ReplaceWorkerModal';
 import ActiveWorkMonitoringHub from '../../BookingTrack/components/ActiveWorkMonitoringHub';
 import FarmerWorkerQrModal from './FarmerWorkerQrModal';
+import AddOnLinks from './AddOnLinks';
 import { workLength } from '../../../../../utils/workerPayment';
 
 // One worker's journey through a job (per day for DAILY bookings)
@@ -60,7 +62,7 @@ const BookedRequestView = ({ request, onRefresh }) => {
   const [tracking, setTracking] = useState(null);
   const [revealed, setRevealed] = useState({});
   const [showDone, setShowDone] = useState(false);
-  const [modal, setModal] = useState(null); // 'extend' | 'add' | 'dispute' | { decrease: worker } | { rate: worker }
+  const [modal, setModal] = useState(null); // 'extend' | 'add' | 'dispute' | { decrease: worker } | { replace: worker } | { rate: worker }
   const [qrModal, setQrModal] = useState(null); // { targetId, title, amount }
   const [rated, setRated] = useState(() => {
     try { return JSON.parse(localStorage.getItem(`rated_workers_${id}`) || '{}'); } catch { return {}; }
@@ -293,6 +295,13 @@ const BookedRequestView = ({ request, onRefresh }) => {
               Stop after today
             </button>
           )}
+          {isDaily && !['COMPLETED'].includes(w.journeyStatus) && !w.isDecreased && ['confirmed', 'in_progress', 'partially_completed'].includes(request.status)
+            && (Number(request.numberOfDays) || 1) - currentDay >= 1 && (
+            <button type="button" onClick={() => setModal({ replace: w })}
+              className="px-3 py-2 rounded-xl border border-indigo-200 text-indigo-800 text-xs font-bold">
+              Replace from tomorrow
+            </button>
+          )}
           {w.journeyStatus === 'COMPLETED' && (
             rated[w.bookingId]
               ? <span className="px-3 py-2 rounded-xl bg-slate-50 text-slate-500 text-xs font-bold flex items-center gap-1"><FiCheck size={13} /> Rated</span>
@@ -415,6 +424,8 @@ const BookedRequestView = ({ request, onRefresh }) => {
             </div>
           </div>
         )}
+
+        <AddOnLinks request={request} />
 
         {/* Workers */}
         <div className={card}>
@@ -560,6 +571,14 @@ const BookedRequestView = ({ request, onRefresh }) => {
         defaultRate={request.maxDailyRate || request.minDailyRate || 500}
         remainingDays={Math.max(1, (request.numberOfDays || 1) - currentDay + 1)}
         onWorkersAdded={refreshAll}
+      />
+      <ReplaceWorkerModal
+        isOpen={Boolean(modal?.replace)}
+        onClose={() => setModal(null)}
+        worker={modal?.replace}
+        requestId={id}
+        remainingDays={Math.max(1, (request.numberOfDays || 1) - currentDay)}
+        onDone={refreshAll}
       />
       <DecreaseWorkerModal
         isOpen={Boolean(modal?.decrease)}
