@@ -1092,6 +1092,11 @@ const JobDetails = () => {
             <div className="flex-1">
               <h3 className="font-bold text-gray-900 text-lg">{job.userId?.name || 'Customer'}</h3>
               <p className="text-sm text-gray-500">{job.serviceName}</p>
+              {job.offlineMember && (
+                <p className="mt-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-lg px-2.5 py-1.5 inline-block">
+                  This job is for {job.offlineMember.name}, who has no app. You start, stop and close it for them with the farmer's codes.
+                </p>
+              )}
             </div>
             {job.userId?.phone && (
               <a href={`tel:${job.userId.phone}`} className="w-11 h-11 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 shadow-sm border border-blue-100 active:scale-90 transition-transform">

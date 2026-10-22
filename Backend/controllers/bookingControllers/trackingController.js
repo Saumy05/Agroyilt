@@ -231,10 +231,16 @@ exports.getTrackingSnapshot = async (req, res) => {
     // Authorization checks
     const isFarmer = role === 'USER' && farmerId && farmerId.toString() === userId.toString();
     const isAdmin = ['ADMIN', 'SUPER_ADMIN'].includes(role);
-    const isAssignedWorker = role === 'WORKER' && bookings.some(b => {
+    let isAssignedWorker = role === 'WORKER' && bookings.some(b => {
       const wId = b.workerId?._id ? b.workerId._id.toString() : (b.workerId ? b.workerId.toString() : '');
       return wId === userId.toString();
     });
+    // an offline member (no app) is followed by the Team Leader who manages them
+    if (!isAssignedWorker && role === 'WORKER') {
+      const Worker = require('../../models/Worker');
+      const workerIds = bookings.map(b => b.workerId?._id || b.workerId).filter(Boolean);
+      isAssignedWorker = Boolean(workerIds.length && await Worker.exists({ _id: { $in: workerIds }, isOfflineMember: true, managedByLeaderId: userId }));
+    }
 
     if (!isFarmer && !isAdmin && !isAssignedWorker) {
       return res.status(403).json({ success: false, message: 'You are not authorized to view this live tracking session.' });

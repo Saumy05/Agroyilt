@@ -342,6 +342,11 @@ const AssignedJobs = () => {
                           {job.serviceName || job.serviceId?.title || 'Farm Work'}
                         </h3>
                       </div>
+                      {job.offlineMember && (
+                        <p className="mt-1.5 inline-block text-[10px] font-black uppercase tracking-wide px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100">
+                          For {job.offlineMember.name} · you run this job
+                        </p>
+                      )}
                       
                       {/* Status Badge Pill */}
                       <div className="flex items-center gap-2 mt-1">

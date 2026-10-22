@@ -130,7 +130,10 @@ const getAssignedJobs = async (req, res) => {
     // These are the authoritative docs created after farmer payment. They do NOT
     // always have a corresponding legacy Booking doc, so we must include them
     // separately — this is the core fix for "Ram Kumar not showing job card".
-    const assignmentQuery = { workerId, assignmentStatus: { $ne: 'CANCELLED' } };
+    // a Team Leader also sees the jobs of the offline members they manage
+    const offlineMembers = await require('../../services/offlineMemberProxy').managedOfflineMembers(workerId);
+    const offlineNameOf = new Map(offlineMembers.map(m => [String(m._id), m.name]));
+    const assignmentQuery = { workerId: { $in: [workerId, ...offlineMembers.map(m => m._id)] }, assignmentStatus: { $ne: 'CANCELLED' } };
     const assignments = await IndWorkerAssignment.find(assignmentQuery)
       .populate('farmerId', 'name phone email')
       .populate({
@@ -170,6 +173,7 @@ const getAssignedJobs = async (req, res) => {
         bookingNumber: `ASGN-${a._id.toString().slice(-6).toUpperCase()}`,
         providerType: 'WORKER',
         workerId: a.workerId,
+        offlineMember: offlineNameOf.has(String(a.workerId)) ? { id: a.workerId, name: offlineNameOf.get(String(a.workerId)) } : undefined,
         workerResponse: 'ACCEPTED',
         workerAcceptedAt: a.createdAt,
         userId: a.farmerId,
@@ -252,7 +256,10 @@ const getJobById = async (req, res) => {
     if (!booking) {
       const IndWorkerAssignment = require('../../models/IndWorkerAssignment');
       const WorkerBookingRequest = require('../../models/WorkerBookingRequest');
-      const assignDoc = await IndWorkerAssignment.findOne({ _id: id, workerId });
+      // the caller's own job, or the job of an offline member they manage
+      const offlineMembers = await require('../../services/offlineMemberProxy').managedOfflineMembers(workerId);
+      const assignDoc = await IndWorkerAssignment.findOne({ _id: id, workerId: { $in: [workerId, ...offlineMembers.map(m => m._id)] } });
+      const offlineMemberOfJob = assignDoc ? offlineMembers.find(m => String(m._id) === String(assignDoc.workerId)) : null;
       if (assignDoc) {
         const parent = await WorkerBookingRequest.findById(assignDoc.parentRequestId).populate('farmerId', 'name phone email');
         const syntheticBooking = {
@@ -261,6 +268,7 @@ const getJobById = async (req, res) => {
           parentRequestId: assignDoc.parentRequestId,
           providerType: 'WORKER',
           workerId: assignDoc.workerId,
+          offlineMember: offlineMemberOfJob ? { id: offlineMemberOfJob._id, name: offlineMemberOfJob.name } : undefined,
           workerResponse: 'ACCEPTED',
           workerAcceptedAt: assignDoc.createdAt,
           serviceName: parent?.workTitle || 'Farm Work',

@@ -158,6 +158,8 @@ const nextDayLog = (dayNumber) => {
   };
 };
 
+const { managedOfflineMembers, actingWorkerId } = require('../../services/offlineMemberProxy');
+
 const audit = settlement.audit;
 
 const OTP_ERRORS = {
@@ -244,7 +246,10 @@ exports.getMyAssignments = async (req, res) => {
     const workerId = req.user._id;
     const { status } = req.query;
 
-    const filter = { workerId };
+    // a Team Leader also sees the jobs of the offline members they manage
+    const members = await managedOfflineMembers(workerId);
+    const nameOf = new Map(members.map(m => [String(m._id), m.name]));
+    const filter = { workerId: { $in: [workerId, ...members.map(m => m._id)] } };
     if (status) {
       filter.assignmentStatus = String(status);
     }
@@ -254,7 +259,14 @@ exports.getMyAssignments = async (req, res) => {
       .populate('parentRequestId', 'workTitle workDescription scheduledDate startTime endTime location rateUnit minRate maxRate')
       .sort({ createdAt: -1 });
 
-    return res.json({ success: true, data: assignments });
+    return res.json({
+      success: true,
+      data: assignments.map(a => {
+        const forMember = nameOf.get(String(a.workerId));
+        if (!forMember) return a;
+        return { ...a.toObject(), offlineMember: { id: a.workerId, name: forMember } };
+      })
+    });
   } catch (err) {
     console.error('[getMyAssignments]', err);
     return res.status(500).json({ success: false, message: 'Failed to fetch assignments.' });
@@ -267,7 +279,7 @@ exports.getMyAssignments = async (req, res) => {
 exports.startJourney = async (req, res) => {
   try {
     const assignmentId = req.params.id;
-    const workerId = req.user._id;
+    const workerId = await actingWorkerId(req); // an offline member's Team Leader acts for them
 
     const current = await IndWorkerAssignment.findOne({ _id: assignmentId, workerId, assignmentStatus: 'CONFIRMED' });
     if (!current) {
@@ -359,7 +371,7 @@ exports.startJourney = async (req, res) => {
 exports.markArrived = async (req, res) => {
   try {
     const assignmentId = req.params.id;
-    const workerId = req.user._id;
+    const workerId = await actingWorkerId(req); // an offline member's Team Leader acts for them
 
     const current = await IndWorkerAssignment.findOne({ _id: assignmentId, workerId, assignmentStatus: 'CONFIRMED' });
     if (!current) {
@@ -455,7 +467,7 @@ const applyLatePenalty = async (assignment, { dayIdx = null, startedAt } = {}) =
 exports.verifyVisitOtp = async (req, res) => {
   try {
     const assignmentId = req.params.id;
-    const workerId = req.user._id;
+    const workerId = await actingWorkerId(req); // an offline member's Team Leader acts for them
     const { otp } = req.body || {};
 
     if (!otp) {
@@ -539,7 +551,7 @@ exports.verifyVisitOtp = async (req, res) => {
 exports.submitProof = async (req, res) => {
   try {
     const assignmentId = req.params.id;
-    const workerId = req.user._id;
+    const workerId = await actingWorkerId(req); // an offline member's Team Leader acts for them
     const { fileUrl, publicId, notes } = req.body || {};
 
     if (fileUrl !== undefined && fileUrl !== null && (typeof fileUrl !== 'string' || fileUrl.length > 2048 || !/^https?:\/\//i.test(fileUrl))) {
@@ -620,7 +632,7 @@ exports._settleAndFinish = settleAndFinish;
 exports.verifyCompletionOtp = async (req, res) => {
   try {
     const assignmentId = req.params.id;
-    const workerId = req.user._id;
+    const workerId = await actingWorkerId(req); // an offline member's Team Leader acts for them
     const { otp, workPhotos, fileUrl, notes, publicId } = req.body || {};
 
     if (!otp) {
@@ -893,7 +905,7 @@ exports.workerWithdraw = async (req, res) => {
 exports.updateLocation = async (req, res) => {
   try {
     const assignmentId = req.params.id;
-    const workerId = req.user._id;
+    const workerId = await actingWorkerId(req); // an offline member's Team Leader acts for them
     const { lat, lng, accuracy, speed, heading } = req.body;
 
     if (lat === undefined || lng === undefined) {
@@ -954,6 +966,70 @@ exports.updateLocation = async (req, res) => {
 };
 
 /**
+ * Who is calling a break endpoint. The worker side is the assigned worker, or the Team Leader of an offline member (who has no
+ * phone); the farmer side is the farmer who owns the booking. Nobody else, so one worker or farmer can never pause another's job.
+ */
+const isWorkerSideOf = async (req, assignment) => {
+  if (String(req.userRole || '').toUpperCase() !== 'WORKER') return false;
+  const callerId = String(req.user._id);
+  if (String(assignment.workerId) === callerId) return true;
+  return Boolean(await Worker.exists({ _id: assignment.workerId, isOfflineMember: true, managedByLeaderId: callerId }));
+};
+const isFarmerSideOf = (req, assignment) => String(assignment.farmerId) === String(req.user._id);
+
+/**
+ * A Team Leader's break is also the break of their offline members on the same booking (they have no phone to start
+ * or end one themselves). Online members manage their own breaks. Mirrors startBreak / resumeBreak for daily bookings.
+ */
+const cascadeBreakToOfflineMembers = async (leaderAssignment, mode, actor, byUserId) => {
+  try {
+    if (leaderAssignment.bookingType !== 'DAILY') return;
+    const members = await managedOfflineMembers(leaderAssignment.workerId);
+    if (!members.length) return;
+    const now = new Date();
+    const mates = await IndWorkerAssignment.find({
+      parentRequestId: leaderAssignment.parentRequestId,
+      workerId: { $in: members.map(m => m._id) },
+      assignmentStatus: 'CONFIRMED',
+      bookingType: 'DAILY'
+    });
+    for (const a of mates) {
+      const dayIdx = a.currentDayIndex || 1;
+      const log = a.dailyLogs?.find(l => l.dayNumber === dayIdx);
+      const onBreak = (log?.breakStatus || a.breakStatus) === 'ON_BREAK';
+      let payload;
+      if (mode === 'start') {
+        const working = ['IN_PROGRESS', 'ARRIVED'].includes(log?.workStatus || a.workStatus) || a.visitOtpStatus === 'VERIFIED';
+        if (onBreak || !working) continue;
+        a.breakStatus = 'ON_BREAK'; a.breakStartedAt = now; a.lastBreakStartedBy = actor;
+        if (log) { log.breakStatus = 'ON_BREAK'; log.breakStartedAt = now; log.lastBreakStartedBy = actor; }
+        a.auditLog.push(audit('break_started', actor, byUserId, { dayNumber: dayIdx, startedBy: actor, withLeader: true }));
+        payload = { breakStatus: 'ON_BREAK', breakStartedAt: now, breakMaxMinutes: 60, startedBy: actor };
+      } else {
+        if (!onBreak) continue;
+        const since = (log?.breakStartedAt) || a.breakStartedAt || now;
+        const elapsed = Math.max(1, Math.round((now.getTime() - new Date(since).getTime()) / 60000));
+        a.breakStatus = 'NOT_ON_BREAK'; a.breakStartedAt = null; a.lastBreakResumedBy = actor;
+        a.breakDurationMinutes = (Number(a.breakDurationMinutes) || 0) + elapsed;
+        if (log) {
+          log.breakStatus = 'NOT_ON_BREAK'; log.breakStartedAt = null; log.lastBreakResumedBy = actor;
+          log.breakDurationMinutes = (Number(log.breakDurationMinutes) || 0) + elapsed;
+        }
+        a.auditLog.push(audit('break_resumed', actor, byUserId, { dayNumber: dayIdx, elapsedMinutes: elapsed, resumedBy: actor, withLeader: true }));
+        payload = { breakStatus: 'NOT_ON_BREAK', resumedBy: actor, breakDurationMinutes: elapsed, totalBreakMinutes: a.breakDurationMinutes };
+      }
+      await a.save();
+      const evt = mode === 'start' ? 'assignment_break_started' : 'assignment_break_resumed';
+      const body = { requestId: a.parentRequestId, assignmentId: a._id, workerId: a.workerId, dayNumber: dayIdx, serverTimestamp: now, ...payload };
+      emitSafe(`booking_req:${a.parentRequestId}`, evt, body);
+      emitSafe(`user:${a.farmerId}`, evt, body);
+    }
+  } catch (err) {
+    console.error('[cascadeBreakToOfflineMembers]', err);
+  }
+};
+
+/**
  * START BREAK (Pause Work for 1-hour Break)
  * Can be triggered by Worker or Farmer.
  * Sets breakStatus = 'ON_BREAK', records breakStartedAt, emits socket event, and notifies both parties.
@@ -970,9 +1046,8 @@ exports.startBreak = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Assignment not found.' });
     }
 
-    const callerId = String(req.user._id);
-    const isWorkerUser = (req.userRole === 'WORKER' || req.user?.role === 'worker' || String(assignment.workerId) === callerId);
-    const isFarmerUser = (req.userRole === 'USER' || req.user?.role === 'user' || String(assignment.farmerId) === callerId);
+    const isWorkerUser = await isWorkerSideOf(req, assignment);
+    const isFarmerUser = !isWorkerUser && isFarmerSideOf(req, assignment);
 
     if (!isWorkerUser && !isFarmerUser) {
       return res.status(403).json({ success: false, message: 'Unauthorized to pause for break.' });
@@ -1014,6 +1089,7 @@ exports.startBreak = async (req, res) => {
 
     assignment.auditLog.push(audit('break_started', actor, req.user._id, { dayNumber: dayIdx, startedBy: actor }));
     await assignment.save();
+    await cascadeBreakToOfflineMembers(assignment, 'start', actor, req.user._id);
 
     // Socket Broadcast
     const payload = {
@@ -1071,9 +1147,8 @@ exports.resumeBreak = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Assignment not found.' });
     }
 
-    const callerId = String(req.user._id);
-    const isWorkerUser = (req.userRole === 'WORKER' || req.user?.role === 'worker' || String(assignment.workerId) === callerId);
-    const isFarmerUser = (req.userRole === 'USER' || req.user?.role === 'user' || String(assignment.farmerId) === callerId);
+    const isWorkerUser = await isWorkerSideOf(req, assignment);
+    const isFarmerUser = !isWorkerUser && isFarmerSideOf(req, assignment);
 
     if (!isWorkerUser && !isFarmerUser) {
       return res.status(403).json({ success: false, message: 'Unauthorized to resume work.' });
@@ -1107,6 +1182,7 @@ exports.resumeBreak = async (req, res) => {
 
     assignment.auditLog.push(audit('break_resumed', actor, req.user._id, { dayNumber: dayIdx, elapsedMinutes, resumedBy: actor }));
     await assignment.save();
+    await cascadeBreakToOfflineMembers(assignment, 'resume', actor, req.user._id);
 
     // Socket Broadcast
     const payload = {
