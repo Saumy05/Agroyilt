@@ -21,11 +21,11 @@ const LiveContentSection = () => {
                 
                 if (blogRes.data.success) {
                     const data = blogRes.data.data;
-                    setBlogs(Array.isArray(data) ? data.slice(0, 3) : []);
+                    setBlogs(Array.isArray(data) ? data.filter(b => b.isActive).slice(0, 3) : []);
                 }
                 if (articleRes.data.success) {
                     const data = articleRes.data.data;
-                    setArticles(Array.isArray(data) ? data.slice(0, 3) : []);
+                    setArticles(Array.isArray(data) ? data.filter(a => a.isActive).slice(0, 3) : []);
                 }
             } catch (error) {
                 console.error("Error fetching content:", error);
