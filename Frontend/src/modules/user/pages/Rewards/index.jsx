@@ -10,9 +10,12 @@ import {
   FiClock,
   FiUsers,
   FiAward,
-  FiAlertCircle
+  FiAlertCircle,
+  FiMail,
+  FiMessageSquare,
+  FiX
 } from 'react-icons/fi';
-import { FaWhatsapp, FaFacebookMessenger } from 'react-icons/fa';
+import { FaWhatsapp, FaFacebookMessenger, FaTelegramPlane, FaFacebookF } from 'react-icons/fa';
 import { themeColors } from '../../../../theme';
 import referralService from '../../../../services/referralService';
 import LogoLoader from '../../../../components/common/LogoLoader';
@@ -39,6 +42,7 @@ const Rewards = () => {
     history: []
   });
   const [copied, setCopied] = useState(false);
+  const [showMore, setShowMore] = useState(false);
 
   useEffect(() => {
     fetchStats();
@@ -96,20 +100,47 @@ const Rewards = () => {
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
+  const shareText = `Join AgroYilt - India's Smart Agri Services & Equipment Platform! Use my Referral Code: ${data.referralCode} when registering.`;
+
+  // Opens the phone's own share sheet when the browser has one; otherwise shows our own list of apps
   const handleNativeShare = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: 'Join AgroYilt',
-          text: `Use my Referral Code: ${data.referralCode} when registering on AgroYilt!\nRegister here: ${registerLink}`,
-        });
-      } catch (e) {
-        // User cancelled share
-      }
-    } else {
-      handleCopy(registerLink, 'Registration Link');
+    if (!navigator.share) {
+      setShowMore(true);
+      return;
+    }
+    try {
+      await navigator.share({ title: 'Join AgroYilt', text: shareText, url: registerLink });
+    } catch (e) {
+      if (e?.name !== 'AbortError') setShowMore(true);
     }
   };
+
+  const moreOptions = [
+    {
+      label: 'Telegram',
+      icon: <FaTelegramPlane className="w-5 h-5" />,
+      color: 'bg-[#229ED9]',
+      href: `https://t.me/share/url?url=${encodeURIComponent(registerLink)}&text=${encodeURIComponent(shareText)}`
+    },
+    {
+      label: 'Facebook',
+      icon: <FaFacebookF className="w-5 h-5" />,
+      color: 'bg-[#1877F2]',
+      href: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(registerLink)}`
+    },
+    {
+      label: 'SMS',
+      icon: <FiMessageSquare className="w-5 h-5" />,
+      color: 'bg-emerald-600',
+      href: `sms:?&body=${encodeURIComponent(`${shareText} ${registerLink}`)}`
+    },
+    {
+      label: 'Email',
+      icon: <FiMail className="w-5 h-5" />,
+      color: 'bg-rose-500',
+      href: `mailto:?subject=${encodeURIComponent('Join AgroYilt')}&body=${encodeURIComponent(`${shareText}\n\n${registerLink}`)}`
+    }
+  ];
 
   if (loading) {
     return (
@@ -209,6 +240,36 @@ const Rewards = () => {
             <span className="text-xs font-bold text-gray-700">More</span>
           </button>
         </div>
+
+        {showMore && (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50" onClick={() => setShowMore(false)}>
+            <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold text-gray-900">Share your referral</h3>
+                <button onClick={() => setShowMore(false)} className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100" aria-label="Close">
+                  <FiX className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="grid grid-cols-4 gap-2">
+                {moreOptions.map(opt => (
+                  <a
+                    key={opt.label}
+                    href={opt.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={() => setShowMore(false)}
+                    className="flex flex-col items-center gap-1.5 p-2 rounded-xl hover:bg-gray-50 transition-colors"
+                  >
+                    <div className={`w-12 h-12 ${opt.color} text-white rounded-2xl flex items-center justify-center shadow-md`}>
+                      {opt.icon}
+                    </div>
+                    <span className="text-xs font-bold text-gray-700">{opt.label}</span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Stats Grid */}
         <div className="grid grid-cols-3 gap-3">
