@@ -429,7 +429,7 @@ const WorkerSignup = () => {
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center mb-8 relative z-10 animate-fade-in">
         <Logo className="h-16 w-auto mx-auto transform hover:scale-110 transition-transform duration-500" />
         <h2 className="mt-4 text-3xl font-extrabold text-gray-900 tracking-tight">
-          {step === 'details' ? 'Xpert Registration' : 'Confirm Phone'}
+          {step === 'details' ? 'Worker Registration' : 'Confirm Phone'}
         </h2>
         <p className="mt-2 text-sm text-gray-600 animate-stagger-1 animate-fade-in">
           Join the pros. Set your schedule, earn more.
@@ -831,7 +831,7 @@ const WorkerSignup = () => {
         </div>
 
         <p className="mt-8 text-center text-sm text-gray-500 animate-fade-in animate-stagger-4">
-          Already an Xpert?{' '}
+          Already registered as a worker?{' '}
           <Link to="/worker/login" className="font-semibold hover:text-[#D68F35] transition-colors" style={{ color: brandColor }}>
             Sign In
           </Link>
