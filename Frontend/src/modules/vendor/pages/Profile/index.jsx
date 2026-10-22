@@ -567,8 +567,8 @@ const Profile = () => {
             </div>
             <h3 className="text-lg font-black text-gray-900 text-center mb-2">Delete Account?</h3>
             <p className="text-sm text-gray-500 text-center mb-6">
-              Yeh action permanent hai. Aapka vendor account aur saara data delete ho jayega.
-              Is number se dobara login karne ke liye aapko <strong>nayi registration</strong> karni padegi.
+              This action is permanent. Your vendor account and all of its data will be deleted.
+              To log in with this number again, you will need to <strong>register as a new vendor</strong>.
             </p>
             <div className="flex gap-3">
               <button

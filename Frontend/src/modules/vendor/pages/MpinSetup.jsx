@@ -12,56 +12,71 @@ const VendorMpinSetup = () => {
   const location = useLocation();
   const isFirstTime = location.state?.isFirstTime || false;
 
-  const [step, setStep] = useState(1);
+  // Step 0 asks for the current MPIN (only when one is already set), 1 the new MPIN, 2 the confirmation
+  const [needsCurrent, setNeedsCurrent] = useState(
+    !isFirstTime && !!authStorage.getUserData('vendor')?.isMpinSet
+  );
+  const [step, setStep] = useState(needsCurrent ? 0 : 1);
+  const [currentMpin, setCurrentMpin] = useState(['', '', '', '']);
   const [mpin, setMpin] = useState(['', '', '', '']);
   const [confirmMpin, setConfirmMpin] = useState(['', '', '', '']);
   const [isLoading, setIsLoading] = useState(false);
 
+  const currentRefs = useRef([]);
   const mpinRefs = useRef([]);
   const confirmRefs = useRef([]);
 
   useEffect(() => {
-    if (step === 1 && mpinRefs.current[0]) {
+    if (isFirstTime) return;
+    vendorAuthService.getMpinStatus()
+      .then((res) => {
+        if (res?.success && res.isMpinSet) {
+          setNeedsCurrent(true);
+          setStep((prev) => (prev === 1 && mpin.join('') === '' ? 0 : prev));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (step === 0 && currentRefs.current[0]) {
+      setTimeout(() => currentRefs.current[0].focus(), 100);
+    } else if (step === 1 && mpinRefs.current[0]) {
       setTimeout(() => mpinRefs.current[0].focus(), 100);
     } else if (step === 2 && confirmRefs.current[0]) {
       setTimeout(() => confirmRefs.current[0].focus(), 100);
     }
   }, [step]);
 
-  const handleChange = (index, value, isConfirm) => {
+  const fields = {
+    current: [currentMpin, setCurrentMpin, currentRefs],
+    new: [mpin, setMpin, mpinRefs],
+    confirm: [confirmMpin, setConfirmMpin, confirmRefs],
+  };
+  const kindForStep = ['current', 'new', 'confirm'][step];
+
+  const handleChange = (index, value, kind) => {
     if (value && !/^\d+$/.test(value)) return;
-    
-    const newArr = isConfirm ? [...confirmMpin] : [...mpin];
-    
+
+    const [arr, setArr, refs] = fields[kind];
+    const newArr = [...arr];
+
     if (value.length > 1) {
       if (index === 0 && value.length === 4) {
-        if (isConfirm) {
-          setConfirmMpin(value.split(''));
-          confirmRefs.current[3]?.focus();
-        } else {
-          setMpin(value.split(''));
-          mpinRefs.current[3]?.focus();
-        }
+        setArr(value.split(''));
+        refs.current[3]?.focus();
       }
       return;
     }
 
     newArr[index] = value;
-    
-    if (isConfirm) {
-      setConfirmMpin(newArr);
-      if (value && index < 3) confirmRefs.current[index + 1]?.focus();
-    } else {
-      setMpin(newArr);
-      if (value && index < 3) mpinRefs.current[index + 1]?.focus();
-    }
+    setArr(newArr);
+    if (value && index < 3) refs.current[index + 1]?.focus();
   };
 
-  const handleKeyDown = (index, e, isConfirm) => {
+  const handleKeyDown = (index, e, kind) => {
     if (e.key === 'Backspace') {
-      const arr = isConfirm ? confirmMpin : mpin;
-      const refs = isConfirm ? confirmRefs : mpinRefs;
-      
+      const [arr, , refs] = fields[kind];
       if (!arr[index] && index > 0) {
         refs.current[index - 1]?.focus();
       }
@@ -69,6 +84,14 @@ const VendorMpinSetup = () => {
   };
 
   const handleNext = () => {
+    if (step === 0) {
+      if (currentMpin.join('').length !== 4) {
+        toastManager.error('Please enter your current 4-digit MPIN');
+        return;
+      }
+      setStep(1);
+      return;
+    }
     if (mpin.join('').length !== 4) {
       toastManager.error('Please enter a 4-digit MPIN');
       return;
@@ -97,6 +120,7 @@ const VendorMpinSetup = () => {
       const response = await vendorAuthService.setMpin({
         mpin: mpinValue,
         confirmMpin: confirmValue,
+        ...(needsCurrent && { currentMpin: currentMpin.join('') }),
       });
 
       if (response.success) {
@@ -115,6 +139,12 @@ const VendorMpinSetup = () => {
     } catch (error) {
       setIsLoading(false);
       toastManager.error(error.response?.data?.message || 'Failed to set MPIN');
+      if (needsCurrent && error.response?.status === 401) {
+        setCurrentMpin(['', '', '', '']);
+        setMpin(['', '', '', '']);
+        setConfirmMpin(['', '', '', '']);
+        setStep(0);
+      }
     }
   };
 
@@ -129,26 +159,26 @@ const VendorMpinSetup = () => {
           </div>
           <h2 className="text-2xl font-bold text-gray-900">Vendor MPIN Setup</h2>
           <p className="text-sm text-gray-500 mt-2">
-            Create a 4-digit MPIN for faster login in the future
+            {needsCurrent ? 'Change your 4-digit MPIN' : 'Create a 4-digit MPIN for faster login in the future'}
           </p>
         </div>
 
         <form onSubmit={step === 2 ? handleSubmit : (e) => { e.preventDefault(); handleNext(); }} className="space-y-8">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-4 text-center">
-              {step === 1 ? 'Enter New MPIN' : 'Confirm MPIN'}
+              {['Enter Current MPIN', 'Enter New MPIN', 'Confirm New MPIN'][step]}
             </label>
             <div className="flex justify-center gap-3">
-              {(step === 1 ? mpin : confirmMpin).map((digit, index) => (
+              {fields[kindForStep][0].map((digit, index) => (
                 <input
-                  key={index}
-                  ref={(el) => step === 1 ? (mpinRefs.current[index] = el) : (confirmRefs.current[index] = el)}
+                  key={`${kindForStep}-${index}`}
+                  ref={(el) => (fields[kindForStep][2].current[index] = el)}
                   type="password"
                   inputMode="numeric"
                   maxLength={1}
                   value={digit}
-                  onChange={(e) => handleChange(index, e.target.value, step === 2)}
-                  onKeyDown={(e) => handleKeyDown(index, e, step === 2)}
+                  onChange={(e) => handleChange(index, e.target.value, kindForStep)}
+                  onKeyDown={(e) => handleKeyDown(index, e, kindForStep)}
                   className="w-14 h-14 text-center text-2xl font-bold rounded-xl focus:ring-2 border-gray-200 focus:border-transparent transition-all shadow-sm"
                   style={{ '--tw-ring-color': brandColor }}
                 />
@@ -166,7 +196,7 @@ const VendorMpinSetup = () => {
               {isLoading ? (
                 <LogoLoader fullScreen={false} inline={true} size="w-6 h-6" />
               ) : (
-                <span>{step === 1 ? 'Next' : 'Save MPIN'}</span>
+                <span>{step === 2 ? 'Save MPIN' : 'Next'}</span>
               )}
             </button>
             
@@ -189,10 +219,10 @@ const VendorMpinSetup = () => {
               </button>
             )}
             
-            {!isFirstTime && step === 2 && (
+            {!isFirstTime && step > (needsCurrent ? 0 : 1) && (
               <button
                 type="button"
-                onClick={() => setStep(1)}
+                onClick={() => setStep(step - 1)}
                 className="w-full py-3 text-sm font-semibold text-gray-500 hover:text-gray-800 transition-colors"
               >
                 Back
