@@ -198,6 +198,9 @@ const streamAgreementPdf = (ag, res, { settings = {}, forAdmin = false } = {}) =
   doc.y = top + h + 10;
   doc.font('regular').fontSize(8).fillColor(GREY).text(`Document fingerprint (SHA-256): ${ag.contentHash}`, MARGIN, doc.y, { width: contentWidth });
   if (ag.executedAt) doc.text(`Executed: ${fmtDateTime(ag.executedAt)}`, { width: contentWidth });
+  if (ag.effective?.startDate && ag.effective?.endDate) {
+    doc.font('bold').fontSize(9.5).fillColor(SLATE).text(`Lease period: ${render.fmtDate(ag.effective.startDate)} to ${render.fmtDate(ag.effective.endDate)}  (${terms.durationMonths} ${(render.LABELS[lang] || render.LABELS.en).months})`, { width: contentWidth });
+  }
 
   // watermark + footer on every page
   const range = doc.bufferedPageRange();

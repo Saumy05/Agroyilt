@@ -16,6 +16,7 @@ const STATUS = {
 };
 
 const fmtDateTime = (d) => (d ? new Date(d).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '');
+const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '');
 const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 
 /** Certificate block of one party: signed (with stamp) or still waiting. */
@@ -213,7 +214,11 @@ const LeaseAgreementPage = () => {
           </div>
           <div className="grid grid-cols-2 gap-2.5 text-center">
             <div className="rounded-xl bg-slate-50 p-2.5"><p className="text-[10px] font-bold uppercase text-slate-400">Land · भूमि</p><p className="font-black text-slate-900">{t.landAreaAcres} acres</p></div>
-            <div className="rounded-xl bg-slate-50 p-2.5"><p className="text-[10px] font-bold uppercase text-slate-400">Duration · अवधि</p><p className="font-black text-slate-900">{t.durationMonths} months</p></div>
+            <div className="rounded-xl bg-slate-50 p-2.5">
+              <p className="text-[10px] font-bold uppercase text-slate-400">Duration · अवधि</p>
+              <p className="font-black text-slate-900">{t.durationMonths} months</p>
+              <p className="text-[10px] font-semibold text-slate-500">{ag.effective?.startDate ? `${fmtDate(ag.effective.startDate)} – ${fmtDate(ag.effective.endDate)}` : 'starts when both sign'}</p>
+            </div>
             <div className="rounded-xl bg-slate-50 p-2.5 col-span-2">
               <p className="text-[10px] font-bold uppercase text-slate-400">{fixed ? 'Rent · किराया' : "Owner's share · मालिक का हिस्सा"}</p>
               <p className="font-black text-slate-900">{fixed ? `${inr(t.pricePerAcrePerYear)} /acre/year · Total ${inr(t.totalRent)}` : `${t.sharePercentage}% of the crop`}</p>
@@ -234,6 +239,9 @@ const LeaseAgreementPage = () => {
             <div>
               <p className="font-black">Agreement signed by both parties</p>
               <p className="text-sm text-emerald-50">दोनों पक्षों ने हस्ताक्षर कर दिए हैं। {ag.executedAt ? fmtDateTime(ag.executedAt) : ''}</p>
+              {ag.effective?.startDate && ag.effective?.endDate && (
+                <p className="mt-1 text-sm font-bold">Lease period · पट्टा अवधि: {fmtDate(ag.effective.startDate)} – {fmtDate(ag.effective.endDate)}</p>
+              )}
               <button onClick={() => navigate('/user/land-lease?tab=my-leases&sub=listings')} className="mt-2 px-3 py-1.5 rounded-lg bg-white/20 text-xs font-bold">Go to my leases</button>
             </div>
           </div>

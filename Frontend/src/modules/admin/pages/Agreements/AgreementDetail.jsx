@@ -11,7 +11,7 @@ const fmtDateTime = (d) => (d ? new Date(d).toLocaleString('en-IN', { day: '2-di
 const ACTION_LABEL = {
   created: 'Agreement made', otp_sent: 'Signing code sent', signed: 'Signed', fully_executed: 'Both signed: agreement executed',
   cancelled: 'Cancelled', expired: 'Expired unsigned', reminder_sent: 'Automatic reminder', admin_reminder: 'Reminder from admin',
-  dispute_flagged: 'Marked as disputed', dispute_resolved: 'Dispute closed'
+  dispute_flagged: 'Marked as disputed', dispute_resolved: 'Dispute closed', lease_started: 'Lease started'
 };
 
 const PartyCard = ({ title, person, sig }) => (
@@ -121,7 +121,7 @@ const AgreementDetail = () => {
         <button onClick={() => navigate('/admin/agreements')} className="p-2 rounded-xl border border-gray-200 hover:bg-gray-50"><FiArrowLeft /></button>
         <div>
           <h2 className="text-lg font-black text-gray-900 flex items-center gap-2"><FiFileText /> {ag.referenceNo} <StatusBadge value={ag.status} /></h2>
-          <p className="text-xs text-gray-500">Template v{ag.templateVersion} · {ag.language === 'hi' ? 'Hindi' : 'English'} · made {fmtDateTime(ag.createdAt)}{ag.lease ? ` · land "${ag.lease.title}" is ${ag.lease.status.replace('_', ' ')}` : ''}</p>
+          <p className="text-xs text-gray-500">Template v{ag.templateVersion} · {ag.language === 'hi' ? 'Hindi' : 'English'} · made {fmtDateTime(ag.createdAt)}{ag.effective?.startDate ? ` · lease period ${new Date(ag.effective.startDate).toLocaleDateString('en-IN')} to ${new Date(ag.effective.endDate).toLocaleDateString('en-IN')}` : ` · ${ag.terms?.durationMonths} months`}{ag.lease ? ` · land "${ag.lease.title}" is ${ag.lease.status.replace('_', ' ')}` : ''}</p>
         </div>
         <div className="ml-auto flex flex-wrap gap-2">
           {live && <button disabled={busy} onClick={remind} className="px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm font-bold flex items-center gap-1.5 hover:bg-gray-50"><FiBell /> Send reminder</button>}

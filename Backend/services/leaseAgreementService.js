@@ -187,6 +187,7 @@ const view = (ag, role, { forAdmin = false } = {}) => {
     consentText: myName ? consentText(myName, doc.language) : null,
     expiresAt: doc.expiresAt,
     executedAt: doc.executedAt,
+    effective: doc.effective || { startDate: null, endDate: null },
     cancelledAt: doc.cancelledAt,
     cancelledBy: doc.cancelledBy,
     cancelReason: doc.cancelReason,
@@ -355,6 +356,10 @@ const activateLease = async (ag) => {
       if (String(o._id) !== String(offer._id) && o.status === 'pending') { o.status = 'rejected'; declined.push(o.farmerId); }
     });
     await lease.save();
+    await LeaseAgreement.updateOne({ _id: ag._id }, {
+      $set: { 'effective.startDate': agreement.startDate, 'effective.endDate': agreement.endDate },
+      $push: { auditTrail: audit('lease_started', { role: 'system', details: `Lease period ${render.fmtDate(agreement.startDate)} to ${render.fmtDate(agreement.endDate)}` }) }
+    });
 
     notifyLease(ag.farmer.userId, 'land_lease_agreement_executed', '✅ पट्टा शुरू (Lease started)',
       `"${lease.title}" का अनुबंध दोनों के हस्ताक्षर से पूरा हुआ। किस्तें "भुगतान" में देखें।`, lease._id);

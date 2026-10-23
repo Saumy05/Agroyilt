@@ -78,6 +78,11 @@ const leaseAgreementSchema = new mongoose.Schema({
   },
   auditTrail: { type: [auditSchema], default: [] },
 
+  // The real lease period, known once both have signed (the text says "from the later signature date, for N months")
+  effective: {
+    startDate: { type: Date, default: null },
+    endDate: { type: Date, default: null }
+  },
   expiresAt: { type: Date, default: null },        // unsigned agreements lapse after this
   reminderSentAt: { type: Date, default: null },
   executedAt: { type: Date, default: null },
