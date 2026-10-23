@@ -38,6 +38,7 @@ import { uploadToCloudinary } from '../../../../utils/cloudinaryUpload';
 import { compressImage } from '../../../../utils/imageCompression';
 import FieldAreaMeasurementModal from '../../components/FieldAreaMeasurementModal';
 import BoundarySketch from '../../components/common/BoundarySketch';
+import PinPickerScreen from '../../components/common/PinPickerScreen';
 
 const LandLeasePage = () => {
   const navigate = useNavigate();
@@ -115,8 +116,10 @@ const LandLeasePage = () => {
     roadAccess: 'Paved Road',
     suitableCrops: 'Wheat, Mustard, Gram',
     images: '',
-    boundaryPoints: [] // corners of the land marked on the map (required)
+    boundaryPoints: [], // corners of the land marked on the map (optional, recommended)
+    pin: null // { lat, lng }: where the land is (required unless the border is marked)
   });
+  const [pinTool, setPinTool] = useState(null); // { land } when adding a location to an existing listing, {} for the new listing
   // Full-screen border tool: { land } when fixing an existing listing, {} when marking for the new listing
   const [boundaryTool, setBoundaryTool] = useState(null);
   const [acceptDialog, setAcceptDialog] = useState(null); // { landId, offer } while the owner chooses the agreement language
@@ -450,6 +453,27 @@ const LandLeasePage = () => {
     }));
   };
 
+  // A pin was dropped: keep it in the form, or save it now for an existing listing
+  const handlePinConfirmed = async (pin) => {
+    const tool = pinTool;
+    setPinTool(null);
+    if (tool?.land) {
+      try {
+        const res = await landLeaseService.setLocation(tool.land._id, pin.lat, pin.lng);
+        if (res?.success) {
+          toastManager.success('Location saved');
+          fetchMyLeases();
+        } else {
+          toastManager.error(res?.message || 'Could not save the location');
+        }
+      } catch (err) {
+        toastManager.error(err.response?.data?.message || 'Could not save the location');
+      }
+      return;
+    }
+    setListingForm((f) => ({ ...f, pin }));
+  };
+
   // Handle Create Listing
   const handleCreateListing = async (e) => {
     e.preventDefault();
@@ -459,8 +483,8 @@ const LandLeasePage = () => {
     if (!listingForm.district || !listingForm.tehsil || !listingForm.village) {
       return toastManager.error('Please enter the district, tehsil and village details');
     }
-    if (!listingForm.boundaryPoints || listingForm.boundaryPoints.length < 3) {
-      return toastManager.error('Please mark the land border on the map first');
+    if ((!listingForm.boundaryPoints || listingForm.boundaryPoints.length < 3) && !listingForm.pin) {
+      return toastManager.error('Please put the land on the map first (a pin, or mark its border)');
     }
 
     try {
@@ -515,7 +539,9 @@ const LandLeasePage = () => {
         roadAccess: listingForm.roadAccess,
         suitableCrops: cropsArray,
         images: finalImages,
-        boundaryPoints: listingForm.boundaryPoints
+        ...(listingForm.boundaryPoints.length >= 3
+          ? { boundaryPoints: listingForm.boundaryPoints }
+          : { lat: listingForm.pin.lat, lng: listingForm.pin.lng })
       };
 
       let res;
@@ -555,7 +581,8 @@ const LandLeasePage = () => {
           roadAccess: 'Paved Road',
           suitableCrops: 'Wheat, Mustard, Gram',
           images: '',
-          boundaryPoints: []
+          boundaryPoints: [],
+          pin: null
         });
         setActiveTab('explore');
         fetchLeases();
@@ -1007,38 +1034,67 @@ const LandLeasePage = () => {
                 </div>
               </div>
 
-              {/* Land border on the map: the agreement describes the land by these corners */}
-              <div className={`rounded-2xl border p-3.5 space-y-2.5 ${listingForm.boundaryPoints.length >= 3 ? 'border-emerald-300 bg-emerald-50/60' : 'border-amber-300 bg-amber-50/60'}`}>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-bold text-gray-900 flex items-center gap-1.5">
-                      <FiMapPin className="w-4 h-4 text-emerald-700" />
-                      Land border on map <span className="text-red-500">*</span>
-                      <span className="text-[11px] font-semibold text-gray-500">(भूमि की सीमा)</span>
-                    </p>
-                    <p className="text-[11px] text-gray-600 mt-0.5 leading-snug">
-                      Stand on your land and tap each corner. These corners go into the lease agreement so everyone knows exactly which land it is.
-                    </p>
+              {/* Where the land is: a pin is required; the whole border is optional but recommended */}
+              {(() => {
+                const hasBorder = listingForm.boundaryPoints.length >= 3;
+                const hasPin = hasBorder || !!listingForm.pin;
+                return (
+                  <div className={`rounded-2xl border p-3.5 space-y-3 ${hasPin ? 'border-emerald-300 bg-emerald-50/60' : 'border-amber-300 bg-amber-50/60'}`}>
+                    <div>
+                      <p className="font-bold text-gray-900 flex items-center gap-1.5">
+                        <FiMapPin className="w-4 h-4 text-emerald-700" />
+                        Where is the land? <span className="text-red-500">*</span>
+                        <span className="text-[11px] font-semibold text-gray-500">(भूमि का स्थान)</span>
+                      </p>
+                      <p className="text-[11px] text-gray-600 mt-0.5 leading-snug">
+                        Put a pin on the map. It goes into the lease agreement together with the khasra number.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-semibold text-gray-800">
+                        {hasBorder
+                          ? 'Location: set by the marked border'
+                          : listingForm.pin
+                            ? `📍 Pin set · ${listingForm.pin.lat.toFixed(5)}, ${listingForm.pin.lng.toFixed(5)}`
+                            : 'No location yet'}
+                      </p>
+                      {!hasBorder && (
+                        <button
+                          type="button"
+                          onClick={() => setPinTool({})}
+                          className="shrink-0 px-3 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black flex items-center gap-1.5 active:scale-95"
+                        >
+                          <FiMapPin className="w-3.5 h-3.5" />
+                          {listingForm.pin ? 'Move pin' : 'Put pin'}
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="border-t border-emerald-200/70 pt-2.5 flex items-start justify-between gap-3">
+                      <p className="text-[11px] text-gray-600 leading-snug">
+                        <b className="text-gray-800">Optional, recommended:</b> mark the whole border. It shows exactly which part of the khasra is leased.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setBoundaryTool({})}
+                        className="shrink-0 px-3 py-2 rounded-xl bg-white border border-emerald-300 text-emerald-800 text-xs font-black active:scale-95"
+                      >
+                        {hasBorder ? 'Edit border' : 'Mark border'}
+                      </button>
+                    </div>
+                    {hasBorder && (
+                      <div className="flex items-center gap-3">
+                        <BoundarySketch points={listingForm.boundaryPoints} size={120} />
+                        <p className="text-xs font-semibold text-emerald-900">
+                          {listingForm.boundaryPoints.length} corners marked
+                          <span className="block text-[11px] font-medium text-emerald-800/80">Area filled in from the border: {listingForm.sizeInAcres} acres</span>
+                        </p>
+                      </div>
+                    )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setBoundaryTool({})}
-                    className="shrink-0 px-3 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black flex items-center gap-1.5 active:scale-95"
-                  >
-                    <FiMapPin className="w-3.5 h-3.5" />
-                    {listingForm.boundaryPoints.length >= 3 ? 'Edit border' : 'Mark border'}
-                  </button>
-                </div>
-                {listingForm.boundaryPoints.length >= 3 && (
-                  <div className="flex items-center gap-3">
-                    <BoundarySketch points={listingForm.boundaryPoints} size={120} />
-                    <p className="text-xs font-semibold text-emerald-900">
-                      {listingForm.boundaryPoints.length} corners marked
-                      <span className="block text-[11px] font-medium text-emerald-800/80">Area filled in from the border: {listingForm.sizeInAcres} acres</span>
-                    </p>
-                  </div>
-                )}
-              </div>
+                );
+              })()}
 
               {/* Location Fields: Separate Tehsil and Village */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1494,11 +1550,21 @@ const LandLeasePage = () => {
                         </div>
 
                         <div className="flex items-center gap-2">
-                          {item.status === 'active' && !(item.boundaryPoints && item.boundaryPoints.length >= 3) && (
+                          {item.status === 'active' && !item.locationSet && (
+                            <button
+                              onClick={() => setPinTool({ land: item })}
+                              className="p-2 rounded-xl text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-xs flex items-center gap-1 font-bold"
+                              title="The land's place on the map is needed before you can accept an offer"
+                            >
+                              <FiMapPin className="w-3.5 h-3.5" />
+                              <span>Add location</span>
+                            </button>
+                          )}
+                          {item.status === 'active' && item.locationSet && !(item.boundaryPoints && item.boundaryPoints.length >= 3) && (
                             <button
                               onClick={() => setBoundaryTool({ land: item })}
-                              className="p-2 rounded-xl text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-xs flex items-center gap-1 font-bold"
-                              title="A land border is needed before you can accept an offer"
+                              className="p-2 rounded-xl text-emerald-800 bg-white hover:bg-emerald-50 border border-emerald-200 text-xs flex items-center gap-1 font-bold"
+                              title="Optional: mark the whole border on the map"
                             >
                               <FiMapPin className="w-3.5 h-3.5" />
                               <span>Mark border</span>
@@ -2065,6 +2131,15 @@ const LandLeasePage = () => {
             <button onClick={() => setAcceptDialog(null)} className="w-full py-2 text-xs font-bold text-gray-500">Cancel</button>
           </div>
         </div>
+      )}
+
+      {/* Full-screen pin picker */}
+      {pinTool && (
+        <PinPickerScreen
+          initialPosition={pinTool.land?.location?.lat && pinTool.land?.locationSet ? { lat: pinTool.land.location.lat, lng: pinTool.land.location.lng } : (pinTool.land ? null : listingForm.pin)}
+          onConfirm={handlePinConfirmed}
+          onClose={() => setPinTool(null)}
+        />
       )}
 
       {/* Full-screen border tool */}

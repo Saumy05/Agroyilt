@@ -64,6 +64,7 @@ router.post('/land-leases', landLeaseController.listLand);
 router.get('/land-leases', landLeaseController.browseLandLeases);
 router.get('/land-leases/my-leases', landLeaseController.getMyLandLeases);
 router.put('/land-leases/:id/boundary', landLeaseController.setBoundary);
+router.put('/land-leases/:id/location', landLeaseController.setLocation);
 router.get('/land-leases/:id', landLeaseController.getLandLeaseById);
 router.post('/land-leases/:id/negotiate', landLeaseController.negotiateLease);
 router.post('/land-leases/:id/accept-offer', landLeaseController.acceptOffer);

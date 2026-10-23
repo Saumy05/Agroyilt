@@ -231,6 +231,12 @@ const LeaseAgreementPage = () => {
               <p className="font-black text-slate-900">{fixed ? `${inr(t.pricePerAcrePerYear)} /acre/year · Total ${inr(t.totalRent)}` : `${t.sharePercentage}% of the crop`}</p>
             </div>
           </div>
+          {!(t.boundaryPoints?.length >= 3) && t.pin && (
+            <p className="mt-3 text-xs font-semibold text-slate-600 flex flex-wrap items-center gap-x-2">
+              📍 Land location: {Number(t.pin.lat).toFixed(5)}, {Number(t.pin.lng).toFixed(5)}
+              <a href={`https://www.google.com/maps?q=${t.pin.lat},${t.pin.lng}`} target="_blank" rel="noreferrer" className="underline font-black text-emerald-800">Open in Maps</a>
+            </p>
+          )}
           {t.boundaryPoints?.length >= 3 && (
             <div className="mt-3 flex items-center gap-3">
               <BoundarySketch points={t.boundaryPoints} size={110} />

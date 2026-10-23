@@ -217,7 +217,7 @@ const TemplateEditor = ({ initial, placeholders, onClose, onSaved }) => {
               {preview ? <div className="agr-doc" dangerouslySetInnerHTML={{ __html: preview.html }} /> : <p className="text-sm text-gray-400">Press “Refresh preview”.</p>}
             </div>
             <p className="mt-3 text-[11px] text-gray-500 leading-snug">
-              Every template must contain {'{{landowner_name}}, {{farmer_name}}, {{khasra_no}}'} and {'{{boundary_table}}'} (the land border coordinates), plus {'{{rent_amount}}'} for fixed rent or {'{{share_percentage}}'} for batai.
+              Every template must contain {'{{landowner_name}}, {{farmer_name}}, {{khasra_no}}'} and {'{{boundary_table}}'} (the land's place on the map: the border corners, or the location pin), plus {'{{rent_amount}}'} for fixed rent or {'{{share_percentage}}'} for batai.
               Saving a changed text makes a new version; agreements already made keep the text they were made from. Have a lawyer review the wording before you activate it.
             </p>
           </div>

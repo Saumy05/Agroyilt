@@ -186,4 +186,52 @@ const areaMismatch = (typedAcres, markedAcres) => {
     : null;
 };
 
-module.exports = { buildBoundary, polygonAreaSqM, centroid, overlapRatio, findOverlappingLease, areaMismatch, SQ_M_PER_ACRE };
+// ── single location pin (used when the owner does not mark a border) ────────────────────────────
+// Listings made before pins existed silently got this placeholder place: it is not a real location.
+const PLACEHOLDER_PIN = { lat: 26.9124, lng: 75.8577 };
+
+const isPlaceholderPin = (lat, lng) => Math.abs(Number(lat) - PLACEHOLDER_PIN.lat) < 0.00005 && Math.abs(Number(lng) - PLACEHOLDER_PIN.lng) < 0.00005;
+
+/** Checks a pin the owner dropped on the map. @returns {{ ok: true, pin } | { ok: false, code, message }} */
+const buildPin = (lat, lng) => {
+  const la = Number(lat); const ln = Number(lng);
+  if (lat == null || lng == null || lat === '' || lng === '' || !Number.isFinite(la) || !Number.isFinite(ln)) {
+    return { ok: false, code: 'LOCATION_REQUIRED', message: 'Put a pin on the map where the land is.' };
+  }
+  if (la < BOUNDS.minLat || la > BOUNDS.maxLat || ln < BOUNDS.minLng || ln > BOUNDS.maxLng) {
+    return { ok: false, code: 'LOCATION_OUT_OF_COUNTRY', message: 'The pin is outside India. Check the location and try again.' };
+  }
+  if (isPlaceholderPin(la, ln)) {
+    return { ok: false, code: 'LOCATION_REQUIRED', message: 'Put a pin on the map where the land is.' };
+  }
+  return { ok: true, pin: { lat: round(la, 7), lng: round(ln, 7) } };
+};
+
+/** Whether a listing says where the land is: a marked border, or a real pin. */
+const hasUsableLocation = (lease) => {
+  if (lease?.boundaryPoints && lease.boundaryPoints.length >= 3) return true;
+  const lat = lease?.location?.lat; const lng = lease?.location?.lng;
+  return lat != null && lng != null && buildPin(lat, lng).ok;
+};
+
+/**
+ * Another open, signing or leased listing of the same khasra in the same village (a second copy of the same land).
+ * Compared as written, ignoring case and spaces.
+ */
+const escapeRx = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const findDuplicateKhasra = async ({ khasraNumber, location = {}, excludeLeaseId = null }) => {
+  const village = String(location.village || '').trim();
+  const district = String(location.district || '').trim();
+  const khasra = String(khasraNumber || '').trim();
+  if (!khasra || !village || !district) return null;
+  const same = (v) => new RegExp(`^\\s*${escapeRx(v).replace(/\s+/g, '\\s*')}\\s*$`, 'i');
+  return LandLease.findOne({
+    ...(excludeLeaseId ? { _id: { $ne: excludeLeaseId } } : {}),
+    status: { $in: ['active', 'agreement_pending', 'leased'] },
+    khasraNumber: same(khasra),
+    'location.village': same(village),
+    'location.district': same(district)
+  }).select('title khasraNumber').lean();
+};
+
+module.exports = { buildPin, hasUsableLocation, findDuplicateKhasra, buildBoundary, polygonAreaSqM, centroid, overlapRatio, findOverlappingLease, areaMismatch, SQ_M_PER_ACRE };

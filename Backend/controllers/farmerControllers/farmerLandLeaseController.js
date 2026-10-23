@@ -258,6 +258,8 @@ const farmerLandLeaseController = {
         roadAccess,
         suitableCrops,
         boundaryPoints,
+        lat,
+        lng,
         confirmHighPrice
       } = req.body;
 
@@ -305,27 +307,49 @@ const farmerLandLeaseController = {
         }
       }
 
-      // The border marked on the map is what the agreement will describe: it is required, and the land's map position comes
-      // from it (never from a default place).
-      const border = landBoundary.buildBoundary(boundaryPoints);
-      if (!border.ok) {
-        return res.status(400).json({ success: false, code: border.code, message: border.message });
+      // The agreement says where the land is: by a pin dropped on the map (required), or by the whole border if the owner marked it
+      // (recommended: it also shows exactly which part of the khasra is leased).
+      let border = null;
+      let pin;
+      const hasBorder = Array.isArray(boundaryPoints) && boundaryPoints.length > 0;
+      if (hasBorder) {
+        border = landBoundary.buildBoundary(boundaryPoints);
+        if (!border.ok) {
+          return res.status(400).json({ success: false, code: border.code, message: border.message });
+        }
+        const mismatch = landBoundary.areaMismatch(sizeInAcres, border.areaAcres);
+        if (mismatch) {
+          return res.status(400).json({ success: false, code: 'AREA_MISMATCH', message: mismatch });
+        }
+        const overlapping = await landBoundary.findOverlappingLease(border.geojson);
+        if (overlapping) {
+          return res.status(409).json({
+            success: false,
+            code: 'BOUNDARY_OVERLAP',
+            message: `This land overlaps "${overlapping.title}" (Khasra ${overlapping.khasraNumber}), which is already listed or leased. Check the border.`
+          });
+        }
+        pin = border.center;
+      } else {
+        const p = landBoundary.buildPin(lat ?? location?.lat, lng ?? location?.lng);
+        if (!p.ok) {
+          return res.status(400).json({ success: false, code: p.code, message: p.message });
+        }
+        pin = p.pin;
       }
-      const mismatch = landBoundary.areaMismatch(sizeInAcres, border.areaAcres);
-      if (mismatch) {
-        return res.status(400).json({ success: false, code: 'AREA_MISMATCH', message: mismatch });
-      }
-      const overlapping = await landBoundary.findOverlappingLease(border.geojson);
-      if (overlapping) {
+
+      // The same khasra of the same village cannot be listed twice
+      const duplicate = await landBoundary.findDuplicateKhasra({ khasraNumber, location });
+      if (duplicate) {
         return res.status(409).json({
           success: false,
-          code: 'BOUNDARY_OVERLAP',
-          message: `This land overlaps "${overlapping.title}" (Khasra ${overlapping.khasraNumber}), which is already listed or leased. Check the border.`
+          code: 'DUPLICATE_KHASRA',
+          message: `Khasra ${duplicate.khasraNumber} of this village is already listed or leased ("${duplicate.title}").`
         });
       }
 
-      const latitude = border.center.lat;
-      const longitude = border.center.lng;
+      const latitude = pin.lat;
+      const longitude = pin.lng;
 
       const landLease = new LandLease({
         ownerId,
@@ -354,10 +378,7 @@ const farmerLandLeaseController = {
           type: 'Point',
           coordinates: [Number(longitude), Number(latitude)]
         },
-        boundary: border.geojson,
-        boundaryPoints: border.points,
-        boundaryAreaAcres: border.areaAcres,
-        boundarySetAt: new Date(),
+        ...(border ? { boundary: border.geojson, boundaryPoints: border.points, boundaryAreaAcres: border.areaAcres, boundarySetAt: new Date() } : {}),
         leaseType,
         pricePerAcre: leaseType === 'fixed-rent' ? Number(pricePerAcre) : null,
         sharePercentage: leaseType === 'crop-share' ? Number(sharePercentage) : null,
@@ -431,6 +452,33 @@ const farmerLandLeaseController = {
       res.status(200).json({ success: true, message: 'Land border saved', data: lease });
     } catch (error) {
       console.error('Error saving land border:', error);
+      res.status(500).json({ success: false, message: 'Server Error' });
+    }
+  },
+
+  // 1c. Put (or move) the location pin of an open listing. A listing with a marked border keeps the border's centre.
+  setLocation: async (req, res) => {
+    try {
+      const lease = await LandLease.findOne({ _id: req.params.id, ownerId: req.user.id });
+      if (!lease) {
+        return res.status(404).json({ success: false, message: 'भूमि नहीं मिली या आप इसके मालिक नहीं हैं (Land not found or unauthorized)' });
+      }
+      if (lease.status !== 'active') {
+        return res.status(400).json({ success: false, message: 'The location can only be changed while the land is open for offers.' });
+      }
+      if (lease.boundaryPoints && lease.boundaryPoints.length >= 3) {
+        return res.status(400).json({ success: false, message: 'This land has a marked border. Mark the border again to change its place.' });
+      }
+      const p = landBoundary.buildPin(req.body.lat, req.body.lng);
+      if (!p.ok) return res.status(400).json({ success: false, code: p.code, message: p.message });
+
+      lease.location.lat = p.pin.lat;
+      lease.location.lng = p.pin.lng;
+      lease.geoLocation = { type: 'Point', coordinates: [p.pin.lng, p.pin.lat] };
+      await lease.save();
+      res.status(200).json({ success: true, message: 'Location saved', data: lease });
+    } catch (error) {
+      console.error('Error saving land location:', error);
       res.status(500).json({ success: false, message: 'Server Error' });
     }
   },
@@ -639,7 +687,7 @@ const farmerLandLeaseController = {
           expiresAt: ag.expiresAt
         }];
       }));
-      myListings.forEach(l => { l.agreementSummary = summaryByLease.get(String(l._id)) || null; });
+      myListings.forEach(l => { l.agreementSummary = summaryByLease.get(String(l._id)) || null; l.locationSet = landBoundary.hasUsableLocation(l); });
       myOffers.forEach(o => { o.agreementSummary = summaryByLease.get(String(o.landId)) || null; });
 
       res.status(200).json({
@@ -803,11 +851,11 @@ const farmerLandLeaseController = {
       }
 
       // The agreement describes the land by its marked border, so a listing without one can't be leased yet
-      if (!(lease.boundaryPoints && lease.boundaryPoints.length >= 3)) {
+      if (!landBoundary.hasUsableLocation(lease)) {
         return res.status(400).json({
           success: false,
-          code: 'BOUNDARY_REQUIRED',
-          message: 'भूमि की सीमा नक्शे पर चिह्नित करें, फिर प्रस्ताव स्वीकार करें (Mark the land border on the map before accepting an offer)'
+          code: 'LOCATION_REQUIRED',
+          message: 'भूमि का स्थान नक्शे पर चिह्नित करें, फिर प्रस्ताव स्वीकार करें (Put the land on the map before accepting an offer)'
         });
       }
 

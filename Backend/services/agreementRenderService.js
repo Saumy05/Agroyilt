@@ -13,8 +13,8 @@ const escapeHtml = require('escape-html');
 const { round2, splitAmount, FIRST_PAYMENT_GRACE_DAYS } = require('./landLeaseScheduleService');
 
 const LABELS = {
-  en: { acres: 'acres', months: 'months', perAcreYear: 'per acre per year', corner: 'Corner', latitude: 'Latitude', longitude: 'Longitude', area: 'Area of the marked border' },
-  hi: { acres: 'एकड़', months: 'महीने', perAcreYear: 'प्रति एकड़ प्रति वर्ष', corner: 'कोना', latitude: 'अक्षांश (Latitude)', longitude: 'देशांतर (Longitude)', area: 'चिह्नित सीमा का क्षेत्रफल' }
+  en: { acres: 'acres', months: 'months', perAcreYear: 'per acre per year', corner: 'Corner', pin: 'Land location (pin)', pinRow: 'Pin', latitude: 'Latitude', longitude: 'Longitude', area: 'Area of the marked border' },
+  hi: { acres: 'एकड़', months: 'महीने', perAcreYear: 'प्रति एकड़ प्रति वर्ष', corner: 'कोना', pin: 'भूमि का स्थान (पिन)', pinRow: 'पिन', latitude: 'अक्षांश (Latitude)', longitude: 'देशांतर (Longitude)', area: 'चिह्नित सीमा का क्षेत्रफल' }
 };
 
 /** Placeholders a template may use (the admin screen lists these). */
@@ -28,7 +28,7 @@ const PLACEHOLDERS = [
   ['share_percentage', "Landowner's share of the crop, % (batai)"], ['tenant_share_percentage', "Tenant's share of the crop, % (batai)"],
   ['duration', 'Length of the lease'], ['available_from', 'Date the land is available from'], ['start_rule', 'When the lease starts'],
   ['crops', 'Crops'], ['payment_terms', 'How and when payment is made'],
-  ['boundary_table', 'Table of the border corners with latitude and longitude'], ['boundary_map', 'Sketch of the land border'],
+  ['boundary_table', 'Where the land is: the border corners (or the location pin) with latitude and longitude'], ['boundary_map', 'Sketch of the land border'],
   ['standard_clauses', 'The standard clauses list of the template']
 ].map(([key, description]) => ({ key, description }));
 
@@ -63,6 +63,8 @@ const buildTerms = ({ lease, offer, commissionPercentage = 0 }) => {
     landAreaAcres: lease.sizeInAcres,
     boundaryAreaAcres: lease.boundaryAreaAcres,
     boundaryPoints: (lease.boundaryPoints || []).map(p => ({ lat: p.lat, lng: p.lng })),
+    // the pin: the border's centre, or the point the owner dropped on the map when no border was marked
+    pin: Number.isFinite(Number(loc.lat)) && Number.isFinite(Number(loc.lng)) ? { lat: Number(loc.lat), lng: Number(loc.lng) } : null,
     village: loc.village || '', tehsil: loc.tehsil || '', district: loc.district || '', state: loc.state || '',
     fullAddress: loc.fullAddress || '',
     durationMonths: months,
@@ -157,12 +159,19 @@ const findUnknownPlaceholders = (content) => {
 const contentHash = (text, terms) => crypto.createHash('sha256').update(JSON.stringify({ text, terms })).digest('hex');
 
 // ── border: table + sketch ───────────────────────────────────────────────────────────────────────
+/** The rows of the location table: every border corner, or just the pin when no border was marked. */
+const locationRows = (terms, lang) => {
+  const L = LABELS[lang] || LABELS.en;
+  if ((terms.boundaryPoints || []).length >= 3) return terms.boundaryPoints.map((p, i) => ({ label: String(i + 1), lat: p.lat, lng: p.lng }));
+  return terms.pin ? [{ label: L.pinRow, lat: terms.pin.lat, lng: terms.pin.lng }] : [];
+};
+
 const boundaryTableHtml = (terms, lang) => {
   const L = LABELS[lang] || LABELS.en;
-  const rows = (terms.boundaryPoints || []).map((p, i) =>
-    `<tr><td>${i + 1}</td><td>${Number(p.lat).toFixed(6)}</td><td>${Number(p.lng).toFixed(6)}</td></tr>`).join('');
+  const rows = locationRows(terms, lang).map((r) =>
+    `<tr><td>${escapeHtml(r.label)}</td><td>${Number(r.lat).toFixed(6)}</td><td>${Number(r.lng).toFixed(6)}</td></tr>`).join('');
   const area = terms.boundaryAreaAcres ? `<p class="agr-note">${escapeHtml(L.area)}: <strong>${round2(terms.boundaryAreaAcres)} ${escapeHtml(L.acres)}</strong></p>` : '';
-  return `<table class="agr-table"><thead><tr><th>${escapeHtml(L.corner)}</th><th>${escapeHtml(L.latitude)}</th><th>${escapeHtml(L.longitude)}</th></tr></thead><tbody>${rows}</tbody></table>${area}`;
+  return `<table class="agr-table"><thead><tr><th>${escapeHtml((terms.boundaryPoints || []).length >= 3 ? L.corner : L.pin)}</th><th>${escapeHtml(L.latitude)}</th><th>${escapeHtml(L.longitude)}</th></tr></thead><tbody>${rows}</tbody></table>${area}`;
 };
 
 /** Same drawing as the app's BoundarySketch: north up, corners numbered. Pure string, nothing from outside. */
@@ -235,5 +244,5 @@ const toHtml = (text, terms, lang) => toBlocks(text).map((b) => {
 
 module.exports = {
   PLACEHOLDERS, buildTerms, fillTemplate, findUnknownPlaceholders, contentHash,
-  toBlocks, toHtml, boundarySvg, boundaryTableHtml, clean, fmtDate, inr, LABELS
+  toBlocks, toHtml, boundarySvg, boundaryTableHtml, locationRows, clean, fmtDate, inr, LABELS
 };

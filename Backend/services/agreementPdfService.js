@@ -37,7 +37,9 @@ const drawBoundaryTable = (doc, terms, lang) => {
   const L = render.LABELS[lang] || render.LABELS.en;
   const x = MARGIN;
   const w = doc.page.width - MARGIN * 2;
-  const cols = [w * 0.18, w * 0.41, w * 0.41];
+  const cols = [w * 0.3, w * 0.35, w * 0.35];
+  const rows = render.locationRows(terms, lang);
+  const hasBorder = (terms.boundaryPoints || []).length >= 3;
   const rowH = 20;
   const cell = (cx, cy, cw, text, bold) => {
     doc.rect(cx, cy, cw, rowH).strokeColor('#cbd5e1').lineWidth(0.6).stroke();
@@ -47,15 +49,15 @@ const drawBoundaryTable = (doc, terms, lang) => {
     ensureSpace(doc, rowH * 2);
     const y = doc.y;
     doc.rect(x, y, w, rowH).fill('#f1f5f9');
-    [L.corner, L.latitude, L.longitude].forEach((t, i) => cell(x + cols.slice(0, i).reduce((a, b) => a + b, 0), y, cols[i], t, true));
+    [hasBorder ? L.corner : L.pin, L.latitude, L.longitude].forEach((t, i) => cell(x + cols.slice(0, i).reduce((a, b) => a + b, 0), y, cols[i], t, true));
     doc.y = y + rowH;
   };
   doc.moveDown(0.3);
   header();
-  (terms.boundaryPoints || []).forEach((p, idx) => {
+  rows.forEach((r) => {
     if (doc.y + rowH > doc.page.height - doc.page.margins.bottom - 20) { doc.addPage(); header(); }
     const y = doc.y;
-    [String(idx + 1), Number(p.lat).toFixed(6), Number(p.lng).toFixed(6)].forEach((t, i) => cell(x + cols.slice(0, i).reduce((a, b) => a + b, 0), y, cols[i], t, false));
+    [r.label, Number(r.lat).toFixed(6), Number(r.lng).toFixed(6)].forEach((t, i) => cell(x + cols.slice(0, i).reduce((a, b) => a + b, 0), y, cols[i], t, false));
     doc.y = y + rowH;
   });
   doc.x = MARGIN;

@@ -33,6 +33,15 @@ const landLeaseService = {
   },
 
   /**
+   * Put (or move) the location pin of an open listing that has no marked border
+   * @param {string} id - Land Lease ID
+   */
+  setLocation: async (id, lat, lng) => {
+    const response = await api.put(`/farmer/land-leases/${id}/location`, { lat, lng });
+    return response.data;
+  },
+
+  /**
    * Owner ends the lease for unpaid rent, or starts the 15-day notice when the rules allow it
    * @param {string} id - Land Lease ID
    */

@@ -82,9 +82,9 @@ const HI_BATAI = [
 const EN_LAND = `## 1. The land
 Khasra / Khata No.: {{khasra_no}}
 Village: {{village}}, Tehsil: {{tehsil}}, District: {{district}}, State: {{state}}
-Area: {{land_area}} (area of the border marked on the map: {{boundary_area}})
+Area: {{land_area}}
 
-The land is identified by the corner points marked on the map (latitude and longitude). They are listed below and form part of this agreement. Both parties have seen this border before signing.
+The land is identified by the khasra number above and by its place on the map (latitude and longitude), shown below. This place forms part of this agreement, and both parties have seen it before signing.
 
 {{boundary_table}}
 
@@ -93,9 +93,9 @@ The land is identified by the corner points marked on the map (latitude and long
 const HI_LAND = `## 1. भूमि का विवरण
 खसरा / खाता संख्या: {{khasra_no}}
 ग्राम: {{village}}, तहसील: {{tehsil}}, जिला: {{district}}, राज्य: {{state}}
-क्षेत्रफल: {{land_area}} (नक्शे पर चिह्नित सीमा का क्षेत्रफल: {{boundary_area}})
+क्षेत्रफल: {{land_area}}
 
-भूमि की पहचान नक्शे पर चिह्नित कोनों (अक्षांश और देशांतर) से की गई है। ये कोने नीचे दिए गए हैं और इस अनुबंध का हिस्सा हैं। दोनों पक्षों ने हस्ताक्षर से पहले यह सीमा देख ली है।
+भूमि की पहचान ऊपर दी गई खसरा संख्या और नीचे दिखाए गए नक्शे पर उसके स्थान (अक्षांश और देशांतर) से की गई है। यह स्थान इस अनुबंध का हिस्सा है, और दोनों पक्षों ने हस्ताक्षर से पहले इसे देख लिया है।
 
 {{boundary_table}}
 
@@ -227,7 +227,18 @@ const getActiveTemplate = async (type, language) => {
  * Templates screen is never empty. Safe to run again.
  */
 const ensureDefaultTemplates = async () => {
-  for (const d of DEFAULTS) await getActiveTemplate(d.type, d.language);
+  for (const d of DEFAULTS) {
+    const t = await getActiveTemplate(d.type, d.language);
+    // A built-in that nobody has edited is brought up to the current wording (the admin's own edits are never touched).
+    // Agreements already made keep the text they were made from.
+    if (t && !t.createdBy && !t.updatedBy && (t.content !== d.content || JSON.stringify(t.standardClauses) !== JSON.stringify(d.standardClauses))) {
+      t.content = d.content;
+      t.standardClauses = d.standardClauses;
+      t.title = d.title;
+      t.version += 1;
+      await t.save();
+    }
+  }
 };
 
 module.exports = { DEFAULTS, getActiveTemplate, ensureDefaultTemplates };
