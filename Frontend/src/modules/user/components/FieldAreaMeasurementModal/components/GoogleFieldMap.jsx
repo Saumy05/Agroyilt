@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { GoogleMap, useJsApiLoader, MarkerF, PolygonF, DrawingManagerF } from '@react-google-maps/api';
+import { GoogleMap, useJsApiLoader, MarkerF, PolygonF, CircleF, DrawingManagerF } from '@react-google-maps/api';
 import { FiLoader, FiAlertCircle } from 'react-icons/fi';
 
 const libraries = ['places', 'geometry', 'drawing'];
@@ -39,7 +39,8 @@ const GoogleFieldMap = ({
   onAddPoint,
   onUpdatePoint,
   onMapLoaded,
-  isDrawingMode = false
+  isDrawingMode = false,
+  myLocation = null // where the farmer is standing right now: { lat, lng, accuracy (metres) }
 }) => {
   const [map, setMap] = useState(null);
   const drawingManagerRef = useRef(null);
@@ -159,6 +160,33 @@ const GoogleFieldMap = ({
               }
             }}
           />
+        )}
+
+        {/* The farmer's own position: the usual blue dot, with a soft circle for how exact the GPS fix is */}
+        {myLocation && Number.isFinite(myLocation.lat) && Number.isFinite(myLocation.lng) && (
+          <>
+            {Number(myLocation.accuracy) > 0 && (
+              <CircleF
+                center={{ lat: myLocation.lat, lng: myLocation.lng }}
+                radius={Math.min(Number(myLocation.accuracy), 300)}
+                options={{ fillColor: '#4285F4', fillOpacity: 0.15, strokeColor: '#4285F4', strokeOpacity: 0.4, strokeWeight: 1, clickable: false, zIndex: 1 }}
+              />
+            )}
+            <MarkerF
+              position={{ lat: myLocation.lat, lng: myLocation.lng }}
+              clickable={false}
+              zIndex={5}
+              title="You are here"
+              icon={{
+                path: window.google?.maps?.SymbolPath?.CIRCLE || 0,
+                fillColor: '#4285F4',
+                fillOpacity: 1,
+                strokeColor: '#ffffff',
+                strokeWeight: 3,
+                scale: 9
+              }}
+            />
+          </>
         )}
 
         {/* Dynamic Polygon connecting boundary pins */}

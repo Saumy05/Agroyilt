@@ -228,6 +228,7 @@ const FieldAreaCalculator = () => {
 
       {/* Measurement Modal */}
       <FieldAreaMeasurementModal
+        asPage
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onApplyArea={handleApplyArea}

@@ -48,6 +48,7 @@ const FieldAreaMeasurementModal = ({
   const [savingFarm, setSavingFarm] = useState(false);
   const [farmName, setFarmName] = useState('');
   const [showSaveInput, setShowSaveInput] = useState(false);
+  const [myLocation, setMyLocation] = useState(null); // live position of the farmer, shown on the map as a blue dot
 
   // On open: start from where the farmer is (live GPS). A place passed in (their city) is only the fallback.
   const locatedRef = useRef(false);
@@ -68,6 +69,7 @@ const FieldAreaMeasurementModal = ({
         .then((loc) => {
           if (Number.isFinite(loc?.latitude) && Number.isFinite(loc?.longitude)) {
             setCenter({ lat: loc.latitude, lng: loc.longitude });
+            setMyLocation({ lat: loc.latitude, lng: loc.longitude, accuracy: loc.accuracy });
           }
         })
         .catch((err) => {
@@ -82,6 +84,18 @@ const FieldAreaMeasurementModal = ({
       setManualInput(String(initialAcres));
     }
   }, [isOpen, initialCenter, initialPoints, initialAcres]);
+
+  // Keep the blue dot following the farmer while the tool is open. The map is not re-centred by this (they may be
+  // drawing); the location button does that.
+  useEffect(() => {
+    if (!isOpen || !navigator.geolocation) return undefined;
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => setMyLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }),
+      () => { /* no permission or no signal: the first-fix message above already told them */ },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
+    );
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [isOpen]);
 
   // Calculate live area and perimeter
   const areaData = useMemo(() => {
@@ -141,6 +155,7 @@ const FieldAreaMeasurementModal = ({
     flutterBridge.getCurrentLocation()
       .then((loc) => {
         setCenter({ lat: loc.latitude, lng: loc.longitude });
+        setMyLocation({ lat: loc.latitude, lng: loc.longitude, accuracy: loc.accuracy });
         toastManager.success('Map centered on your current location');
       })
       .catch((err) => {
@@ -409,6 +424,7 @@ const FieldAreaMeasurementModal = ({
                     points={points}
                     onAddPoint={handleAddPoint}
                     onUpdatePoint={handleUpdatePoint}
+                    myLocation={myLocation}
                   />
                 </div>
 
