@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   FiFileText,
@@ -347,7 +347,7 @@ const PaymentReports = () => {
         return [
           { key: 'date', header: 'Date', render: (val) => val ? new Date(val).toLocaleDateString('en-IN') : '-' },
           { key: 'bookingNumber', header: 'Booking ID' },
-          { key: 'service', header: 'Equipment' },
+          { key: 'service', header: 'Equipment', render: (val, row) => row?.equipmentName || row?.equipment || (val && val !== 'N/A' ? val : (row?.serviceName || '-')) },
           { key: 'customer', header: 'Farmer' },
           { key: 'vendor', header: 'Vendor' },
           { key: 'amount', header: 'Amount', render: (val) => `₹${(val || 0).toLocaleString('en-IN')}` },

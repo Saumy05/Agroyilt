@@ -2,6 +2,7 @@ const Booking = require('../../models/Booking');
 const VendorBill = require('../../models/VendorBill');
 const Settlement = require('../../models/Settlement');
 const Vendor = require('../../models/Vendor');
+const VendorEquipment = require('../../models/VendorEquipment');
 const User = require('../../models/User');
 const Settings = require('../../models/Settings');
 const PlatformEarning = require('../../models/PlatformEarning');
@@ -152,7 +153,8 @@ const getPaymentTransactions = async (req, res) => {
       .populate('userId', 'name phone')
       .populate('vendorId', 'businessName phone')
       .populate('serviceId', 'title')
-      .select('bookingNumber finalAmount paymentMethod paymentStatus status createdAt completedAt razorpayPaymentId vendorBillId')
+      .populate('equipmentId', 'name')
+      .select('bookingNumber finalAmount paymentMethod paymentStatus status createdAt completedAt razorpayPaymentId vendorBillId userId vendorId serviceId equipmentId serviceName serviceCategory bookedItems')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit))
@@ -169,10 +171,13 @@ const getPaymentTransactions = async (req, res) => {
 
     const reportData = bookings.map(b => {
       const bill = billMap[b._id.toString()];
+      const equipmentName = b.equipmentId?.name || b.serviceName || b.serviceId?.title || b.bookedItems?.[0]?.card?.title || b.bookedItems?.[0]?.serviceName || b.serviceCategory || 'N/A';
       return {
         date: b.createdAt,
         bookingNumber: b.bookingNumber,
-        service: b.serviceId?.title || 'N/A',
+        service: equipmentName,
+        equipment: equipmentName,
+        equipmentName: equipmentName,
         customer: b.userId?.name || 'Guest',
         vendor: b.vendorId?.businessName || 'Unassigned',
         amount: bill?.grandTotal || b.finalAmount || 0,
@@ -556,10 +561,40 @@ const getRevenueBreakdown = async (req, res) => {
           as: 'service'
         }
       },
-      { $unwind: { path: '$service', preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: 'vendorequipments',
+          localField: 'booking.equipmentId',
+          foreignField: '_id',
+          as: 'equipment'
+        }
+      },
+      {
+        $project: {
+          grandTotal: 1,
+          companyRevenue: 1,
+          totalGST: 1,
+          serviceTitle: {
+            $ifNull: [
+              { $arrayElemAt: ['$equipment.name', 0] },
+              {
+                $ifNull: [
+                  '$booking.serviceName',
+                  {
+                    $ifNull: [
+                      { $arrayElemAt: ['$service.title', 0] },
+                      'Other Equipment'
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
       {
         $group: {
-          _id: '$service.title',
+          _id: '$serviceTitle',
           revenue: { $sum: '$grandTotal' },
           commission: { $sum: { $subtract: ['$companyRevenue', { $ifNull: ['$totalGST', 0] }] } },
           count: { $sum: 1 }

@@ -22,9 +22,17 @@ exports.getBookingReport = async (req, res) => {
       { $group: { _id: '$status', count: { $sum: 1 } } }
     ]);
 
-    // Service category distribution
+    // Equipment / Service category distribution
     const serviceDistribution = await Booking.aggregate([
       { $match: filter },
+      {
+        $lookup: {
+          from: 'vendorequipments',
+          localField: 'equipmentId',
+          foreignField: '_id',
+          as: 'equipment'
+        }
+      },
       {
         $lookup: {
           from: 'services',
@@ -33,8 +41,27 @@ exports.getBookingReport = async (req, res) => {
           as: 'service'
         }
       },
-      { $unwind: '$service' },
-      { $group: { _id: '$service.title', count: { $sum: 1 } } },
+      {
+        $project: {
+          equipmentName: {
+            $ifNull: [
+              { $arrayElemAt: ['$equipment.name', 0] },
+              {
+                $ifNull: [
+                  '$serviceName',
+                  {
+                    $ifNull: [
+                      { $arrayElemAt: ['$service.title', 0] },
+                      'Other Equipment'
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      { $group: { _id: '$equipmentName', count: { $sum: 1 } } },
       { $sort: { count: -1 } }
     ]);
 
