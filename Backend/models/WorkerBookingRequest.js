@@ -248,11 +248,15 @@ const workerBookingRequestSchema = new mongoose.Schema({
     refId: { type: String, default: null },
     amount: { type: Number, default: null },
     adminUpiId: { type: String, default: null },
-    status: { type: String, enum: ['PENDING', 'COMPLETED', 'FAILED'], default: 'PENDING' },
+    status: { type: String, enum: ['PENDING', 'COMPLETED', 'FAILED', 'REVIEW'], default: 'PENDING' },
     utr: { type: String, default: null },
     generatedAt: { type: Date, default: null },
     confirmedAt: { type: Date, default: null },
-    expiresAt: { type: Date, default: null }
+    expiresAt: { type: Date, default: null },
+    razorpayQrId: { type: String, default: null },        // Razorpay QR this payment is made against
+    razorpayQrImageUrl: { type: String, default: null },
+    razorpayPaymentId: { type: String, default: null },   // the payment Razorpay confirmed
+    reviewReason: { type: String, default: null }         // set when a payment arrived that could not be applied automatically
   },
 
   // Immutable financial snapshot (locked at payment creation time)

@@ -439,7 +439,7 @@ const WorkCompletionModal = ({ isOpen, onClose, job, onComplete, loading, onOpen
                   </label>
 
                   {/* Switch to Dynamic Admin QR option */}
-                  {onOpenQrModal && (
+                  {onOpenQrModal && !(dailyToday && !dailyToday.isLastDay) && (
                     <button
                       type="button"
                       onClick={() => {

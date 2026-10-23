@@ -209,6 +209,7 @@ const FarmerWorkerQrModal = ({
                         <p className="text-2xl font-black text-slate-900">
                           ₹{displayAmount.toLocaleString('en-IN')}
                         </p>
+                        {qrData.adminUpiId && (
                         <div className="flex items-center justify-center gap-1.5 text-xs text-slate-600">
                           <span className="font-mono text-slate-800 font-semibold">{qrData.adminUpiId}</span>
                           <button
@@ -220,6 +221,7 @@ const FarmerWorkerQrModal = ({
                             {copied ? <FiCheck className="text-emerald-600" size={13} /> : <FiCopy size={13} />}
                           </button>
                         </div>
+                      )}
                       </div>
 
                       {/* Pay via UPI App deep link */}

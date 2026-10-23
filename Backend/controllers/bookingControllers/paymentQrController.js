@@ -1,9 +1,9 @@
 'use strict';
 
-const QRCode = require('qrcode');
 const Booking = require('../../models/Booking');
 const WorkerBookingRequest = require('../../models/WorkerBookingRequest');
 const IndWorkerAssignment = require('../../models/IndWorkerAssignment');
+const IndWorkerExtension = require('../../models/IndWorkerExtension');
 const Worker = require('../../models/Worker');
 const User = require('../../models/User');
 const Wallet = require('../../models/Wallet');
@@ -35,8 +35,6 @@ const qrCallerRelation = (req, { booking, assignment, parentReq }) => {
   return null;
 };
 
-// UPI UTR / bank reference numbers are 12-22 alphanumerics
-const UTR_PATTERN = /^[A-Za-z0-9]{10,24}$/;
 const { getIO } = require('../../sockets');
 const { createNotification } = require('../notificationControllers/notificationController');
 
@@ -60,6 +58,111 @@ const getAdminUpiConfig = async () => {
   const adminUpiId = settings?.adminUpiId || process.env.ADMIN_UPI_ID || 'agroyilt@icici';
   const merchantName = settings?.adminUpiMerchantName || settings?.companyName || 'AgroYilt Technologies';
   return { adminUpiId, merchantName, settings };
+};
+
+/**
+ * What a worker assignment's QR must collect, and whether a QR may be used for it now. One place, used by QR creation,
+ * QR confirmation and the "pay all" request QR, so the amount and the rules never drift apart.
+ *  - amount: exactly what the farmer owes the worker for this collection (the worker's pay + the platform fee on it + any
+ *    travel charge), the same figure the cash path collects. DAILY: only the last day collects, and it collects whatever
+ *    the earlier days' cash did not already cover.
+ *  - rules: a cash booking only (an online-paid job is already paid); a DAILY job only on its last day (a QR confirmation
+ *    completes the whole assignment, so earlier days are collected in cash and day by day).
+ * @returns {{ ok: true, payable: number, parent: object, cash: object } | { ok: false, status: number, message: string }}
+ */
+const assignmentQrDue = async (assignment) => {
+  const { isCashAssignment } = require('../../services/workerSettlementService');
+  const { buildWorkerCashCollection } = require('../../services/workerFinancialService');
+  const parent = await WorkerBookingRequest.findById(assignment.parentRequestId)
+    .select('paymentMethod paymentStatus financialSnapshot bookingType durationMinutes numberOfDays auditLog workTitle');
+  if (!isCashAssignment(assignment, parent)) {
+    return { ok: false, status: 409, message: 'This job was paid online, so there is nothing to collect with a UPI QR.' };
+  }
+  const exts = await IndWorkerExtension.find({ parentRequestId: assignment.parentRequestId, status: 'CONFIRMED' });
+  const cash = buildWorkerCashCollection(assignment, parent, exts);
+  if (cash.today && !cash.today.isLastDay) {
+    return {
+      ok: false, status: 409,
+      message: `UPI QR can be used on the last day only (day ${cash.today.dayNumber} of ${cash.today.totalDays} is today). Collect each earlier day's pay in cash.`
+    };
+  }
+  const payable = cash.today ? cash.today.amount : cash.totalToCollect;
+  if (!(payable > 0)) return { ok: false, status: 400, message: 'Invalid payable amount for QR generation' };
+  return { ok: true, payable, parent, cash };
+};
+
+/**
+ * Settles one worker assignment as paid through the admin QR: claims it once, then runs the shared settlement. The worker's
+ * wallet is credited the net pay (and travel charge) not already covered by earlier cash days; the platform keeps the
+ * commission and the platform fee.
+ * @returns {{ ok: true, payable, credited, grossAmount, commissionAmount, netEarning } | { ok: false, status, message }}
+ */
+const settleAssignmentByQr = async (assignment, { utr, adminUpiId, expectedAmount, paymentId }) => {
+  const due = await assignmentQrDue(assignment);
+  if (!due.ok) return due;
+  // what is owed changed after the QR was made (an extension, a bill edit): do not split the money on a stale amount
+  if (expectedAmount != null && !sameMoney(due.payable, expectedAmount)) {
+    return { ok: false, status: 409, review: true, message: `The amount owed changed to ₹${due.payable} after the QR (₹${expectedAmount}) was made.` };
+  }
+
+  // The provider cannot be paid for a job that never started (their UTR is not verified against the bank here).
+  if (assignment.visitOtpStatus !== 'VERIFIED' && !(assignment.workedDays > 0)) {
+    return { ok: false, status: 409, message: 'A QR payment can only be confirmed after the work has started.' };
+  }
+
+  const isDaily = assignment.bookingType === 'DAILY';
+  const bookedDays = Math.max(1, Number(assignment.bookedDays) || 1);
+  let grossAmount = Number(assignment.grossAmount) || 0;
+  let commissionAmount = Number(assignment.commissionAmount) || 0;
+  let netEarning = Number(assignment.netEarning) || 0;
+  if (isDaily) {
+    // the last day is being closed by this payment, so every booked day counts as worked
+    const { calculateDailyWorkerSettlement } = require('../../services/workerFinancialService');
+    const s = calculateDailyWorkerSettlement({ ...assignment.toObject(), workedDays: bookedDays });
+    grossAmount = s.grossAmount; commissionAmount = s.commissionAmount; netEarning = s.netEarning;
+  }
+  if (!Number.isFinite(grossAmount) || grossAmount <= 0) {
+    return { ok: false, status: 400, message: 'A valid payment amount is required.' };
+  }
+
+  const now = new Date();
+  const dayIdx = Math.max(1, Number(assignment.currentDayIndex) || 1);
+  const claimed = await IndWorkerAssignment.findOneAndUpdate(
+    { _id: assignment._id, assignmentStatus: 'CONFIRMED', settlementStatus: { $in: ['PENDING', 'FAILED'] } },
+    {
+      $set: {
+        completionStatus: 'OTP_VERIFIED', workStatus: 'SUBMITTED', paymentMethod: 'qr_online', isCashBooking: false,
+        grossAmount, commissionAmount, netEarning, workCompletedAt: now, cashPlatformFee: 0,
+        qrPayment: {
+          ...sessionFields(assignment),
+          refId: assignment.qrPayment?.refId || `qr_settle_assign_${assignment._id}`, amount: due.payable, adminUpiId,
+          status: 'COMPLETED', utr, razorpayPaymentId: paymentId || null, confirmedAt: now
+        },
+        ...(isDaily ? { workedDays: bookedDays, 'dailyLogs.$[d].workStatus': 'COMPLETED', 'dailyLogs.$[d].completedAt': now } : {})
+      }
+    },
+    { new: true, ...(isDaily ? { arrayFilters: [{ 'd.dayNumber': dayIdx }] } : {}) }
+  );
+  if (!claimed) return { ok: false, status: 409, message: 'This assignment is already settled or being settled.' };
+
+  // Settle through the shared, idempotent ledger path (credit exactly once, retry-safe).
+  const settlementSvc = require('../../services/workerSettlementService');
+  const outcome = await settlementSvc.settleAssignment(assignment._id, { useStoredAmounts: true });
+  if (outcome.error) {
+    return { ok: false, status: 500, message: 'Payment was recorded but settlement failed; it will be retried automatically.' };
+  }
+  if (assignment.legacyBookingId) {
+    await Booking.findByIdAndUpdate(assignment.legacyBookingId, {
+      paymentStatus: PAYMENT_STATUS.SUCCESS, paymentMethod: 'qr_online', cashCollected: false, finalAmount: grossAmount
+    });
+  }
+
+  // what actually reached the worker's wallet (earlier cash days were credited/settled on their own days)
+  const earlier = assignment.cashDays || [];
+  const earlierNet = earlier.reduce((sum, d) => sum + (d.workerAmount || 0) - (d.commission || 0), 0);
+  const earlierTravel = earlier.reduce((sum, d) => sum + (d.travelCharge || 0), 0);
+  const credited = Math.round((Math.max(0, netEarning - earlierNet) + Math.max(0, (Number(assignment.travelCharge) || 0) - earlierTravel)) * 100) / 100;
+  return { ok: true, payable: due.payable, credited, grossAmount, commissionAmount, netEarning };
 };
 
 /**
@@ -124,14 +227,10 @@ exports.generateAdminPaymentQr = async (req, res) => {
       farmerName = assignment.farmerId?.name || 'Farmer';
       referenceNumber = `WRK-${assignment._id.toString().slice(-6).toUpperCase()}`;
 
-      // Calculate amount
-      if (amount !== undefined && Number(amount) > 0) {
-        payableAmount = Number(amount);
-      } else {
-        const workedDays = assignment.workedDays || 1;
-        const rate = assignment.agreedRate || 0;
-        payableAmount = assignment.grossAmount || (rate * workedDays) || 0;
-      }
+      // The QR collects exactly what the farmer owes the worker (pay + platform fee + travel), and only when a QR may be used
+      const due = await assignmentQrDue(assignment);
+      if (!due.ok) return res.status(due.status).json({ success: false, message: due.message });
+      payableAmount = due.payable;
 
       // Check if legacy booking is attached
       if (assignment.legacyBookingId) {
@@ -181,90 +280,86 @@ exports.generateAdminPaymentQr = async (req, res) => {
       farmerName = parentReq.farmerId?.name || 'Farmer';
       referenceNumber = `REQ-${parentReq._id.toString().slice(-6).toUpperCase()}`;
 
-      if (amount !== undefined && Number(amount) > 0) {
-        payableAmount = Number(amount);
-      } else {
-        payableAmount = parentReq.financialSnapshot?.totalPayable || 0;
+      // One QR for every worker of the request: the sum of what each of them is owed (all must be ready to be paid this way)
+      const activeAssignments = await IndWorkerAssignment.find({ parentRequestId: parentReq._id, assignmentStatus: { $ne: 'CANCELLED' }, settlementStatus: { $ne: 'SETTLED' } });
+      if (activeAssignments.length === 0) {
+        return res.status(400).json({ success: false, message: 'There is nothing left to pay on this request.' });
       }
+      for (const asg of activeAssignments) {
+        const due = await assignmentQrDue(asg);
+        if (!due.ok) return res.status(due.status).json({ success: false, message: due.message });
+        payableAmount += due.payable;
+      }
+      payableAmount = Math.round(payableAmount * 100) / 100;
     }
 
     if (payableAmount <= 0) {
       return res.status(400).json({ success: false, message: 'Invalid payable amount for QR generation' });
     }
 
-    // Get Admin UPI details
-    const { adminUpiId, merchantName } = await getAdminUpiConfig();
-
-    // Unique transaction reference
-    const cleanId = (targetDoc._id || id).toString().slice(-8).toUpperCase();
-    const refId = `AGY_QR_${cleanId}_${Date.now()}`;
+    const { merchantName } = await getAdminUpiConfig();
+    const rzp = require('../../services/razorpayService');
     const transactionNote = `AgroYilt Service Bill ${referenceNumber}`;
 
-    // NPCI UPI Deep Link format
-    const upiUri = `upi://pay?pa=${encodeURIComponent(adminUpiId)}&pn=${encodeURIComponent(merchantName)}&am=${payableAmount.toFixed(2)}&tr=${encodeURIComponent(refId)}&tn=${encodeURIComponent(transactionNote)}&cu=INR`;
+    // Reuse a QR that is still open for exactly this amount; otherwise close the old one and make a new one
+    const existing = targetDoc.qrPayment;
+    const reusable = existing && existing.status === 'PENDING' && existing.razorpayQrId && existing.razorpayQrImageUrl
+      && existing.expiresAt && new Date(existing.expiresAt).getTime() > Date.now() + 3 * 60 * 1000
+      && sameMoney(existing.amount, payableAmount);
 
-    // Generate Base64 Data URL
-    const qrCodeDataUrl = await QRCode.toDataURL(upiUri, {
-      errorCorrectionLevel: 'H',
-      margin: 2,
-      width: 360,
-      color: {
-        dark: '#0f172a',
-        light: '#ffffff'
-      }
-    });
+    let qrSession;
+    if (reusable) {
+      qrSession = sessionFields(targetDoc);
+    } else {
+      if (existing?.status === 'PENDING' && existing.razorpayQrId) await rzp.closeQr(existing.razorpayQrId);
 
-    const expiresAt = new Date(Date.now() + 20 * 60 * 1000); // 20 minutes expiry
-
-    // Save pending QR session on document
-    const qrSession = {
-      refId,
-      amount: payableAmount,
-      adminUpiId,
-      status: 'PENDING',
-      generatedAt: new Date(),
-      expiresAt
-    };
-
-    targetDoc.qrPayment = qrSession;
-    await targetDoc.save();
-
-    // Also persist in legacy booking if linked
-    if (booking && targetDoc !== booking) {
-      booking.qrPayment = qrSession;
-      await booking.save();
-    }
-
-    // Broadcast socket event to farmer & booking rooms
-    if (farmerId) {
-      emitSafe(`user_${farmerId}`, 'admin_qr_generated', {
-        id: targetDoc._id,
+      const cleanId = (targetDoc._id || id).toString().slice(-8).toUpperCase();
+      const refId = `AGY_QR_${cleanId}_${Date.now()}`;
+      const expiresAt = new Date(Date.now() + 20 * 60 * 1000); // 20 minutes
+      const created = await rzp.createUpiQr({
         amount: payableAmount,
-        refId,
-        upiUri,
-        adminUpiId,
-        merchantName
+        name: `AgroYilt ${referenceNumber}`.slice(0, 40),
+        description: transactionNote,
+        closeBy: expiresAt,
+        notes: { agyTargetType: docType, agyTargetId: String(targetDoc._id), agyRefId: refId }
       });
-    }
+      if (!created.success || !created.qr?.id || !created.qr?.image_url) {
+        console.error('[generateAdminPaymentQr] Razorpay QR failed:', created.error);
+        return res.status(503).json({ success: false, message: 'UPI QR is not available right now. Please collect cash or try again shortly.' });
+      }
 
-    emitSafe(`booking_${targetDoc._id}`, 'admin_qr_generated', {
-      id: targetDoc._id,
-      amount: payableAmount,
-      refId,
-      upiUri
-    });
+      qrSession = {
+        refId, amount: payableAmount, adminUpiId: null, status: 'PENDING', generatedAt: new Date(), expiresAt,
+        razorpayQrId: created.qr.id, razorpayQrImageUrl: created.qr.image_url
+      };
+      targetDoc.qrPayment = qrSession;
+      await targetDoc.save();
+
+      // Also persist in legacy booking if linked
+      if (booking && targetDoc !== booking) {
+        booking.qrPayment = qrSession;
+        await booking.save();
+      }
+    }
+    const { refId, expiresAt, razorpayQrImageUrl: qrCodeDataUrl } = qrSession;
+
+    // Tell the farmer's screen a QR is ready
+    if (farmerId) {
+      emitSafe(`user_${farmerId}`, 'admin_qr_generated', { id: targetDoc._id, amount: payableAmount, refId, qrCodeDataUrl, merchantName });
+    }
+    emitSafe(`booking_${targetDoc._id}`, 'admin_qr_generated', { id: targetDoc._id, amount: payableAmount, refId, qrCodeDataUrl });
 
     return res.status(200).json({
       success: true,
-      message: 'Admin UPI QR generated successfully',
+      message: 'Payment QR generated successfully',
       data: {
         id: targetDoc._id,
         type: docType,
         amount: payableAmount,
-        adminUpiId,
+        adminUpiId: null,
         merchantName,
         refId,
-        upiUri,
+        upiUri: null,
         qrCodeDataUrl,
         expiresAt,
         referenceNumber
@@ -277,60 +372,35 @@ exports.generateAdminPaymentQr = async (req, res) => {
   }
 };
 
+/** Lets the settlement code below answer with `res.status(x).json(y)` while the caller (HTTP handler or webhook) receives { status, body }. */
+const makeReply = () => {
+  const r = { code: 200, status(c) { r.code = c; return r; }, json(body) { return { status: r.code, body }; } };
+  return r;
+};
+
+/** The QR session fields worth keeping when a payment settles the target. */
+const sessionFields = (doc) => {
+  const q = doc?.qrPayment || {};
+  return {
+    refId: q.refId || null, amount: q.amount ?? null, adminUpiId: q.adminUpiId || null,
+    generatedAt: q.generatedAt || null, expiresAt: q.expiresAt || null,
+    razorpayQrId: q.razorpayQrId || null, razorpayQrImageUrl: q.razorpayQrImageUrl || null
+  };
+};
+
+const sameMoney = (a, b) => Math.round(Number(a) * 100) === Math.round(Number(b) * 100);
+
 /**
- * POST /api/bookings/payment/confirm-admin-qr (and /api/bookings/cash/:id/confirm-admin-qr)
- * Confirms payment received into AgroYilt Admin UPI Account.
- * Performs automatic financial split:
- *   - Admin retains 10% platform commission.
- *   - Worker wallet receives 90% net earnings.
- *   - Worker owes ZERO cash dues.
- *   - Sets paymentMethod = 'qr_online' & settles booking/assignment.
+ * Applies a payment Razorpay has confirmed (captured, for exactly the amount the QR was made for) to the worker
+ * assignment, booking or worker request it was made for: marks it paid and settles the money.
+ * `expectedAmount` is what the QR was made for; if what is owed has changed since (an extension, a bill edit) the
+ * payment is NOT applied: the target is flagged for review so no money is mis-split.
+ * @returns {Promise<{ status: number, body: object }>}
  */
-exports.confirmAdminQrPayment = async (req, res) => {
-  try {
-    const id = req.params.id || req.body.id || req.body.bookingId;
-    const { utr } = req.body;
-    const amount = undefined; // amounts always come from the bill, never from the client
-    const confirmedByUserId = req.user?._id || req.user?.id;
-    const userRole = (req.user?.role || '').toLowerCase();
-
-    if (!id) {
-      return res.status(400).json({ success: false, message: 'Target ID is required' });
-    }
-
-    // Resolve target
-    let assignment = await IndWorkerAssignment.findById(id);
-    let booking = null;
-    let parentReq = null;
-
-    if (!assignment) {
-      booking = await Booking.findById(id);
-      if (!booking) {
-        parentReq = await WorkerBookingRequest.findById(id);
-      }
-    }
-
-    if (!assignment && !booking && !parentReq) {
-      return res.status(404).json({ success: false, message: 'Booking or Assignment not found' });
-    }
-
-    const rel = qrCallerRelation(req, { booking, assignment, parentReq });
-    if (rel !== 'provider' && rel !== 'admin') {
-      return res.status(403).json({ success: false, message: 'Only the service provider (or an admin) can confirm a QR payment.' });
-    }
-    if (!utr || !UTR_PATTERN.test(String(utr).trim())) {
-      return res.status(400).json({ success: false, message: 'A valid UTR / bank reference number is required to confirm a QR payment.' });
-    }
-    const cleanUtr = String(utr).trim().toUpperCase();
-    const utrUsed = await Promise.all([
-      Booking.exists({ 'qrPayment.utr': cleanUtr, ...(booking ? { _id: { $ne: booking._id } } : {}) }),
-      IndWorkerAssignment.exists({ 'qrPayment.utr': cleanUtr, ...(assignment ? { _id: { $ne: assignment._id } } : {}) })
-    ]);
-    if (utrUsed.some(Boolean)) {
-      return res.status(409).json({ success: false, message: 'This UTR has already been used for another payment.' });
-    }
-
-    const { adminUpiId, settings } = await getAdminUpiConfig();
+const runQrSettlement = async ({ assignment = null, booking = null, parentReq = null }, ctx) => {
+  const res = makeReply();
+  const { utr: cleanUtr, paymentId, expectedAmount, confirmedBy: confirmedByUserId } = ctx;
+  const adminUpiId = ctx.adminUpiId || null;
 
     // ─────────────────────────────────────────────────────────────────────────
     // FLOW A: INDIVIDUAL WORKER ASSIGNMENT
@@ -347,57 +417,13 @@ exports.confirmAdminQrPayment = async (req, res) => {
         });
       }
 
-      const grossAmount = (amount !== undefined && Number(amount) > 0)
-        ? Number(amount)
-        : (assignment.grossAmount || (assignment.agreedRate * (assignment.workedDays || 1)) || 0);
-      if (!Number.isFinite(grossAmount) || grossAmount <= 0) {
-        return res.status(400).json({ success: false, message: 'A valid payment amount is required.' });
-      }
-
-      const commissionRate = assignment.commissionRate ?? settings?.workerCommissionPercentage ?? 10;
-      const commissionAmount = Math.round((grossAmount * commissionRate) / 100);
-      const workerNetEarning = grossAmount - commissionAmount;
-
       const workerId = assignment.workerId;
       const farmerId = assignment.farmerId;
-      const idempotencyKey = `qr_settle_assign_${assignment._id}`;
+      const result = await settleAssignmentByQr(assignment, { utr: cleanUtr, adminUpiId, expectedAmount, paymentId });
+      if (!result.ok) return res.status(result.status).json({ success: false, message: result.message, ...(result.review ? { review: true } : {}) });
+      const { payable, credited, grossAmount, commissionAmount, netEarning: workerNetEarning } = result;
 
-      // The provider cannot be paid for a job that never started (their UTR is not verified against the bank here).
-      if (assignment.visitOtpStatus !== 'VERIFIED' && !(assignment.workedDays > 0)) {
-        return res.status(409).json({ success: false, message: 'A QR payment can only be confirmed after the work has started.' });
-      }
-
-      // 1. Atomically claim the settlement: exactly one confirmation can ever win for this assignment.
-      const claimed = await IndWorkerAssignment.findOneAndUpdate(
-        { _id: assignment._id, assignmentStatus: 'CONFIRMED', settlementStatus: { $in: ['PENDING', 'FAILED'] } },
-        {
-          $set: {
-            completionStatus: 'OTP_VERIFIED', workStatus: 'SUBMITTED', paymentMethod: 'qr_online', isCashBooking: false,
-            grossAmount, commissionAmount, netEarning: workerNetEarning, workCompletedAt: new Date(), cashPlatformFee: 0,
-            qrPayment: {
-              refId: assignment.qrPayment?.refId || idempotencyKey, amount: grossAmount, adminUpiId, status: 'COMPLETED',
-              utr: cleanUtr, confirmedAt: new Date()
-            }
-          }
-        },
-        { new: true }
-      );
-      if (!claimed) {
-        return res.status(409).json({ success: false, message: 'This assignment is already settled or being settled.' });
-      }
-
-      // 2. Settle through the shared, idempotent ledger path (credit exactly once, retry-safe).
-      const settlementSvc = require('../../services/workerSettlementService');
-      const outcome = await settlementSvc.settleAssignment(assignment._id, { useStoredAmounts: true });
-      if (outcome.error) {
-        return res.status(500).json({ success: false, message: 'Payment was recorded but settlement failed; it will be retried automatically.' });
-      }
-      if (assignment.legacyBookingId) {
-        await Booking.findByIdAndUpdate(assignment.legacyBookingId, {
-          paymentStatus: PAYMENT_STATUS.SUCCESS, paymentMethod: 'qr_online', cashCollected: false, finalAmount: grossAmount
-        });
-      }
-      await settlementSvc.finishParent(assignment.parentRequestId);
+      await require('../../services/workerSettlementService').finishParent(assignment.parentRequestId);
 
       // 7. Socket Events
       const eventData = {
@@ -405,11 +431,13 @@ exports.confirmAdminQrPayment = async (req, res) => {
         assignmentId: assignment._id,
         workerId: assignment.workerId,
         paymentMethod: 'qr_online',
+        amountPaid: payable,
         grossAmount,
         netEarning: workerNetEarning,
+        credited,
         settlementStatus: 'SETTLED',
         status: 'completed',
-        utr: utr || null,
+        utr: cleanUtr || null,
         serverTimestamp: new Date()
       };
 
@@ -423,7 +451,7 @@ exports.confirmAdminQrPayment = async (req, res) => {
         userId: farmerId,
         type: 'payment_success',
         title: 'UPI Payment Confirmed!',
-        message: `Your payment of ₹${grossAmount} via Admin QR has been successfully verified. Work marked complete.`,
+        message: `Your payment of ₹${payable} via Admin QR has been successfully verified. Work marked complete.`,
         relatedId: assignment._id,
         relatedType: 'IndWorkerAssignment',
         priority: 'high'
@@ -434,7 +462,7 @@ exports.confirmAdminQrPayment = async (req, res) => {
         recipientId: workerId,
         type: 'payment_success',
         title: '💰 Wallet Credited via Admin QR!',
-        message: `₹${workerNetEarning} has been added to your AgroYilt wallet for completing this job. (Farmer paid via Admin QR).`,
+        message: `₹${credited} has been added to your AgroYilt wallet for completing this job. (Farmer paid via Admin QR).`,
         relatedId: assignment.parentRequestId || assignment._id,
         relatedType: 'IndWorkerAssignment',
         priority: 'high'
@@ -442,11 +470,13 @@ exports.confirmAdminQrPayment = async (req, res) => {
 
       return res.status(200).json({
         success: true,
-        message: `Admin QR payment verified! ₹${workerNetEarning} credited to worker wallet.`,
+        message: `Admin QR payment verified! ₹${credited} credited to worker wallet.`,
         data: {
           assignmentId: assignment._id,
+          amountPaid: payable,
           grossAmount,
           netEarning: workerNetEarning,
+          credited,
           commissionAmount,
           paymentMethod: 'qr_online'
         }
@@ -473,6 +503,9 @@ exports.confirmAdminQrPayment = async (req, res) => {
 
       const advance = getAdvancePaid(booking);
       const collectionAmount = booking.balanceDue > 0 ? booking.balanceDue : Math.max(0, (booking.finalAmount || 0) - advance);
+      if (expectedAmount != null && !sameMoney(collectionAmount, expectedAmount)) {
+        return res.status(409).json({ success: false, review: true, message: `The bill changed to ₹${collectionAmount} after the QR (₹${expectedAmount}) was made.` });
+      }
 
       // Atomic claim: only one confirm can win
       const claimed = await Booking.findOneAndUpdate(
@@ -492,7 +525,7 @@ exports.confirmAdminQrPayment = async (req, res) => {
             completedAt: new Date(),
             paymentOtp: null,
             customerConfirmationOTP: null,
-            qrPayment: { ...(booking.qrPayment || {}), status: 'COMPLETED', utr: cleanUtr, confirmedAt: new Date(), confirmedBy: String(confirmedByUserId) }
+            qrPayment: { ...(booking.qrPayment || {}), status: 'COMPLETED', utr: cleanUtr, confirmedAt: new Date(), confirmedBy: String(confirmedByUserId), razorpayPaymentId: paymentId }
           }
         },
         { new: true }
@@ -551,84 +584,71 @@ exports.confirmAdminQrPayment = async (req, res) => {
         });
       }
 
-      const totalPayable = parentReq.financialSnapshot?.totalPayable || 0;
-      parentReq.paymentStatus = 'success';
-      parentReq.paymentMethod = 'qr_online';
-      parentReq.isCashBooking = false;
-      parentReq.status = 'completed';
-      parentReq.qrPayment = {
-        refId: parentReq.qrPayment?.refId || `qr_${Date.now()}`,
-        amount: totalPayable,
-        adminUpiId,
-        status: 'COMPLETED',
-        utr: cleanUtr,
-        confirmedAt: new Date()
-      };
-      await parentReq.save();
-
-      // Settle all active child assignments for this parent request
-      const settlementSvc = require('../../services/workerSettlementService');
+      // Every worker of the request must be ready to be paid this way before any of them is settled
       const assignments = await IndWorkerAssignment.find({
         parentRequestId: parentReq._id,
         assignmentStatus: { $ne: 'CANCELLED' }
       });
-
-      for (const asg of assignments) {
-        if (asg.settlementStatus !== 'SETTLED') {
-          const workedDays = asg.workedDays || 1;
-          const grossAmount = asg.grossAmount || (asg.agreedRate * workedDays) || 0;
-          const commRate = asg.commissionRate ?? settings?.workerCommissionPercentage ?? 10;
-          const commAmount = Math.round((grossAmount * commRate) / 100);
-          const workerNetEarning = grossAmount - commAmount;
-
-          await IndWorkerAssignment.updateOne(
-            { _id: asg._id },
-            {
-              $set: {
-                completionStatus: 'OTP_VERIFIED',
-                workStatus: 'SUBMITTED',
-                paymentMethod: 'qr_online',
-                isCashBooking: false,
-                grossAmount,
-                commissionAmount: commAmount,
-                netEarning: workerNetEarning,
-                workCompletedAt: new Date(),
-                cashPlatformFee: 0,
-                qrPayment: {
-                  refId: `qr_${asg._id}`,
-                  amount: grossAmount,
-                  adminUpiId,
-                  status: 'COMPLETED',
-                  utr: cleanUtr,
-                  confirmedAt: new Date()
-                }
-              }
-            }
-          );
-          await settlementSvc.settleAssignment(asg._id, { useStoredAmounts: true });
-
-          emitSafe(`worker_${asg.workerId}`, 'qr_payment_success', {
-            requestId: parentReq._id,
-            assignmentId: asg._id,
-            workerId: asg.workerId,
-            grossAmount,
-            netEarning: workerNetEarning,
-            paymentMethod: 'qr_online'
-          });
-
-          await createNotification({
-            recipientType: 'worker',
-            recipientId: asg.workerId,
-            type: 'payment_success',
-            title: '💰 Wallet Credited via Admin QR!',
-            message: `₹${workerNetEarning} has been added to your AgroYilt wallet for completing this job. (Farmer paid online).`,
-            relatedId: parentReq._id,
-            relatedType: 'WorkerBookingRequest',
-            priority: 'high'
-          });
+      const unsettled = assignments.filter(asg => asg.settlementStatus !== 'SETTLED');
+      if (unsettled.length === 0) {
+        return res.status(400).json({ success: false, message: 'There is nothing left to pay on this request.' });
+      }
+      let totalPayable = 0;
+      for (const asg of unsettled) {
+        const due = await assignmentQrDue(asg);
+        if (!due.ok) return res.status(due.status).json({ success: false, message: due.message });
+        if (asg.visitOtpStatus !== 'VERIFIED' && !(asg.workedDays > 0)) {
+          return res.status(409).json({ success: false, message: 'A QR payment can only be confirmed after every worker has started the work.' });
         }
+        totalPayable += due.payable;
+      }
+      totalPayable = Math.round(totalPayable * 100) / 100;
+      if (expectedAmount != null && !sameMoney(totalPayable, expectedAmount)) {
+        return res.status(409).json({ success: false, review: true, message: `The amount owed changed to ₹${totalPayable} after the QR (₹${expectedAmount}) was made.` });
       }
 
+      // Settle each worker (idempotent: if one fails, confirming again carries on with the rest)
+      const settlementSvc = require('../../services/workerSettlementService');
+      for (const asg of unsettled) {
+        // the request-level total was checked above; each worker's own amount is checked against what they are owed
+        const result = await settleAssignmentByQr(asg, { utr: cleanUtr, adminUpiId, paymentId });
+        if (!result.ok) {
+          return res.status(result.status).json({ success: false, message: `${result.message} Confirm again to continue with the remaining workers.` });
+        }
+
+        emitSafe(`worker_${asg.workerId}`, 'qr_payment_success', {
+          requestId: parentReq._id,
+          assignmentId: asg._id,
+          workerId: asg.workerId,
+          grossAmount: result.grossAmount,
+          netEarning: result.netEarning,
+          credited: result.credited,
+          paymentMethod: 'qr_online'
+        });
+
+        await createNotification({
+          recipientType: 'worker',
+          recipientId: asg.workerId,
+          type: 'payment_success',
+          title: '💰 Wallet Credited via Admin QR!',
+          message: `₹${result.credited} has been added to your AgroYilt wallet for completing this job. (Farmer paid via Admin QR).`,
+          relatedId: parentReq._id,
+          relatedType: 'WorkerBookingRequest',
+          priority: 'high'
+        });
+      }
+
+      // The request is paid; its status moves to completed only once every worker is settled (finishParent decides)
+      await WorkerBookingRequest.updateOne({ _id: parentReq._id }, {
+        $set: {
+          paymentStatus: 'success', paymentMethod: 'qr_online', isCashBooking: false,
+          qrPayment: {
+            ...sessionFields(parentReq),
+            refId: parentReq.qrPayment?.refId || `qr_${Date.now()}`, amount: totalPayable, adminUpiId,
+            status: 'COMPLETED', utr: cleanUtr, razorpayPaymentId: paymentId || null, confirmedAt: new Date()
+          }
+        }
+      });
       await settlementSvc.finishParent(parentReq._id);
 
       emitSafe(`user_${parentReq.farmerId}`, 'qr_payment_success', {
@@ -654,6 +674,131 @@ exports.confirmAdminQrPayment = async (req, res) => {
       });
     }
 
+  return res.status(404).json({ success: false, message: 'Nothing to settle for this payment.' });
+};
+
+/**
+ * A payment Razorpay confirmed for a QR: find what it was for, check it, apply it. Used by the webhook and by the
+ * "check payment" button, so both do exactly the same thing.
+ * @param {object} docs  { assignment | booking | parentReq } the QR was made for
+ * @param {object} payment  Razorpay payment entity ({ id, amount (paise), status, ... })
+ */
+const applyVerifiedQrPayment = async (docs, payment, { confirmedBy = 'razorpay' } = {}) => {
+  const target = docs.assignment || docs.booking || docs.parentReq;
+  const session = target?.qrPayment;
+  if (!target || !session?.razorpayQrId) {
+    return { status: 409, body: { success: false, message: 'No payment QR was generated for this.' } };
+  }
+  if (session.status === 'COMPLETED') {
+    return { status: 200, body: { success: true, message: 'Payment already confirmed and settled', data: { id: target._id, settled: true } } };
+  }
+  if (payment.status !== 'captured') {
+    return { status: 409, body: { success: false, pending: true, message: 'Payment is being processed. Please wait a moment.' } };
+  }
+  if (!sameMoney(Number(payment.amount) / 100, session.amount)) {
+    target.qrPayment = { ...sessionFields(target), status: 'REVIEW', razorpayPaymentId: payment.id, reviewReason: `Paid ₹${Number(payment.amount) / 100} but the QR was for ₹${session.amount}` };
+    await target.save();
+    console.error(`[QR REVIEW] payment ${payment.id} amount ${payment.amount} paise does not match QR amount ${session.amount} for ${target._id}`);
+    return { status: 409, body: { success: false, review: true, message: 'The amount paid does not match the QR. Support will review this payment.' } };
+  }
+  // one Razorpay payment settles one thing, once
+  const usedElsewhere = await Promise.all([
+    Booking.exists({ 'qrPayment.razorpayPaymentId': payment.id, _id: { $ne: target._id } }),
+    // (a request-level QR also stamps its payment on each worker's assignment: those are the same payment, not another use)
+    IndWorkerAssignment.exists({ 'qrPayment.razorpayPaymentId': payment.id, _id: { $ne: target._id }, parentRequestId: { $ne: target._id } }),
+    WorkerBookingRequest.exists({ 'qrPayment.razorpayPaymentId': payment.id, _id: { $ne: target._id } })
+  ]);
+  if (usedElsewhere.some(Boolean)) {
+    return { status: 409, body: { success: false, message: 'This payment has already been applied to something else.' } };
+  }
+
+  const out = await runQrSettlement(docs, {
+    utr: String(payment.acquirer_data?.rrn || payment.id).toUpperCase(),
+    paymentId: payment.id,
+    expectedAmount: session.amount,
+    confirmedBy
+  });
+  if (out.body?.review) {
+    target.qrPayment = { ...sessionFields(target), status: 'REVIEW', razorpayPaymentId: payment.id, reviewReason: out.body.message };
+    await target.save();
+    console.error(`[QR REVIEW] payment ${payment.id} for ${target._id}: ${out.body.message}`);
+  }
+  return out;
+};
+
+/** Finds what a Razorpay QR was made for. */
+const findQrTarget = async ({ qrCodeId, refId }) => {
+  const filter = qrCodeId ? { 'qrPayment.razorpayQrId': qrCodeId } : refId ? { 'qrPayment.refId': refId } : null;
+  if (!filter) return null;
+  const assignment = await IndWorkerAssignment.findOne(filter);
+  if (assignment) return { assignment };
+  const booking = await Booking.findOne(filter);
+  if (booking) return { booking };
+  const parentReq = await WorkerBookingRequest.findOne(filter);
+  if (parentReq) return { parentReq };
+  return null;
+};
+
+/**
+ * Razorpay webhook entry point for QR payments (`qr_code.credited`, or `payment.captured` for a QR payment).
+ * Safe to receive more than once. @returns {Promise<{ handled: boolean, status?: number, note: string }>}
+ */
+exports.handleRazorpayQrPayment = async ({ qrCodeId, refId, payment }) => {
+  if (!(qrCodeId || refId) || !payment?.id) return { handled: false, note: 'missing QR id or payment' };
+  const docs = await findQrTarget({ qrCodeId, refId });
+  if (!docs) return { handled: false, note: 'no booking found for this QR' };
+  const out = await applyVerifiedQrPayment(docs, payment);
+  return { handled: true, status: out.status, note: out.body?.message || '' };
+};
+
+/**
+ * POST /api/bookings/payment/confirm-admin-qr (and /api/bookings/cash/:id/confirm-admin-qr)
+ * "Check payment": asks Razorpay whether this QR has been paid and, if so, settles exactly as the webhook would.
+ * Nobody types a reference: the payment is confirmed by Razorpay, never by the person collecting.
+ */
+exports.confirmAdminQrPayment = async (req, res) => {
+  try {
+    const id = req.params.id || req.body.id || req.body.bookingId;
+    if (!id) {
+      return res.status(400).json({ success: false, message: 'Target ID is required' });
+    }
+
+    let assignment = await IndWorkerAssignment.findById(id);
+    let booking = null;
+    let parentReq = null;
+    if (!assignment) {
+      booking = await Booking.findById(id);
+      if (!booking) parentReq = await WorkerBookingRequest.findById(id);
+    }
+    if (!assignment && !booking && !parentReq) {
+      return res.status(404).json({ success: false, message: 'Booking or Assignment not found' });
+    }
+
+    const rel = qrCallerRelation(req, { booking, assignment, parentReq });
+    if (rel !== 'provider' && rel !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Only the service provider (or an admin) can check a QR payment.' });
+    }
+
+    const target = assignment || booking || parentReq;
+    const session = target.qrPayment;
+    if (!session?.razorpayQrId) {
+      return res.status(409).json({ success: false, message: 'Show the payment QR first.' });
+    }
+    if (session.status === 'COMPLETED') {
+      return res.status(200).json({ success: true, message: 'Payment already confirmed and settled', data: { id: target._id, settled: true } });
+    }
+
+    const fetched = await require('../../services/razorpayService').fetchQrPayments(session.razorpayQrId);
+    if (!fetched.success) {
+      return res.status(502).json({ success: false, message: 'Could not check the payment right now. Please try again in a moment.' });
+    }
+    const paid = (fetched.payments || []).find(p => p.status === 'captured' && sameMoney(Number(p.amount) / 100, session.amount));
+    if (!paid) {
+      return res.status(409).json({ success: false, pending: true, message: 'Payment not received yet. It can take a minute after the farmer pays.' });
+    }
+
+    const out = await applyVerifiedQrPayment({ assignment, booking, parentReq }, paid, { confirmedBy: String(req.user?._id || req.user?.id || 'user') });
+    return res.status(out.status).json(out.body);
   } catch (error) {
     console.error('[confirmAdminQrPayment]', error);
     return res.status(500).json({ success: false, message: error.message });
@@ -668,8 +813,11 @@ exports.getAdminQrStatus = async (req, res) => {
   try {
     const { id } = req.params;
 
-    let assignment = await IndWorkerAssignment.findById(id).select('settlementStatus completionStatus paymentMethod isCashBooking qrPayment grossAmount');
+    let assignment = await IndWorkerAssignment.findById(id).select('settlementStatus completionStatus paymentMethod isCashBooking qrPayment grossAmount farmerId workerId');
     if (assignment) {
+      if (!qrCallerRelation(req, { assignment })) {
+        return res.status(403).json({ success: false, message: 'Not authorized for this booking.' });
+      }
       const isPaid = assignment.settlementStatus === 'SETTLED' || assignment.qrPayment?.status === 'COMPLETED';
       return res.status(200).json({
         success: true,
@@ -679,7 +827,7 @@ exports.getAdminQrStatus = async (req, res) => {
           isPaid,
           status: assignment.settlementStatus,
           paymentMethod: assignment.paymentMethod,
-          amount: assignment.grossAmount,
+          amount: assignment.qrPayment?.amount ?? assignment.grossAmount,
           qrPayment: assignment.qrPayment || null
         }
       });
@@ -705,8 +853,11 @@ exports.getAdminQrStatus = async (req, res) => {
       });
     }
 
-    let parentReq = await WorkerBookingRequest.findById(id).select('paymentStatus paymentMethod status qrPayment financialSnapshot');
+    let parentReq = await WorkerBookingRequest.findById(id).select('paymentStatus paymentMethod status qrPayment financialSnapshot farmerId selectedWorkerIds');
     if (parentReq) {
+      if (!qrCallerRelation(req, { parentReq })) {
+        return res.status(403).json({ success: false, message: 'Not authorized for this booking.' });
+      }
       const isPaid = parentReq.paymentStatus === 'success' || parentReq.qrPayment?.status === 'COMPLETED';
       return res.status(200).json({
         success: true,
@@ -716,7 +867,7 @@ exports.getAdminQrStatus = async (req, res) => {
           isPaid,
           status: parentReq.paymentStatus,
           paymentMethod: parentReq.paymentMethod,
-          amount: parentReq.financialSnapshot?.totalPayable || 0,
+          amount: parentReq.qrPayment?.amount ?? parentReq.financialSnapshot?.totalPayable ?? 0,
           qrPayment: parentReq.qrPayment || null
         }
       });

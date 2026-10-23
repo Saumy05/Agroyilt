@@ -498,7 +498,7 @@ const AdminSettings = () => {
       });
       toastManager.success('Financial settings updated');
     } catch (error) {
-      toastManager.error('Failed to update settings');
+      toastManager.error(error?.response?.data?.message || 'Failed to update settings');
     } finally {
       setLoading(false);
     }

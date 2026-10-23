@@ -107,7 +107,11 @@ app.use(cors({
 }));
 
 // Body parser middleware
-app.use(express.json({ limit: '50mb' }));
+// Razorpay signs the exact bytes of a webhook, so keep them for the signature check (webhook routes only)
+app.use(express.json({
+  limit: '50mb',
+  verify: (req, res, buf) => { if (req.originalUrl && req.originalUrl.startsWith('/api/webhooks/')) req.rawBody = buf; }
+}));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cookieParser());
 

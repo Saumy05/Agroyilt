@@ -278,7 +278,8 @@ const BookedRequestView = ({ request, onRefresh }) => {
               <span className={`px-3 py-2 rounded-xl text-xs font-bold ${cash.status === 'paid' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}>
                 {cash.status === 'paid' ? `Paid ₹${Number(cash.cashToPay).toLocaleString('en-IN')} cash` : `Pay ₹${Number(cash.cashToPay).toLocaleString('en-IN')} cash at the end`}
               </span>
-              {cash.status !== 'paid' && ['IN_PROGRESS', 'WORK_SUBMITTED', 'COMPLETED'].includes(w.journeyStatus) && (
+              {cash.status !== 'paid' && ['IN_PROGRESS', 'WORK_SUBMITTED', 'COMPLETED'].includes(w.journeyStatus)
+                && !(w.bookingType === 'DAILY' && Number(w.currentDayIndex || 1) < Number(w.bookedDays || 1)) && (
                 <button
                   type="button"
                   onClick={() => setQrModal({ targetId: w.assignmentId, title: `${w.workerName} · UPI Payment`, amount: cash.cashToPay })}
@@ -489,7 +490,8 @@ const BookedRequestView = ({ request, onRefresh }) => {
           <div className={card}>
             <div className="flex items-center justify-between mb-3 gap-2">
               <h2 className="font-black text-slate-900">Payment</h2>
-              {request.status !== 'completed' && request.paymentMethod === 'cash' && (
+              {request.status !== 'completed' && request.paymentMethod === 'cash'
+                && !workers.some(w => w.bookingType === 'DAILY' && Number(w.currentDayIndex || 1) < Number(w.bookedDays || 1)) && (
                 <button
                   type="button"
                   onClick={() => setQrModal({

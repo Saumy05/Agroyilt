@@ -20,12 +20,12 @@ exports.razorpayWebhook = async (req, res) => {
   });
 
   try {
-    // We expect raw body for signature validation. If express.json() is parsing it, 
-    // we need to use JSON.stringify or configure a custom middleware for raw body.
-    // For this phase, assuming JSON.stringify works as the payload is clean.
+    // Razorpay signs the exact bytes it sent, so the signature is checked against the raw body (kept by server.js);
+    // re-serialising the parsed JSON is only the fallback and can differ from what was signed.
+    const signedPayload = req.rawBody || JSON.stringify(req.body);
     const expectedSignature = crypto
       .createHmac('sha256', secret || 'unset')
-      .update(JSON.stringify(req.body))
+      .update(signedPayload)
       .digest('hex');
 
     // Fail closed: production without a configured secret, or ANY configured secret with a bad signature, is rejected.
@@ -42,7 +42,30 @@ exports.razorpayWebhook = async (req, res) => {
 
     // 3. Extract data and enforce Idempotency
     const event = req.body.event;
-    
+
+    // ── UPI QR payments (the admin QR shown for worker / vendor jobs) ──
+    // Razorpay confirms the payment itself: no one types a reference. `qr_code.credited` is the QR event; some accounts
+    // also send `payment.captured` for it, so that is accepted too when it belongs to one of our QRs.
+    const qrPayment = req.body.payload?.payment?.entity;
+    const qrCodeId = req.body.payload?.qr_code?.entity?.id || qrPayment?.qr_code_id || null;
+    const qrRefId = qrPayment?.notes?.agyRefId || req.body.payload?.qr_code?.entity?.notes?.agyRefId || null;
+    if (event === 'qr_code.credited' || (event === 'payment.captured' && (qrCodeId || qrRefId))) {
+      try {
+        const outcome = await require('../bookingControllers/paymentQrController').handleRazorpayQrPayment({ qrCodeId, refId: qrRefId, payment: qrPayment });
+        logEntry.processedStatus = 'processed'; // 'ignored' for a QR we have no booking for is recorded in errorDetails
+        logEntry.errorDetails = outcome.note || null;
+        await logEntry.save();
+        // a payment we could not apply is logged for review; asking Razorpay to retry would not change that
+        return res.status(200).send('OK');
+      } catch (qrErr) {
+        console.error('[Webhook] QR payment failed:', qrErr);
+        logEntry.processedStatus = 'failed';
+        logEntry.errorDetails = `QR apply failed: ${qrErr.message}`;
+        await logEntry.save();
+        return res.status(500).send('Retry'); // transient: let Razorpay retry
+      }
+    }
+
     if (event !== 'payment.captured') {
       logEntry.processedStatus = 'processed';
       logEntry.errorDetails = 'Ignored event type';

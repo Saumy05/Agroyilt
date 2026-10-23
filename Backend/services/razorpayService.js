@@ -132,7 +132,58 @@ const refundPayment = async (paymentId, amount = null, notes = {}) => {
   }
 };
 
+/**
+ * Razorpay UPI QR (one fixed amount, one payment). The QR pays into the company's Razorpay account and Razorpay tells us
+ * about the payment (webhook `qr_code.credited`, or by asking for the QR's payments), so nobody has to type a reference.
+ * Needs the QR Codes feature enabled on the Razorpay account.
+ */
+const createUpiQr = async ({ amount, name, description, closeBy, notes = {} }) => {
+  try {
+    if (!razorpay) return { success: false, error: 'Razorpay not initialized. Please check credentials in .env file.' };
+    const qr = await razorpay.qrCode.create({
+      type: 'upi_qr',
+      name,
+      usage: 'single_use',
+      fixed_amount: true,
+      payment_amount: Math.round(amount * 100),
+      description,
+      close_by: Math.floor(closeBy.getTime() / 1000),
+      notes
+    });
+    return { success: true, qr };
+  } catch (error) {
+    console.error('❌ Razorpay create QR error:', { message: error.message, description: error.description, code: error.code, statusCode: error.statusCode, error: error.error });
+    return { success: false, error: error.error?.description || error.description || error.message || 'Failed to create the payment QR' };
+  }
+};
+
+/** Payments made against a QR code: [{ id, amount (paise), status, ... }]. */
+const fetchQrPayments = async (qrCodeId) => {
+  try {
+    if (!razorpay) return { success: false, error: 'Razorpay not initialized.' };
+    const res = await razorpay.qrCode.fetchAllPayments(qrCodeId, { count: 20 });
+    return { success: true, payments: res?.items || [] };
+  } catch (error) {
+    console.error('Razorpay fetch QR payments error:', error.message);
+    return { success: false, error: error.error?.description || error.message };
+  }
+};
+
+/** Close a QR that is no longer wanted (best effort: a failure only leaves it to expire on its own). */
+const closeQr = async (qrCodeId) => {
+  try {
+    if (!razorpay) return { success: false };
+    await razorpay.qrCode.close(qrCodeId);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+};
+
 module.exports = {
+  createUpiQr,
+  fetchQrPayments,
+  closeQr,
   createOrder,
   verifyPayment,
   getPaymentDetails,

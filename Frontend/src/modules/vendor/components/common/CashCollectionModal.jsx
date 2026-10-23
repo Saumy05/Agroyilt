@@ -31,7 +31,6 @@ const CashCollectionModal = ({
   const [qrData, setQrData] = useState(null);
   const [qrLoading, setQrLoading] = useState(false);
   const [qrError, setQrError] = useState(null);
-  const [utrNumber, setUtrNumber] = useState('');
   const [qrSuccess, setQrSuccess] = useState(false);
   const pollingTimerRef = useRef(null);
 
@@ -83,7 +82,6 @@ const CashCollectionModal = ({
       setQrData(null);
       setQrError(null);
       setQrSuccess(false);
-      setUtrNumber('');
     } else {
       if (pollingTimerRef.current) {
         clearInterval(pollingTimerRef.current);
@@ -168,8 +166,7 @@ const CashCollectionModal = ({
     try {
       setSubmitting(true);
       const res = await api.post(`/bookings/cash/${bookingId}/confirm-admin-qr`, {
-        amount: finalTotal,
-        utr: utrNumber
+        amount: finalTotal
       });
       if (res.data?.success) {
         setQrSuccess(true);
@@ -181,7 +178,9 @@ const CashCollectionModal = ({
         throw new Error(res.data?.message || 'Failed to confirm payment');
       }
     } catch (err) {
-      toastManager.error(err?.response?.data?.message || err.message || 'Failed to confirm QR payment');
+      const reply = err?.response?.data;
+      if (reply?.pending) toastManager.info(reply.message);
+      else toastManager.error(reply?.message || err.message || 'Failed to check the payment');
     } finally {
       setSubmitting(false);
     }
@@ -415,11 +414,13 @@ const CashCollectionModal = ({
 
                         <div className="space-y-1">
                           <p className="text-2xl font-black text-slate-900 tracking-tight">
-                            ₹{finalTotal.toLocaleString()}
+                            ₹{Number(qrData?.amount ?? finalTotal).toLocaleString()}
                           </p>
-                          <p className="text-[11px] font-bold text-slate-500">
-                            UPI ID: <span className="font-mono text-slate-800">{qrData.adminUpiId}</span>
-                          </p>
+                          {qrData.adminUpiId && (
+                            <p className="text-[11px] font-bold text-slate-500">
+                              UPI ID: <span className="font-mono text-slate-800">{qrData.adminUpiId}</span>
+                            </p>
+                          )}
                         </div>
 
                         {/* Supported UPI Apps Badges */}
@@ -433,26 +434,18 @@ const CashCollectionModal = ({
                     ) : null}
                   </div>
 
-                  {/* Pulsing Listener Status */}
+                  {/* Razorpay tells us when the payment arrives: this screen updates by itself */}
                   <div className="flex items-center justify-center gap-2 py-1">
                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
                     <span className="text-xs font-bold text-slate-600">
-                      Waiting for farmer to scan & pay...
+                      Waiting for the payment. This screen updates by itself once it is received.
                     </span>
                   </div>
 
-                  {/* Manual Confirmation / UTR Input Section */}
                   <div className="p-3.5 bg-white border border-slate-200 rounded-2xl space-y-2">
-                    <label className="text-[11px] font-black text-slate-700 block uppercase">
-                      Manual Verification (Optional UTR / Ref)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Enter 12-digit UTR from customer's screen"
-                      value={utrNumber}
-                      onChange={(e) => setUtrNumber(e.target.value)}
-                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-mono"
-                    />
+                    <p className="text-[11px] text-slate-500 leading-snug">
+                      Already paid, but nothing has changed after a minute? Check the payment.
+                    </p>
                     <button
                       type="button"
                       id="confirm-qr-payment-btn"
@@ -460,7 +453,7 @@ const CashCollectionModal = ({
                       disabled={submitting}
                       className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-xs transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
                     >
-                      {submitting ? 'Verifying Online Payment...' : 'Customer Paid? Confirm Online Payment'}
+                      {submitting ? 'Checking payment...' : 'Check payment'}
                       <FiCheck size={15} />
                     </button>
                   </div>

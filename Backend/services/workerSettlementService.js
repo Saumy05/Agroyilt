@@ -328,18 +328,27 @@ const settleAssignment = async (assignmentId, { useStoredAmounts = false } = {})
         recipientId = a.teamLeaderId || targetWorker.managedByLeaderId;
       }
 
-      await ledger.applyOnce({ ownerId: recipientId, ownerModel: 'Worker', amount: net, key: `${key}_credit`, reason: 'earnings_credit', referenceId: a._id });
+      // DAILY: earlier days were collected in cash and already settled (the worker kept that cash and paid the commission
+      // and fee through the wallet), so only the part not covered by those days is credited now.
+      const earlierDays = a.cashDays || [];
+      const creditNet = earlierDays.length
+        ? Math.max(0, toINR(toP(net) - earlierDays.reduce((sum, d) => sum + toP(d.workerAmount || 0) - toP(d.commission || 0), 0)))
+        : net;
+      const commissionNow = earlierDays.length ? Math.max(0, toINR(toP(commission || 0) - sumDays(earlierDays, 'commission'))) : commission;
+      await ledger.applyOnce({ ownerId: recipientId, ownerModel: 'Worker', amount: creditNet, key: `${key}_credit`, reason: 'earnings_credit', referenceId: a._id });
       await ledger.recordPassbookOnce(`${key}_credit`, {
-        workerId: recipientId, type: 'earnings_credit', amount: net, status: 'completed', paymentMethod: 'wallet',
+        workerId: recipientId, type: 'earnings_credit', amount: creditNet, status: 'completed', paymentMethod: 'wallet',
         description: recipientId.toString() !== a.workerId.toString()
-          ? `Earnings for offline member ${targetWorker?.name || ''}${forJob} (after ₹${commission} commission)`
-          : `Earnings${forJob} (after ₹${commission} app commission)`,
+          ? `Earnings for offline member ${targetWorker?.name || ''}${forJob} (after ₹${commissionNow} commission)`
+          : `Earnings${forJob} (after ₹${commissionNow} app commission)`,
         referenceId: key,
-        metadata: { ...job, grossAmount: gross, commissionAmount: commission, netEarning: net, memberId: a.workerId }
+        metadata: { ...job, grossAmount: gross, commissionAmount: commissionNow, netEarning: creditNet, memberId: a.workerId }
       });
       // Travel charge: paid in full on top of the earnings (no commission). Settlement only runs after the visit and
       // completion OTPs, so arrival is already confirmed.
-      const travel = Number(a.travelCharge) || 0;
+      const travel = earlierDays.length
+        ? Math.max(0, toINR(toP(a.travelCharge || 0) - sumDays(earlierDays, 'travelCharge')))
+        : (Number(a.travelCharge) || 0);
       if (travel > 0) {
         await ledger.applyOnce({ ownerId: recipientId, ownerModel: 'Worker', amount: travel, key: `${key}_travel_credit`, reason: 'earnings_credit', referenceId: a._id });
         await ledger.recordPassbookOnce(`${key}_travel_credit`, {
@@ -591,6 +600,6 @@ const finishParent = async (parentId) => {
 };
 
 module.exports = {
-  addRefunded, repriceHourlyByTime, settleAssignment, settleCashDay, syncParentProgress, finishParent, processBookingRefund, refundUnusedDays, refundWorkerReserveShare,
+  addRefunded, repriceHourlyByTime, settleAssignment, settleCashDay, isCashAssignment, syncParentProgress, finishParent, processBookingRefund, refundUnusedDays, refundWorkerReserveShare,
   reconcile, creditFarmerOnce, isPaidOnline, deductCashCommissionOnce, audit, hasStarted, STALE_PROCESSING_MS
 };

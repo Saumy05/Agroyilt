@@ -873,6 +873,9 @@ const JobDetails = () => {
 
     // work_done = worker pressed Stop → waiting for farmer's End OTP (Cash) OR Admin QR (Online)
     if (statusLower === 'work_done' && (isAssignmentJob || job?.workStatus === 'SUBMITTED')) {
+      const isCashJob = job.paymentMethod === 'cash' || Boolean(job.isCashBooking) || Boolean(job.cashCollection?.isCashBooking);
+      // A UPI QR only makes sense for a cash booking, and on a daily job only on the last day (earlier days are collected in cash)
+      const qrNotToday = job.cashCollection?.today && !job.cashCollection.today.isLastDay;
       return (
         <div className={`space-y-2.5 ${isSticky ? '' : 'mb-4'}`}>
           <button
@@ -881,19 +884,26 @@ const JobDetails = () => {
             className="w-full py-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 shadow-xl active:scale-95 transition-all text-lg"
             style={{ background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)' }}
           >
-            {actionLoading ? 'Loading...' : <>ENTER END OTP (CASH) <FiCheckCircle className="w-5 h-5" /></>}
+            {actionLoading ? 'Loading...' : <>{isCashJob ? 'ENTER END OTP (CASH)' : 'ENTER END OTP'} <FiCheckCircle className="w-5 h-5" /></>}
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              setCollectionAmount(job.finalAmount || job.grossAmount || job.workerGrossEarning || 0);
-              setIsPaymentModalOpen(true);
-            }}
-            className="w-full py-3.5 rounded-xl font-black text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border-2 border-emerald-400/60 flex items-center justify-center gap-2 active:scale-95 transition-all text-sm shadow-sm"
-          >
-            <FiCreditCard className="w-4 h-4 text-emerald-600" />
-            <span>📲 SHOW ADMIN QR (ONLINE / ZERO DUES)</span>
-          </button>
+          {isCashJob && !qrNotToday && (
+            <button
+              type="button"
+              onClick={() => {
+                setCollectionAmount(job.finalAmount || job.grossAmount || job.workerGrossEarning || 0);
+                setIsPaymentModalOpen(true);
+              }}
+              className="w-full py-3.5 rounded-xl font-black text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border-2 border-emerald-400/60 flex items-center justify-center gap-2 active:scale-95 transition-all text-sm shadow-sm"
+            >
+              <FiCreditCard className="w-4 h-4 text-emerald-600" />
+              <span>📲 SHOW ADMIN QR (ONLINE / ZERO DUES)</span>
+            </button>
+          )}
+          {isCashJob && qrNotToday && (
+            <p className="text-[11px] text-center text-slate-500 font-medium">
+              UPI QR is available on the last day only. Collect today's pay in cash.
+            </p>
+          )}
         </div>
       );
     }
