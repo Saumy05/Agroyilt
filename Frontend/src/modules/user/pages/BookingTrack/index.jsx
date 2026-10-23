@@ -10,6 +10,7 @@ import {
 } from 'react-icons/fi';
 import { FaRupeeSign } from 'react-icons/fa';
 import { GoogleMap, useJsApiLoader, OverlayView, InfoWindow } from '@react-google-maps/api';
+import { GOOGLE_MAPS_LOADER_ID, GOOGLE_MAPS_LIBRARIES } from '../../../../utils/googleMapsLoader';
 import api from '../../../../services/api';
 import { toastManager } from '../../../../utils/toastManager';
 import { useSocket } from '../../../../context/SocketContext';
@@ -121,11 +122,10 @@ const BookingTrack = () => {
   const [activeInfoWindowWorker, setActiveInfoWindowWorker] = useState(null);
   const [showFarmInfoWindow, setShowFarmInfoWindow] = useState(false);
 
-  const googleMapsLibraries = useMemo(() => ['places', 'geometry'], []);
   const { isLoaded: isMapScriptLoaded } = useJsApiLoader({
-    id: 'google-map-script',
+    id: GOOGLE_MAPS_LOADER_ID,
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '',
-    libraries: googleMapsLibraries
+    libraries: GOOGLE_MAPS_LIBRARIES
   });
 
   // ── Reset state when booking ID changes ──

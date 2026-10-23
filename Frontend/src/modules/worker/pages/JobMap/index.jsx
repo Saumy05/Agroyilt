@@ -3,13 +3,13 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GoogleMap, useJsApiLoader, DirectionsRenderer, OverlayView, PolylineF } from '@react-google-maps/api';
+import { GOOGLE_MAPS_LOADER_ID, GOOGLE_MAPS_LIBRARIES } from '../../../../utils/googleMapsLoader';
 import { FiArrowLeft, FiNavigation, FiMapPin, FiCrosshair, FiPhone, FiCheckCircle, FiMaximize, FiMinimize, FiClock, FiWifiOff, FiAlertTriangle, FiRefreshCw } from 'react-icons/fi';
 import { toastManager } from '../../../../utils/toastManager';
 import workerService from '../../../../services/workerService';
 import VisitVerificationModal from '../../components/common/VisitVerificationModal';
 import useAppNotifications from '../../../../hooks/useAppNotifications';
 
-const libraries = ['places', 'geometry'];
 const SHOW_SIMULATION_BUTTON = false; // Set to true for debugging
 
 const JobMap = () => {
@@ -49,9 +49,9 @@ const JobMap = () => {
   const mapId = import.meta.env.VITE_GOOGLE_MAPS_MAP_ID;
 
   const { isLoaded } = useJsApiLoader({
-    id: 'google-map-script',
+    id: GOOGLE_MAPS_LOADER_ID,
     googleMapsApiKey: apiKey,
-    libraries
+    libraries: GOOGLE_MAPS_LIBRARIES
   });
 
   const mapRef = useRef(null);

@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { GoogleMap, useJsApiLoader, Marker } from '@react-google-maps/api';
+import { GOOGLE_MAPS_LOADER_ID, GOOGLE_MAPS_LIBRARIES } from '../../../../../utils/googleMapsLoader';
 import { toastManager } from '../../../../../utils/toastManager';
 
 
-const libraries = ['places', 'geometry'];
 
 const mapContainerStyle = {
   width: '100%',
@@ -21,9 +21,9 @@ const GoogleMapPicker = ({ onLocationSelect, initialPosition = null }) => {
   const [loading, setLoading] = useState(false);
 
   const { isLoaded, loadError } = useJsApiLoader({
-    id: 'google-map-script',
+    id: GOOGLE_MAPS_LOADER_ID,
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
-    libraries
+    libraries: GOOGLE_MAPS_LIBRARIES
   });
 
   // Update marker when initialPosition changes

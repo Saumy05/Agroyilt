@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GoogleMap, useJsApiLoader, MarkerF, PolygonF, CircleF, DrawingManagerF } from '@react-google-maps/api';
+import { GOOGLE_MAPS_LOADER_ID, GOOGLE_MAPS_LIBRARIES } from '../../../../../utils/googleMapsLoader';
 import { FiLoader, FiAlertCircle } from 'react-icons/fi';
-
-const libraries = ['places', 'geometry', 'drawing'];
 
 const mapContainerStyle = {
   width: '100%',
@@ -48,9 +47,9 @@ const GoogleFieldMap = ({
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
 
   const { isLoaded, loadError } = useJsApiLoader({
-    id: 'google-map-script',
+    id: GOOGLE_MAPS_LOADER_ID,
     googleMapsApiKey: apiKey,
-    libraries
+    libraries: GOOGLE_MAPS_LIBRARIES
   });
 
   const onLoad = useCallback(

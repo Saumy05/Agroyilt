@@ -4,10 +4,9 @@ import {
   Marker,
   useJsApiLoader
 } from '@react-google-maps/api';
+import { GOOGLE_MAPS_LOADER_ID, GOOGLE_MAPS_LIBRARIES } from '../../../../../utils/googleMapsLoader';
 import { FiCrosshair } from 'react-icons/fi';
 import { toastManager } from '../../../../../utils/toastManager';
-
-const GOOGLE_LIBRARIES = ['places'];
 
 const MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
 
@@ -24,8 +23,9 @@ const mapOptions = {
 
 const LocationPicker = ({ onLocationSelect, initialPosition = null, flyToPosition = null }) => {
   const { isLoaded, loadError } = useJsApiLoader({
+    id: GOOGLE_MAPS_LOADER_ID,
     googleMapsApiKey: MAPS_API_KEY,
-    libraries: GOOGLE_LIBRARIES,
+    libraries: GOOGLE_MAPS_LIBRARIES,
   });
 
   const [marker, setMarker] = useState(initialPosition || defaultCenter);
