@@ -1,12 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../../middleware/authMiddleware');
-const { isAdmin } = require('../../middleware/roleMiddleware');
+const { isAdmin, isSuperAdmin } = require('../../middleware/roleMiddleware');
 const c = require('../../controllers/adminControllers/agreementAdminController');
 
 router.use(authenticate, isAdmin);
 
-// agreement templates (fixed paths first, so they are not taken for an :id)
+// agreement templates: the legal wording, so only a Super Admin can read or change it (fixed paths first, so they are not taken for an :id)
+router.use('/agreement-templates', isSuperAdmin);
 router.get('/agreement-templates', c.listTemplates);
 router.get('/agreement-templates/placeholders', c.placeholders);
 router.post('/agreement-templates/preview', c.previewTemplate);

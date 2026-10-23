@@ -10,6 +10,7 @@ import authStorage from '../../../../utils/authStorage';
 import Policies from './Policies';
 import TravelCharges from './TravelCharges';
 import PaymentMethods from './PaymentMethods';
+import { TemplatesPanel as AgreementTemplates } from '../Agreements';
 
 const AdminSettings = () => {
   const navigate = useNavigate();
@@ -272,7 +273,7 @@ const AdminSettings = () => {
 
   const [loading, setLoading] = useState(false);
   const [profileLoading, setProfileLoading] = useState(false);
-  const [activeView, setActiveView] = useState('main'); // 'main', 'profile', 'financial', 'system', 'branding', 'travel', 'paymentMethods', 'policies', 'admins'
+  const [activeView, setActiveView] = useState('main'); // 'main', 'profile', 'financial', 'system', 'branding', 'travel', 'paymentMethods', 'policies', 'agreementTemplates', 'admins'
 
   // Deep link from the admin search: ?view=financial&field=<input name>
   useEffect(() => {
@@ -900,6 +901,18 @@ const AdminSettings = () => {
           </div>
           <h3 className="text-lg font-bold text-gray-800 mb-2">Policies & Terms</h3>
           <p className="text-sm text-gray-500">Terms & Conditions and Privacy Policy for farmers, vendors and workers</p>
+        </div>
+      )}
+
+      {/* Lease Agreement Templates Card - Super Admin Only */}
+      {isSuperAdmin && (
+        <div onClick={() => setActiveView('agreementTemplates')}
+          className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer group">
+          <div className="w-12 h-12 bg-emerald-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-emerald-100 transition-colors">
+            <FiFileText className="w-6 h-6 text-emerald-600" />
+          </div>
+          <h3 className="text-lg font-bold text-gray-800 mb-2">Lease Agreement Templates</h3>
+          <p className="text-sm text-gray-500">Wording of the land lease agreements farmers sign. Only a Super Admin can change it</p>
         </div>
       )}
 
@@ -1969,6 +1982,13 @@ const AdminSettings = () => {
         {activeView === 'policies' && isSuperAdmin && (
           <motion.div key="policies" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
             <Policies />
+          </motion.div>
+        )}
+
+        {/* Lease Agreement Templates View - Super Admin Only */}
+        {activeView === 'agreementTemplates' && isSuperAdmin && (
+          <motion.div key="agreementTemplates" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
+            <AgreementTemplates />
           </motion.div>
         )}
 

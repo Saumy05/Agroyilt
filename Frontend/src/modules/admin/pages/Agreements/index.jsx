@@ -231,7 +231,7 @@ const TemplateEditor = ({ initial, placeholders, onClose, onSaved }) => {
   );
 };
 
-const TemplatesPanel = () => {
+export const TemplatesPanel = () => {
   const [rows, setRows] = useState([]);
   const [placeholders, setPlaceholders] = useState([]);
   const [editing, setEditing] = useState(null);
@@ -296,18 +296,7 @@ const TemplatesPanel = () => {
   );
 };
 
-const Agreements = () => {
-  const [tab, setTab] = useState('agreements');
-  return (
-    <div className="space-y-4">
-      <div className="inline-flex rounded-xl bg-gray-100 p-1">
-        {[['agreements', 'Agreements'], ['templates', 'Templates']].map(([k, label]) => (
-          <button key={k} onClick={() => setTab(k)} className={`px-4 py-2 rounded-lg text-sm font-bold ${tab === k ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500'}`}>{label}</button>
-        ))}
-      </div>
-      {tab === 'agreements' ? <AgreementsList /> : <TemplatesPanel />}
-    </div>
-  );
-};
+// The wording (templates) is edited by a Super Admin under Settings > Lease Agreement Templates
+const Agreements = () => <AgreementsList />;
 
 export default Agreements;
