@@ -163,7 +163,7 @@ const BookedRequestView = ({ request, onRefresh }) => {
       const ws = (w.workStatus || '').toUpperCase();
       return ['IN_PROGRESS', 'WORK_SUBMITTED'].includes(js) ||
         ['IN_PROGRESS', 'SUBMITTED'].includes(ws) ||
-        Boolean(w.workStartedAt && !w.completedAt && js !== 'COMPLETED' && js !== 'CANCELLED');
+        Boolean(w.workStartedAt && !w.completedAt && !['COMPLETED', 'CANCELLED', 'NOT_STARTED', 'JOURNEY_STARTED'].includes(js));
     });
     if (hasActiveWorkers) return true;
     if (['in_progress', 'partially_completed'].includes(request.status) && anyStarted) return true;

@@ -412,6 +412,10 @@ exports.getTrackingSnapshot = async (req, res) => {
         }
       }
 
+      // DAILY, before today's work has started: yesterday's day is closed, but the assignment still carries
+      // yesterday's start time. Report no start so the farmer's work clock does not keep running.
+      const dayBetween = isIndAssign && isDailyBooking && ['NOT_STARTED', 'JOURNEY_STARTED', 'ARRIVED'].includes(canonical) && !currentDayLog?.workStartedAt;
+
       return {
         assignmentId: b._id.toString(),
         bookingId: b.legacyBookingId ? b.legacyBookingId.toString() : b._id.toString(),
@@ -458,8 +462,8 @@ exports.getTrackingSnapshot = async (req, res) => {
         distanceKm: distanceKm !== null ? Number(distanceKm.toFixed(2)) : null,
         journeyStartedAt: b.journeyStartedAt || null,
         arrivedAt: b.arrivedAt || b.visitedAt || null,
-        otpVerifiedAt: b.visitOtpVerifiedAt || ((canonical === 'IN_PROGRESS' || canonical === 'COMPLETED') ? (b.startedAt || null) : null),
-        workStartedAt: b.workStartedAt || b.visitOtpVerifiedAt || b.startedAt || null,
+        otpVerifiedAt: dayBetween ? null : (b.visitOtpVerifiedAt || ((canonical === 'IN_PROGRESS' || canonical === 'COMPLETED') ? (b.startedAt || null) : null)),
+        workStartedAt: dayBetween ? null : (b.workStartedAt || b.visitOtpVerifiedAt || b.startedAt || null),
         workSubmittedAt: b.workSubmittedAt || null,
         completedAt: b.workCompletedAt || b.completedAt || null,
         visitOtp: finalVisitOtp,
