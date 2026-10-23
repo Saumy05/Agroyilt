@@ -12,6 +12,9 @@ const connectDB = async () => {
     // One-time data-safety migration (idempotent): remove the TTL index that hard-deleted live worker bookings.
     require('../models/WorkerBookingRequest').dropLegacyTtlIndex();
 
+    // Farm saves failed while this geo index existed on a non-GeoJSON field.
+    require('../models/User').dropLegacyFarmGeoIndex();
+
   } catch (error) {
     console.error('MongoDB connection error:', error.message);
     process.exit(1);

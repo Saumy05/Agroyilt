@@ -344,7 +344,22 @@ userSchema.index({ 'addresses.city': 1 });
 userSchema.index({ 'addresses.district': 1 });
 userSchema.index({ districtId: 1, createdAt: -1 });
 userSchema.index({ subDistrictId: 1, createdAt: -1 });
-userSchema.index({ 'farms.location': '2dsphere' });
+// No 2dsphere index on farms.location: that field is a plain address object (lat/lng/city/...), not GeoJSON, so the index
+// made MongoDB reject every save of a farm that has a location ("Can't extract geo keys"). Nothing queries it by geo.
+
+/** One-time migration (idempotent): drop the farms.location 2dsphere index from databases that already have it. */
+userSchema.statics.dropLegacyFarmGeoIndex = async function () {
+  try {
+    const idx = await this.collection.indexes();
+    const geo = idx.find(i => i.name === 'farms.location_2dsphere');
+    if (geo) {
+      await this.collection.dropIndex('farms.location_2dsphere');
+      console.warn('[User] dropped legacy index farms.location_2dsphere');
+    }
+  } catch (err) {
+    if (err && err.codeName !== 'NamespaceNotFound') console.error('[User] farm geo index migration failed:', err.message);
+  }
+};
 
 module.exports = mongoose.model('User', userSchema);
 
