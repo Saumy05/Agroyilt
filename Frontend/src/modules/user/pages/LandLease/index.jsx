@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLeaseTypes } from '../../../../hooks/useLeaseTypes';
 import {
   FiArrowLeft,
   FiSearch,
@@ -44,6 +45,8 @@ const LandLeasePage = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const currentUser = authStorage.getUserData('user');
+  const leaseTypes = useLeaseTypes();
+  const defaultLeaseType = leaseTypes.fixedRent ? 'fixed-rent' : 'crop-share';
 
   // Active Main Tab
   const [activeTab, setActiveTab] = useState('explore'); // 'explore' | 'list' | 'my-leases'
@@ -569,7 +572,7 @@ const LandLeasePage = () => {
           city: '',
           addressLine1: '',
           pincode: '',
-          leaseType: 'fixed-rent',
+          leaseType: defaultLeaseType,
           pricePerAcre: '',
           sharePercentage: '50',
           availableFrom: new Date().toISOString().split('T')[0],
@@ -597,8 +600,28 @@ const LandLeasePage = () => {
     }
   };
 
+  // If the admin switches a type off, the listing form and browse filter must not stay on it
+  useEffect(() => {
+    if (!leaseTypes.loaded || !leaseTypes.anyEnabled) return;
+    setListingForm(f => (
+      (f.leaseType === 'fixed-rent' && !leaseTypes.fixedRent) || (f.leaseType === 'crop-share' && !leaseTypes.cropShare)
+        ? { ...f, leaseType: defaultLeaseType } : f
+    ));
+    setLeaseTypeFilter(f => (
+      (f === 'fixed-rent' && !leaseTypes.fixedRent) || (f === 'crop-share' && !leaseTypes.cropShare) ? 'all' : f
+    ));
+  }, [leaseTypes.loaded, leaseTypes.fixedRent, leaseTypes.cropShare, leaseTypes.anyEnabled, defaultLeaseType]);
+
+  const bothTypes = leaseTypes.fixedRent && leaseTypes.cropShare;
+
   return (
     <div className="min-h-screen bg-[#F8FAF7] text-gray-900 pb-20">
+      {leaseTypes.loaded && !leaseTypes.anyEnabled && (
+        <div className="bg-amber-50 border-b border-amber-200 text-amber-900 text-xs font-semibold px-4 py-2">
+          New land lease listings and offers are paused right now. Your existing leases, agreements and payments are not affected.
+        </div>
+      )}
+
       {/* 1. Ultra-Compact Sticky Header */}
       <div className="sticky top-0 z-30 bg-gradient-to-r from-emerald-800 via-teal-900 to-[#1b4332] text-white px-3 py-2 shadow-sm">
         <div className="max-w-5xl mx-auto flex items-center justify-between gap-2">
@@ -687,7 +710,7 @@ const LandLeasePage = () => {
 
               {/* Single Line Scrollable Filters */}
               <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none text-[11px]">
-                <button
+                {bothTypes && <button
                   onClick={() => setLeaseTypeFilter('all')}
                   className={`px-2.5 py-1 rounded-lg font-bold whitespace-nowrap transition-all ${
                     leaseTypeFilter === 'all'
@@ -696,8 +719,8 @@ const LandLeasePage = () => {
                   }`}
                 >
                   All
-                </button>
-                <button
+                </button>}
+                {leaseTypes.fixedRent && bothTypes && <button
                   onClick={() => setLeaseTypeFilter('fixed-rent')}
                   className={`px-2.5 py-1 rounded-lg font-bold whitespace-nowrap transition-all flex items-center gap-1 ${
                     leaseTypeFilter === 'fixed-rent'
@@ -706,8 +729,8 @@ const LandLeasePage = () => {
                   }`}
                 >
                   <FiDollarSign className="w-3 h-3" /> Fixed Rent
-                </button>
-                <button
+                </button>}
+                {leaseTypes.cropShare && bothTypes && <button
                   onClick={() => setLeaseTypeFilter('crop-share')}
                   className={`px-2.5 py-1 rounded-lg font-bold whitespace-nowrap transition-all flex items-center gap-1 ${
                     leaseTypeFilter === 'crop-share'
@@ -716,7 +739,7 @@ const LandLeasePage = () => {
                   }`}
                 >
                   <FiPercent className="w-3 h-3" /> Crop Share
-                </button>
+                </button>}
 
                 <div className="h-4 w-[1px] bg-gray-200 shrink-0" />
 
@@ -1153,8 +1176,8 @@ const LandLeasePage = () => {
                 <label className="block font-bold text-gray-800 mb-2">
                   Lease Arrangement <span className="text-red-500">*</span>
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div
+                <div className={`grid grid-cols-1 gap-3 ${bothTypes ? 'sm:grid-cols-2' : ''}`}>
+                  {leaseTypes.fixedRent && <div
                     onClick={() => setListingForm({ ...listingForm, leaseType: 'fixed-rent' })}
                     className={`p-3.5 rounded-2xl cursor-pointer border-2 transition-all ${
                       listingForm.leaseType === 'fixed-rent'
@@ -1180,9 +1203,9 @@ const LandLeasePage = () => {
                     <p className="text-xs text-gray-500">
                       Receive a fixed cash rent every year (e.g. ₹35,000 / acre / year)
                     </p>
-                  </div>
+                  </div>}
 
-                  <div
+                  {leaseTypes.cropShare && <div
                     onClick={() => setListingForm({ ...listingForm, leaseType: 'crop-share' })}
                     className={`p-3.5 rounded-2xl cursor-pointer border-2 transition-all ${
                       listingForm.leaseType === 'crop-share'
@@ -1208,7 +1231,7 @@ const LandLeasePage = () => {
                     <p className="text-xs text-gray-500">
                       Share in the produce (e.g. 50-50 or 60-40 arrangement)
                     </p>
-                  </div>
+                  </div>}
                 </div>
               </div>
 

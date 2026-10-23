@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import useReferralEnabled from '../../../../hooks/useReferralEnabled';
+import { useLeaseTypes } from '../../../../hooks/useLeaseTypes';
 import { useNavigate } from 'react-router-dom';
 import { toastManager } from '../../../../utils/toastManager';
 import { themeColors } from '../../../../theme';
@@ -38,6 +39,7 @@ import { LogoutModal } from '../../../../components/common';
 import api from '../../../../services/api';
 
 const Account = () => {
+  const leaseTypes = useLeaseTypes();
   const { enabled: referralOn } = useReferralEnabled('farmer');
   const navigate = useNavigate();
   const socket = useSocket();
@@ -414,13 +416,15 @@ const Account = () => {
                 subtitle="Reviews given to operators & equipment"
                 onClick={() => navigate('/user/my-rating')}
               />
-              <MenuItem
-                icon={FiLayers}
-                iconBg="bg-teal-50 text-teal-700"
-                label="Land Lease & Contract"
-                subtitle="Farmland rental listings, offers & records"
-                onClick={() => navigate('/user/land-lease')}
-              />
+              {leaseTypes.anyEnabled && (
+                <MenuItem
+                  icon={FiLayers}
+                  iconBg="bg-teal-50 text-teal-700"
+                  label="Land Lease & Contract"
+                  subtitle="Farmland rental listings, offers & records"
+                  onClick={() => navigate('/user/land-lease')}
+                />
+              )}
             </div>
           </motion.div>
 

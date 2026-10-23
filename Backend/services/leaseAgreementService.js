@@ -25,6 +25,7 @@ const { hashOtp, otpMatches, OTP_MAX_ATTEMPTS } = require('../utils/otpUtil');
 const sms = require('./smsService');
 const { notifyLease } = require('./landLeaseNotifyService');
 const { hasUsableLocation } = require('./landBoundaryService');
+const { enabledLeaseTypes, disabledMessage } = require('./landLeaseConfigService');
 
 const ROLES = ['landowner', 'farmer'];
 const LIVE = ['DRAFT', 'PARTIALLY_SIGNED'];
@@ -96,6 +97,9 @@ const startAgreementForOffer = async ({ leaseId, ownerId, offerId, language = 'h
   const offer = lease.offers.id(offerId);
   if (!offer) return fail(404, 'OFFER_NOT_FOUND', 'प्रस्ताव नहीं मिला (Offer not found)');
   if (offer.status !== 'pending') return fail(400, 'OFFER_NOT_PENDING', 'यह प्रस्ताव अब लंबित नहीं है (Offer is no longer pending)');
+  if (!(await enabledLeaseTypes()).includes(lease.leaseType)) {
+    return fail(400, 'TYPE_DISABLED', disabledMessage(lease.leaseType));
+  }
   if (!hasUsableLocation(lease)) {
     return fail(400, 'LOCATION_REQUIRED', 'भूमि का स्थान नक्शे पर चिह्नित करें, फिर प्रस्ताव स्वीकार करें (Put the land on the map before accepting an offer)');
   }

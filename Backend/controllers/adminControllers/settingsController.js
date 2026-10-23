@@ -58,6 +58,8 @@ exports.updateSettings = async (req, res, next) => {
       landLeaseCommissionPercentage,
       landLeaseRequireAgreement,
       landLeaseAgreementValidDays,
+      landLeaseFixedRentEnabled,
+      landLeaseCropShareEnabled,
       workerPlatformChargePercentage,
       machineryPlatformFeePercentage,
       maxIndependentWorkerRequest,
@@ -184,6 +186,8 @@ exports.updateSettings = async (req, res, next) => {
           settings.landLeaseCommissionPercentage = val;
         }
       }
+      if (landLeaseFixedRentEnabled !== undefined) settings.landLeaseFixedRentEnabled = Boolean(Number(landLeaseFixedRentEnabled));
+      if (landLeaseCropShareEnabled !== undefined) settings.landLeaseCropShareEnabled = Boolean(Number(landLeaseCropShareEnabled));
       if (landLeaseRequireAgreement !== undefined) {
         settings.landLeaseRequireAgreement = Boolean(Number(landLeaseRequireAgreement));
       }
@@ -344,7 +348,7 @@ exports.updateSettings = async (req, res, next) => {
 // Get Public Settings (Visited Charges, GST, Branding)
 exports.getPublicSettings = async (req, res, next) => {
   try {
-    let settings = await Settings.findOne({ type: 'global' }).select('visitedCharges serviceGstPercentage partsGstPercentage rentalGstPercentage machineryPlatformFeePercentage supportEmail supportPhone supportWhatsapp cancellationPenalty bookingCommissionPercentage appName appTagline appLogo appFavicon workerAlertTimeoutSeconds');
+    let settings = await Settings.findOne({ type: 'global' }).select('visitedCharges serviceGstPercentage partsGstPercentage rentalGstPercentage machineryPlatformFeePercentage supportEmail supportPhone supportWhatsapp cancellationPenalty bookingCommissionPercentage appName appTagline appLogo appFavicon workerAlertTimeoutSeconds landLeaseFixedRentEnabled landLeaseCropShareEnabled');
 
     // Default if not found (fallback values)
     if (!settings) {

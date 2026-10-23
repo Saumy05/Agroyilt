@@ -95,6 +95,15 @@ const settingsSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  // The admin can switch a lease type off: it is no longer offered for new listings, offers or leases (existing leases carry on)
+  landLeaseFixedRentEnabled: {
+    type: Boolean,
+    default: true
+  },
+  landLeaseCropShareEnabled: {
+    type: Boolean,
+    default: true
+  },
   landLeaseAgreementValidDays: { // an unsigned agreement lapses after this many days and the land opens again
     type: Number,
     default: 7,

@@ -8,6 +8,7 @@ const { notifyLease } = require('../../services/landLeaseNotifyService');
 const landBoundary = require('../../services/landBoundaryService');
 const agreementSvc = require('../../services/leaseAgreementService');
 const duesSvc = require('../../services/landLeaseDuesService');
+const { enabledLeaseTypes, disabledMessage } = require('../../services/landLeaseConfigService');
 const LeaseAgreement = require('../../models/LeaseAgreement');
 
 // A rent per acre per year above this is almost always a typing slip (a real lease is a few thousand rupees per acre): the
@@ -272,6 +273,10 @@ const farmerLandLeaseController = {
         });
       }
 
+      if (['fixed-rent', 'crop-share'].includes(leaseType) && !(await enabledLeaseTypes()).includes(leaseType)) {
+        return res.status(400).json({ success: false, code: 'TYPE_DISABLED', message: disabledMessage(leaseType) });
+      }
+
       if (!['fixed-rent', 'crop-share'].includes(leaseType)) {
         return res.status(400).json({
           success: false,
@@ -511,9 +516,9 @@ const farmerLandLeaseController = {
         filter.ownerId = { $ne: req.user.id };
       }
 
-      if (type && type !== 'all') {
-        filter.leaseType = type;
-      }
+      // A lease type the admin switched off is not shown in the marketplace
+      const enabled = await enabledLeaseTypes();
+      filter.leaseType = { $in: type && type !== 'all' ? enabled.filter(t => t === type) : enabled };
 
       if (minAcres || maxAcres) {
         filter.sizeInAcres = {};
@@ -736,6 +741,10 @@ const farmerLandLeaseController = {
         });
       }
 
+      if (!(await enabledLeaseTypes()).includes(lease.leaseType)) {
+        return res.status(400).json({ success: false, code: 'TYPE_DISABLED', message: disabledMessage(lease.leaseType) });
+      }
+
       const alreadyDecided = (lease.offers || []).find(
         o => String(o.farmerId) === String(req.user.id) && ['rejected', 'accepted'].includes(o.status)
       );
@@ -851,6 +860,9 @@ const farmerLandLeaseController = {
       }
 
       // The agreement describes the land by its marked border, so a listing without one can't be leased yet
+      if (!(await enabledLeaseTypes()).includes(lease.leaseType)) {
+        return res.status(400).json({ success: false, code: 'TYPE_DISABLED', message: disabledMessage(lease.leaseType) });
+      }
       if (!landBoundary.hasUsableLocation(lease)) {
         return res.status(400).json({
           success: false,

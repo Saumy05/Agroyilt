@@ -7,6 +7,7 @@ import { publicCatalogService } from '../../../../../services/catalogService';
 import { themeColors } from '../../../../../theme';
 import { toastManager } from '../../../../../utils/toastManager';
 import { SOIL_TESTING_ENABLED } from '../../../../../utils/featureFlags';
+import { useLeaseTypes } from '../../../../../hooks/useLeaseTypes';
 
 const toAssetUrl = (url) => {
   if (!url) return '';
@@ -17,6 +18,7 @@ const toAssetUrl = (url) => {
 };
 
 const SearchOverlay = ({ isOpen, onClose, categories = [], onCategoryClick }) => {
+  const leaseTypes = useLeaseTypes();
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
@@ -153,7 +155,7 @@ const SearchOverlay = ({ isOpen, onClose, categories = [], onCategoryClick }) =>
       else toastManager.info('Soil testing service is currently unavailable.');
       return;
     }
-    if (titleLower.includes('lease') || titleLower.includes('theka') || titleLower.includes('batai') || titleLower.includes('patta') || titleLower.includes('land') || slugLower.includes('lease')) {
+    if (leaseTypes.anyEnabled && (titleLower.includes('lease') || titleLower.includes('theka') || titleLower.includes('batai') || titleLower.includes('patta') || titleLower.includes('land') || slugLower.includes('lease'))) {
       navigate('/user/land-lease');
       return;
     }

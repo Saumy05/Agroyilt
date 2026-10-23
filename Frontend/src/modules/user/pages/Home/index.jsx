@@ -33,6 +33,7 @@ import LogoLoader from '../../../../components/common/LogoLoader';
 import AddressSelectionModal from '../Checkout/components/AddressSelectionModal';
 import { FiChevronRight } from 'react-icons/fi';
 import useReferralEnabled from '../../../../hooks/useReferralEnabled';
+import { useLeaseTypes } from '../../../../hooks/useLeaseTypes';
 
 
 
@@ -47,6 +48,7 @@ const toAssetUrl = (url) => {
 };
 
 const Home = () => {
+  const leaseTypes = useLeaseTypes();
   const { enabled: referralOn } = useReferralEnabled('farmer');
   const navigate = useNavigate();
   const location = useLocation();
@@ -597,6 +599,7 @@ const Home = () => {
             </motion.section>
 
             {/* Land Lease & Theka Marketplace Banner (SOW #20) */}
+            {leaseTypes.anyEnabled && (
             <motion.section variants={itemVariants} className="px-3.5 sm:px-5 py-1.5">
               <div
                 onClick={() => navigate('/user/land-lease')}
@@ -630,6 +633,7 @@ const Home = () => {
                 </div>
               </div>
             </motion.section>
+            )}
 
 
             {/* Categories Sections */}

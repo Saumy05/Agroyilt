@@ -30,6 +30,8 @@ const AdminSettings = () => {
     workerPlatformChargePercentage: 1,
     machineryPlatformFeePercentage: 0,
     landLeaseCommissionPercentage: 2,
+    landLeaseFixedRentEnabled: 1,
+    landLeaseCropShareEnabled: 1,
     landLeaseRequireAgreement: 1,
     landLeaseAgreementValidDays: 7,
     rentalGstPercentage: 5,
@@ -360,6 +362,8 @@ const AdminSettings = () => {
             workerPlatformChargePercentage: res.settings.workerPlatformChargePercentage ?? 1,
             machineryPlatformFeePercentage: res.settings.machineryPlatformFeePercentage ?? 0,
             landLeaseCommissionPercentage: res.settings.landLeaseCommissionPercentage ?? 2,
+            landLeaseFixedRentEnabled: res.settings.landLeaseFixedRentEnabled === false ? 0 : 1,
+            landLeaseCropShareEnabled: res.settings.landLeaseCropShareEnabled === false ? 0 : 1,
             landLeaseRequireAgreement: res.settings.landLeaseRequireAgreement === false ? 0 : 1,
             landLeaseAgreementValidDays: res.settings.landLeaseAgreementValidDays ?? 7,
             rentalGstPercentage: res.settings.rentalGstPercentage ?? 5,
@@ -1224,6 +1228,28 @@ const AdminSettings = () => {
                         className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all font-bold text-gray-800"
                       />
                       <p className="text-[10px] text-gray-400 mt-1">Deducted from the landowner's share of every rent installment and crop-share settlement. Applies to new leases only.</p>
+                    </div>
+
+                    {/* Lease types on/off */}
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Land Lease Types Offered</label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {[
+                          { key: 'landLeaseFixedRentEnabled', label: 'Fixed rent (rental)' },
+                          { key: 'landLeaseCropShareEnabled', label: 'Crop share (batai)' }
+                        ].map(t => (
+                          <label key={t.key} className="flex items-center gap-3 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={Number(financialSettings[t.key]) === 1}
+                              onChange={(e) => setFinancialSettings(prev => ({ ...prev, [t.key]: e.target.checked ? 1 : 0 }))}
+                              className="w-4 h-4 accent-green-600"
+                            />
+                            <span className="text-sm font-bold text-gray-800">{t.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-gray-400 mt-1">Turn a type off to hide it from the app and stop new listings, offers and agreements of that type. Leases already running, their payments and agreements already being signed are not affected. With both off, Land Lease is hidden from the app.</p>
                     </div>
 
                     {/* Lease agreement signing */}
