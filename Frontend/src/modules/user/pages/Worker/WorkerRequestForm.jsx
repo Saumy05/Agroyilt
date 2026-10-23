@@ -10,6 +10,8 @@ import toast from 'react-hot-toast';
 import workerBookingService from '../../../../services/workerBookingService';
 import { userAuthService } from '../../../../services/authService';
 import LocationPicker from '../Checkout/components/LocationPicker';
+import SavedAddressChooser from '../../components/common/SavedAddressChooser';
+import { MAX_SAVED_ADDRESSES, usableAddresses, pickDefaultAddress, addressKey, addressText, withNewDefault } from '../../../../utils/savedAddresses';
 import { WORKER_SERVICES } from '../../../../constants/workerServices';
 
 // Work categories with rich metadata and templates for auto-filling
@@ -436,25 +438,29 @@ const WorkerRequestForm = () => {
     additionalInstructions: ''
   });
 
-  // Work location: the farmer's saved address is used by default (no map, no Google calls).
-  // The map only opens when they choose to change it.
-  const [savedAddress, setSavedAddress] = useState(null);
+  // Work location: the farmer's default saved address is used (no map, no Google calls).
+  // The map only opens when they choose to change it. They can keep up to MAX_SAVED_ADDRESSES addresses.
+  const [allAddresses, setAllAddresses] = useState([]);   // every saved address (kept whole when saving a new one)
+  const [savedAddresses, setSavedAddresses] = useState([]); // the ones with coordinates, usable for a request
+  const [selectedKey, setSelectedKey] = useState(null);
+  const [choosing, setChoosing] = useState(false);
   const [locationMode, setLocationMode] = useState('loading'); // 'loading' | 'saved' | 'map'
-  const [saveAsDefault, setSaveAsDefault] = useState(true); // a place picked on the map becomes the saved address unless unticked
+  const [saveAsDefault, setSaveAsDefault] = useState(true); // a place picked on the map is saved as the new default unless unticked
   const [pickedPincode, setPickedPincode] = useState('');
-
-  const savedAddressText = (a) => [a?.addressLine2, a?.addressLine1].filter(Boolean).join(', ');
+  const addressBookFull = allAddresses.length >= MAX_SAVED_ADDRESSES;
 
   const applySavedAddress = useCallback((a) => {
     setFormData(prev => ({
       ...prev,
-      addressLine1: savedAddressText(a),
+      addressLine1: addressText(a),
       city:         a.city || '',
       state:        a.state || '',
       lat:          String(a.lat),
       lng:          String(a.lng)
     }));
     setErrors(prev => ({ ...prev, city: '' }));
+    setSelectedKey(addressKey(a));
+    setChoosing(false);
     setLocationMode('saved');
   }, []);
 
@@ -463,15 +469,13 @@ const WorkerRequestForm = () => {
     userAuthService.getProfile()
       .then(res => {
         if (!alive) return;
-        // Only an address with coordinates can be used for radius matching
-        const usable = (res?.user?.addresses || []).filter(a => Number.isFinite(Number(a.lat)) && Number.isFinite(Number(a.lng)) && a.lat !== null && a.lng !== null);
-        const chosen = usable.find(a => a.isDefault) || usable[0];
-        if (chosen) {
-          setSavedAddress(chosen);
-          applySavedAddress(chosen);
-        } else {
-          setLocationMode('map');
-        }
+        const all = res?.user?.addresses || [];
+        const usable = usableAddresses(all);
+        const chosen = pickDefaultAddress(usable);
+        setAllAddresses(all);
+        setSavedAddresses(usable);
+        if (chosen) applySavedAddress(chosen);
+        else setLocationMode('map');
       })
       .catch(() => { if (alive) setLocationMode('map'); });
     return () => { alive = false; };
@@ -481,6 +485,8 @@ const WorkerRequestForm = () => {
     // Start clean so the request can't go out with the old coordinates if no new place is picked
     setFormData(prev => ({ ...prev, addressLine1: '', city: '', state: '', lat: '', lng: '' }));
     setPickedPincode('');
+    setSelectedKey(null);
+    setChoosing(false);
     setLocationMode('map');
   };
 
@@ -844,24 +850,22 @@ const WorkerRequestForm = () => {
 
       const created = await workerBookingService.createFarmerRequest(payload);
 
-      // A place picked on the map becomes the farmer's saved address (the profile keeps one). A failure here never blocks the request.
-      if (locationMode === 'map' && saveAsDefault && formData.lat !== '' && formData.lng !== '') {
+      // A place picked on the map is added to the farmer's saved addresses as the new default. A failure never blocks the request.
+      if (locationMode === 'map' && saveAsDefault && !addressBookFull && formData.lat !== '' && formData.lng !== '') {
         try {
           await userAuthService.updateProfile({
-            addresses: [{
-              type: 'home',
+            addresses: withNewDefault(allAddresses, {
               addressLine1: formData.addressLine1,
               addressLine2: '',
               city: formData.city,
               state: formData.state,
               pincode: pickedPincode,
               lat: Number(formData.lat),
-              lng: Number(formData.lng),
-              isDefault: true
-            }]
+              lng: Number(formData.lng)
+            })
           });
         } catch {
-          toast('Request sent, but we could not save this as your default address.', { id: 'worker-req-addr' });
+          toast('Request sent, but we could not save this address.', { id: 'worker-req-addr' });
         }
       }
       toast.success('Request submitted! Finding workers near you...', { id: 'worker-req-toast' });
@@ -1421,7 +1425,19 @@ const WorkerRequestForm = () => {
               <div className="h-16 rounded-xl bg-slate-50 animate-pulse" />
             )}
 
-            {locationMode === 'saved' && savedAddress && (
+            {choosing && (
+              <div className="mb-2.5">
+                <SavedAddressChooser
+                  addresses={savedAddresses}
+                  selectedKey={selectedKey}
+                  onSelect={applySavedAddress}
+                  onPickOnMap={changeLocation}
+                  onCancel={() => setChoosing(false)}
+                />
+              </div>
+            )}
+
+            {locationMode === 'saved' && !choosing && (
               <div className="flex items-start justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
                 <div className="min-w-0">
                   <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-700 mb-0.5">Your saved address</p>
@@ -1432,7 +1448,7 @@ const WorkerRequestForm = () => {
                 </div>
                 <button
                   type="button"
-                  onClick={changeLocation}
+                  onClick={() => (savedAddresses.length > 1 ? setChoosing(true) : changeLocation())}
                   className="shrink-0 px-3 py-1.5 rounded-lg bg-white border border-emerald-300 text-emerald-700 text-xs font-bold active:scale-95"
                 >
                   Change
@@ -1440,15 +1456,15 @@ const WorkerRequestForm = () => {
               </div>
             )}
 
-            {locationMode === 'map' && (
+            {locationMode === 'map' && !choosing && (
               <>
-                {savedAddress && (
+                {savedAddresses.length > 0 && (
                   <button
                     type="button"
-                    onClick={() => applySavedAddress(savedAddress)}
+                    onClick={() => setChoosing(true)}
                     className="mb-2 text-xs font-bold text-emerald-700 underline"
                   >
-                    Use my saved address
+                    {savedAddresses.length > 1 ? 'Use a saved address' : 'Use my saved address'}
                   </button>
                 )}
             <div className="mb-2.5 rounded-xl overflow-hidden border border-slate-200">
@@ -1562,16 +1578,21 @@ const WorkerRequestForm = () => {
                 />
               </div>
             </div>
-            <label className="mt-2.5 flex items-start gap-2 cursor-pointer select-none">
+            <label className={`mt-2.5 flex items-start gap-2 select-none ${addressBookFull ? 'opacity-60' : 'cursor-pointer'}`}>
               <input
                 type="checkbox"
-                checked={saveAsDefault}
+                checked={saveAsDefault && !addressBookFull}
+                disabled={addressBookFull}
                 onChange={(e) => setSaveAsDefault(e.target.checked)}
                 className="mt-0.5 w-4 h-4 accent-emerald-600"
               />
               <span className="text-xs text-slate-600 leading-snug">
-                Also save as my default address
-                <span className="block text-[10px] text-slate-400">It replaces your current saved address and is used for your next bookings.</span>
+                Also save this address and make it my default
+                <span className="block text-[10px] text-slate-400">
+                  {addressBookFull
+                    ? `You already have ${MAX_SAVED_ADDRESSES} saved addresses. Delete one in Manage Addresses to save this.`
+                    : `Saved addresses: ${allAddresses.length} of ${MAX_SAVED_ADDRESSES}.`}
+                </span>
               </span>
             </label>
               </>

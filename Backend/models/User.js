@@ -96,7 +96,7 @@ const userSchema = new mongoose.Schema({
     upiId: { type: String, trim: true, default: null },
     updatedAt: { type: Date, default: null }
   },
-  // ENFORCED POLICY: Only 1 address allowed. If user changes it, we replace.
+  // Up to 5 saved addresses (MAX_USER_ADDRESSES in utils/addressList.js), exactly one default and kept first.
   addresses: [{
     type: {
       type: String, // home, work, other

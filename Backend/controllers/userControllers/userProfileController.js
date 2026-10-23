@@ -1,6 +1,7 @@
 const User = require('../../models/User');
 const { validationResult } = require('express-validator');
 const cloudinaryService = require('../../services/cloudinaryService');
+const { normalizeAddressList } = require('../../utils/addressList');
 
 /**
  * Get user profile
@@ -132,9 +133,13 @@ const updateProfile = async (req, res) => {
       }
     }
 
-    // Update addresses - ENFORCE SINGLE ADDRESS POLICY
+    // Update addresses: up to MAX_USER_ADDRESSES, one of them the default
     if (addresses && Array.isArray(addresses)) {
-      updateData.addresses = addresses.slice(-1); // Only save the last one
+      const checked = normalizeAddressList(addresses);
+      if (checked.error) {
+        return res.status(400).json({ success: false, message: checked.error });
+      }
+      updateData.addresses = checked.addresses;
     }
 
     // Update farms

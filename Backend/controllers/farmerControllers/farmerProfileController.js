@@ -1,4 +1,5 @@
 const User = require('../../models/User');
+const { normalizeAddressList } = require('../../utils/addressList');
 
 const farmerProfileController = {
   // Get Profile
@@ -35,9 +36,13 @@ const farmerProfileController = {
         }
       }
       
-      // Update Address (Enforced only 1 address as per User model comments)
+      // Update addresses: up to MAX_USER_ADDRESSES, one of them the default
       if (addresses && Array.isArray(addresses) && addresses.length > 0) {
-        user.addresses = [addresses[0]]; 
+        const checked = normalizeAddressList(addresses);
+        if (checked.error) {
+          return res.status(400).json({ success: false, message: checked.error });
+        }
+        user.addresses = checked.addresses;
       }
 
       await user.save();

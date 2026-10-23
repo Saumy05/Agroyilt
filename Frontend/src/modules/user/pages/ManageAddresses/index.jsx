@@ -1,13 +1,15 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toastManager } from '../../../../utils/toastManager';
-import { FiArrowLeft, FiPlus, FiMoreVertical, FiEdit2, FiTrash2, FiMapPin, FiNavigation } from 'react-icons/fi';
+import { FiArrowLeft, FiPlus, FiMoreVertical, FiEdit2, FiTrash2, FiMapPin, FiNavigation, FiCheck } from 'react-icons/fi';
 import AddressSelectionModal from '../Checkout/components/AddressSelectionModal';
 import { userAuthService } from '../../../../services/authService';
 
 import { z } from "zod";
 
 // Zod schema for Address validation
+const MAX_ADDRESSES = 5;
+
 const addressSchema = z.object({
   addressLine1: z.string().min(5, "Address location is too short"),
   addressLine2: z.string().optional(), // House Number
@@ -46,6 +48,10 @@ const ManageAddresses = () => {
 
 
   const handleAddAddress = () => {
+    if (addresses.length >= MAX_ADDRESSES) {
+      toastManager.error(`You can save up to ${MAX_ADDRESSES} addresses. Delete one to add another.`);
+      return;
+    }
     setEditingAddress(null);
     setHouseNumber('');
     setShowAddModal(true);
@@ -96,16 +102,27 @@ const ManageAddresses = () => {
         return;
       }
 
-      const newAddress = {
-        type: 'home', // Default type
+      const fields = {
         ...addressData,
         lat: locationObj.lat,
-        lng: locationObj.lng,
-        isDefault: addresses.length === 0 // Make first address default
+        lng: locationObj.lng
       };
 
-      // ENFORCE SINGLE ADDRESS: Replace existing if adding new
-      const updatedAddresses = [newAddress];
+      let updatedAddresses;
+      if (editingAddress) {
+        // Editing keeps the address's default flag and any other saved details
+        const editId = editingAddress._id || editingAddress.id;
+        updatedAddresses = addresses.map(a => ((a._id || a.id) === editId ? { ...a, ...fields } : a));
+      } else {
+        if (addresses.length >= MAX_ADDRESSES) {
+          toastManager.error(`You can save up to ${MAX_ADDRESSES} addresses. Delete one to add another.`);
+          return;
+        }
+        updatedAddresses = [
+          ...addresses,
+          { type: addresses.length === 0 ? 'home' : 'other', ...fields, isDefault: addresses.length === 0 }
+        ];
+      }
 
       // Call API
       toastManager.info('Saving address...');
@@ -147,6 +164,25 @@ const ManageAddresses = () => {
     }
   };
 
+  const handleSetDefault = async (addressId) => {
+    try {
+      const updatedAddresses = addresses.map(a => ({ ...a, isDefault: (a._id || a.id) === addressId }));
+      toastManager.info('Updating default address...');
+      const response = await userAuthService.updateProfile({ addresses: updatedAddresses });
+      toastManager.dismissAll();
+      if (response.success) {
+        setAddresses(response.user.addresses || updatedAddresses);
+        setShowMenu(null);
+        toastManager.success('Default address updated!');
+      } else {
+        toastManager.error(response.message || 'Failed to update default address');
+      }
+    } catch {
+      toastManager.dismissAll();
+      toastManager.error('Failed to update default address');
+    }
+  };
+
   const handleMenuToggle = (addressId) => {
     setShowMenu(showMenu === addressId ? null : addressId);
   };
@@ -173,8 +209,8 @@ const ManageAddresses = () => {
 
         {/* Saved Addresses Section */}
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider">Saved Address</h2>
-          {addresses.length === 0 && (
+          <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider">Saved Addresses ({addresses.length}/{MAX_ADDRESSES})</h2>
+          {addresses.length < MAX_ADDRESSES && (
             <button
               onClick={handleAddAddress}
               className="flex items-center gap-1.5 text-sm font-bold text-purple-600"
@@ -219,6 +255,15 @@ const ManageAddresses = () => {
               {/* Menu Dropdown */}
               {showMenu === (address._id || address.id) && (
                 <div className="absolute top-12 right-4 bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-[120px]">
+                  {!address.isDefault && (
+                    <button
+                      onClick={() => handleSetDefault(address._id || address.id)}
+                      className="w-full flex items-center gap-2 px-4 py-2 hover:bg-gray-50 transition-colors text-left"
+                    >
+                      <FiCheck className="w-4 h-4 text-gray-600" />
+                      <span className="text-sm text-gray-700 whitespace-nowrap">Set as default</span>
+                    </button>
+                  )}
                   <button
                     onClick={() => handleEdit(address)}
                     className="w-full flex items-center gap-2 px-4 py-2 hover:bg-gray-50 transition-colors text-left"

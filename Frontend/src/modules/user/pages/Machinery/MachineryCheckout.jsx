@@ -12,6 +12,8 @@ import { paymentService } from '../../../../services/paymentService';
 import { configService } from '../../../../services/configService';
 import authStorage from '../../../../utils/authStorage';
 import { userAuthService } from '../../../../services/authService';
+import SavedAddressChooser from '../../components/common/SavedAddressChooser';
+import { MAX_SAVED_ADDRESSES, usableAddresses, pickDefaultAddress, addressKey, toBookingAddress, withNewDefault } from '../../../../utils/savedAddresses';
 import AddressSelectionModal from '../Checkout/components/AddressSelectionModal';
 import usePaymentMethods from '../../../../hooks/usePaymentMethods';
 import { estimateDistanceBill } from '../../../../utils/distanceFare';
@@ -43,9 +45,13 @@ const MachineryCheckout = () => {
     const [houseNumber, setHouseNumber] = useState('');
     // The farmer's saved address is used by default; the map modal only opens when they choose to change it (or have none)
     const [showAddressModal, setShowAddressModal] = useState(false);
-    const [savedAddress, setSavedAddress] = useState(null);
-    const [isCustomAddress, setIsCustomAddress] = useState(false); // a place picked on the map instead of the saved one
+    const [allAddresses, setAllAddresses] = useState([]);    // every saved address (kept whole when saving a new one)
+    const [savedAddresses, setSavedAddresses] = useState([]); // the ones with coordinates, usable for a booking
+    const [selectedKey, setSelectedKey] = useState(null);
+    const [choosing, setChoosing] = useState(false);
+    const [isCustomAddress, setIsCustomAddress] = useState(false); // a place picked on the map instead of a saved one
     const [saveAsDefault, setSaveAsDefault] = useState(true);
+    const addressBookFull = allAddresses.length >= MAX_SAVED_ADDRESSES;
     const [paymentMethod, setPaymentMethod] = useState('cash'); // Defaulting to COD for agriculture
     const [submitting, setSubmitting] = useState(false);
     const [showPaymentConfirmModal, setShowPaymentConfirmModal] = useState(false);
@@ -58,21 +64,14 @@ const MachineryCheckout = () => {
         userAuthService.getProfile()
             .then(res => {
                 if (!alive) return;
-                // Only an address with coordinates can be used (travel charge and vendor matching need them)
-                const usable = (res?.user?.addresses || []).filter(a => a.lat != null && a.lng != null && Number.isFinite(Number(a.lat)) && Number.isFinite(Number(a.lng)));
-                const chosen = usable.find(a => a.isDefault) || usable[0];
+                const all = res?.user?.addresses || [];
+                const usable = usableAddresses(all); // travel charge and vendor matching need coordinates
+                const chosen = pickDefaultAddress(usable);
+                setAllAddresses(all);
+                setSavedAddresses(usable);
                 if (chosen) {
-                    const addr = {
-                        addressLine1: chosen.addressLine1 || '',
-                        addressLine2: chosen.addressLine2 || '',
-                        city: chosen.city || '',
-                        state: chosen.state || '',
-                        pincode: chosen.pincode || '',
-                        lat: Number(chosen.lat),
-                        lng: Number(chosen.lng)
-                    };
-                    setSavedAddress(addr);
-                    setSelectedAddress(addr);
+                    setSelectedAddress(toBookingAddress(chosen));
+                    setSelectedKey(addressKey(chosen));
                 } else {
                     setShowAddressModal(true);
                 }
@@ -260,6 +259,19 @@ const MachineryCheckout = () => {
         return `${formatted} ${type === 'land_based' ? (num === 1 ? 'Acre' : 'Acres') : type === 'daily' ? (num === 1 ? 'Day' : 'Days') : type}`;
     };
 
+    // Change: pick among the saved addresses first; the map opens only for a new place (or when none are saved)
+    const openAddressChange = () => {
+        if (savedAddresses.length > 0) setChoosing(true);
+        else setShowAddressModal(true);
+    };
+
+    const useSavedAddress = (a) => {
+        setSelectedAddress(toBookingAddress(a));
+        setSelectedKey(addressKey(a));
+        setIsCustomAddress(false);
+        setChoosing(false);
+    };
+
     const handleConfirmBooking = async () => {
         if (!selectedAddress) {
             toastManager.error('Please select an address first');
@@ -339,24 +351,22 @@ const MachineryCheckout = () => {
                 return;
             }
 
-            // A place picked on the map becomes the farmer's saved address (the profile keeps one). A failure never blocks the booking.
-            if (isCustomAddress && saveAsDefault && selectedAddress.lat != null && selectedAddress.lng != null) {
+            // A place picked on the map is added to the farmer's saved addresses as the new default. A failure never blocks the booking.
+            if (isCustomAddress && saveAsDefault && !addressBookFull && selectedAddress.lat != null && selectedAddress.lng != null) {
                 try {
                     await userAuthService.updateProfile({
-                        addresses: [{
-                            type: 'home',
+                        addresses: withNewDefault(allAddresses, {
                             addressLine1: selectedAddress.addressLine1,
                             addressLine2: selectedAddress.addressLine2 || '',
                             city: selectedAddress.city,
                             state: selectedAddress.state,
                             pincode: selectedAddress.pincode,
                             lat: selectedAddress.lat,
-                            lng: selectedAddress.lng,
-                            isDefault: true
-                        }]
+                            lng: selectedAddress.lng
+                        })
                     });
                 } catch {
-                    toastManager.info('Booking placed, but we could not save this as your default address.');
+                    toastManager.info('Booking placed, but we could not save this address.');
                 }
             }
 
@@ -504,7 +514,7 @@ const MachineryCheckout = () => {
             <div className="max-w-xl mx-auto px-3.5 py-2.5 space-y-2.5">
                 {/* Farm Location Card */}
                 <div 
-                  onClick={() => setShowAddressModal(true)}
+                  onClick={openAddressChange}
                   className="bg-white rounded-2xl p-3.5 shadow-xs border border-slate-200/80 cursor-pointer hover:border-emerald-400 transition-all group"
                 >
                     <div className="flex justify-between items-center mb-2">
@@ -519,7 +529,7 @@ const MachineryCheckout = () => {
                         </div>
                         <button 
                           type="button"
-                          onClick={(e) => { e.stopPropagation(); setShowAddressModal(true); }}
+                          onClick={(e) => { e.stopPropagation(); openAddressChange(); }}
                           className="px-2.5 py-1 rounded-lg text-[11px] font-black text-emerald-700 bg-emerald-50 hover:bg-emerald-100/70 border border-emerald-200/60 transition-colors cursor-pointer"
                         >
                           Change
@@ -538,29 +548,36 @@ const MachineryCheckout = () => {
                             <span className="text-[11px]">Tap to specify your farm field or survey number location...</span>
                         </div>
                     )}
-                    {isCustomAddress && (
-                        <div className="mt-2 space-y-1.5" onClick={(e) => e.stopPropagation()}>
-                            <label className="flex items-start gap-2 cursor-pointer select-none">
+                    {choosing && (
+                        <div className="mt-2">
+                            <SavedAddressChooser
+                                addresses={savedAddresses}
+                                selectedKey={selectedKey}
+                                onSelect={useSavedAddress}
+                                onPickOnMap={() => { setChoosing(false); setShowAddressModal(true); }}
+                                onCancel={() => setChoosing(false)}
+                            />
+                        </div>
+                    )}
+                    {isCustomAddress && !choosing && (
+                        <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+                            <label className={`flex items-start gap-2 select-none ${addressBookFull ? 'opacity-60' : 'cursor-pointer'}`}>
                                 <input
                                     type="checkbox"
-                                    checked={saveAsDefault}
+                                    checked={saveAsDefault && !addressBookFull}
+                                    disabled={addressBookFull}
                                     onChange={(e) => setSaveAsDefault(e.target.checked)}
                                     className="mt-0.5 w-4 h-4 accent-emerald-600"
                                 />
                                 <span className="text-[11px] font-semibold text-slate-600 leading-snug">
-                                    Also save as my default address
-                                    <span className="block text-[10px] font-medium text-slate-400">It replaces your current saved address and is used for your next bookings.</span>
+                                    Also save this address and make it my default
+                                    <span className="block text-[10px] font-medium text-slate-400">
+                                        {addressBookFull
+                                            ? `You already have ${MAX_SAVED_ADDRESSES} saved addresses. Delete one in Manage Addresses to save this.`
+                                            : `Saved addresses: ${allAddresses.length} of ${MAX_SAVED_ADDRESSES}.`}
+                                    </span>
                                 </span>
                             </label>
-                            {savedAddress && (
-                                <button
-                                    type="button"
-                                    onClick={() => { setSelectedAddress(savedAddress); setIsCustomAddress(false); }}
-                                    className="text-[11px] font-black text-emerald-700 underline"
-                                >
-                                    Use my saved address
-                                </button>
-                            )}
                         </div>
                     )}
                 </div>
@@ -895,6 +912,8 @@ const MachineryCheckout = () => {
                       lng: location?.lng
                   });
                   setIsCustomAddress(true);
+                  setSelectedKey(null);
+                  setChoosing(false);
                   setShowAddressModal(false);
               }}
             />
