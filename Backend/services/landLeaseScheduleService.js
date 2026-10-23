@@ -6,6 +6,9 @@
  * adds up to exactly the total rent.
  */
 
+/** Days after the start in which an advance first installment must be paid before the owner may end the lease. */
+const FIRST_PAYMENT_GRACE_DAYS = 3;
+
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
 const addMonths = (date, months) => {
@@ -47,13 +50,20 @@ const buildAgreement = (lease, offer, commissionPercentage = 0) => {
     agreedPrice: null,
     agreedShare: null,
     totalRent: null,
-    commissionPercentage
+    commissionPercentage,
+    advanceFirstInstallment: false,
+    firstPaymentDueBy: null
   };
   let installments = [];
 
   if (lease.leaseType === 'fixed-rent') {
     agreement.agreedPrice = Number(offer.proposedPrice) || Number(lease.pricePerAcre);
     agreement.totalRent = round2(lease.sizeInAcres * agreement.agreedPrice * (durationMonths / 12));
+    // The farmer promised to pay installment 1 when the lease starts: it is charged then, and must be paid within 3 days of the start
+    if (offer.payFirstInstallmentOnStart) {
+      agreement.advanceFirstInstallment = true;
+      agreement.firstPaymentDueBy = new Date(startDate.getTime() + FIRST_PAYMENT_GRACE_DAYS * 24 * 60 * 60 * 1000);
+    }
     installments = splitAmount(agreement.totalRent, durationMonths).map((amount, i) => ({
       number: i + 1,
       dueDate: addMonths(startDate, i),
@@ -68,4 +78,4 @@ const buildAgreement = (lease, offer, commissionPercentage = 0) => {
   return { agreement, installments };
 };
 
-module.exports = { buildAgreement, commissionSplit, round2, addMonths };
+module.exports = { buildAgreement, commissionSplit, splitAmount, round2, addMonths, FIRST_PAYMENT_GRACE_DAYS };

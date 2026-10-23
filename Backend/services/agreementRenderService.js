@@ -10,7 +10,7 @@
 
 const crypto = require('crypto');
 const escapeHtml = require('escape-html');
-const { round2 } = require('./landLeaseScheduleService');
+const { round2, splitAmount, FIRST_PAYMENT_GRACE_DAYS } = require('./landLeaseScheduleService');
 
 const LABELS = {
   en: { acres: 'acres', months: 'months', perAcreYear: 'per acre per year', corner: 'Corner', latitude: 'Latitude', longitude: 'Longitude', area: 'Area of the marked border' },
@@ -69,6 +69,8 @@ const buildTerms = ({ lease, offer, commissionPercentage = 0 }) => {
     pricePerAcrePerYear: price,
     totalRent,
     installmentCount: fixed ? months : null,
+    advanceFirstInstallment: fixed && !!offer.payFirstInstallmentOnStart,
+    firstInstallmentAmount: fixed ? splitAmount(totalRent, months)[0] : null,
     sharePercentage: share,
     crops: offer.proposedCrops || (lease.suitableCrops || []).join(', '),
     availableFrom: lease.availableFrom,
@@ -80,9 +82,14 @@ const paymentTermsText = (terms, lang) => {
   const hi = lang === 'hi';
   if (terms.leaseType === 'fixed-rent') {
     const each = terms.installmentCount ? round2(terms.totalRent / terms.installmentCount) : terms.totalRent;
+    const advance = terms.advanceFirstInstallment
+      ? (hi
+        ? ` पहली किस्त (${inr(terms.firstInstallmentAmount)}) दोनों पक्षों के हस्ताक्षर होते ही काश्तकार के AgroYilt वॉलेट से अपने आप काट ली जाएगी। यदि वह पट्टा शुरू होने के ${FIRST_PAYMENT_GRACE_DAYS} दिन के भीतर नहीं दी जाती, तो भूमि स्वामी तुरंत पट्टा समाप्त कर सकता है।`
+        : ` The first installment (${inr(terms.firstInstallmentAmount)}) is charged automatically from the tenant's AgroYilt wallet as soon as both parties have signed. If it is not paid within ${FIRST_PAYMENT_GRACE_DAYS} days after the lease starts, the landowner may end the lease at once.`)
+      : '';
     return hi
-      ? `किराया ${terms.installmentCount} मासिक किस्तों में (लगभग ${inr(each)} प्रति माह) AgroYilt ऐप के माध्यम से दिया जाएगा। पहली किस्त पट्टा आरंभ होने पर और आगे हर महीने उसी तारीख को देय होगी।`
-      : `The rent is paid in ${terms.installmentCount} monthly installments (about ${inr(each)} a month) through the AgroYilt app. The first installment is due when the lease starts and the others on the same date each month.`;
+      ? `किराया ${terms.installmentCount} मासिक किस्तों में (लगभग ${inr(each)} प्रति माह) AgroYilt ऐप के माध्यम से दिया जाएगा। पहली किस्त पट्टा आरंभ होने पर और आगे हर महीने उसी तारीख को देय होगी।${advance}`
+      : `The rent is paid in ${terms.installmentCount} monthly installments (about ${inr(each)} a month) through the AgroYilt app. The first installment is due when the lease starts and the others on the same date each month.${advance}`;
   }
   return hi
     ? `हर फसल कटने के बाद काश्तकार ऐप में फसल की कुल कीमत दर्ज करेगा, भूमि स्वामी उसे पुष्टि करेगा, और काश्तकार भूमि स्वामी का ${terms.sharePercentage}% हिस्सा AgroYilt ऐप के माध्यम से देगा।`

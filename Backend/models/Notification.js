@@ -239,6 +239,10 @@ const notificationSchema = new mongoose.Schema({
       'land_lease_agreement_reminder',
       'land_lease_agreement_cancelled',
       'land_lease_agreement_expired',
+      'land_lease_payment_due',
+      'land_lease_payment_overdue',
+      'land_lease_notice',
+      'land_lease_terminated',
       'general'
     ],
     index: true

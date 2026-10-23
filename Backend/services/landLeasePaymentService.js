@@ -118,7 +118,9 @@ const loadPayable = async ({ leaseId, tenantId, kind, itemId }) => {
 
   const lease = await LandLease.findById(leaseId);
   if (!lease) return { error: { ok: false, code: 404, reason: 'Land lease not found.' } };
-  if (String(lease.currentTenantId) !== String(tenantId) || lease.status !== 'leased') {
+  // A lease ended for unpaid rent still takes payments: the owner is still owed the money
+  const payable = lease.status === 'leased' || (lease.status === 'inactive' && lease.endedReason === 'non_payment');
+  if (String(lease.currentTenantId) !== String(tenantId) || !payable) {
     return { error: { ok: false, code: 403, reason: 'Only the current tenant can pay for this lease.' } };
   }
 

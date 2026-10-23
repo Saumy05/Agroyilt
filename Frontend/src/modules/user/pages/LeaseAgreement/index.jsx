@@ -65,6 +65,13 @@ const LeaseAgreementPage = () => {
 
   useEffect(() => { load(); }, [load]);
 
+  // coming back from the wallet screen: the balance may have changed
+  useEffect(() => {
+    const onFocus = () => load(true);
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [load]);
+
   // while it is still open, pick up the other party's signature
   useEffect(() => {
     if (!ag || !['DRAFT', 'PARTIALLY_SIGNED'].includes(ag.status)) return undefined;
@@ -232,6 +239,24 @@ const LeaseAgreementPage = () => {
           )}
         </div>
 
+        {/* Advance payment: installment 1 is charged from the farmer's wallet the moment both have signed */}
+        {ag.advance?.required && live && (
+          <div className={`rounded-2xl border p-3.5 text-sm ${ag.advance.short && ag.myRole === 'farmer' ? 'bg-amber-50 border-amber-300 text-amber-900' : 'bg-white border-slate-200 text-slate-800'}`}>
+            <p className="font-black">First installment paid at the start · शुरुआत में पहली किस्त</p>
+            <p className="mt-0.5 text-[13px]">
+              {inr(ag.advance.amount)} is taken from the farmer's wallet as soon as both have signed. If it is not paid within 3 days of the lease starting, the owner can end the lease.
+            </p>
+            {ag.myRole === 'farmer' && (
+              <p className="mt-1.5 text-[13px] font-bold flex flex-wrap items-center gap-x-2">
+                Your wallet: {inr(Math.round(ag.advance.balance))}
+                {ag.advance.short
+                  ? <> · add {inr(Math.ceil(ag.advance.amount - ag.advance.balance))} to sign <button onClick={() => navigate('/user/wallet')} className="underline font-black">Add money</button></>
+                  : ' · enough'}
+              </p>
+            )}
+          </div>
+        )}
+
         {/* State banners */}
         {ag.status === 'FULLY_EXECUTED' && (
           <div className="rounded-2xl bg-emerald-600 text-white p-4 flex items-start gap-3">
@@ -284,6 +309,11 @@ const LeaseAgreementPage = () => {
         {ag.canSign && (
           <div className="bg-white rounded-2xl border-2 border-emerald-500 p-4 space-y-3.5 shadow-sm">
             <p className="font-black text-slate-900">Sign this agreement · अनुबंध पर हस्ताक्षर करें</p>
+            {ag.myRole === 'farmer' && ag.advance?.short && (
+              <p className="text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
+                Signing needs ₹{Math.ceil(ag.advance.amount - ag.advance.balance)} more in your wallet. Add money, then come back and sign.
+              </p>
+            )}
             {!readToEnd && (
               <p className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
                 Scroll through the whole agreement above to enable signing. · पूरा अनुबंध पढ़ने के बाद ही हस्ताक्षर होंगे।
@@ -307,7 +337,7 @@ const LeaseAgreementPage = () => {
             {!otpSentTo ? (
               <button
                 onClick={sendOtp}
-                disabled={!readToEnd || !accepted || sending}
+                disabled={!readToEnd || !accepted || sending || (ag.myRole === 'farmer' && ag.advance?.short)}
                 className="w-full py-3.5 rounded-xl bg-emerald-700 text-white font-black flex items-center justify-center gap-2 disabled:opacity-40 active:scale-[0.99]"
               >
                 <FiSend /> {sending ? 'Sending…' : 'Send OTP to my mobile · OTP भेजें'}

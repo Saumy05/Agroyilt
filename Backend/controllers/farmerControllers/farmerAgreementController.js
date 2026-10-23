@@ -48,7 +48,7 @@ const farmerAgreementController = {
     try {
       const found = await loadForParty(req, res);
       if (!found) return;
-      res.status(200).json({ success: true, data: svc.view(found.agreement, found.role) });
+      res.status(200).json({ success: true, data: await svc.present(found.agreement, found.role) });
     } catch (error) {
       console.error('Error fetching agreement:', error);
       res.status(500).json({ success: false, message: 'Server Error' });
@@ -78,9 +78,10 @@ const farmerAgreementController = {
         otp, accepted, contentHash, device: device && typeof device === 'object' ? device : {},
         ip: req.ip, userAgent: req.headers['user-agent']
       });
+      if (result.ok) result.view = await svc.present(result.agreement, found.role);
       send(res, result, (r) => ({
         message: r.executed ? 'Agreement fully signed. The lease has started.' : 'You have signed. Waiting for the other party.',
-        data: { executed: r.executed, agreement: svc.view(r.agreement, found.role) }
+        data: { executed: r.executed, agreement: r.view }
       }));
     } catch (error) {
       console.error('Error signing agreement:', error);

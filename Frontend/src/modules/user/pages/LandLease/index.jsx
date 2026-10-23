@@ -32,7 +32,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import landLeaseService from '../../services/landLeaseService';
 import { toastManager } from '../../../../utils/toastManager';
 import authStorage from '../../../../utils/authStorage';
-import LeasePaymentsModal from './LeasePaymentsModal';
+import walletService from '../../../../services/walletService';
 import flutterBridge from '../../../../utils/flutterBridge';
 import { uploadToCloudinary } from '../../../../utils/cloudinaryUpload';
 import { compressImage } from '../../../../utils/imageCompression';
@@ -66,14 +66,15 @@ const LandLeasePage = () => {
   const [activeModalImageIndex, setActiveModalImageIndex] = useState(0);
   const [offerModalLand, setOfferModalLand] = useState(null);
   const [submittingOffer, setSubmittingOffer] = useState(false);
-  const [paymentsLandId, setPaymentsLandId] = useState(null);
+  const openPayments = (landId) => navigate(`/user/land-lease/${landId}/payments`);
+  const [offerWallet, setOfferWallet] = useState(null); // wallet balance, shown while a fixed-rent offer is open
 
   // Deep link from a notification: ?tab=my-leases&sub=listings|offers&pay=<landId>
   useEffect(() => {
     if (searchParams.get('tab') === 'my-leases') {
       setActiveTab('my-leases');
       if (['listings', 'offers'].includes(searchParams.get('sub'))) setMyLeasesSubTab(searchParams.get('sub'));
-      if (searchParams.get('pay')) setPaymentsLandId(searchParams.get('pay'));
+      if (searchParams.get('pay')) navigate(`/user/land-lease/${searchParams.get('pay')}/payments`, { replace: true });
       setSearchParams({}, { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -85,7 +86,8 @@ const LandLeasePage = () => {
     proposedShare: '',
     durationMonths: 12,
     proposedCrops: '',
-    message: ''
+    message: '',
+    payFirstInstallment: false
   });
 
   // Listing Form State
@@ -215,24 +217,39 @@ const LandLeasePage = () => {
       proposedShare: land.leaseType === 'crop-share' ? land.sharePercentage || 50 : '',
       durationMonths: 12,
       proposedCrops: (land.suitableCrops || []).join(', '),
-      message: ''
+      message: '',
+      payFirstInstallment: false
     });
+    setOfferWallet(null);
+    if (land.leaseType === 'fixed-rent') {
+      walletService.getBalance().then((r) => { if (r?.success) setOfferWallet(Number(r.data?.balance) || 0); }).catch(() => {});
+    }
   };
 
-  // Submit Offer
+  // Submit Offer (an unusually high rent has to be confirmed first)
   const handleSubmitOffer = async (e) => {
     e.preventDefault();
     if (!offerModalLand) return;
 
+    const send = (confirmHighPrice) => landLeaseService.submitOffer(offerModalLand._id, {
+      proposedPrice: offerModalLand.leaseType === 'fixed-rent' ? Number(offerForm.proposedPrice) : undefined,
+      proposedShare: offerModalLand.leaseType === 'crop-share' ? Number(offerForm.proposedShare) : undefined,
+      durationMonths: Number(offerForm.durationMonths) || 12,
+      proposedCrops: offerForm.proposedCrops,
+      message: offerForm.message,
+      payFirstInstallment: offerModalLand.leaseType === 'fixed-rent' ? !!offerForm.payFirstInstallment : undefined,
+      confirmHighPrice: confirmHighPrice || undefined
+    });
+
     try {
       setSubmittingOffer(true);
-      const res = await landLeaseService.submitOffer(offerModalLand._id, {
-        proposedPrice: offerModalLand.leaseType === 'fixed-rent' ? Number(offerForm.proposedPrice) : undefined,
-        proposedShare: offerModalLand.leaseType === 'crop-share' ? Number(offerForm.proposedShare) : undefined,
-        durationMonths: Number(offerForm.durationMonths) || 12,
-        proposedCrops: offerForm.proposedCrops,
-        message: offerForm.message
-      });
+      let res;
+      try {
+        res = await send(false);
+      } catch (err) {
+        if (err.response?.data?.code === 'PRICE_CONFIRM' && window.confirm(err.response.data.message)) res = await send(true);
+        else throw err;
+      }
 
       if (res?.success) {
         toastManager.success('Offer submitted to the owner successfully!');
@@ -242,7 +259,7 @@ const LandLeasePage = () => {
         toastManager.error(res?.message || 'Failed to submit offer');
       }
     } catch (err) {
-      toastManager.error(err.response?.data?.message || 'Error submitting offer');
+      if (err.response?.data?.code !== 'PRICE_CONFIRM') toastManager.error(err.response?.data?.message || 'Error submitting offer');
     } finally {
       setSubmittingOffer(false);
     }
@@ -501,7 +518,16 @@ const LandLeasePage = () => {
         boundaryPoints: listingForm.boundaryPoints
       };
 
-      const res = await landLeaseService.listLand(payload);
+      let res;
+      try {
+        res = await landLeaseService.listLand(payload);
+      } catch (err) {
+        if (err.response?.data?.code === 'PRICE_CONFIRM' && window.confirm(err.response.data.message)) {
+          res = await landLeaseService.listLand({ ...payload, confirmHighPrice: true });
+        } else {
+          throw err;
+        }
+      }
       if (res?.success) {
         toastManager.success('Land listed successfully!');
         setListingPhotos([]);
@@ -538,7 +564,7 @@ const LandLeasePage = () => {
         toastManager.error(res?.message || 'Failed to list land');
       }
     } catch (err) {
-      toastManager.error(err.response?.data?.message || 'Error listing land');
+      if (err.response?.data?.code !== 'PRICE_CONFIRM') toastManager.error(err.response?.data?.message || 'Error listing land');
     } finally {
       setSubmittingListing(false);
     }
@@ -1144,6 +1170,12 @@ const LandLeasePage = () => {
                     onChange={(e) => setListingForm({ ...listingForm, pricePerAcre: e.target.value })}
                     className="w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white text-gray-900 font-bold"
                   />
+                  {Number(listingForm.pricePerAcre) > 0 && Number(listingForm.sizeInAcres) > 0 && (
+                    <p className="mt-1.5 text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-lg px-2.5 py-1.5">
+                      {listingForm.sizeInAcres} acres × ₹{Number(listingForm.pricePerAcre).toLocaleString('en-IN')} = ₹{(Number(listingForm.sizeInAcres) * Number(listingForm.pricePerAcre)).toLocaleString('en-IN')} per year
+                      <span className="block font-medium text-emerald-700">₹{Math.round(Number(listingForm.sizeInAcres) * Number(listingForm.pricePerAcre) / 12).toLocaleString('en-IN')} per month · rent is per acre per year</span>
+                    </p>
+                  )}
                 </div>
               ) : (
                 <div>
@@ -1454,7 +1486,7 @@ const LandLeasePage = () => {
                                   : 'bg-emerald-100 text-emerald-800'
                               }`}
                             >
-                              {item.status === 'leased' ? 'Leased' : item.status === 'agreement_pending' ? 'Signing' : 'Active'}
+                              {item.endedReason === 'non_payment' ? 'Ended' : item.status === 'leased' ? 'Leased' : item.status === 'agreement_pending' ? 'Signing' : 'Active'}
                             </span>
                             <span className="text-xs text-gray-400 font-medium">Khasra: {item.khasraNumber}</span>
                           </div>
@@ -1484,9 +1516,9 @@ const LandLeasePage = () => {
                               <span>{!item.agreementSummary.mySigned && ['DRAFT', 'PARTIALLY_SIGNED'].includes(item.agreementSummary.status) ? 'Sign agreement' : 'View agreement'}</span>
                             </button>
                           )}
-                          {item.status === 'leased' && (
+                          {(item.status === 'leased' || item.endedReason === 'non_payment') && (
                             <button
-                              onClick={() => setPaymentsLandId(item._id)}
+                              onClick={() => openPayments(item._id)}
                               className="p-2 rounded-xl text-emerald-800 hover:bg-emerald-50 border border-emerald-200 text-xs flex items-center gap-1 font-bold"
                             >
                               <FiDollarSign className="w-3.5 h-3.5" />
@@ -1659,9 +1691,9 @@ const LandLeasePage = () => {
                           {!item.agreementSummary.mySigned && ['DRAFT', 'PARTIALLY_SIGNED'].includes(item.agreementSummary.status) ? 'Sign agreement' : 'View agreement'}
                         </button>
                       )}
-                      {item.isCurrentTenant && item.status === 'leased' && (
+                      {item.isCurrentTenant && (item.status === 'leased' || item.endedReason === 'non_payment') && (
                         <button
-                          onClick={() => setPaymentsLandId(item.landId)}
+                          onClick={() => openPayments(item.landId)}
                           className="py-2 px-3 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl text-xs font-bold flex items-center gap-1 shrink-0"
                         >
                           <FiDollarSign className="w-3.5 h-3.5" />
@@ -1768,6 +1800,41 @@ const LandLeasePage = () => {
                     <option value="36">3 years (long term)</option>
                   </select>
                 </div>
+
+                {/* What this adds up to, and the option to pay installment 1 when the lease starts */}
+                {offerModalLand.leaseType === 'fixed-rent' && Number(offerForm.proposedPrice) > 0 && (() => {
+                  const months = Number(offerForm.durationMonths) || 12;
+                  const total = Number(offerModalLand.sizeInAcres) * Number(offerForm.proposedPrice) * (months / 12);
+                  const each = total / months;
+                  const short = offerForm.payFirstInstallment && offerWallet !== null && offerWallet < each;
+                  return (
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 space-y-2">
+                      <p className="text-xs font-bold text-emerald-900">
+                        {offerModalLand.sizeInAcres} acres × ₹{Number(offerForm.proposedPrice).toLocaleString('en-IN')} × {months}/12 year
+                        <span className="block text-base font-black">= ₹{Math.round(total).toLocaleString('en-IN')} total · ₹{Math.round(each).toLocaleString('en-IN')} a month</span>
+                      </p>
+                      <label className="flex items-start gap-2.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={!!offerForm.payFirstInstallment}
+                          onChange={(e) => setOfferForm({ ...offerForm, payFirstInstallment: e.target.checked })}
+                          className="w-4 h-4 mt-0.5 accent-emerald-700 shrink-0"
+                        />
+                        <span className="text-xs font-semibold text-gray-800 leading-snug">
+                          I will pay the first installment (₹{Math.round(each).toLocaleString('en-IN')}) as soon as the lease starts
+                          <span className="block text-[11px] font-medium text-gray-500">It is taken from my wallet when both of us have signed. Shows the owner I am serious.</span>
+                        </span>
+                      </label>
+                      {offerForm.payFirstInstallment && offerWallet !== null && (
+                        <p className={`text-[11px] font-semibold ${short ? 'text-amber-700' : 'text-emerald-700'}`}>
+                          Wallet: ₹{Math.round(offerWallet).toLocaleString('en-IN')}
+                          {short ? ` · add ₹${Math.ceil(each - offerWallet).toLocaleString('en-IN')} before you sign the agreement` : ' · enough'}
+                          {short && <button type="button" onClick={() => navigate('/user/wallet')} className="ml-2 underline font-black">Add money</button>}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* Proposed Crops */}
                 <div>
@@ -1981,13 +2048,6 @@ const LandLeasePage = () => {
         )}
       </AnimatePresence>
 
-      {paymentsLandId && (
-        <LeasePaymentsModal
-          landId={paymentsLandId}
-          onClose={() => setPaymentsLandId(null)}
-          onChanged={fetchMyLeases}
-        />
-      )}
       {/* Accepting an offer makes the agreement: the owner picks its language first */}
       {acceptDialog && (
         <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/50 p-3" onClick={() => setAcceptDialog(null)}>

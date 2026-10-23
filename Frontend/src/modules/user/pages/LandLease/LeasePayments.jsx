@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { FiX, FiCheck, FiClock, FiCreditCard } from 'react-icons/fi';
-import { motion } from 'framer-motion';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { FiArrowLeft, FiCheck, FiClock, FiCreditCard, FiAlertTriangle, FiFileText } from 'react-icons/fi';
 import landLeaseService from '../../services/landLeaseService';
 import { walletService } from '../../../../services/walletService';
 import { toastManager } from '../../../../utils/toastManager';
@@ -45,15 +45,14 @@ const StatusChip = ({ status }) => (
   </span>
 );
 
-const LeasePaymentsModal = ({ landId, onClose, onChanged }) => {
+const LeasePaymentsPage = () => {
+  const { landId } = useParams();
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
   const [walletBalance, setWalletBalance] = useState(null); // null until loaded; payments stay allowed so the server still decides
   const [harvest, setHarvest] = useState({ cropName: '', harvestValue: '', note: '' });
-
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
 
   const load = useCallback(async () => {
     try {
@@ -61,11 +60,11 @@ const LeasePaymentsModal = ({ landId, onClose, onChanged }) => {
       if (res?.success) setData(res.data);
     } catch (err) {
       toastManager.error(err.response?.data?.message || 'Failed to load payments');
-      onCloseRef.current();
+      navigate(-1);
     } finally {
       setLoading(false);
     }
-  }, [landId]);
+  }, [landId, navigate]);
 
   const loadBalance = useCallback(async () => {
     try {
@@ -132,7 +131,6 @@ const LeasePaymentsModal = ({ landId, onClose, onChanged }) => {
               if (res?.success) {
                 toastManager.success(successMsg);
                 await Promise.all([load(), loadBalance()]);
-                onChanged?.();
                 return resolve(true);
               }
               toastManager.error(res?.message || 'Payment could not be confirmed');
@@ -164,7 +162,6 @@ const LeasePaymentsModal = ({ landId, onClose, onChanged }) => {
       if (res?.success) {
         toastManager.success(successMsg);
         await Promise.all([load(), loadBalance()]);
-        onChanged?.();
         return true;
       }
       toastManager.error(res?.message || 'Action failed');
@@ -213,63 +210,139 @@ const LeasePaymentsModal = ({ landId, onClose, onChanged }) => {
   const hasOpenSettlement = data?.settlements?.some((s) => ['submitted', 'confirmed', 'processing'].includes(s.status));
   const sharePreview = (Number(harvest.harvestValue) || 0) * ((agreement.agreedShare || 0) / 100);
 
+  const endForNonPayment = async () => {
+    const eligibility = data?.endEligibility;
+    const text = eligibility?.immediate
+      ? 'End this lease now? The first installment was not paid in time. The tenant can still pay what is owed, but the lease stops.'
+      : `Send a ${data?.noticeDays || 15}-day notice? If the overdue rent (${inr(eligibility?.overdueAmount)}) is still unpaid when it runs out, the lease ends.`;
+    if (!window.confirm(text)) return;
+    await run('end-lease', () => landLeaseService.endForNonPayment(landId), 'Done');
+  };
+
+
+  const eligibility = data?.endEligibility;
+  const notice = data?.terminationNotice;
+  const noticeOpen = notice?.status === 'open';
+  const endedForRent = data?.status === 'inactive' && data?.endedReason === 'non_payment';
+  const firstInstallment = data?.installments?.[0];
+  const firstPending = agreement.advanceFirstInstallment && firstInstallment && firstInstallment.status !== 'paid';
+  const overdueAmount = (data?.installments || []).filter((i) => i.overdue).reduce((t, i) => t + i.amount, 0);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <motion.div
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        className="bg-white rounded-3xl max-w-lg w-full p-5 sm:p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto"
-      >
-        <button onClick={onClose} className="absolute top-4 right-4 p-2 rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200">
-          <FiX className="w-5 h-5" />
-        </button>
-
-        <div className="border-b border-gray-100 pb-3 mb-4 pr-10">
-          <span className="text-xs uppercase font-extrabold text-emerald-700 tracking-wider">Lease Payments</span>
-          <h3 className="text-base sm:text-lg font-black text-gray-900 mt-0.5">Payments & Settlements</h3>
-          {data && <p className="text-xs text-gray-500 line-clamp-1">{data.title}</p>}
+    <div className="min-h-screen bg-slate-50 pb-10">
+      <div className="sticky top-0 z-30 bg-white border-b border-gray-200 px-4 py-3">
+        <div className="max-w-xl mx-auto flex items-center gap-3">
+          <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center text-gray-700 active:scale-95" aria-label="Back">
+            <FiArrowLeft size={18} />
+          </button>
+          <div className="min-w-0 flex-1">
+            <span className="text-[10px] uppercase font-extrabold text-emerald-700 tracking-wider">Lease Payments</span>
+            <h1 className="text-sm font-black text-gray-900 truncate">{data ? data.title : 'Payments & Settlements'}</h1>
+          </div>
+          {data?.agreementId && (
+            <button onClick={() => navigate(`/user/agreements/${data.agreementId}`)} className="px-3 py-2 rounded-xl bg-emerald-50 text-emerald-800 text-xs font-bold flex items-center gap-1.5 border border-emerald-200">
+              <FiFileText size={13} /> Agreement
+            </button>
+          )}
         </div>
+      </div>
 
+      <div className="max-w-xl mx-auto px-3.5 pt-4">
         {loading || !data ? (
-          <div className="py-10 text-center text-gray-400">
-            <div className="w-8 h-8 border-3 border-emerald-700 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+          <div className="py-16 text-center text-gray-400">
+            <div className="w-8 h-8 border-4 border-emerald-700 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
             <p className="text-xs">Loading...</p>
           </div>
         ) : (
           <div className="space-y-4 text-xs">
-            {/* Agreement summary */}
-            <div className="grid grid-cols-2 gap-2">
-              <div className="bg-gray-50 p-2.5 rounded-xl">
-                <span className="text-gray-400 block text-[10px]">Duration</span>
-                <span className="font-bold text-gray-800">
-                  {fmtDate(agreement.startDate)} – {fmtDate(agreement.endDate)}
-                </span>
+            {/* Notices first: they need action */}
+            {endedForRent && (
+              <div className="rounded-2xl bg-slate-800 text-white p-4 flex gap-3">
+                <FiAlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-black text-sm">This lease was ended for unpaid rent</p>
+                  <p className="text-slate-300 mt-0.5">पट्टा किराया न देने के कारण समाप्त हो गया। The rent still owed can be paid to the owner below.</p>
+                </div>
               </div>
-              <div className="bg-gray-50 p-2.5 rounded-xl">
+            )}
+            {noticeOpen && (
+              <div className="rounded-2xl bg-red-50 border border-red-200 p-4 flex gap-3 text-red-900">
+                <FiAlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-red-600" />
+                <div>
+                  <p className="font-black text-sm">Notice: the lease ends on {fmtDate(notice.endsAt)}</p>
+                  <p className="mt-0.5">
+                    {isTenant
+                      ? `Pay the overdue rent (${inr(overdueAmount)}) before then to keep the lease.`
+                      : `It ends then unless the tenant pays the overdue rent (${inr(overdueAmount)}).`}
+                  </p>
+                </div>
+              </div>
+            )}
+            {!endedForRent && !noticeOpen && firstPending && (
+              <div className="rounded-2xl bg-amber-50 border border-amber-200 p-4 flex gap-3 text-amber-900">
+                <FiClock className="w-5 h-5 shrink-0 mt-0.5 text-amber-600" />
+                <div>
+                  <p className="font-black text-sm">First installment {isTenant ? 'is waiting for your payment' : 'is not paid yet'}</p>
+                  <p className="mt-0.5">
+                    Promised at the start: {inr(firstInstallment.amount)}. It must be paid by {fmtDate(agreement.firstPaymentDueBy)}, or the owner can end the lease.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Summary */}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="bg-white border border-gray-200 p-3 rounded-xl">
+                <span className="text-gray-400 block text-[10px]">Duration</span>
+                <span className="font-bold text-gray-800">{fmtDate(agreement.startDate)} – {fmtDate(agreement.endDate)}</span>
+              </div>
+              <div className="bg-white border border-gray-200 p-3 rounded-xl">
                 <span className="text-gray-400 block text-[10px]">Terms</span>
                 <span className="font-bold text-gray-800">
-                  {data.leaseType === 'fixed-rent'
-                    ? `${inr(agreement.agreedPrice)}/acre/year`
-                    : `${agreement.agreedShare}% Crop Share (owner's share)`}
+                  {data.leaseType === 'fixed-rent' ? `${inr(agreement.agreedPrice)}/acre/year` : `${agreement.agreedShare}% Crop Share (owner's share)`}
                 </span>
+                {data.leaseType === 'fixed-rent' && <span className="block text-[10px] text-gray-500">Total {inr(agreement.totalRent)} · {data.sizeInAcres} acres</span>}
               </div>
-              <div className="bg-emerald-50 p-2.5 rounded-xl border border-emerald-100">
+              <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-100">
                 <span className="text-emerald-700 block text-[10px]">Paid so far</span>
                 <span className="font-extrabold text-emerald-900">{inr(data.totals?.paid)}</span>
               </div>
               {data.leaseType === 'fixed-rent' && (
-                <div className="bg-amber-50 p-2.5 rounded-xl border border-amber-100">
-                  <span className="text-amber-700 block text-[10px]">Rent due</span>
-                  <span className="font-extrabold text-amber-900">{inr(data.totals?.pendingRent)}</span>
+                <div className={`p-3 rounded-xl border ${overdueAmount > 0 ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-100'}`}>
+                  <span className={`block text-[10px] ${overdueAmount > 0 ? 'text-red-700' : 'text-amber-700'}`}>{overdueAmount > 0 ? 'Overdue' : 'Rent due'}</span>
+                  <span className={`font-extrabold ${overdueAmount > 0 ? 'text-red-900' : 'text-amber-900'}`}>{inr(overdueAmount > 0 ? overdueAmount : data.totals?.pendingRent)}</span>
+                  {overdueAmount > 0 && <span className="block text-[10px] text-red-700">of {inr(data.totals?.pendingRent)} still to pay</span>}
                 </div>
               )}
             </div>
 
             {isTenant && (
-              <p className="text-[11px] text-gray-500">
-                Payment comes from your wallet; if the wallet is short, you pay the full amount online. A platform fee of {agreement.commissionPercentage || 0}% is deducted from the owner's amount.
-                {walletBalance !== null && <span className="block font-bold text-gray-700 mt-0.5">Wallet balance: {inr(walletBalance)}</span>}
-              </p>
+              <div className="bg-white border border-gray-200 rounded-xl p-3 space-y-1">
+                <p className="text-[11px] text-gray-500">
+                  Payment comes from your wallet; if the wallet is short, you pay the full amount online. A platform fee of {agreement.commissionPercentage || 0}% is deducted from the owner's amount.
+                </p>
+                {walletBalance !== null && (
+                  <p className="font-bold text-gray-800 flex items-center justify-between">
+                    <span>Wallet balance: {inr(walletBalance)}</span>
+                    <button onClick={() => navigate('/user/wallet')} className="text-emerald-700 underline font-black">Add money</button>
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Owner: end the lease for unpaid rent */}
+            {isOwner && eligibility?.eligible && (
+              <div className="bg-white border border-red-200 rounded-xl p-3 space-y-2">
+                <p className="font-black text-gray-900">{eligibility.immediate ? 'The first installment was not paid in time' : `${eligibility.overdue} installments are overdue (${inr(eligibility.overdueAmount)})`}</p>
+                <p className="text-gray-600">
+                  {eligibility.immediate
+                    ? 'You can end this lease now.'
+                    : `You can send a ${data.noticeDays}-day notice. The lease ends if the rent is still unpaid after it.`}
+                </p>
+                <button onClick={endForNonPayment} disabled={!!busyId} className="w-full py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-black disabled:opacity-60">
+                  {busyId === 'end-lease' ? '...' : eligibility.immediate ? 'End lease for non-payment' : `Send ${data.noticeDays}-day notice`}
+                </button>
+              </div>
             )}
 
             {/* Fixed-rent installments */}
@@ -277,23 +350,26 @@ const LeasePaymentsModal = ({ landId, onClose, onChanged }) => {
               <div className="space-y-2">
                 <h4 className="font-extrabold text-gray-900 text-xs">Monthly Installments</h4>
                 {data.installments.map((item) => (
-                  <div key={item._id} className="flex items-center justify-between gap-2 bg-white border border-gray-200 rounded-xl p-2.5">
-                    <div>
-                      <div className="font-bold text-gray-900">
-                        Installment {item.number} • {inr(item.amount)}
+                  <div key={item._id} className={`bg-white border rounded-xl p-3 space-y-2 ${item.overdue ? 'border-red-200' : 'border-gray-200'}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="font-bold text-gray-900 text-sm">Installment {item.number} · {inr(item.amount)}</div>
+                        <div className="text-[11px] text-gray-500 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5">
+                          <FiClock className="w-3 h-3" /> Due {fmtDate(item.dueDate)}
+                          {item.status === 'paid' && item.paidAt && <span>· paid {fmtDate(item.paidAt)}</span>}
+                          {isOwner && item.status === 'paid' && <span>· you received {inr(item.ownerAmount)}</span>}
+                        </div>
                       </div>
-                      <div className="text-[11px] text-gray-500 flex items-center gap-1">
-                        <FiClock className="w-3 h-3" /> Due: {fmtDate(item.dueDate)}
-                        {isOwner && item.status === 'paid' && <span> • You received {inr(item.ownerAmount)}</span>}
-                        {item.status === 'paid' && item.paidAt && <span> • {fmtDate(item.paidAt)}</span>}
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <StatusChip status={item.status} />
+                        {item.overdue && <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-red-100 text-red-700">Overdue</span>}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <StatusChip status={item.status} />
-                      {isTenant && nextDue?._id === item._id && item.status !== 'paid' && (
-                        renderPayButton(item, () => payInstallment(item), 'Pay')
-                      )}
-                    </div>
+                    {isTenant && nextDue?._id === item._id && item.status !== 'paid' && (
+                      <div className="[&>button]:w-full [&>button]:justify-center [&>button]:py-2.5">
+                        {renderPayButton(item, () => payInstallment(item), 'Pay')}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -391,9 +467,9 @@ const LeasePaymentsModal = ({ landId, onClose, onChanged }) => {
             )}
           </div>
         )}
-      </motion.div>
+      </div>
     </div>
   );
 };
 
-export default LeasePaymentsModal;
+export default LeasePaymentsPage;

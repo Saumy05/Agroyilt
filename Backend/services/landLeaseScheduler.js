@@ -12,6 +12,7 @@
 const LandLease = require('../models/LandLease');
 const { notifyLease } = require('./landLeaseNotifyService');
 const { runPeriodic: runAgreementJobs } = require('./leaseAgreementService');
+const { runPeriodic: runDuesJobs } = require('./landLeaseDuesService');
 
 const OPEN_SETTLEMENT = ['submitted', 'confirmed', 'processing'];
 
@@ -55,6 +56,9 @@ const startLandLeaseScheduler = () => {
   // agreements nobody signed lapse, reminders go out, and a lease start that failed is retried
   setInterval(runAgreementJobs, 30 * 60 * 1000);
   setTimeout(runAgreementJobs, 40000);
+  // rent reminders, and notices to end a lease for unpaid rent
+  setInterval(runDuesJobs, 60 * 60 * 1000);
+  setTimeout(runDuesJobs, 60000);
   console.log('✅ Land lease expiry scheduler initialized');
 };
 

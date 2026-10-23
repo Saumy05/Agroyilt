@@ -17,6 +17,7 @@ const LandLease = require('../models/LandLease');
 const LeaseAgreement = require('../models/LeaseAgreement');
 const User = require('../models/User');
 const Settings = require('../models/Settings');
+const Wallet = require('../models/Wallet');
 const { buildAgreement } = require('./landLeaseScheduleService');
 const render = require('./agreementRenderService');
 const { getActiveTemplate } = require('./agreementDefaults');
@@ -51,6 +52,30 @@ const partyRole = (ag, userId) => {
 
 const getSettings = async () =>
   Settings.findOne({ type: 'global' }).select('landLeaseCommissionPercentage landLeaseRequireAgreement landLeaseAgreementValidDays').lean();
+
+/** The farmer's wallet balance (the wallet row, or the older balance kept on the user until the row exists). */
+const walletBalanceOf = async (userId) => {
+  const w = await Wallet.findOne({ userId, userModel: 'User' }).sort({ _id: 1 }).select('balance').lean();
+  if (w) return Number(w.balance) || 0;
+  const u = await User.findById(userId).select('wallet.balance').lean();
+  return Number(u?.wallet?.balance) || 0;
+};
+
+/**
+ * For a fixed-rent agreement whose farmer promised to pay installment 1 at the start: how much, and whether their wallet
+ * covers it right now. Only the farmer is told their balance.
+ * @returns {Promise<{ required: boolean, amount?: number, balance?: number, short?: boolean }|null>}
+ */
+const advanceInfo = async (ag, role) => {
+  const t = ag.termsSnapshot || {};
+  if (!t.advanceFirstInstallment) return null;
+  if (role !== 'farmer') return { required: true, amount: t.firstInstallmentAmount };
+  const balance = await walletBalanceOf(ag.farmer.userId);
+  return { required: true, amount: t.firstInstallmentAmount, balance, short: balance < t.firstInstallmentAmount };
+};
+
+/** The agreement as the screens need it, plus the advance-payment status for the farmer. */
+const present = async (ag, role, opts = {}) => ({ ...view(ag, role, opts), advance: await advanceInfo(ag, role) });
 
 /** Whether accepted offers need a signed agreement before they become a lease (admin can switch it off). */
 const agreementRequired = async () => (await getSettings())?.landLeaseRequireAgreement !== false;
@@ -284,6 +309,14 @@ const sign = async (ag, role, { otp, accepted, contentHash, device = {}, ip = nu
     return fail(409, 'NAME_CHANGED', 'The name on your account no longer matches the name on this agreement. Ask the other party to cancel it so a new agreement can be made.');
   }
 
+  // The farmer promised to pay installment 1 when the lease starts: they cannot sign without the money in their wallet
+  if (role === 'farmer') {
+    const adv = await advanceInfo(ag, role);
+    if (adv?.short) {
+      return fail(402, 'WALLET_SHORT', `Add ₹${Math.ceil(adv.amount - adv.balance)} to your wallet before signing. The first installment (₹${adv.amount}) is charged from it when the lease starts.`);
+    }
+  }
+
   const otpResult = await checkSigningOtp(ag, role, otp);
   if (!otpResult.ok) return otpResult;
 
@@ -360,6 +393,27 @@ const activateLease = async (ag) => {
       $set: { 'effective.startDate': agreement.startDate, 'effective.endDate': agreement.endDate },
       $push: { auditTrail: audit('lease_started', { role: 'system', details: `Lease period ${render.fmtDate(agreement.startDate)} to ${render.fmtDate(agreement.endDate)}` }) }
     });
+
+    // The farmer promised to pay installment 1 now: charge it from their wallet. If it cannot be taken, installment 1 stays due
+    // and the farmer has until `firstPaymentDueBy`; after that the owner may end the lease at once.
+    if (agreement.advanceFirstInstallment && lease.installments[0]) {
+      const { payItem } = require('./landLeasePaymentService');
+      let paid = false;
+      try {
+        const r = await payItem({ leaseId: lease._id, tenantId: ag.farmer.userId, kind: 'installment', itemId: lease.installments[0]._id });
+        paid = !!r.ok;
+      } catch (err) {
+        console.error('[leaseAgreement] charging the first installment failed:', err);
+      }
+      await LeaseAgreement.updateOne({ _id: ag._id }, { $push: { auditTrail: audit(paid ? 'first_installment_paid' : 'first_installment_pending', { role: 'system', details: paid ? 'Installment 1 charged from the farmer wallet' : 'Wallet could not cover installment 1: it stays due' }) } });
+      if (!paid) {
+        const payLink = { link: `/user/land-lease/${lease._id}/payments` };
+        notifyLease(ag.farmer.userId, 'land_lease_payment_due', '⚠️ पहली किस्त बाकी (First installment due)',
+          `"${lease.title}" की पहली किस्त वॉलेट से नहीं कट सकी। ${render.fmtDate(agreement.firstPaymentDueBy)} तक भुगतान करें, वरना मालिक पट्टा समाप्त कर सकता है।`, lease._id, payLink);
+        notifyLease(ag.landowner.userId, 'land_lease_payment_due', 'पहली किस्त बाकी (First installment pending)',
+          `"${lease.title}" की पहली किस्त अभी नहीं मिली। ${render.fmtDate(agreement.firstPaymentDueBy)} तक न आने पर आप पट्टा समाप्त कर सकते हैं।`, lease._id, payLink);
+      }
+    }
 
     notifyLease(ag.farmer.userId, 'land_lease_agreement_executed', '✅ पट्टा शुरू (Lease started)',
       `"${lease.title}" का अनुबंध दोनों के हस्ताक्षर से पूरा हुआ। किस्तें "भुगतान" में देखें।`, lease._id);
@@ -474,6 +528,7 @@ const readDownloadToken = (token) => {
 };
 
 module.exports = {
+  present, advanceInfo, walletBalanceOf,
   makeDownloadToken, readDownloadToken,
   agreementRequired, startAgreementForOffer, partyRole, view, sendSigningOtp, sign, cancel, activateLease, runPeriodic, consentText, isExpired, audit, TYPE_OF
 };

@@ -7,7 +7,17 @@ const { payItem, createOnlineOrder, verifyOnlinePayment } = require('../../servi
 const { notifyLease } = require('../../services/landLeaseNotifyService');
 const landBoundary = require('../../services/landBoundaryService');
 const agreementSvc = require('../../services/leaseAgreementService');
+const duesSvc = require('../../services/landLeaseDuesService');
 const LeaseAgreement = require('../../models/LeaseAgreement');
+
+// A rent per acre per year above this is almost always a typing slip (a real lease is a few thousand rupees per acre): the
+// farmer is asked to confirm it before it is saved.
+const HIGH_PRICE_PER_ACRE = 100000;
+const priceConfirmError = (price) => ({
+  success: false,
+  code: 'PRICE_CONFIRM',
+  message: `₹${Number(price).toLocaleString('en-IN')} per acre per year is very high. Please check it, then confirm if it is correct.`
+});
 
 const escapeRegex = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -247,7 +257,8 @@ const farmerLandLeaseController = {
         fencing,
         roadAccess,
         suitableCrops,
-        boundaryPoints
+        boundaryPoints,
+        confirmHighPrice
       } = req.body;
 
       const ownerId = req.user.id;
@@ -278,6 +289,10 @@ const farmerLandLeaseController = {
           success: false,
           message: 'कृपया प्रति एकड़ किराया दर्ज करें (Price per acre is required for fixed-rent)'
         });
+      }
+
+      if (leaseType === 'fixed-rent' && Number(pricePerAcre) > HIGH_PRICE_PER_ACRE && confirmHighPrice !== true) {
+        return res.status(400).json(priceConfirmError(pricePerAcre));
       }
 
       if (leaseType === 'crop-share') {
@@ -601,6 +616,7 @@ const farmerLandLeaseController = {
           pricePerAcre: land.pricePerAcre,
           sharePercentage: land.sharePercentage,
           status: land.status,
+          endedReason: land.endedReason || null,
           images: land.images,
           ownerName: land.ownerId?.name || 'Landowner',
           myOffer: myOffer || null,
@@ -648,7 +664,9 @@ const farmerLandLeaseController = {
         proposedShare,
         durationMonths = 12,
         proposedCrops,
-        message
+        message,
+        payFirstInstallment,
+        confirmHighPrice
       } = req.body;
 
       const lease = await LandLease.findById(id);
@@ -686,6 +704,9 @@ const farmerLandLeaseController = {
       if (!(bid > 0) || (lease.leaseType === 'crop-share' && bid > 100)) {
         return res.status(400).json({ success: false, message: 'अमान्य प्रस्ताव राशि या हिस्सा (Invalid offer amount or share)' });
       }
+      if (lease.leaseType === 'fixed-rent' && bid > HIGH_PRICE_PER_ACRE && confirmHighPrice !== true) {
+        return res.status(400).json(priceConfirmError(bid));
+      }
       const months = Number(durationMonths);
       if (!(months >= 1 && months <= 120)) {
         return res.status(400).json({ success: false, message: 'अवधि 1 से 120 माह के बीच होनी चाहिए (Duration must be 1-120 months)' });
@@ -704,6 +725,7 @@ const farmerLandLeaseController = {
         proposedShare: lease.leaseType === 'crop-share' ? bid : null,
         durationMonths: months,
         proposedCrops: proposedCrops || '',
+        payFirstInstallmentOnStart: lease.leaseType === 'fixed-rent' && payFirstInstallment === true,
         message: message || '',
         status: 'pending',
         createdAt: new Date()
@@ -941,17 +963,22 @@ const farmerLandLeaseController = {
       }
 
       const lease = await LandLease.findById(req.params.id)
-        .select('title leaseType sizeInAcres ownerId currentTenantId status agreement installments settlements')
+        .select('title leaseType sizeInAcres ownerId currentTenantId status agreement installments settlements terminationNotice endedReason agreementId')
         .populate('ownerId', 'name')
         .populate('currentTenantId', 'name')
         .lean();
 
       const sum = (arr, status) => arr.filter(i => i.status === status).reduce((t, i) => t + i.amount, 0);
+      const now = new Date();
+      const overdueIds = new Set(duesSvc.overdueInstallments(lease, now).map(i => String(i._id)));
+      lease.installments = lease.installments.map(i => ({ ...i, overdue: overdueIds.has(String(i._id)) }));
       res.status(200).json({
         success: true,
         data: {
           ...lease,
           role: isOwner ? 'owner' : 'tenant',
+          endEligibility: isOwner ? duesSvc.endEligibility(lease, now) : null,
+          noticeDays: duesSvc.NOTICE_DAYS,
           totals: {
             paid: sum(lease.installments, 'paid') + sum(lease.settlements, 'paid'),
             pendingRent: lease.installments.filter(i => i.status !== 'paid').reduce((t, i) => t + i.amount, 0)
@@ -960,6 +987,25 @@ const farmerLandLeaseController = {
       });
     } catch (error) {
       console.error('Error fetching lease payments:', error);
+      res.status(500).json({ success: false, message: 'Server Error' });
+    }
+  },
+
+  // 7b2. Owner ends the lease (or starts the 15-day notice) for unpaid rent
+  endLeaseForNonPayment: async (req, res) => {
+    try {
+      const result = await duesSvc.giveNotice({ leaseId: req.params.id, ownerId: req.user.id });
+      if (!result.ok) return res.status(result.status).json({ success: false, message: result.message });
+      res.status(200).json({
+        success: true,
+        ended: result.ended,
+        message: result.ended
+          ? 'पट्टा समाप्त कर दिया गया (The lease has been ended)'
+          : `15 दिन का नोटिस भेज दिया गया (A 15-day notice was sent). The lease ends on ${new Date(result.endsAt).toLocaleDateString('en-IN')} if the overdue rent is not paid.`,
+        data: { endsAt: result.endsAt || null }
+      });
+    } catch (error) {
+      console.error('Error ending lease for non-payment:', error);
       res.status(500).json({ success: false, message: 'Server Error' });
     }
   },

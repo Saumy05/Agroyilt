@@ -33,6 +33,15 @@ const landLeaseService = {
   },
 
   /**
+   * Owner ends the lease for unpaid rent, or starts the 15-day notice when the rules allow it
+   * @param {string} id - Land Lease ID
+   */
+  endForNonPayment: async (id) => {
+    const response = await api.post(`/farmer/land-leases/${id}/end-notice`);
+    return response.data;
+  },
+
+  /**
    * Mark or correct the border of a listing (corner points marked on the map)
    * @param {string} id - Land Lease ID
    * @param {Array<{lat:number,lng:number}>} boundaryPoints

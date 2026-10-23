@@ -30,6 +30,11 @@ const offerSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  // Fixed rent: the farmer promises to pay installment 1 from the wallet as soon as the lease starts (both have signed)
+  payFirstInstallmentOnStart: {
+    type: Boolean,
+    default: false
+  },
   message: {
     type: String,
     trim: true,
@@ -55,7 +60,9 @@ const installmentSchema = new mongoose.Schema({
   status: { type: String, enum: ['pending', 'processing', 'paid'], default: 'pending' },
   paidAt: { type: Date, default: null },
   paymentKey: { type: String, default: null },
-  razorpayOrderId: { type: String, default: null }
+  razorpayOrderId: { type: String, default: null },
+  dueReminderSentAt: { type: Date, default: null },  // "installment due" reminder to the tenant
+  lateReminderSentAt: { type: Date, default: null }  // "installment overdue" reminder to the tenant and owner
 });
 
 const settlementSchema = new mongoose.Schema({
@@ -220,8 +227,19 @@ const landLeaseSchema = new mongoose.Schema({
     agreedPrice: { type: Number, default: null }, // fixed-rent: INR / acre / year
     agreedShare: { type: Number, default: null }, // crop-share: owner %
     totalRent: { type: Number, default: null }, // fixed-rent: INR for the whole term
-    commissionPercentage: { type: Number, default: 0 }
+    commissionPercentage: { type: Number, default: 0 },
+    advanceFirstInstallment: { type: Boolean, default: false }, // installment 1 is charged from the tenant's wallet at the start
+    firstPaymentDueBy: { type: Date, default: null }            // after this, an unpaid installment 1 lets the owner end the lease at once
   },
+  // The owner's notice to end the lease for unpaid rent. immediate: no waiting period (first installment never paid).
+  terminationNotice: {
+    status: { type: String, enum: ['open', 'cleared', 'executed'], default: undefined },
+    reason: { type: String, default: undefined },
+    immediate: { type: Boolean, default: undefined },
+    givenAt: { type: Date, default: undefined },
+    endsAt: { type: Date, default: undefined }
+  },
+  endedReason: { type: String, default: null }, // e.g. 'non_payment'
   installments: [installmentSchema],
   settlements: [settlementSchema]
 }, {

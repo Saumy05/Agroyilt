@@ -70,6 +70,7 @@ router.post('/land-leases/:id/accept-offer', landLeaseController.acceptOffer);
 router.post('/land-leases/:id/reject-offer', landLeaseController.rejectOffer);
 router.post('/land-leases/:id/accept', landLeaseController.acceptLeaseTerms);
 router.get('/land-leases/:id/payments', landLeaseController.getPayments);
+router.post('/land-leases/:id/end-notice', landLeaseController.endLeaseForNonPayment);
 router.post('/land-leases/:id/installments/:itemId/pay', landLeaseController.payInstallment);
 router.post('/land-leases/:id/installments/:itemId/pay-online/order', landLeaseController.createOnlinePaymentOrder('installment'));
 router.post('/land-leases/:id/installments/:itemId/pay-online/verify', landLeaseController.verifyOnlinePayment('installment'));
