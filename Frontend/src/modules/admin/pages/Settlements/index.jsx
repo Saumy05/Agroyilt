@@ -308,15 +308,16 @@ const SettlementManagement = () => {
         }
       ];
     } else if (activeTab === 'history') {
+      const isApprovedOrCompleted = (st) => ['approved', 'completed'].includes(String(st || '').toLowerCase());
       const totalTxns = history.length;
-      const totalSettled = history.reduce((sum, h) => h.status === 'approved' ? sum + (h.amount || 0) : 0, 0);
-      const approvedCount = history.filter(h => h.status === 'approved').length;
-      const rejectedCount = history.filter(h => h.status === 'rejected').length;
+      const totalSettled = history.reduce((sum, h) => isApprovedOrCompleted(h.status) ? sum + (Number(h.amount) || 0) : sum, 0);
+      const approvedCount = history.filter(h => isApprovedOrCompleted(h.status)).length;
+      const rejectedCount = history.filter(h => String(h.status || '').toLowerCase() === 'rejected').length;
 
       cards = [
         {
           title: 'Total Settled Amount',
-          value: `₹${totalSettled.toLocaleString()}`,
+          value: `₹${totalSettled.toLocaleString('en-IN')}`,
           icon: FiCheck,
           color: 'text-green-600',
           bg: 'bg-green-50',
@@ -609,52 +610,80 @@ const SettlementManagement = () => {
     </div>
   );
 
-  const renderHistoryList = () => (
-    history.length === 0 ? (
+  const renderHistoryList = () => {
+    const isApprovedOrCompleted = (st) => ['approved', 'completed'].includes(String(st || '').toLowerCase());
+    const isRejectedStatus = (st) => String(st || '').toLowerCase() === 'rejected';
+
+    return history.length === 0 ? (
       <div className="text-center py-16 bg-gray-50/50 rounded-2xl border border-dashed border-gray-200">
         <FiTrendingUp className="w-12 h-12 mx-auto mb-3 text-gray-300" />
         <p className="text-gray-700 font-bold text-base">No settlement history found</p>
       </div>
     ) : (
       <div className="space-y-3">
-        {history.map(settlement => (
-          <div
-            key={settlement._id}
-            className={`bg-white rounded-2xl p-4 border transition-all hover:shadow-md ${settlement.status === 'approved' ? 'border-l-4 border-l-green-500 border-gray-100' :
-              settlement.status === 'rejected' ? 'border-l-4 border-l-red-500 border-gray-100' :
-                'border-l-4 border-l-orange-500 border-gray-100'
+        {history.map(settlement => {
+          const isSettled = isApprovedOrCompleted(settlement.status);
+          const isRejected = isRejectedStatus(settlement.status);
+
+          return (
+            <div
+              key={settlement._id}
+              className={`bg-white rounded-2xl p-4 border transition-all hover:shadow-md ${
+                isSettled
+                  ? 'border-l-4 border-l-green-500 border-gray-100'
+                  : isRejected
+                  ? 'border-l-4 border-l-red-500 border-gray-100'
+                  : 'border-l-4 border-l-orange-500 border-gray-100'
               }`}
-          >
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${settlement.status === 'approved' ? 'bg-green-100 text-green-600' :
-                  settlement.status === 'rejected' ? 'bg-red-100 text-red-600' :
-                    'bg-orange-100 text-orange-600'
-                  }`}>
-                  {settlement.status === 'approved' ? <FiCheck /> : settlement.status === 'rejected' ? <FiX /> : <FiClock />}
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div
+                    className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+                      isSettled
+                        ? 'bg-green-100 text-green-600'
+                        : isRejected
+                        ? 'bg-red-100 text-red-600'
+                        : 'bg-orange-100 text-orange-600'
+                    }`}
+                  >
+                    {isSettled ? <FiCheck /> : isRejected ? <FiX /> : <FiClock />}
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-900">
+                      {settlement.vendorId?.name || settlement.vendorId?.businessName || 'Unknown'}{' '}
+                      <span className="font-normal text-gray-500">paid</span> ₹{Number(settlement.amount || 0).toLocaleString('en-IN')}
+                    </h4>
+                    <p className="text-xs text-gray-500">
+                      {formatDate(settlement.createdAt)} • via {settlement.paymentMethod}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="text-sm font-bold text-gray-900">{settlement.vendorId?.name || 'Unknown'} <span className="font-normal text-gray-500">paid</span> ₹{settlement.amount?.toLocaleString()}</h4>
-                  <p className="text-xs text-gray-500">{formatDate(settlement.createdAt)} • via {settlement.paymentMethod}</p>
+                <div className="text-right">
+                  <span
+                    className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${
+                      isSettled
+                        ? 'bg-green-50 text-green-700'
+                        : isRejected
+                        ? 'bg-red-50 text-red-700'
+                        : 'bg-orange-50 text-orange-700'
+                    }`}
+                  >
+                    {settlement.status}
+                  </span>
+                  {settlement.rejectionReason && (
+                    <p className="text-xs text-red-500 mt-1 max-w-[200px] truncate" title={settlement.rejectionReason}>
+                      {settlement.rejectionReason}
+                    </p>
+                  )}
                 </div>
-              </div>
-              <div className="text-right">
-                <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${settlement.status === 'approved' ? 'bg-green-50 text-green-700' :
-                  settlement.status === 'rejected' ? 'bg-red-50 text-red-700' :
-                    'bg-orange-50 text-orange-700'
-                  }`}>
-                  {settlement.status}
-                </span>
-                {settlement.rejectionReason && (
-                  <p className="text-xs text-red-500 mt-1 max-w-[200px] truncate" title={settlement.rejectionReason}>{settlement.rejectionReason}</p>
-                )}
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
-    )
-  );
+    );
+  };
 
   return (
     <div className="space-y-6">

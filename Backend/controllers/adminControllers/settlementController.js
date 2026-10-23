@@ -343,7 +343,13 @@ const getSettlementHistory = async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const query = {};
-    if (status) query.status = status;
+    if (status) {
+      if (status.toLowerCase() === 'approved') {
+        query.status = { $in: ['approved', 'completed'] };
+      } else {
+        query.status = status;
+      }
+    }
     if (vendorId) query.vendorId = vendorId;
 
     const settlements = await Settlement.find(query)
