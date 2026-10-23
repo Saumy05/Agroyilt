@@ -84,6 +84,7 @@ const EquipmentDetail = lazyLoad(() => import('../pages/Machinery/EquipmentDetai
 import { SOIL_TESTING_ENABLED } from '../../../utils/featureFlags';
 const SoilTesting = lazyLoad(() => import('../pages/SoilTesting'));
 const FieldAreaCalculator = lazyLoad(() => import('../pages/FieldAreaCalculator'));
+const FieldAreaMeasure = lazyLoad(() => import('../pages/FieldAreaMeasure'));
 const MandiBhav = lazyLoad(() => import('../pages/MandiBhav'));
 const LandLease = lazyLoad(() => import('../pages/LandLease'));
 
@@ -163,6 +164,7 @@ const UserRoutes = () => {
               <Route path="/weather" element={<ProtectedRoute userType="user"><WeatherReport /></ProtectedRoute>} />
               <Route path="/machinery-explorer" element={<ProtectedRoute userType="user"><MachineryExplorer /></ProtectedRoute>} />
               <Route path="/field-area-calculator" element={<ProtectedRoute userType="user"><FieldAreaCalculator /></ProtectedRoute>} />
+              <Route path="/field-area-measure" element={<ProtectedRoute userType="user"><FieldAreaMeasure /></ProtectedRoute>} />
               <Route path="/mandi-bhav" element={<ProtectedRoute userType="user"><MandiBhav /></ProtectedRoute>} />
               <Route path="/kisan-suvidha" element={<ProtectedRoute userType="user"><MandiBhav /></ProtectedRoute>} />
               <Route path="/land-lease" element={<ProtectedRoute userType="user"><LandLease /></ProtectedRoute>} />

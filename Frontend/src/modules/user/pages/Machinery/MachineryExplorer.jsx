@@ -15,7 +15,6 @@ import LogoLoader from '../../../../components/common/LogoLoader';
 import { toastManager } from '../../../../utils/toastManager';
 import { estimateDistanceBill } from '../../../../utils/distanceFare';
 import { themeColors } from '../../../../theme';
-import FieldAreaMeasurementModal from '../../components/FieldAreaMeasurementModal';
 
 const MachineryExplorer = () => {
   const navigate = useNavigate();
@@ -94,19 +93,12 @@ const MachineryExplorer = () => {
     }
     return 1;
   });
-  const [isAreaModalOpen, setIsAreaModalOpen] = useState(false);
   // Admin's per-km tier for the chosen attachment (e.g. Trolley); null when it can't be booked per km
   const [distancePricing, setDistancePricing] = useState(null);
   // Farmer's approximate trip distance: shows an approx bill up front and tells the vendor how far to go. The bill itself is always the GPS-measured distance.
   const [estimatedKm, setEstimatedKm] = useState(location.state?.estimatedKm ? String(location.state.estimatedKm) : '');
-  const [measuredField, setMeasuredField] = useState(location.state?.measuredField || null);
+  const measuredField = location.state?.measuredField || null; // set by the measure page, which returns here with it
 
-  const handleApplyMeasuredField = (fieldData) => {
-    setMeasuredField(fieldData);
-    if (fieldData?.acres) {
-      setQuantity(fieldData.acres);
-    }
-  };
   const [bookingDate, setBookingDate] = useState(() => {
     if (location.state?.bookingDate) return location.state.bookingDate;
     return isTodayClosed ? tomorrowStr : todayStr;
@@ -618,6 +610,32 @@ const MachineryExplorer = () => {
         lng: currentCity?.lng || selectedDistrict?.lng,
         measuredField,
         ...(rentalType === 'distance_based' ? { estimatedKm: Math.round(parseFloat(estimatedKm) * 10) / 10 } : {})
+      }
+    });
+  };
+
+  // Measure the field on a full-screen page; it returns here with these same choices plus the measured area
+  const openFieldMeasure = () => {
+    navigate('/user/field-area-measure', {
+      state: {
+        returnState: {
+          category: selectedCat,
+          preSelectedImplement: selectedImplement,
+          hpRange,
+          rentalType,
+          bookingDate,
+          startTime,
+          endTime,
+          step: currentStep,
+          estimatedKm: estimatedKm || undefined
+        },
+        initialAcres: parseFloat(quantity) || 1,
+        initialCenter: currentCity?.lat && currentCity?.lng
+          ? { lat: currentCity.lat, lng: currentCity.lng }
+          : selectedDistrict?.lat && selectedDistrict?.lng
+          ? { lat: selectedDistrict.lat, lng: selectedDistrict.lng }
+          : null,
+        initialPoints: measuredField?.points || []
       }
     });
   };
@@ -1145,7 +1163,7 @@ const MachineryExplorer = () => {
                               </div>
                               <button
                                 type="button"
-                                onClick={() => setIsAreaModalOpen(true)}
+                                onClick={openFieldMeasure}
                                 className="px-2.5 py-1.5 bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-black shrink-0 transition-all cursor-pointer shadow-2xs"
                               >
                                 Edit Border
@@ -1154,7 +1172,7 @@ const MachineryExplorer = () => {
                           ) : (
                             <button
                               type="button"
-                              onClick={() => setIsAreaModalOpen(true)}
+                              onClick={openFieldMeasure}
                               className="w-full py-2 px-3 bg-gradient-to-r from-emerald-600 to-green-700 hover:from-emerald-700 hover:to-green-800 active:scale-[0.99] text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 shadow-sm shadow-emerald-700/20 transition-all cursor-pointer border border-emerald-500/30"
                             >
                               <FiMapPin size={14} className="text-emerald-200" />
@@ -1474,21 +1492,6 @@ const MachineryExplorer = () => {
           </div>
         </div>
 
-        {/* FIELD AREA MEASUREMENT MODAL */}
-        <FieldAreaMeasurementModal
-          isOpen={isAreaModalOpen}
-          onClose={() => setIsAreaModalOpen(false)}
-          onApplyArea={handleApplyMeasuredField}
-          initialAcres={parseFloat(quantity) || 1}
-          initialCenter={
-            currentCity?.lat && currentCity?.lng
-              ? { lat: currentCity.lat, lng: currentCity.lng }
-              : selectedDistrict?.lat && selectedDistrict?.lng
-              ? { lat: selectedDistrict.lat, lng: selectedDistrict.lng }
-              : null
-          }
-          initialPoints={measuredField?.points || []}
-        />
     </div>
   );
 };

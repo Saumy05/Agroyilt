@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   FiX,
@@ -22,6 +22,7 @@ import {
 } from '../../../../utils/geoAreaCalculator';
 import fieldAreaService from '../../../../services/fieldAreaService';
 import { toastManager } from '../../../../utils/toastManager';
+import { flutterBridge } from '../../../../utils/flutterBridge';
 
 const defaultLocation = {
   lat: 28.6139,
@@ -34,7 +35,8 @@ const FieldAreaMeasurementModal = ({
   onApplyArea,
   initialAcres = null,
   initialCenter = null,
-  initialPoints = []
+  initialPoints = [],
+  asPage = false // full-screen page (a route) instead of a popup over another screen
 }) => {
   const [points, setPoints] = useState(initialPoints || []);
   const [center, setCenter] = useState(initialCenter || defaultLocation);
@@ -47,32 +49,37 @@ const FieldAreaMeasurementModal = ({
   const [farmName, setFarmName] = useState('');
   const [showSaveInput, setShowSaveInput] = useState(false);
 
-  // Sync initial center or acquire user's current GPS location on open
+  // On open: start from where the farmer is (live GPS). A place passed in (their city) is only the fallback.
+  const locatedRef = useRef(false);
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) {
+      locatedRef.current = false;
+      return;
+    }
+    if (initialPoints && initialPoints.length > 0) {
+      setPoints(initialPoints);
+      setCenter(calculatePolygonCenter(initialPoints));
+    } else if (!locatedRef.current) {
+      locatedRef.current = true;
       if (initialCenter && initialCenter.lat && initialCenter.lng) {
         setCenter(initialCenter);
-      } else if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            setCenter({
-              lat: pos.coords.latitude,
-              lng: pos.coords.longitude
-            });
-          },
-          () => {
-            // Keep default center
-          },
-          { enableHighAccuracy: true, timeout: 6000 }
-        );
       }
-      if (initialPoints && initialPoints.length > 0) {
-        setPoints(initialPoints);
-        setCenter(calculatePolygonCenter(initialPoints));
-      }
-      if (initialAcres) {
-        setManualInput(String(initialAcres));
-      }
+      flutterBridge.getCurrentLocation()
+        .then((loc) => {
+          if (Number.isFinite(loc?.latitude) && Number.isFinite(loc?.longitude)) {
+            setCenter({ lat: loc.latitude, lng: loc.longitude });
+          }
+        })
+        .catch((err) => {
+          toastManager.info(
+            err?.code === 1
+              ? 'Location access is off for this app. Allow it to start from your field, or search for your village.'
+              : 'Could not get your live location. Search for your village or tap the location button.'
+          );
+        });
+    }
+    if (initialAcres) {
+      setManualInput(String(initialAcres));
     }
   }, [isOpen, initialCenter, initialPoints, initialAcres]);
 
@@ -130,26 +137,20 @@ const FieldAreaMeasurementModal = ({
 
   // GPS Locate field
   const handleLocateMe = () => {
-    if (!navigator.geolocation) {
-      toastManager.error('Geolocation is not supported by your browser');
-      return;
-    }
     toastManager.info('Locating your field via GPS...');
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const userPos = {
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude
-        };
-        setCenter(userPos);
+    flutterBridge.getCurrentLocation()
+      .then((loc) => {
+        setCenter({ lat: loc.latitude, lng: loc.longitude });
         toastManager.success('Map centered on your current location');
-      },
-      (err) => {
+      })
+      .catch((err) => {
         console.error(err);
-        toastManager.error('Unable to fetch GPS position. Please check location permissions.');
-      },
-      { enableHighAccuracy: true, timeout: 8000 }
-    );
+        toastManager.error(
+          err?.code === 1
+            ? 'Location access is off for this app. Please allow location in your phone settings.'
+            : 'Unable to get your GPS position. Check that location is switched on and try again.'
+        );
+      });
   };
 
   // Search village / location via Google Maps Geocoding API / Geocoder
@@ -257,13 +258,13 @@ const FieldAreaMeasurementModal = ({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/80 backdrop-blur-md">
+      <div className={asPage ? 'fixed inset-0 z-50 bg-white' : 'fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/80 backdrop-blur-md'}>
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 15 }}
           transition={{ duration: 0.2 }}
-          className="relative w-full max-w-4xl h-[92vh] max-h-[880px] bg-white rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-slate-200/80"
+          className={asPage ? 'relative w-full h-full bg-white flex flex-col overflow-hidden' : 'relative w-full max-w-4xl h-[92vh] max-h-[880px] bg-white rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-slate-200/80'}
         >
           {/* MODAL HEADER */}
           <div className="px-4 py-3 bg-gradient-to-r from-emerald-800 via-emerald-700 to-green-800 text-white flex items-center justify-between shrink-0 shadow-sm">
