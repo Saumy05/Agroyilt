@@ -12,6 +12,7 @@ const {
   respondToRentalBooking,
   startMachineryWork,
   completeMachineryWork,
+  rentalBillingPreview,
   confirmRentalReturn,
   reportRentalDamage,
   getRentalHandoverStatus
@@ -48,6 +49,7 @@ router.put('/:id', updateEquipment);
 router.put('/bookings/:bookingId/respond', respondToRentalBooking);
 router.post('/bookings/:bookingId/start', startMachineryWork);
 router.post('/bookings/:bookingId/complete', completeMachineryWork);
+router.get('/bookings/:bookingId/billing-preview', rentalBillingPreview);
 
 // Rental Equipment Return Handover & Damage Claims
 router.get('/bookings/:bookingId/rental-status', getRentalHandoverStatus);

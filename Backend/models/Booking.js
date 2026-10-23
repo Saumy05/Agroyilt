@@ -367,6 +367,11 @@ const bookingSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  // Rental kept past its booked time (and grace): the farmer and vendor were told extra time is now billed
+  overdueNoticeSent: {
+    type: Boolean,
+    default: false
+  },
   // Agriculture: Specific Fields
   cropType: {
     type: String,

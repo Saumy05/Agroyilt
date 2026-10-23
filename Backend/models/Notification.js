@@ -202,6 +202,7 @@ const notificationSchema = new mongoose.Schema({
       'job_assigned',
       'booking_approaching',
       'booking_ending',
+      'booking_overdue',
       'trip_started',
       'work_started',
       'worker_reached',

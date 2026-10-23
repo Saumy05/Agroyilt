@@ -549,6 +549,9 @@ const settleVendorCash = async (bookingId, { collectorRole, collectorId }) => {
  */
 /** A timer-billed job is always charged for at least this many minutes, so ending it instantly never produces a ₹0 bill. */
 const MIN_BILLABLE_MINUTES = 1;
+/** Rentals: how long past a full hour / day the equipment can be kept before the next hour / day is billed. */
+const RENTAL_HOUR_GRACE_MS = 10 * 60000;
+const RENTAL_DAY_GRACE_MS = 60 * 60000;
 const billableMinutes = (activeSeconds) => Math.max(MIN_BILLABLE_MINUTES, Math.ceil((Number(activeSeconds) || 0) / 60));
 
 const computeMachineryBase = ({ booking, service, equipment, workUnits, now }) => {
@@ -592,8 +595,11 @@ const computeMachineryBase = ({ booking, service, equipment, workUnits, now }) =
   }
 
   const durationMs = now - (booking.startedAt || now);
-  const hours = Math.max(1, Math.ceil(durationMs / 3600000));
-  const days = Math.max(1, Math.ceil(durationMs / 86400000));
+  // A rental is not billed for a few minutes of lateness: the first minutes past a full hour / day are free
+  const hourGraceMs = isRental ? RENTAL_HOUR_GRACE_MS : 0;
+  const dayGraceMs = isRental ? RENTAL_DAY_GRACE_MS : 0;
+  const hours = Math.max(1, Math.ceil(Math.max(0, durationMs - hourGraceMs) / 3600000));
+  const days = Math.max(1, Math.ceil(Math.max(0, durationMs - dayGraceMs) / 86400000));
   const units = parseFloat(workUnits) || booking.workUnits || 1;
   let hourly = equipment?.pricing?.hourly?.isEnabled ? equipment.pricing.hourly.price : service?.hourly_price;
   let land = equipment?.pricing?.land_based?.isEnabled ? equipment.pricing.land_based.price : service?.land_price;
@@ -648,7 +654,7 @@ const computeMachineryBase = ({ booking, service, equipment, workUnits, now }) =
   const visiting = Number(booking.visitingCharges) || 0;
   if (visiting > 0) lines.push({ label: 'Visiting charge', amount: round2(visiting) });
   base += visiting;
-  return { base: round2(base), hasTimer: false, lines };
+  return { base: round2(base), hasTimer: false, lines, isRental, durationMs, hours, days, pieces };
 };
 
 /**
@@ -790,6 +796,8 @@ module.exports = {
   ensureBill,
   settleVendorCash,
   computeMachineryBase,
+  RENTAL_HOUR_GRACE_MS,
+  RENTAL_DAY_GRACE_MS,
   applyBillToBooking,
   finalizeMachineryBilling
 };

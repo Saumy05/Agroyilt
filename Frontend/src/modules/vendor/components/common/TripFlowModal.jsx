@@ -5,6 +5,7 @@ import { FiCamera, FiX, FiCheck, FiUpload, FiLoader, FiRefreshCw, FiArrowRight }
 import { toastManager } from '../../../../utils/toastManager';
 import { uploadToCloudinary } from '../../../../utils/cloudinaryUpload';
 import { flutterBridge } from '../../../../utils/flutterBridge';
+import { getRentalBillingPreview } from '../../services/bookingService';
 
 /**
  * TripFlowModal - Handles Start Trip / End Trip flow
@@ -31,6 +32,7 @@ const TripFlowModal = ({ isOpen, onClose, mode = 'start', onSubmit, rentalType, 
     const [workUnits, setWorkUnits] = useState(''); // Acres covered
     const [uploading, setUploading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+    const [billPreview, setBillPreview] = useState(null); // rental return: what the bill would be right now
     const fileInputRef = useRef(null);
     const otpRefs = [useRef(), useRef(), useRef(), useRef()];
 
@@ -122,6 +124,18 @@ const TripFlowModal = ({ isOpen, onClose, mode = 'start', onSubmit, rentalType, 
         }
     }, [isOpen, mode]);
 
+    // Rental return: show how long it was kept and what that bills, before the vendor confirms
+    useEffect(() => {
+        setBillPreview(null);
+        const bookingId = booking?._id || booking?.id;
+        if (!isOpen || isStart || !effectiveIsRental || !bookingId) return;
+        let cancelled = false;
+        getRentalBillingPreview(bookingId)
+            .then(res => { if (!cancelled) setBillPreview(res?.data || null); })
+            .catch(() => { /* the summary is only a guide; the bill is still cut on confirm */ });
+        return () => { cancelled = true; };
+    }, [isOpen, mode, booking?._id, booking?.id]);
+
     const handleClose = () => {
         onClose();
     };
@@ -212,20 +226,6 @@ const TripFlowModal = ({ isOpen, onClose, mode = 'start', onSubmit, rentalType, 
         }
     };
 
-    const handleSubmitSkippingOTP = async () => {
-        if (!isStart && rentalType === 'land_based' && !workUnits) return toastManager.error('Please enter total area covered');
-
-        try {
-            setSubmitting(true);
-            await onSubmit(photoFile, '', workUnits ? parseFloat(workUnits) : undefined, evidenceFile);
-            handleClose();
-        } catch (err) {
-            toastManager.error(err?.message || 'Failed to submit. Try again.');
-        } finally {
-            setSubmitting(false);
-        }
-    };
-
     // Final Submit (OTP Mode)
     const handleSubmit = async () => {
         const otpStr = otp.join('');
@@ -293,6 +293,20 @@ const TripFlowModal = ({ isOpen, onClose, mode = 'start', onSubmit, rentalType, 
                             {/* === STEP 1: KM PHOTO === */}
                             {step === 1 && (
                                 <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
+                                    {billPreview?.isRental && (
+                                        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-1">
+                                            <p className="text-xs font-black text-amber-900 uppercase tracking-wide">Bill if you return it now</p>
+                                            <p className="text-sm font-semibold text-gray-800">
+                                                Kept for {billPreview.heldHours} hr
+                                                {billPreview.rentalType === 'daily' ? ` → billed ${billPreview.billedDays} day${billPreview.billedDays > 1 ? 's' : ''}` : billPreview.rentalType === 'hourly' ? ` → billed ${billPreview.billedHours} hr` : ''}
+                                                {billPreview.bookedDuration ? ` (booked ${billPreview.bookedDuration})` : ''}
+                                            </p>
+                                            {billPreview.lines?.map((l, i) => (
+                                                <p key={i} className="text-xs text-gray-600 flex justify-between gap-2"><span>{l.label}</span><span className="font-bold">₹{l.amount}</span></p>
+                                            ))}
+                                            <p className="text-[11px] text-gray-500">Before GST and fees. Time past the booked period is billed automatically.</p>
+                                        </div>
+                                    )}
                                     <p className="text-sm font-semibold text-gray-700">{photoLabel}</p>
 
                                     {/* Photo Preview / Camera Button */}

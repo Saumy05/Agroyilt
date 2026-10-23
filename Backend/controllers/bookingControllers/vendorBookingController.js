@@ -26,6 +26,7 @@ const {
   CONFLICT_STATUSES,
   settleVendorCash,
   finalizeMachineryBilling,
+  computeMachineryBase,
   applyBillToBooking,
   round2
 } = require('../../services/bookingSettlementService');
@@ -1828,6 +1829,40 @@ const machineryComplete = async (req, res) => {
 };
 
 /**
+ * What a rental would be billed if the vendor closed it right now (read-only), so the return screen can show
+ * "held 2 days, 2 pcs = Rs 20" before the vendor confirms. Same calculation as the real bill.
+ */
+const rentalBillingPreview = async (req, res) => {
+  try {
+    const booking = await Booking.findOne({ _id: req.params.id || req.params.bookingId, vendorId: req.user.id }).populate('serviceId');
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+    if (!isEndable(booking) || !booking.startedAt) {
+      return res.status(400).json({ success: false, message: 'Nothing to preview for this booking' });
+    }
+    const VendorEquipment = require('../../models/VendorEquipment');
+    const equipment = booking.equipmentId ? await VendorEquipment.findById(booking.equipmentId) : null;
+    const calc = computeMachineryBase({ booking, service: booking.serviceId, equipment, workUnits: null, now: new Date() });
+    res.status(200).json({
+      success: true,
+      data: {
+        isRental: calc.isRental,
+        rentalType: booking.rental_type,
+        heldHours: round2(calc.durationMs / 3600000),
+        billedDays: calc.days,
+        billedHours: calc.hours,
+        bookedDuration: Number(booking.estimatedDuration) || null,
+        pieces: calc.pieces || null,
+        base: calc.base,
+        lines: calc.lines
+      }
+    });
+  } catch (error) {
+    console.error('Rental billing preview error:', error);
+    res.status(500).json({ success: false, message: 'Could not work out the bill' });
+  }
+};
+
+/**
  * Approve Booking Extension
  * Automatically calculates charges based on rate card to prevent arbitrary pricing.
  */
@@ -1936,5 +1971,6 @@ module.exports = {
   approveExtension,
   rejectExtension,
   machineryStart,
-  machineryComplete
+  machineryComplete,
+  rentalBillingPreview
 };

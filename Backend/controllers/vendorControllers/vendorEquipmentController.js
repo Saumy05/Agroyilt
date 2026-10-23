@@ -358,6 +358,11 @@ exports.completeMachineryWork = (req, res) => {
   return require('../bookingControllers/vendorBookingController').machineryComplete(req, res);
 };
 
+exports.rentalBillingPreview = (req, res) => {
+  req.params.id = req.params.bookingId;
+  return require('../bookingControllers/vendorBookingController').rentalBillingPreview(req, res);
+};
+
 /**
  * Equipment Return Handover & Damage Claims (Vendor Side)
  */

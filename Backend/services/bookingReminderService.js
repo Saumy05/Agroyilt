@@ -73,7 +73,21 @@ async function checkUpcomingSlotBookings() {
   }
 }
 
-// Check in-progress hourly/daily rentals ending in the next 15 minutes
+// How far ahead the "ending soon" notice goes out. A day-long rental gets more notice so the farmer can arrange the return.
+const END_REMINDER_LEAD_MS = 15 * 60 * 1000;
+const RENTAL_DAILY_END_REMINDER_LEAD_MS = 2 * 60 * 60 * 1000;
+
+const leadLabel = (ms) => (ms >= 60 * 60 * 1000 ? `${Math.round(ms / 3600000)} hours` : `${Math.round(ms / 60000)} minutes`);
+
+// How long the booking was booked for, in milliseconds
+const bookedDurationMs = (booking) => {
+  const duration = booking.estimatedDuration || 1;
+  if (booking.rental_type === 'daily') return duration * 24 * 60 * 60 * 1000;
+  if (booking.rental_type === 'monthly') return duration * 30 * 24 * 60 * 60 * 1000;
+  return duration * 60 * 60 * 1000; // Default to hourly duration calculations
+};
+
+// Check in-progress hourly/daily bookings ending soon
 async function checkEndingSlotBookings() {
   try {
     const now = Date.now();
@@ -87,26 +101,27 @@ async function checkEndingSlotBookings() {
       if (!booking.startedAt) continue;
 
       const startedTime = new Date(booking.startedAt).getTime();
-      const duration = booking.estimatedDuration || 1;
-      
-      // Calculate duration in milliseconds
-      const durationMs = booking.rental_type === 'daily'
-        ? duration * 24 * 60 * 60 * 1000
-        : duration * 60 * 60 * 1000; // Default to hourly duration calculations
+      const isRental = booking.fulfillmentMode === 'rental';
+      const durationMs = bookedDurationMs(booking);
 
+      const leadMs = isRental && booking.rental_type === 'daily' ? RENTAL_DAILY_END_REMINDER_LEAD_MS : END_REMINDER_LEAD_MS;
       const endDateTime = startedTime + durationMs;
       const timeDiff = endDateTime - now;
 
-      // If slot is ending in the next 15 minutes (and hasn't ended more than 5 minutes ago)
-      if (timeDiff > -5 * 60 * 1000 && timeDiff <= 15 * 60 * 1000) {
+      // If slot is ending within the lead time (and hasn't ended more than 5 minutes ago)
+      if (timeDiff > -5 * 60 * 1000 && timeDiff <= leadMs) {
         console.log(`[BookingReminder] Sending end reminder for booking ${booking.bookingNumber}`);
+        const lead = leadLabel(leadMs);
+        const pieces = Number(booking.unitsBooked) > 0 ? ` (${booking.unitsBooked} pcs)` : '';
 
         // 1. Notify User
         await createNotification({
           userId: booking.userId,
           type: 'booking_ending',
-          title: '⏳ Rental Slot Ending Soon',
-          message: `Your rental for ${booking.serviceName} is ending in 15 minutes.`,
+          title: isRental ? '⏳ Return Your Rental Soon' : '⏳ Rental Slot Ending Soon',
+          message: isRental
+            ? `Your rental for ${booking.serviceName}${pieces} ends in about ${lead}. Please return it on time: any extra time you keep it is billed at the same rate.`
+            : `Your rental for ${booking.serviceName} is ending in ${lead}.`,
           relatedId: booking._id,
           relatedType: 'Booking',
           priority: 'high'
@@ -118,7 +133,7 @@ async function checkEndingSlotBookings() {
             vendorId: booking.vendorId,
             type: 'booking_ending',
             title: '⏳ Rental Slot Ending Soon',
-            message: `Your rental slot for ${booking.serviceName} is ending in 15 minutes. Please prepare for collection.`,
+            message: `Your rental slot for ${booking.serviceName} is ending in ${lead}. Please prepare for collection.`,
             relatedId: booking._id,
             relatedType: 'Booking',
             priority: 'high'
@@ -135,6 +150,53 @@ async function checkEndingSlotBookings() {
   }
 }
 
+// A rental kept past its booked time plus the grace period is now billed for the extra time: tell both sides once
+async function checkOverdueRentals() {
+  try {
+    const { RENTAL_HOUR_GRACE_MS, RENTAL_DAY_GRACE_MS } = require('./bookingSettlementService');
+    const now = Date.now();
+    const bookings = await Booking.find({
+      status: 'in_progress',
+      fulfillmentMode: 'rental',
+      overdueNoticeSent: { $ne: true },
+      startedAt: { $ne: null }
+    });
+
+    for (const booking of bookings) {
+      const graceMs = booking.rental_type === 'hourly' ? RENTAL_HOUR_GRACE_MS : RENTAL_DAY_GRACE_MS;
+      const billedFrom = new Date(booking.startedAt).getTime() + bookedDurationMs(booking) + graceMs;
+      if (now < billedFrom) continue;
+
+      const unit = booking.rental_type === 'hourly' ? 'hour' : 'day';
+      const pieces = Number(booking.unitsBooked) > 0 ? ` (${booking.unitsBooked} pcs)` : '';
+      await createNotification({
+        userId: booking.userId,
+        type: 'booking_overdue',
+        title: '⚠️ Rental Time Is Over',
+        message: `Your rental for ${booking.serviceName}${pieces} has gone past its booked time. Each extra ${unit} you keep it is now added to your bill. Please return it as soon as you can.`,
+        relatedId: booking._id,
+        relatedType: 'Booking',
+        priority: 'high'
+      });
+      if (booking.vendorId) {
+        await createNotification({
+          vendorId: booking.vendorId,
+          type: 'booking_overdue',
+          title: '⚠️ Rental Not Returned',
+          message: `${booking.serviceName}${pieces} is past its booked time. The extra ${unit}s are added to the bill automatically when you close the rental.`,
+          relatedId: booking._id,
+          relatedType: 'Booking',
+          priority: 'high'
+        });
+      }
+      booking.overdueNoticeSent = true;
+      await booking.save();
+    }
+  } catch (error) {
+    console.error('[BookingReminder] Error checking overdue rentals:', error);
+  }
+}
+
 /**
  * Start the Scheduler
  */
@@ -144,6 +206,7 @@ function startBookingReminderScheduler() {
     try {
       await checkUpcomingSlotBookings();
       await checkEndingSlotBookings();
+      await checkOverdueRentals();
     } catch (err) {
       console.error('[BookingReminderScheduler] Error in run loop:', err);
     }
@@ -153,6 +216,7 @@ function startBookingReminderScheduler() {
   setTimeout(() => {
     checkUpcomingSlotBookings();
     checkEndingSlotBookings();
+    checkOverdueRentals();
   }, 10000);
 
   console.log('✅ Booking Reminder Scheduler Initialized');

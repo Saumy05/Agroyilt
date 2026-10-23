@@ -171,6 +171,14 @@ export const machineryStartWork = async (bookingId, otp, startKmPhoto, startLoca
 };
 
 /**
+ * Rental return: what the bill would be if the vendor closed the rental right now (read-only)
+ */
+export const getRentalBillingPreview = async (bookingId) => {
+  const response = await api.get(`/vendors/equipment/bookings/${bookingId}/billing-preview`);
+  return response.data;
+};
+
+/**
  * Machinery Complete Work — Vendor/Driver submits end KM photo and evidence to mark work done
  * System will automatically generate and send End OTP to farmer
  * @param {string} bookingId
