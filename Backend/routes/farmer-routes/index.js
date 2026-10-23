@@ -63,6 +63,7 @@ router.post('/rentals/:id/damage-report', rentalController.reportDamage);
 router.post('/land-leases', landLeaseController.listLand);
 router.get('/land-leases', landLeaseController.browseLandLeases);
 router.get('/land-leases/my-leases', landLeaseController.getMyLandLeases);
+router.put('/land-leases/:id/boundary', landLeaseController.setBoundary);
 router.get('/land-leases/:id', landLeaseController.getLandLeaseById);
 router.post('/land-leases/:id/negotiate', landLeaseController.negotiateLease);
 router.post('/land-leases/:id/accept-offer', landLeaseController.acceptOffer);
@@ -82,7 +83,11 @@ router.delete('/land-leases/:id', landLeaseController.deleteLand);
 
 // 9. Agreements
 router.get('/agreements', agreementController.getAgreements);
-router.get('/agreements/:id/download', agreementController.downloadAgreement);
+router.get('/agreements/:id', agreementController.getAgreement);
+router.post('/agreements/:id/otp', agreementController.sendSigningOtp);
+router.post('/agreements/:id/sign', agreementController.signAgreement);
+router.post('/agreements/:id/cancel', agreementController.cancelAgreement);
+router.post('/agreements/:id/pdf-link', agreementController.getPdfLink);
 
 // 10. Agri-Info
 router.get('/agri-info/mandi', agriInfoController.getMandiPrices);

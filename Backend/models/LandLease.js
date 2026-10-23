@@ -37,7 +37,7 @@ const offerSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'accepted', 'rejected'],
+    enum: ['pending', 'accepted', 'rejected', 'cancelled'], // cancelled: accepted, but the agreement was never signed
     default: 'pending'
   },
   createdAt: {
@@ -126,6 +126,19 @@ const landLeaseSchema = new mongoose.Schema({
       default: [75.8577, 26.9124] // [lng, lat]
     }
   },
+  // The field's border as marked on the map. `boundary` is the GeoJSON Polygon ([lng, lat], closed) MongoDB searches;
+  // `boundaryPoints` are the corners as marked (numbered 1..n in the agreement). No default: a listing without a border
+  // must have no `boundary` at all, because the geo index rejects an empty one.
+  boundary: {
+    type: { type: String, enum: ['Polygon'] },
+    coordinates: { type: [[[Number]]], default: undefined }
+  },
+  boundaryPoints: {
+    type: [{ _id: false, lat: Number, lng: Number }],
+    default: undefined
+  },
+  boundaryAreaAcres: { type: Number, default: null }, // geodesic area of the marked border
+  boundarySetAt: { type: Date, default: null },
   leaseType: {
     type: String,
     enum: ['fixed-rent', 'crop-share'],
@@ -175,7 +188,7 @@ const landLeaseSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending_verification', 'active', 'leased', 'inactive'],
+    enum: ['pending_verification', 'active', 'agreement_pending', 'leased', 'inactive'], // agreement_pending: an offer is accepted, waiting for both signatures
     default: 'active',
     index: true
   },
@@ -190,6 +203,12 @@ const landLeaseSchema = new mongoose.Schema({
   currentTenantId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
+    default: null
+  },
+  // The agreement being signed (agreement_pending) or signed (leased)
+  agreementId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'LeaseAgreement',
     default: null
   },
   offers: [offerSchema],
@@ -210,5 +229,6 @@ const landLeaseSchema = new mongoose.Schema({
 });
 
 landLeaseSchema.index({ 'geoLocation': '2dsphere' });
+landLeaseSchema.index({ boundary: '2dsphere' });
 
 module.exports = mongoose.model('LandLease', landLeaseSchema);

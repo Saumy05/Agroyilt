@@ -144,7 +144,7 @@ const Notifications = () => {
     if (type.startsWith('land_lease')) {
       // payment-related alerts open the payments modal of that lease; offer alerts open the right My Leases sub-tab
       const sub = ['land_lease_offer_rejected'].includes(type) ? 'offers' : type === 'land_lease_offer_accepted' ? 'offers' : 'listings';
-      const pay = ['land_lease_payment', 'land_lease_settlement', 'land_lease_offer_accepted', 'land_lease_ended'].includes(type);
+      const pay = ['land_lease_payment', 'land_lease_settlement', 'land_lease_offer_accepted', 'land_lease_ended', 'land_lease_agreement_executed'].includes(type);
       const params = new URLSearchParams({ tab: 'my-leases', sub });
       if (pay && relatedId) params.set('pay', relatedId);
       navigate(`/user/land-lease?${params.toString()}`);

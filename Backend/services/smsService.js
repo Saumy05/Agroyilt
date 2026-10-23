@@ -135,8 +135,21 @@ const sendAccountApprovedSMS = async (phone, name, roleLabel) => {
   return sendSMS(phone, message, { templateId });
 };
 
+/**
+ * One-time code to sign a lease agreement. Wording must match a DLT template registered for it
+ * (SMS_AGREEMENT_OTP_DLT_TEMPLATE_ID). Without that, the registered login OTP template is used so the code still arrives.
+ * Template: "Your AgroYilt OTP to sign the lease agreement is {#var#}. Do not share it. - AgroYilt"
+ */
+const sendAgreementOtp = async (phone, otp) => {
+  const templateId = process.env.SMS_AGREEMENT_OTP_DLT_TEMPLATE_ID;
+  if (!templateId) return sendOTP(phone, otp);
+  const message = `Your AgroYilt OTP to sign the lease agreement is ${otp}. Do not share it. - AgroYilt`;
+  return sendSMS(phone, message, { templateId });
+};
+
 module.exports = {
   sendSMS,
   sendOTP,
+  sendAgreementOtp,
   sendAccountApprovedSMS
 };

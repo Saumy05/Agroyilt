@@ -11,6 +11,7 @@
 
 const LandLease = require('../models/LandLease');
 const { notifyLease } = require('./landLeaseNotifyService');
+const { runPeriodic: runAgreementJobs } = require('./leaseAgreementService');
 
 const OPEN_SETTLEMENT = ['submitted', 'confirmed', 'processing'];
 
@@ -51,6 +52,9 @@ const endFinishedLeases = async () => {
 const startLandLeaseScheduler = () => {
   setInterval(endFinishedLeases, 60 * 60 * 1000);
   setTimeout(endFinishedLeases, 20000);
+  // agreements nobody signed lapse, reminders go out, and a lease start that failed is retried
+  setInterval(runAgreementJobs, 30 * 60 * 1000);
+  setTimeout(runAgreementJobs, 40000);
   console.log('✅ Land lease expiry scheduler initialized');
 };
 

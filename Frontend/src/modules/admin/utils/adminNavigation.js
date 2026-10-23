@@ -95,6 +95,7 @@ export const MENU_PERMISSION_MAP = {
   'Reviews': 'reviews.view',
   'Soil Testing': 'soiltest.view',
   'Land Leases': 'payments.view',
+  'Lease Agreements': 'payments.view',
   'Disputes': 'disputes.view',
   'Help & Support': 'support.view',
   'Manage Website': 'website.view',

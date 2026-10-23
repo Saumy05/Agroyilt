@@ -35,6 +35,8 @@ const Products = lazy(() => import('../pages/Products'));
 import { SOIL_TESTING_ENABLED } from '../../../utils/featureFlags';
 const SoilTesting = lazy(() => import('../pages/SoilTesting'));
 const LandLeases = lazy(() => import('../pages/LandLeases'));
+const Agreements = lazy(() => import('../pages/Agreements'));
+const AgreementDetail = lazy(() => import('../pages/Agreements/AgreementDetail'));
 const Disputes = lazy(() => import('../pages/Disputes'));
 const WebsiteSettings = lazy(() => import('../pages/WebsiteSettings'));
 const EquipmentApproval = lazy(() => import('../pages/EquipmentApproval'));
@@ -96,6 +98,8 @@ const AdminRoutes = () => {
             <Route path="products" element={<Products />} />
             <Route path="soil-tests" element={SOIL_TESTING_ENABLED ? <SoilTesting /> : <Navigate to="/admin/dashboard" replace />} />
             <Route path="land-leases" element={<LandLeases />} />
+            <Route path="agreements" element={<Agreements />} />
+            <Route path="agreements/:id" element={<AgreementDetail />} />
             <Route path="disputes" element={<Disputes />} />
             <Route path="withdrawals" element={<Withdrawals />} />
             <Route path="withdrawals/*" element={<Withdrawals />} />

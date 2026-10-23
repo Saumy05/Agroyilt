@@ -90,6 +90,17 @@ const settingsSchema = new mongoose.Schema({
     min: 0,
     max: 100
   },
+  // Land lease agreement: both parties must sign before an accepted offer becomes a lease
+  landLeaseRequireAgreement: {
+    type: Boolean,
+    default: true
+  },
+  landLeaseAgreementValidDays: { // an unsigned agreement lapses after this many days and the land opens again
+    type: Number,
+    default: 7,
+    min: 1,
+    max: 60
+  },
   workerCommissionPercentage: {
     type: Number,
     default: 10, // 10% default admin commission on worker earnings

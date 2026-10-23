@@ -15,6 +15,9 @@ const connectDB = async () => {
     // Farm saves failed while this geo index existed on a non-GeoJSON field.
     require('../models/User').dropLegacyFarmGeoIndex();
 
+    // The lease agreement wording the admin can edit: save the built-in templates if they are not there yet.
+    require('../services/agreementDefaults').ensureDefaultTemplates().catch((err) => console.error('[agreementDefaults] seeding failed:', err.message));
+
   } catch (error) {
     console.error('MongoDB connection error:', error.message);
     process.exit(1);

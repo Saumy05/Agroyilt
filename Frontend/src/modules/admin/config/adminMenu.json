@@ -135,6 +135,16 @@
   },
   {
     "category": "FINANCE & PAYOUTS",
+    "title": "Lease Agreements",
+    "route": "/admin/agreements",
+    "allowedRoles": [
+      "super_admin",
+      "admin"
+    ],
+    "children": []
+  },
+  {
+    "category": "FINANCE & PAYOUTS",
     "title": "Withdrawals",
     "route": "/admin/withdrawals",
     "badgeKey": "withdrawals",

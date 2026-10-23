@@ -56,6 +56,8 @@ exports.updateSettings = async (req, res, next) => {
       // Worker Hiring & Commission Rules
       workerCommissionPercentage,
       landLeaseCommissionPercentage,
+      landLeaseRequireAgreement,
+      landLeaseAgreementValidDays,
       workerPlatformChargePercentage,
       machineryPlatformFeePercentage,
       maxIndependentWorkerRequest,
@@ -181,6 +183,16 @@ exports.updateSettings = async (req, res, next) => {
         if (!isNaN(val) && val >= 0 && val <= 100) {
           settings.landLeaseCommissionPercentage = val;
         }
+      }
+      if (landLeaseRequireAgreement !== undefined) {
+        settings.landLeaseRequireAgreement = Boolean(Number(landLeaseRequireAgreement));
+      }
+      if (landLeaseAgreementValidDays !== undefined) {
+        const days = Math.round(Number(landLeaseAgreementValidDays));
+        if (isNaN(days) || days < 1 || days > 60) {
+          return res.status(400).json({ success: false, message: 'Agreement signing time must be 1 to 60 days' });
+        }
+        settings.landLeaseAgreementValidDays = days;
       }
       if (machineryPlatformFeePercentage !== undefined) {
         const val = Number(machineryPlatformFeePercentage);

@@ -36,6 +36,8 @@ import LeasePaymentsModal from './LeasePaymentsModal';
 import flutterBridge from '../../../../utils/flutterBridge';
 import { uploadToCloudinary } from '../../../../utils/cloudinaryUpload';
 import { compressImage } from '../../../../utils/imageCompression';
+import FieldAreaMeasurementModal from '../../components/FieldAreaMeasurementModal';
+import BoundarySketch from '../../components/common/BoundarySketch';
 
 const LandLeasePage = () => {
   const navigate = useNavigate();
@@ -110,8 +112,12 @@ const LandLeasePage = () => {
     fencing: false,
     roadAccess: 'Paved Road',
     suitableCrops: 'Wheat, Mustard, Gram',
-    images: ''
+    images: '',
+    boundaryPoints: [] // corners of the land marked on the map (required)
   });
+  // Full-screen border tool: { land } when fixing an existing listing, {} when marking for the new listing
+  const [boundaryTool, setBoundaryTool] = useState(null);
+  const [acceptDialog, setAcceptDialog] = useState(null); // { landId, offer } while the owner chooses the agreement language
   const [listingPhotos, setListingPhotos] = useState([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -242,17 +248,24 @@ const LandLeasePage = () => {
     }
   };
 
-  // Landowner accepts tenant's offer
-  const handleAcceptOffer = async (landId, offerId) => {
-    if (!window.confirm('Do you want to accept this tenant offer?')) {
-      return;
-    }
+  // Landowner accepts tenant's offer: asks which language the agreement is in, then makes the agreement to sign
+  const handleAcceptOffer = (landId, offer) => setAcceptDialog({ landId, offer });
+
+  const confirmAcceptOffer = async (language) => {
+    const dialog = acceptDialog;
+    if (!dialog) return;
+    setAcceptDialog(null);
     try {
-      const res = await landLeaseService.acceptOffer(landId, offerId);
+      const res = await landLeaseService.acceptOffer(dialog.landId, dialog.offer._id, language);
       if (res?.success) {
-        toastManager.success('Offer accepted! The lease has been registered.');
         fetchMyLeases();
         fetchLeases();
+        if (res.agreementRequired && res.agreementId) {
+          toastManager.success('Offer accepted. Now read and sign the agreement.');
+          navigate(`/user/agreements/${res.agreementId}`);
+        } else {
+          toastManager.success('Offer accepted! The lease has been registered.');
+        }
       } else {
         toastManager.error(res?.message || 'Failed to accept offer');
       }
@@ -394,6 +407,32 @@ const LandLeasePage = () => {
     toastManager.success('Photo link added');
   };
 
+  // The border was marked: for a new listing keep it in the form; for an existing listing save it now
+  const handleBoundaryApplied = async (field) => {
+    const tool = boundaryTool;
+    setBoundaryTool(null);
+    if (!field?.points || field.points.length < 3) return;
+    if (tool?.land) {
+      try {
+        const res = await landLeaseService.setBoundary(tool.land._id, field.points);
+        if (res?.success) {
+          toastManager.success('Land border saved');
+          fetchMyLeases();
+        } else {
+          toastManager.error(res?.message || 'Could not save the border');
+        }
+      } catch (err) {
+        toastManager.error(err.response?.data?.message || 'Could not save the border');
+      }
+      return;
+    }
+    setListingForm((f) => ({
+      ...f,
+      boundaryPoints: field.points,
+      sizeInAcres: String(Math.round(field.acres * 100) / 100)
+    }));
+  };
+
   // Handle Create Listing
   const handleCreateListing = async (e) => {
     e.preventDefault();
@@ -402,6 +441,9 @@ const LandLeasePage = () => {
     }
     if (!listingForm.district || !listingForm.tehsil || !listingForm.village) {
       return toastManager.error('Please enter the district, tehsil and village details');
+    }
+    if (!listingForm.boundaryPoints || listingForm.boundaryPoints.length < 3) {
+      return toastManager.error('Please mark the land border on the map first');
     }
 
     try {
@@ -455,7 +497,8 @@ const LandLeasePage = () => {
         fencing: listingForm.fencing,
         roadAccess: listingForm.roadAccess,
         suitableCrops: cropsArray,
-        images: finalImages
+        images: finalImages,
+        boundaryPoints: listingForm.boundaryPoints
       };
 
       const res = await landLeaseService.listLand(payload);
@@ -485,7 +528,8 @@ const LandLeasePage = () => {
           fencing: false,
           roadAccess: 'Paved Road',
           suitableCrops: 'Wheat, Mustard, Gram',
-          images: ''
+          images: '',
+          boundaryPoints: []
         });
         setActiveTab('explore');
         fetchLeases();
@@ -937,6 +981,39 @@ const LandLeasePage = () => {
                 </div>
               </div>
 
+              {/* Land border on the map: the agreement describes the land by these corners */}
+              <div className={`rounded-2xl border p-3.5 space-y-2.5 ${listingForm.boundaryPoints.length >= 3 ? 'border-emerald-300 bg-emerald-50/60' : 'border-amber-300 bg-amber-50/60'}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-bold text-gray-900 flex items-center gap-1.5">
+                      <FiMapPin className="w-4 h-4 text-emerald-700" />
+                      Land border on map <span className="text-red-500">*</span>
+                      <span className="text-[11px] font-semibold text-gray-500">(भूमि की सीमा)</span>
+                    </p>
+                    <p className="text-[11px] text-gray-600 mt-0.5 leading-snug">
+                      Stand on your land and tap each corner. These corners go into the lease agreement so everyone knows exactly which land it is.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setBoundaryTool({})}
+                    className="shrink-0 px-3 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black flex items-center gap-1.5 active:scale-95"
+                  >
+                    <FiMapPin className="w-3.5 h-3.5" />
+                    {listingForm.boundaryPoints.length >= 3 ? 'Edit border' : 'Mark border'}
+                  </button>
+                </div>
+                {listingForm.boundaryPoints.length >= 3 && (
+                  <div className="flex items-center gap-3">
+                    <BoundarySketch points={listingForm.boundaryPoints} size={120} />
+                    <p className="text-xs font-semibold text-emerald-900">
+                      {listingForm.boundaryPoints.length} corners marked
+                      <span className="block text-[11px] font-medium text-emerald-800/80">Area filled in from the border: {listingForm.sizeInAcres} acres</span>
+                    </p>
+                  </div>
+                )}
+              </div>
+
               {/* Location Fields: Separate Tehsil and Village */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -1372,10 +1449,12 @@ const LandLeasePage = () => {
                               className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
                                 item.status === 'leased'
                                   ? 'bg-blue-100 text-blue-800'
+                                  : item.status === 'agreement_pending'
+                                  ? 'bg-amber-100 text-amber-800'
                                   : 'bg-emerald-100 text-emerald-800'
                               }`}
                             >
-                              {item.status === 'leased' ? 'Leased' : 'Active'}
+                              {item.status === 'leased' ? 'Leased' : item.status === 'agreement_pending' ? 'Signing' : 'Active'}
                             </span>
                             <span className="text-xs text-gray-400 font-medium">Khasra: {item.khasraNumber}</span>
                           </div>
@@ -1383,6 +1462,28 @@ const LandLeasePage = () => {
                         </div>
 
                         <div className="flex items-center gap-2">
+                          {item.status === 'active' && !(item.boundaryPoints && item.boundaryPoints.length >= 3) && (
+                            <button
+                              onClick={() => setBoundaryTool({ land: item })}
+                              className="p-2 rounded-xl text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-xs flex items-center gap-1 font-bold"
+                              title="A land border is needed before you can accept an offer"
+                            >
+                              <FiMapPin className="w-3.5 h-3.5" />
+                              <span>Mark border</span>
+                            </button>
+                          )}
+                          {item.agreementSummary && (
+                            <button
+                              onClick={() => navigate(`/user/agreements/${item.agreementSummary.id}`)}
+                              className={`p-2 rounded-xl text-xs flex items-center gap-1 font-bold border ${
+                                !item.agreementSummary.mySigned && ['DRAFT', 'PARTIALLY_SIGNED'].includes(item.agreementSummary.status)
+                                  ? 'text-white bg-emerald-700 border-emerald-700'
+                                  : 'text-emerald-800 bg-white border-emerald-200 hover:bg-emerald-50'
+                              }`}
+                            >
+                              <span>{!item.agreementSummary.mySigned && ['DRAFT', 'PARTIALLY_SIGNED'].includes(item.agreementSummary.status) ? 'Sign agreement' : 'View agreement'}</span>
+                            </button>
+                          )}
                           {item.status === 'leased' && (
                             <button
                               onClick={() => setPaymentsLandId(item._id)}
@@ -1480,7 +1581,7 @@ const LandLeasePage = () => {
                                   )}
                                 </div>
 
-                                {offer.status === 'pending' && item.status !== 'leased' && (
+                                {offer.status === 'pending' && item.status === 'active' && (
                                   <div className="flex gap-1.5 shrink-0">
                                     <button
                                       onClick={() => handleRejectOffer(item._id, offer._id)}
@@ -1489,7 +1590,7 @@ const LandLeasePage = () => {
                                       <span>Reject</span>
                                     </button>
                                     <button
-                                      onClick={() => handleAcceptOffer(item._id, offer._id)}
+                                      onClick={() => handleAcceptOffer(item._id, offer)}
                                       className="py-1.5 px-3 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1"
                                     >
                                       <FiCheck className="w-3.5 h-3.5" />
@@ -1546,6 +1647,18 @@ const LandLeasePage = () => {
                         </p>
                       </div>
 
+                      {item.agreementSummary && (
+                        <button
+                          onClick={() => navigate(`/user/agreements/${item.agreementSummary.id}`)}
+                          className={`py-2 px-3 rounded-xl text-xs font-bold shrink-0 ${
+                            !item.agreementSummary.mySigned && ['DRAFT', 'PARTIALLY_SIGNED'].includes(item.agreementSummary.status)
+                              ? 'bg-emerald-700 text-white'
+                              : 'bg-white text-emerald-800 border border-emerald-200'
+                          }`}
+                        >
+                          {!item.agreementSummary.mySigned && ['DRAFT', 'PARTIALLY_SIGNED'].includes(item.agreementSummary.status) ? 'Sign agreement' : 'View agreement'}
+                        </button>
+                      )}
                       {item.isCurrentTenant && item.status === 'leased' && (
                         <button
                           onClick={() => setPaymentsLandId(item.landId)}
@@ -1873,6 +1986,36 @@ const LandLeasePage = () => {
           landId={paymentsLandId}
           onClose={() => setPaymentsLandId(null)}
           onChanged={fetchMyLeases}
+        />
+      )}
+      {/* Accepting an offer makes the agreement: the owner picks its language first */}
+      {acceptDialog && (
+        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/50 p-3" onClick={() => setAcceptDialog(null)}>
+          <div className="w-full max-w-sm bg-white rounded-3xl p-5 space-y-3" onClick={(e) => e.stopPropagation()}>
+            <p className="font-black text-gray-900 text-base">Accept this offer? · प्रस्ताव स्वीकार करें?</p>
+            <p className="text-xs text-gray-600 leading-snug">
+              A lease agreement will be made for both of you to read and sign. The lease starts only after you both sign.
+              <span className="block mt-1">अनुबंध बनेगा। दोनों के हस्ताक्षर के बाद ही पट्टा शुरू होगा।</span>
+            </p>
+            <p className="text-[11px] font-bold uppercase text-gray-500">Agreement language · अनुबंध की भाषा</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => confirmAcceptOffer('hi')} className="py-3 rounded-xl bg-emerald-800 text-white font-black text-sm active:scale-95">हिन्दी</button>
+              <button onClick={() => confirmAcceptOffer('en')} className="py-3 rounded-xl bg-white border-2 border-emerald-800 text-emerald-900 font-black text-sm active:scale-95">English</button>
+            </div>
+            <button onClick={() => setAcceptDialog(null)} className="w-full py-2 text-xs font-bold text-gray-500">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Full-screen border tool */}
+      {boundaryTool && (
+        <FieldAreaMeasurementModal
+          asPage
+          isOpen
+          onClose={() => setBoundaryTool(null)}
+          onApplyArea={handleBoundaryApplied}
+          initialAcres={boundaryTool.land?.sizeInAcres || Number(listingForm.sizeInAcres) || 1}
+          initialPoints={boundaryTool.land?.boundaryPoints || (boundaryTool.land ? [] : listingForm.boundaryPoints)}
         />
       )}
     </div>

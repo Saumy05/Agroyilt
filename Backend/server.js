@@ -285,6 +285,8 @@ app.use('/api/admin', require('./routes/admin-routes/productManagement.routes'))
 app.use('/api/admin/soil-tests', soilTestingGate);
 app.use('/api/admin', require('./routes/admin-routes/soilTest.routes'));
 app.use('/api/admin', require('./routes/admin-routes/landLeaseManagement.routes'));
+app.use('/api/admin', require('./routes/admin-routes/agreementManagement.routes'));
+app.use('/api/agreement-files', require('./routes/common-routes/agreementFile.routes'));
 app.use('/api/admin', require('./routes/admin-routes/reportManagement.routes'));
 app.use('/api/admin/payment-rules', require('./routes/admin-routes/paymentRules.routes'));
 app.use('/api/admin/disputes', require('./routes/admin-routes/disputeManagement.routes'));

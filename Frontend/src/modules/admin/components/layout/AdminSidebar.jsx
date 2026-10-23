@@ -58,6 +58,7 @@ const iconMap = {
   Settings: FiSettings,
   "Soil Testing": FiActivity,
   "Land Leases": FiMap,
+  "Lease Agreements": FiFileText,
   Disputes: FiAlertTriangle,
   "Catalog Setup": FiGrid,
   "Machinery Listings": FiPackage,

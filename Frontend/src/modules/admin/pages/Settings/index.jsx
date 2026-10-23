@@ -30,6 +30,8 @@ const AdminSettings = () => {
     workerPlatformChargePercentage: 1,
     machineryPlatformFeePercentage: 0,
     landLeaseCommissionPercentage: 2,
+    landLeaseRequireAgreement: 1,
+    landLeaseAgreementValidDays: 7,
     rentalGstPercentage: 5,
     minWithdrawalAmount: 300
   });
@@ -358,6 +360,8 @@ const AdminSettings = () => {
             workerPlatformChargePercentage: res.settings.workerPlatformChargePercentage ?? 1,
             machineryPlatformFeePercentage: res.settings.machineryPlatformFeePercentage ?? 0,
             landLeaseCommissionPercentage: res.settings.landLeaseCommissionPercentage ?? 2,
+            landLeaseRequireAgreement: res.settings.landLeaseRequireAgreement === false ? 0 : 1,
+            landLeaseAgreementValidDays: res.settings.landLeaseAgreementValidDays ?? 7,
             rentalGstPercentage: res.settings.rentalGstPercentage ?? 5,
             minWithdrawalAmount: res.settings.minWithdrawalAmountPaise ? Math.round(res.settings.minWithdrawalAmountPaise / 100) : (res.settings.minWithdrawalAmount || 300)
           });
@@ -1220,6 +1224,32 @@ const AdminSettings = () => {
                         className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all font-bold text-gray-800"
                       />
                       <p className="text-[10px] text-gray-400 mt-1">Deducted from the landowner's share of every rent installment and crop-share settlement. Applies to new leases only.</p>
+                    </div>
+
+                    {/* Lease agreement signing */}
+                    <div className="md:col-span-1">
+                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Land Lease Agreement</label>
+                      <label className="flex items-center gap-3 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={Number(financialSettings.landLeaseRequireAgreement) === 1}
+                          onChange={(e) => setFinancialSettings(prev => ({ ...prev, landLeaseRequireAgreement: e.target.checked ? 1 : 0 }))}
+                          className="w-4 h-4 accent-green-600"
+                        />
+                        <span className="text-sm font-bold text-gray-800">Both parties must sign before a lease starts</span>
+                      </label>
+                      <p className="text-[10px] text-gray-400 mt-1">When on, accepting an offer makes an agreement that the landowner and the farmer sign digitally. Wording is managed under Lease Agreements &gt; Templates.</p>
+                    </div>
+                    <div className="md:col-span-1">
+                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Agreement Signing Time (days)</label>
+                      <input
+                        type="number" name="landLeaseAgreementValidDays"
+                        value={financialSettings.landLeaseAgreementValidDays}
+                        onChange={handleFinancialChange}
+                        min="1" max="60"
+                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all font-bold text-gray-800"
+                      />
+                      <p className="text-[10px] text-gray-400 mt-1">An agreement not signed by both within this time lapses and the land opens for offers again. Applies to new agreements.</p>
                     </div>
 
                     {/* Vendor (machinery) Platform Fee */}

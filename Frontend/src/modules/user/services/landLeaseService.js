@@ -33,6 +33,16 @@ const landLeaseService = {
   },
 
   /**
+   * Mark or correct the border of a listing (corner points marked on the map)
+   * @param {string} id - Land Lease ID
+   * @param {Array<{lat:number,lng:number}>} boundaryPoints
+   */
+  setBoundary: async (id, boundaryPoints) => {
+    const response = await api.put(`/farmer/land-leases/${id}/boundary`, { boundaryPoints });
+    return response.data;
+  },
+
+  /**
    * Get lands listed by current user & applied offers
    */
   getMyLeases: async () => {
@@ -54,9 +64,10 @@ const landLeaseService = {
    * Landowner accepts a tenant's offer
    * @param {string} id - Land Lease ID
    * @param {string} offerId - Offer ID
+   * @param {'hi'|'en'} [language] - language of the lease agreement that is made
    */
-  acceptOffer: async (id, offerId) => {
-    const response = await api.post(`/farmer/land-leases/${id}/accept-offer`, { offerId });
+  acceptOffer: async (id, offerId, language = 'hi') => {
+    const response = await api.post(`/farmer/land-leases/${id}/accept-offer`, { offerId, language });
     return response.data;
   },
 

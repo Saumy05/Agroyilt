@@ -30,7 +30,7 @@ const adminLandLeaseController = {
     try {
       const { status, leaseType, search, page = 1, limit = 20 } = req.query;
       const filter = {};
-      if (['active', 'leased', 'inactive', 'pending_verification'].includes(status)) filter.status = status;
+      if (['active', 'agreement_pending', 'leased', 'inactive', 'pending_verification'].includes(status)) filter.status = status;
       if (['fixed-rent', 'crop-share'].includes(leaseType)) filter.leaseType = leaseType;
       if (search && search.trim()) {
         const regex = new RegExp(escapeRegex(search.trim()), 'i');
@@ -99,7 +99,7 @@ const adminLandLeaseController = {
         ])
       ]);
 
-      const counts = { active: 0, leased: 0, inactive: 0, pending_verification: 0 };
+      const counts = { active: 0, agreement_pending: 0, leased: 0, inactive: 0, pending_verification: 0 };
       byStatus.forEach((s) => { counts[s._id] = s.count; });
       const m = money[0] || { collected: 0, commission: 0, payments: 0 };
       const r = (n) => Math.round(n * 100) / 100;

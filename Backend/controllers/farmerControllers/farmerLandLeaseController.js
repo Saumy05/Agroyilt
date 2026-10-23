@@ -5,6 +5,9 @@ const Settings = require('../../models/Settings');
 const { buildAgreement, commissionSplit, round2 } = require('../../services/landLeaseScheduleService');
 const { payItem, createOnlineOrder, verifyOnlinePayment } = require('../../services/landLeasePaymentService');
 const { notifyLease } = require('../../services/landLeaseNotifyService');
+const landBoundary = require('../../services/landBoundaryService');
+const agreementSvc = require('../../services/leaseAgreementService');
+const LeaseAgreement = require('../../models/LeaseAgreement');
 
 const escapeRegex = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -244,8 +247,7 @@ const farmerLandLeaseController = {
         fencing,
         roadAccess,
         suitableCrops,
-        lat,
-        lng
+        boundaryPoints
       } = req.body;
 
       const ownerId = req.user.id;
@@ -288,8 +290,27 @@ const farmerLandLeaseController = {
         }
       }
 
-      const latitude = lat || location?.lat || 26.9124;
-      const longitude = lng || location?.lng || 75.8577;
+      // The border marked on the map is what the agreement will describe: it is required, and the land's map position comes
+      // from it (never from a default place).
+      const border = landBoundary.buildBoundary(boundaryPoints);
+      if (!border.ok) {
+        return res.status(400).json({ success: false, code: border.code, message: border.message });
+      }
+      const mismatch = landBoundary.areaMismatch(sizeInAcres, border.areaAcres);
+      if (mismatch) {
+        return res.status(400).json({ success: false, code: 'AREA_MISMATCH', message: mismatch });
+      }
+      const overlapping = await landBoundary.findOverlappingLease(border.geojson);
+      if (overlapping) {
+        return res.status(409).json({
+          success: false,
+          code: 'BOUNDARY_OVERLAP',
+          message: `This land overlaps "${overlapping.title}" (Khasra ${overlapping.khasraNumber}), which is already listed or leased. Check the border.`
+        });
+      }
+
+      const latitude = border.center.lat;
+      const longitude = border.center.lng;
 
       const landLease = new LandLease({
         ownerId,
@@ -318,6 +339,10 @@ const farmerLandLeaseController = {
           type: 'Point',
           coordinates: [Number(longitude), Number(latitude)]
         },
+        boundary: border.geojson,
+        boundaryPoints: border.points,
+        boundaryAreaAcres: border.areaAcres,
+        boundarySetAt: new Date(),
         leaseType,
         pricePerAcre: leaseType === 'fixed-rent' ? Number(pricePerAcre) : null,
         sharePercentage: leaseType === 'crop-share' ? Number(sharePercentage) : null,
@@ -347,6 +372,51 @@ const farmerLandLeaseController = {
     } catch (error) {
       console.error('Error listing land:', error);
       res.status(500).json({ success: false, message: 'Server Error: ' + error.message });
+    }
+  },
+
+  // 1b. Mark (or correct) the border of a listing. Only while the land is open: a border that an agreement already
+  // describes can't move.
+  setBoundary: async (req, res) => {
+    try {
+      const lease = await LandLease.findOne({ _id: req.params.id, ownerId: req.user.id });
+      if (!lease) {
+        return res.status(404).json({ success: false, message: 'भूमि नहीं मिली या आप इसके मालिक नहीं हैं (Land not found or unauthorized)' });
+      }
+      if (lease.status !== 'active') {
+        return res.status(400).json({ success: false, message: 'The border can only be changed while the land is open for offers.' });
+      }
+
+      const border = landBoundary.buildBoundary(req.body.boundaryPoints);
+      if (!border.ok) {
+        return res.status(400).json({ success: false, code: border.code, message: border.message });
+      }
+      const mismatch = landBoundary.areaMismatch(lease.sizeInAcres, border.areaAcres);
+      if (mismatch) {
+        return res.status(400).json({ success: false, code: 'AREA_MISMATCH', message: mismatch });
+      }
+      const overlapping = await landBoundary.findOverlappingLease(border.geojson, lease._id);
+      if (overlapping) {
+        return res.status(409).json({
+          success: false,
+          code: 'BOUNDARY_OVERLAP',
+          message: `This land overlaps "${overlapping.title}" (Khasra ${overlapping.khasraNumber}), which is already listed or leased. Check the border.`
+        });
+      }
+
+      lease.boundary = border.geojson;
+      lease.boundaryPoints = border.points;
+      lease.boundaryAreaAcres = border.areaAcres;
+      lease.boundarySetAt = new Date();
+      lease.location.lat = border.center.lat;
+      lease.location.lng = border.center.lng;
+      lease.geoLocation = { type: 'Point', coordinates: [border.center.lng, border.center.lat] };
+      await lease.save();
+
+      res.status(200).json({ success: true, message: 'Land border saved', data: lease });
+    } catch (error) {
+      console.error('Error saving land border:', error);
+      res.status(500).json({ success: false, message: 'Server Error' });
     }
   },
 
@@ -538,6 +608,24 @@ const farmerLandLeaseController = {
         };
       });
 
+      // The agreement being signed (or signed) for each of these lands, so the screen can show "Sign agreement"
+      const leaseIds = [...myListings.map(l => l._id), ...myAppliedLands.map(l => l._id)];
+      const agreements = await LeaseAgreement.find({
+        leaseId: { $in: leaseIds }, status: { $in: ['DRAFT', 'PARTIALLY_SIGNED', 'FULLY_EXECUTED', 'DISPUTED'] }
+      }).select('leaseId referenceNo status signatures.landowner.signed signatures.farmer.signed landowner.userId farmer.userId expiresAt');
+      const summaryByLease = new Map(agreements.map((ag) => {
+        const role = agreementSvc.partyRole(ag, userId);
+        if (!role) return [String(ag.leaseId), null]; // someone who only made an offer is not shown another pair's agreement
+        return [String(ag.leaseId), {
+          id: ag._id, referenceNo: ag.referenceNo, status: ag.status, myRole: role,
+          mySigned: role ? !!ag.signatures[role].signed : null,
+          otherSigned: role ? !!ag.signatures[role === 'landowner' ? 'farmer' : 'landowner'].signed : null,
+          expiresAt: ag.expiresAt
+        }];
+      }));
+      myListings.forEach(l => { l.agreementSummary = summaryByLease.get(String(l._id)) || null; });
+      myOffers.forEach(o => { o.agreementSummary = summaryByLease.get(String(o.landId)) || null; });
+
       res.status(200).json({
         success: true,
         data: {
@@ -648,7 +736,22 @@ const farmerLandLeaseController = {
   acceptOffer: async (req, res) => {
     try {
       const { id } = req.params;
-      const { offerId } = req.body;
+      const { offerId, language } = req.body;
+
+      // With agreements on (the default), accepting an offer makes the agreement: the lease starts when both have signed it
+      if (await agreementSvc.agreementRequired()) {
+        const started = await agreementSvc.startAgreementForOffer({ leaseId: id, ownerId: req.user.id, offerId, language });
+        if (!started.ok) {
+          return res.status(started.status).json({ success: false, code: started.code, message: started.message });
+        }
+        return res.status(200).json({
+          success: true,
+          agreementRequired: true,
+          agreementId: started.agreement._id,
+          message: 'प्रस्ताव स्वीकार हुआ। अब दोनों पक्ष अनुबंध पर हस्ताक्षर करें (Offer accepted. Both of you now need to sign the agreement)',
+          data: started.lease
+        });
+      }
 
       const lease = await LandLease.findOne({ _id: id, ownerId: req.user.id });
       if (!lease) {
@@ -674,6 +777,15 @@ const farmerLandLeaseController = {
         return res.status(400).json({
           success: false,
           message: 'यह प्रस्ताव अब लंबित नहीं है (Offer is no longer pending)'
+        });
+      }
+
+      // The agreement describes the land by its marked border, so a listing without one can't be leased yet
+      if (!(lease.boundaryPoints && lease.boundaryPoints.length >= 3)) {
+        return res.status(400).json({
+          success: false,
+          code: 'BOUNDARY_REQUIRED',
+          message: 'भूमि की सीमा नक्शे पर चिह्नित करें, फिर प्रस्ताव स्वीकार करें (Mark the land border on the map before accepting an offer)'
         });
       }
 
@@ -759,7 +871,7 @@ const farmerLandLeaseController = {
   acceptLeaseTerms: async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenantId } = req.body;
+      const { tenantId, language } = req.body;
 
       const lease = await LandLease.findOne({ _id: id, ownerId: req.user.id });
       if (!lease) {
@@ -779,6 +891,20 @@ const farmerLandLeaseController = {
       );
       if (!tenantOffer) {
         return res.status(400).json({ success: false, message: 'No pending offer from this tenant' });
+      }
+
+      if (await agreementSvc.agreementRequired()) {
+        const started = await agreementSvc.startAgreementForOffer({ leaseId: id, ownerId: req.user.id, offerId: tenantOffer._id, language });
+        if (!started.ok) {
+          return res.status(started.status).json({ success: false, code: started.code, message: started.message });
+        }
+        return res.status(200).json({
+          success: true,
+          agreementRequired: true,
+          agreementId: started.agreement._id,
+          message: 'Offer accepted. Both parties now need to sign the agreement.',
+          data: started.lease
+        });
       }
 
       await applyAgreement(lease, tenantOffer);
