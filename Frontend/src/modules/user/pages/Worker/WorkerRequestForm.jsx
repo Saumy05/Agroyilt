@@ -8,6 +8,7 @@ import {
 } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import workerBookingService from '../../../../services/workerBookingService';
+import { userAuthService } from '../../../../services/authService';
 import LocationPicker from '../Checkout/components/LocationPicker';
 import { WORKER_SERVICES } from '../../../../constants/workerServices';
 
@@ -340,6 +341,7 @@ const WorkerRequestForm = () => {
         const stateComp = comps.find(c => c.types.includes('administrative_area_level_1'));
         const city = cityComp?.long_name || prediction.structured_formatting?.main_text || '';
         const state = stateComp?.long_name || '';
+        setPickedPincode(comps.find(c => c.types.includes('postal_code'))?.long_name || '');
 
         setFormData(prev => ({
           ...prev,
@@ -433,6 +435,54 @@ const WorkerRequestForm = () => {
     lng:             '',
     additionalInstructions: ''
   });
+
+  // Work location: the farmer's saved address is used by default (no map, no Google calls).
+  // The map only opens when they choose to change it.
+  const [savedAddress, setSavedAddress] = useState(null);
+  const [locationMode, setLocationMode] = useState('loading'); // 'loading' | 'saved' | 'map'
+  const [saveAsDefault, setSaveAsDefault] = useState(true); // a place picked on the map becomes the saved address unless unticked
+  const [pickedPincode, setPickedPincode] = useState('');
+
+  const savedAddressText = (a) => [a?.addressLine2, a?.addressLine1].filter(Boolean).join(', ');
+
+  const applySavedAddress = useCallback((a) => {
+    setFormData(prev => ({
+      ...prev,
+      addressLine1: savedAddressText(a),
+      city:         a.city || '',
+      state:        a.state || '',
+      lat:          String(a.lat),
+      lng:          String(a.lng)
+    }));
+    setErrors(prev => ({ ...prev, city: '' }));
+    setLocationMode('saved');
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    userAuthService.getProfile()
+      .then(res => {
+        if (!alive) return;
+        // Only an address with coordinates can be used for radius matching
+        const usable = (res?.user?.addresses || []).filter(a => Number.isFinite(Number(a.lat)) && Number.isFinite(Number(a.lng)) && a.lat !== null && a.lng !== null);
+        const chosen = usable.find(a => a.isDefault) || usable[0];
+        if (chosen) {
+          setSavedAddress(chosen);
+          applySavedAddress(chosen);
+        } else {
+          setLocationMode('map');
+        }
+      })
+      .catch(() => { if (alive) setLocationMode('map'); });
+    return () => { alive = false; };
+  }, [applySavedAddress]);
+
+  const changeLocation = () => {
+    // Start clean so the request can't go out with the old coordinates if no new place is picked
+    setFormData(prev => ({ ...prev, addressLine1: '', city: '', state: '', lat: '', lng: '' }));
+    setPickedPincode('');
+    setLocationMode('map');
+  };
 
   useEffect(() => {
     if (targetedWorker) {
@@ -793,6 +843,27 @@ const WorkerRequestForm = () => {
       }
 
       const created = await workerBookingService.createFarmerRequest(payload);
+
+      // A place picked on the map becomes the farmer's saved address (the profile keeps one). A failure here never blocks the request.
+      if (locationMode === 'map' && saveAsDefault && formData.lat !== '' && formData.lng !== '') {
+        try {
+          await userAuthService.updateProfile({
+            addresses: [{
+              type: 'home',
+              addressLine1: formData.addressLine1,
+              addressLine2: '',
+              city: formData.city,
+              state: formData.state,
+              pincode: pickedPincode,
+              lat: Number(formData.lat),
+              lng: Number(formData.lng),
+              isDefault: true
+            }]
+          });
+        } catch {
+          toast('Request sent, but we could not save this as your default address.', { id: 'worker-req-addr' });
+        }
+      }
       toast.success('Request submitted! Finding workers near you...', { id: 'worker-req-toast' });
       const newId = created?.data?._id || created?.data?.request?._id;
       navigate(newId ? `/user/farmer-worker-request/${newId}` : '/user/my-bookings?filter=pending', { replace: true });
@@ -1346,6 +1417,40 @@ const WorkerRequestForm = () => {
               <FiMapPin size={14} className="text-emerald-600" /> Work Location
             </h3>
             
+            {locationMode === 'loading' && (
+              <div className="h-16 rounded-xl bg-slate-50 animate-pulse" />
+            )}
+
+            {locationMode === 'saved' && savedAddress && (
+              <div className="flex items-start justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-700 mb-0.5">Your saved address</p>
+                  <p className="text-xs sm:text-sm font-semibold text-slate-800 leading-snug">{formData.addressLine1}</p>
+                  {(formData.city || formData.state) && (
+                    <p className="text-[11px] text-slate-500 mt-0.5">{[formData.city, formData.state].filter(Boolean).join(', ')}</p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={changeLocation}
+                  className="shrink-0 px-3 py-1.5 rounded-lg bg-white border border-emerald-300 text-emerald-700 text-xs font-bold active:scale-95"
+                >
+                  Change
+                </button>
+              </div>
+            )}
+
+            {locationMode === 'map' && (
+              <>
+                {savedAddress && (
+                  <button
+                    type="button"
+                    onClick={() => applySavedAddress(savedAddress)}
+                    className="mb-2 text-xs font-bold text-emerald-700 underline"
+                  >
+                    Use my saved address
+                  </button>
+                )}
             <div className="mb-2.5 rounded-xl overflow-hidden border border-slate-200">
               <LocationPicker
                 flyToPosition={flyToPosition}
@@ -1357,6 +1462,7 @@ const WorkerRequestForm = () => {
                     const stateComp = loc.components.find(c => c.types.includes('administrative_area_level_1'));
                     if (cityComp) city = cityComp.long_name;
                     if (stateComp) state = stateComp.long_name;
+                    setPickedPincode(loc.components.find(c => c.types.includes('postal_code'))?.long_name || '');
                   }
                   setFormData(prev => ({
                     ...prev,
@@ -1455,40 +1561,21 @@ const WorkerRequestForm = () => {
                   className="w-full bg-slate-50/80 border border-slate-200 rounded-xl px-3 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
                 />
               </div>
-              <div>
-                <input
-                  type="text"
-                  name="state"
-                  value={formData.state}
-                  onChange={handleChange}
-                  placeholder="State (optional)"
-                  className="w-full bg-slate-50/80 border border-slate-200 rounded-xl px-3 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="number"
-                  name="lat"
-                  value={formData.lat}
-                  onChange={handleChange}
-                  placeholder="Latitude (optional)"
-                  step="any"
-                  className="w-full bg-slate-50/80 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
-                />
-                <input
-                  type="number"
-                  name="lng"
-                  value={formData.lng}
-                  onChange={handleChange}
-                  placeholder="Longitude (optional)"
-                  step="any"
-                  className="w-full bg-slate-50/80 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
-                />
-              </div>
-              <p className="text-[10px] text-slate-400">
-                Coordinates improve radius matching accuracy.
-              </p>
             </div>
+            <label className="mt-2.5 flex items-start gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={saveAsDefault}
+                onChange={(e) => setSaveAsDefault(e.target.checked)}
+                className="mt-0.5 w-4 h-4 accent-emerald-600"
+              />
+              <span className="text-xs text-slate-600 leading-snug">
+                Also save as my default address
+                <span className="block text-[10px] text-slate-400">It replaces your current saved address and is used for your next bookings.</span>
+              </span>
+            </label>
+              </>
+            )}
           </div>
 
           {/* ── Budget ────────────────────────────────────────────────────────── */}

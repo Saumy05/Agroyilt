@@ -37,7 +37,7 @@ const ManageAddresses = () => {
       if (response.success && response.user?.addresses) {
         setAddresses(response.user.addresses);
       }
-    } catch (error) {
+    } catch {
       toastManager.error('Failed to load addresses');
     } finally {
       setLoading(false);
@@ -120,7 +120,7 @@ const ManageAddresses = () => {
         toastManager.error(response.message || 'Failed to save address');
       }
 
-    } catch (error) {
+    } catch {
       toastManager.dismissAll();
       toastManager.error('Something went wrong');
     }
@@ -141,7 +141,7 @@ const ManageAddresses = () => {
       } else {
         toastManager.error('Failed to delete address');
       }
-    } catch (error) {
+    } catch {
       toastManager.dismissAll();
       toastManager.error('Failed to delete address');
     }
@@ -149,18 +149,6 @@ const ManageAddresses = () => {
 
   const handleMenuToggle = (addressId) => {
     setShowMenu(showMenu === addressId ? null : addressId);
-  };
-
-  // Helper to format address for display
-  const formatAddress = (addr) => {
-    const parts = [
-      addr.addressLine2,
-      addr.addressLine1,
-      addr.city,
-      addr.state,
-      addr.pincode
-    ].filter(Boolean);
-    return parts.join(', ');
   };
 
   return (
@@ -265,7 +253,7 @@ const ManageAddresses = () => {
                   {address.addressLine2 ? `${address.addressLine2}, ` : ''}{address.addressLine1}
                 </p>
                 <p className="text-xs text-gray-500">
-                  {address.city}, {address.state} - {address.pincode}
+                  {[address.city, address.state].filter(Boolean).join(', ')}{address.pincode ? ` - ${address.pincode}` : ''}
                 </p>
               </div>
             </div>

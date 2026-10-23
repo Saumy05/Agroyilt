@@ -11,6 +11,7 @@ import { bookingService } from '../../../../services/bookingService';
 import { paymentService } from '../../../../services/paymentService';
 import { configService } from '../../../../services/configService';
 import authStorage from '../../../../utils/authStorage';
+import { userAuthService } from '../../../../services/authService';
 import AddressSelectionModal from '../Checkout/components/AddressSelectionModal';
 import usePaymentMethods from '../../../../hooks/usePaymentMethods';
 import { estimateDistanceBill } from '../../../../utils/distanceFare';
@@ -40,13 +41,45 @@ const MachineryCheckout = () => {
 
     const [selectedAddress, setSelectedAddress] = useState(null);
     const [houseNumber, setHouseNumber] = useState('');
-    const [showAddressModal, setShowAddressModal] = useState(true);
+    // The farmer's saved address is used by default; the map modal only opens when they choose to change it (or have none)
+    const [showAddressModal, setShowAddressModal] = useState(false);
+    const [savedAddress, setSavedAddress] = useState(null);
+    const [isCustomAddress, setIsCustomAddress] = useState(false); // a place picked on the map instead of the saved one
+    const [saveAsDefault, setSaveAsDefault] = useState(true);
     const [paymentMethod, setPaymentMethod] = useState('cash'); // Defaulting to COD for agriculture
     const [submitting, setSubmitting] = useState(false);
     const [showPaymentConfirmModal, setShowPaymentConfirmModal] = useState(false);
     const [adminRentalGst, setAdminRentalGst] = useState(null);
     const [adminPlatformFeePct, setAdminPlatformFeePct] = useState(0);
     const [travel, setTravel] = useState(null); // travel charge for the vendor coming to the chosen address
+
+    useEffect(() => {
+        let alive = true;
+        userAuthService.getProfile()
+            .then(res => {
+                if (!alive) return;
+                // Only an address with coordinates can be used (travel charge and vendor matching need them)
+                const usable = (res?.user?.addresses || []).filter(a => a.lat != null && a.lng != null && Number.isFinite(Number(a.lat)) && Number.isFinite(Number(a.lng)));
+                const chosen = usable.find(a => a.isDefault) || usable[0];
+                if (chosen) {
+                    const addr = {
+                        addressLine1: chosen.addressLine1 || '',
+                        addressLine2: chosen.addressLine2 || '',
+                        city: chosen.city || '',
+                        state: chosen.state || '',
+                        pincode: chosen.pincode || '',
+                        lat: Number(chosen.lat),
+                        lng: Number(chosen.lng)
+                    };
+                    setSavedAddress(addr);
+                    setSelectedAddress(addr);
+                } else {
+                    setShowAddressModal(true);
+                }
+            })
+            .catch(() => { if (alive) setShowAddressModal(true); });
+        return () => { alive = false; };
+    }, []);
 
     useEffect(() => {
         let isMounted = true;
@@ -306,6 +339,27 @@ const MachineryCheckout = () => {
                 return;
             }
 
+            // A place picked on the map becomes the farmer's saved address (the profile keeps one). A failure never blocks the booking.
+            if (isCustomAddress && saveAsDefault && selectedAddress.lat != null && selectedAddress.lng != null) {
+                try {
+                    await userAuthService.updateProfile({
+                        addresses: [{
+                            type: 'home',
+                            addressLine1: selectedAddress.addressLine1,
+                            addressLine2: selectedAddress.addressLine2 || '',
+                            city: selectedAddress.city,
+                            state: selectedAddress.state,
+                            pincode: selectedAddress.pincode,
+                            lat: selectedAddress.lat,
+                            lng: selectedAddress.lng,
+                            isDefault: true
+                        }]
+                    });
+                } catch {
+                    toastManager.info('Booking placed, but we could not save this as your default address.');
+                }
+            }
+
             const newBookingId = res.booking?._id || res.data?._id || res.data?.booking?._id || res._id || res.booking?.id || res.data?.id;
 
             if (effectivePaymentMethod === 'online' && newBookingId) {
@@ -482,6 +536,31 @@ const MachineryCheckout = () => {
                         <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-2.5 flex items-center gap-2 text-amber-900 text-xs font-bold">
                             <FiMapPin className="text-amber-600 shrink-0" size={14} />
                             <span className="text-[11px]">Tap to specify your farm field or survey number location...</span>
+                        </div>
+                    )}
+                    {isCustomAddress && (
+                        <div className="mt-2 space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                            <label className="flex items-start gap-2 cursor-pointer select-none">
+                                <input
+                                    type="checkbox"
+                                    checked={saveAsDefault}
+                                    onChange={(e) => setSaveAsDefault(e.target.checked)}
+                                    className="mt-0.5 w-4 h-4 accent-emerald-600"
+                                />
+                                <span className="text-[11px] font-semibold text-slate-600 leading-snug">
+                                    Also save as my default address
+                                    <span className="block text-[10px] font-medium text-slate-400">It replaces your current saved address and is used for your next bookings.</span>
+                                </span>
+                            </label>
+                            {savedAddress && (
+                                <button
+                                    type="button"
+                                    onClick={() => { setSelectedAddress(savedAddress); setIsCustomAddress(false); }}
+                                    className="text-[11px] font-black text-emerald-700 underline"
+                                >
+                                    Use my saved address
+                                </button>
+                            )}
                         </div>
                     )}
                 </div>
@@ -815,6 +894,7 @@ const MachineryCheckout = () => {
                       lat: location?.lat,
                       lng: location?.lng
                   });
+                  setIsCustomAddress(true);
                   setShowAddressModal(false);
               }}
             />
