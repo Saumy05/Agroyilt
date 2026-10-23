@@ -325,6 +325,19 @@ const indWorkerAssignmentSchema = new mongoose.Schema(
       type: Number,
       default: null
     },
+    // DAILY cash bookings: the cash the worker collects at the end of each day (not only at the very end).
+    // One entry per completed day; the final settlement records only what these have not already covered.
+    cashDays: [{
+      _id: false,
+      dayNumber:    { type: Number, required: true },
+      workerAmount: { type: Number, default: 0 },   // the worker's pay for the day
+      platformFee:  { type: Number, default: 0 },   // fee collected for the app on that pay
+      travelCharge: { type: Number, default: 0 },   // travel charge (collected with day 1; the worker's own money)
+      cashAmount:   { type: Number, default: 0 },   // what the farmer hands over that day
+      commission:   { type: Number, default: 0 },   // app commission deducted for the day
+      status:       { type: String, enum: ['PENDING', 'DONE'], default: 'PENDING' },
+      at:           { type: Date, default: Date.now }
+    }],
     settlementTransactionId: {
       type: String,
       default: null,

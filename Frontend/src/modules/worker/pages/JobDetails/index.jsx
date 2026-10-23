@@ -1442,10 +1442,33 @@ const JobDetails = () => {
                     {cash && (
                       <div className="mt-4 bg-amber-50 border border-amber-200 rounded-xl p-3.5 space-y-2 text-xs">
                         <div className="flex justify-between items-center">
-                          <span className="font-black text-amber-900 uppercase tracking-wide">Collect in cash from farmer</span>
-                          <span className="text-lg font-black text-amber-900">{rupees(cash.totalToCollect)}</span>
+                          <span className="font-black text-amber-900 uppercase tracking-wide">
+                            {cash.today ? `Cash today — Day ${cash.today.dayNumber} of ${cash.today.totalDays}` : 'Collect in cash from farmer'}
+                          </span>
+                          <span className="text-lg font-black text-amber-900">{rupees(cash.today ? cash.today.amount : cash.totalToCollect)}</span>
                         </div>
-                        {(cash.lines || []).map((line, i) => (
+                        {cash.today && (
+                          <>
+                            {(cash.schedule || []).map(d => (
+                              <div key={d.dayNumber} className="flex justify-between gap-3 text-amber-900/90">
+                                <span className="font-semibold">
+                                  Day {d.dayNumber}
+                                  <span className="ml-1.5 text-[10px] font-bold text-amber-800/80">
+                                    {d.dayNumber < cash.today.dayNumber ? '✓ collected' : d.dayNumber === cash.today.dayNumber ? '← today' : 'later'}
+                                  </span>
+                                </span>
+                                <span className="font-bold shrink-0">{rupees(d.cashAmount)}</span>
+                              </div>
+                            ))}
+                            <div className="flex justify-between text-[11px] text-amber-900/80 pt-1 border-t border-amber-200">
+                              <span>Collected so far</span><span className="font-bold">{rupees(cash.today.collectedSoFar)}</span>
+                            </div>
+                            <div className="flex justify-between text-[11px] text-amber-900/80">
+                              <span>Left after today</span><span className="font-bold">{rupees(cash.today.remainingAfterToday)}</span>
+                            </div>
+                          </>
+                        )}
+                        {!cash.today && (cash.lines || []).map((line, i) => (
                           <div key={i} className="flex justify-between gap-3 text-amber-900/90">
                             <div className="min-w-0">
                               <span className="font-semibold block">{paymentLineLabel(line)}</span>
@@ -1459,7 +1482,9 @@ const JobDetails = () => {
                           </div>
                         ))}
                         <p className="text-[10px] text-amber-800 font-medium leading-relaxed pt-1.5 border-t border-amber-200">
-                          After the job, {rupees(cash.walletDeduction)} (platform fee {rupees(cash.platformFee)} + app commission {rupees(cash.commissionAmount)}) is taken from your wallet, so you keep {rupees(cash.netEarnings)}.
+                          {cash.today
+                            ? `Each day, the platform fee and app commission on that day's pay are taken from your wallet. Over the whole job: ${rupees(cash.walletDeduction)} (platform fee ${rupees(cash.platformFee)} + commission ${rupees(cash.commissionAmount)}), so you keep ${rupees(cash.netEarnings)}.`
+                            : `After the job, ${rupees(cash.walletDeduction)} (platform fee ${rupees(cash.platformFee)} + app commission ${rupees(cash.commissionAmount)}) is taken from your wallet, so you keep ${rupees(cash.netEarnings)}.`}
                         </p>
                       </div>
                     )}
@@ -1509,14 +1534,18 @@ const JobDetails = () => {
               <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-3.5 mb-3 space-y-1.5 shadow-2xs">
                 <div className="flex justify-between items-center">
                   <span className="text-xs font-black text-amber-900 uppercase tracking-wide">
-                    Total Cash to Collect From Farmer
+                    {job.cashCollection?.today
+                      ? `Cash to collect today (Day ${job.cashCollection.today.dayNumber} of ${job.cashCollection.today.totalDays})`
+                      : 'Total Cash to Collect From Farmer'}
                   </span>
                   <span className="text-lg font-black text-amber-900">
-                    ₹{(job.cashCollection?.totalToCollect ?? job.cashToCollect ?? (job.workerGrossEarning || job.agreedRate || 0)).toLocaleString('en-IN')}
+                    ₹{(job.cashCollection?.today?.amount ?? job.cashCollection?.totalToCollect ?? job.cashToCollect ?? (job.workerGrossEarning || job.agreedRate || 0)).toLocaleString('en-IN')}
                   </span>
                 </div>
                 <p className="text-[11px] text-amber-800 font-medium leading-relaxed">
-                  {job.cashCollection?.instruction || 'Collect this cash amount directly from the farmer.'}
+                  {job.cashCollection?.today
+                    ? `Collect only today's amount from the farmer, at the end of today's work. Already collected: ₹${job.cashCollection.today.collectedSoFar.toLocaleString('en-IN')}. ${job.cashCollection.today.isLastDay ? 'This is the last day.' : `Still to collect on later days: ₹${job.cashCollection.today.remainingAfterToday.toLocaleString('en-IN')}.`}`
+                    : (job.cashCollection?.instruction || 'Collect this cash amount directly from the farmer.')}
                 </p>
               </div>
             )}
@@ -1599,7 +1628,9 @@ const JobDetails = () => {
                       <p className="text-[10px] text-amber-700 font-medium">
                         {job.status === 'completed'
                           ? `₹${(job.cashCollection?.totalToCollect || job.cashToCollect || (job.workerGrossEarning || 0)).toLocaleString('en-IN')} physical cash collected directly from farmer.`
-                          : `Collect ₹${(job.cashCollection?.totalToCollect ?? job.cashToCollect ?? (job.workerGrossEarning || job.agreedRate || 0)).toLocaleString('en-IN')} cash in hand before submitting completion OTP.`}
+                          : job.cashCollection?.today
+                            ? `Collect ₹${job.cashCollection.today.amount.toLocaleString('en-IN')} cash in hand for today (Day ${job.cashCollection.today.dayNumber} of ${job.cashCollection.today.totalDays}) before submitting the End OTP.`
+                            : `Collect ₹${(job.cashCollection?.totalToCollect ?? job.cashToCollect ?? (job.workerGrossEarning || job.agreedRate || 0)).toLocaleString('en-IN')} cash in hand before submitting completion OTP.`}
                       </p>
                     </div>
                   </div>

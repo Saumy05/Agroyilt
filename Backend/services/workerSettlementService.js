@@ -111,6 +111,108 @@ const repriceHourlyByTime = async (assignmentId) => {
   return { repriced: !!updated, workedMinutes, bookedMinutes: baseMinutes, assignment: updated || a };
 };
 
+// ── cash bookings ────────────────────────────────────────────────────────────────────────────────
+const isCashAssignment = (a, parent) => {
+  const isOnlinePay = a.paymentMethod === 'qr_online' || a.paymentMethod === 'online' || a.isCashBooking === false;
+  return !isOnlinePay && (Boolean(a.isCashBooking) || a.paymentMethod === 'cash' || (parent && parent.paymentMethod === 'cash'));
+};
+
+/** Who holds the cash and owes the app's share: the Team Leader for a team / offline member's job, else the worker. */
+const resolveCashDebtor = async (a) => {
+  if (a.teamLeaderId) return a.teamLeaderId;
+  const workerDoc = await Worker.findById(a.workerId).select('name isOfflineMember managedByLeaderId');
+  if (workerDoc?.isOfflineMember && workerDoc?.managedByLeaderId) return workerDoc.managedByLeaderId;
+  return a.workerId;
+};
+
+const sumDays = (days, field) => (days || []).reduce((sum, d) => sum + toP(d[field] || 0), 0);
+
+/**
+ * Records one completed day of a DAILY cash booking: the cash received that day, the app commission and the platform
+ * fee on it. Every write has its own idempotency key, so replaying a day (retry, or the final settlement catching up)
+ * never records it twice.
+ */
+const applyCashDay = async (a, parent, entry) => {
+  const key = `settle_assign_${a._id}_day${entry.dayNumber}`;
+  const debtorId = await resolveCashDebtor(a);
+  const forLeader = debtorId.toString() !== a.workerId.toString();
+  const forJob = parent?.workTitle ? ` for ${parent.workTitle}` : '';
+  const job = { assignmentId: String(a._id), workTitle: parent?.workTitle || null, dayNumber: entry.dayNumber };
+
+  if (entry.cashAmount > 0) {
+    await ledger.recordPassbookOnce(`${key}_cash`, {
+      workerId: debtorId, type: 'cash_collected', amount: entry.cashAmount, status: 'completed', paymentMethod: 'cash',
+      description: forLeader
+        ? `Day ${entry.dayNumber} cash ₹${entry.cashAmount} received for team member${forJob}`
+        : `Day ${entry.dayNumber} cash ₹${entry.cashAmount} received from the farmer${forJob}`,
+      referenceId: key,
+      metadata: { ...job, type: 'cash_received', workerAmount: entry.workerAmount, platformFee: entry.platformFee, memberId: a.workerId }
+    });
+  }
+  if (entry.commission > 0) {
+    await deductCashCommissionOnce({ workerId: debtorId, amount: entry.commission, key: `${key}_commission`, referenceId: a._id });
+    await ledger.recordPassbookOnce(`${key}_commission`, {
+      workerId: debtorId, type: 'commission_deduction', amount: entry.commission, status: 'completed', paymentMethod: 'cash',
+      description: forLeader ? `App commission for team member's day ${entry.dayNumber}${forJob}` : `App commission on your day ${entry.dayNumber} pay${forJob}`,
+      referenceId: key,
+      metadata: { ...job, type: 'cash_collection_commission', grossAmount: entry.workerAmount, commissionAmount: entry.commission, memberId: a.workerId }
+    });
+  }
+  if (entry.platformFee > 0) {
+    await deductCashCommissionOnce({ workerId: debtorId, amount: entry.platformFee, key: `${key}_platform_fee`, referenceId: a._id });
+    await ledger.recordPassbookOnce(`${key}_platform_fee`, {
+      workerId: debtorId, type: 'platform_fee', amount: entry.platformFee, status: 'completed', paymentMethod: 'cash',
+      description: forLeader ? `Platform fee collected from farmer for team member's day ${entry.dayNumber}${forJob}` : `Platform fee the farmer paid you in cash for day ${entry.dayNumber}${forJob}`,
+      referenceId: key,
+      metadata: { ...job, type: 'cash_collection_platform_fee', grossAmount: entry.workerAmount, platformFee: entry.platformFee, memberId: a.workerId }
+    });
+  }
+  await require('./workerDuesService').syncDuesRestriction(debtorId);
+  await IndWorkerAssignment.updateOne(
+    { _id: a._id, 'cashDays.dayNumber': entry.dayNumber },
+    { $set: { 'cashDays.$.status': 'DONE' } }
+  );
+  emit(`worker_${debtorId}`, 'wallet_balance_updated', { assignmentId: String(a._id), reason: 'cash_day', timestamp: new Date() });
+  emit(`worker:${debtorId}`, 'wallet_balance_updated', { assignmentId: String(a._id), reason: 'cash_day', timestamp: new Date() });
+};
+
+/**
+ * A day of a DAILY cash booking was just completed (End OTP): record that day's cash, commission and fee now, not at
+ * the very end. Safe to call again for the same day. Any day missed here is picked up by the final settlement.
+ * @returns {{ recorded: boolean, reason?: string }}
+ */
+const settleCashDay = async (assignmentId, dayNumber) => {
+  const a = await IndWorkerAssignment.findById(assignmentId);
+  if (!a || a.bookingType !== 'DAILY' || a.settlementStatus === 'SETTLED') return { recorded: false, reason: 'not_applicable' };
+  const parent = await WorkerBookingRequest.findById(a.parentRequestId).select('paymentMethod paymentStatus financialSnapshot bookingType durationMinutes numberOfDays auditLog workTitle');
+  if (!isCashAssignment(a, parent)) return { recorded: false, reason: 'not_cash' };
+  // legacy cash / QR paths record their own cash entry at settlement
+  if (a.cashPlatformFee !== null && a.cashPlatformFee !== undefined) return { recorded: false, reason: 'legacy' };
+
+  const existing = (a.cashDays || []).find(d => d.dayNumber === dayNumber);
+  if (existing) {
+    if (existing.status !== 'DONE') await applyCashDay(a, parent, existing);
+    return { recorded: true };
+  }
+
+  const { buildWorkerCashCollection } = require('./workerFinancialService');
+  const exts = await IndWorkerExtension.find({ parentRequestId: a.parentRequestId, status: 'CONFIRMED' });
+  const cash = buildWorkerCashCollection(a, parent, exts);
+  const planned = (cash.schedule || [])[dayNumber - 1];
+  if (!planned) return { recorded: false, reason: 'no_such_day' };
+
+  const entry = { ...planned, status: 'PENDING', at: new Date() };
+  // claim the day first (one winner), then do the writes; a crash in between is finished by the next call or the final settlement
+  const claimed = await IndWorkerAssignment.findOneAndUpdate(
+    { _id: a._id, settlementStatus: { $ne: 'SETTLED' }, 'cashDays.dayNumber': { $ne: dayNumber } },
+    { $push: { cashDays: entry, auditLog: audit('cash_day_collected', 'system', null, { dayNumber, cash: entry.cashAmount }) } },
+    { new: true }
+  );
+  if (!claimed) return { recorded: false, reason: 'already_claimed' };
+  await applyCashDay(claimed, parent, entry);
+  return { recorded: true };
+};
+
 // ── settle one assignment ────────────────────────────────────────────────────────────────────────
 /**
  * Preconditions: completion OTP already verified. Safe to call concurrently / repeatedly.
@@ -136,8 +238,7 @@ const settleAssignment = async (assignmentId, { useStoredAmounts = false } = {})
   const key = `settle_assign_${a._id}`;
   try {
     const parent = await WorkerBookingRequest.findById(a.parentRequestId).select('paymentMethod paymentStatus financialSnapshot bookingType durationMinutes numberOfDays auditLog workTitle');
-    const isOnlinePay = a.paymentMethod === 'qr_online' || a.paymentMethod === 'online' || a.isCashBooking === false;
-    const isCash = !isOnlinePay && (Boolean(a.isCashBooking) || a.paymentMethod === 'cash' || (parent && parent.paymentMethod === 'cash'));
+    const isCash = isCashAssignment(a, parent);
 
     let gross = a.grossAmount, commission = a.commissionAmount, net = a.netEarning;
     if (a.bookingType === 'DAILY' && !useStoredAmounts) {
@@ -151,18 +252,11 @@ const settleAssignment = async (assignmentId, { useStoredAmounts = false } = {})
     const forJob = parent?.workTitle ? ` for ${parent.workTitle}` : '';
 
     let cashPlatformFee = null;
+    let cashFeeLeft = 0;      // platform fee still to hand back at this settlement (earlier days of a DAILY job already did theirs)
+    let commissionLeft = commission || 0; // likewise for the app commission
     if (isCash) {
       // Determine if this worker is an offline worker or part of a team job managed by a Team Leader
-      let debtorId = a.workerId;
-      let workerDoc = null;
-      if (a.teamLeaderId) {
-        debtorId = a.teamLeaderId;
-      } else {
-        workerDoc = await Worker.findById(a.workerId).select('name isOfflineMember managedByLeaderId');
-        if (workerDoc?.isOfflineMember && workerDoc?.managedByLeaderId) {
-          debtorId = workerDoc.managedByLeaderId;
-        }
-      }
+      const debtorId = await resolveCashDebtor(a);
 
       // The farmer paid the platform fee to the worker/leader in cash with the wages: give it back to the app, once.
       // (cashPlatformFee is pre-set to 0 by the legacy cash / QR paths, which record their own cash entry.)
@@ -172,37 +266,51 @@ const settleAssignment = async (assignmentId, { useStoredAmounts = false } = {})
         const exts = await IndWorkerExtension.find({ parentRequestId: a.parentRequestId, status: 'CONFIRMED' });
         const cash = buildWorkerCashCollection(a, parent, exts, { grossOverride: gross });
         cashPlatformFee = cash.platformFee;
+        // DAILY cash: earlier days were already recorded as they were completed. Finish any that were left half-done,
+        // then record only what they have not covered, so the days add up to exactly the full amount.
+        for (const day of (a.cashDays || [])) {
+          if (day.status !== 'DONE') await applyCashDay(a, parent, day);
+        }
+        const hadDays = (a.cashDays || []).length > 0;
+        const cashLeftP = Math.max(0, toP(cash.totalToCollect) - sumDays(a.cashDays, 'cashAmount'));
+        commissionLeft = hadDays ? Math.max(0, toINR(toP(commission || 0) - sumDays(a.cashDays, 'commission'))) : (commission || 0);
+        cashPlatformFee = cash.platformFee; // the total, stored on the assignment below
+        cashFeeLeft = hadDays ? Math.max(0, toINR(toP(cash.platformFee) - sumDays(a.cashDays, 'platformFee'))) : cash.platformFee;
         // cash in hand is not wallet money: recorded for the cash collector (Team Leader if team/offline job, else worker)
-        await ledger.recordPassbookOnce(`${key}_cash`, {
-          workerId: debtorId, type: 'cash_collected', amount: cash.totalToCollect, status: 'completed', paymentMethod: 'cash',
-          description: debtorId.toString() !== a.workerId.toString()
-            ? `Cash ₹${cash.totalToCollect} received for team member${forJob}`
-            : `Cash ₹${cash.totalToCollect} received from the farmer${forJob}`,
-          referenceId: key,
-          metadata: { ...job, type: 'cash_received', workerAmount: gross, platformFee: cashPlatformFee, memberId: a.workerId }
-        });
+        if (!hadDays || cashLeftP > 0) {
+          await ledger.recordPassbookOnce(`${key}_cash`, {
+            workerId: debtorId, type: 'cash_collected', amount: toINR(cashLeftP), status: 'completed', paymentMethod: 'cash',
+            description: debtorId.toString() !== a.workerId.toString()
+              ? `Cash ₹${toINR(cashLeftP)} received for team member${forJob}`
+              : `Cash ₹${toINR(cashLeftP)} received from the farmer${forJob}`,
+            referenceId: key,
+            metadata: { ...job, type: 'cash_received', workerAmount: gross, platformFee: cashFeeLeft, memberId: a.workerId }
+          });
+        }
+      } else {
+        cashFeeLeft = cashPlatformFee;
       }
 
       // Deduct commission and platform fee from the debtor (Team Leader if team/offline job, else worker)
-      await deductCashCommissionOnce({ workerId: debtorId, amount: commission || 0, key: `${key}_commission`, referenceId: a._id });
+      await deductCashCommissionOnce({ workerId: debtorId, amount: commissionLeft, key: `${key}_commission`, referenceId: a._id });
       await ledger.recordPassbookOnce(`${key}_commission`, {
-        workerId: debtorId, type: 'commission_deduction', amount: commission || 0, status: 'completed', paymentMethod: 'cash',
+        workerId: debtorId, type: 'commission_deduction', amount: commissionLeft, status: 'completed', paymentMethod: 'cash',
         description: debtorId.toString() !== a.workerId.toString()
           ? `App commission for team member's job${forJob}`
           : `App commission on your pay${forJob}`,
         referenceId: key,
-        metadata: { ...job, type: 'cash_collection_commission', grossAmount: gross, commissionAmount: commission, netEarning: net, memberId: a.workerId }
+        metadata: { ...job, type: 'cash_collection_commission', grossAmount: gross, commissionAmount: commissionLeft, netEarning: net, memberId: a.workerId }
       });
 
-      if (cashPlatformFee > 0) {
-        await deductCashCommissionOnce({ workerId: debtorId, amount: cashPlatformFee, key: `${key}_platform_fee`, referenceId: a._id });
+      if (cashFeeLeft > 0) {
+        await deductCashCommissionOnce({ workerId: debtorId, amount: cashFeeLeft, key: `${key}_platform_fee`, referenceId: a._id });
         await ledger.recordPassbookOnce(`${key}_platform_fee`, {
-          workerId: debtorId, type: 'platform_fee', amount: cashPlatformFee, status: 'completed', paymentMethod: 'cash',
+          workerId: debtorId, type: 'platform_fee', amount: cashFeeLeft, status: 'completed', paymentMethod: 'cash',
           description: debtorId.toString() !== a.workerId.toString()
             ? `Platform fee collected from farmer for team member${forJob}`
             : `Platform fee the farmer paid you in cash${forJob}`,
           referenceId: key,
-          metadata: { ...job, type: 'cash_collection_platform_fee', grossAmount: gross, platformFee: cashPlatformFee, memberId: a.workerId }
+          metadata: { ...job, type: 'cash_collection_platform_fee', grossAmount: gross, platformFee: cashFeeLeft, memberId: a.workerId }
         });
       }
       await require('./workerDuesService').syncDuesRestriction(debtorId);
@@ -483,6 +591,6 @@ const finishParent = async (parentId) => {
 };
 
 module.exports = {
-  addRefunded, repriceHourlyByTime, settleAssignment, syncParentProgress, finishParent, processBookingRefund, refundUnusedDays, refundWorkerReserveShare,
+  addRefunded, repriceHourlyByTime, settleAssignment, settleCashDay, syncParentProgress, finishParent, processBookingRefund, refundUnusedDays, refundWorkerReserveShare,
   reconcile, creditFarmerOnce, isPaidOnline, deductCashCommissionOnce, audit, hasStarted, STALE_PROCESSING_MS
 };

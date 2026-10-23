@@ -333,6 +333,38 @@ const baseSchedule = (request, confirmedExtensions = []) => {
 };
 
 /**
+ * A DAILY cash booking is collected day by day. Spreads each cash line over its days (the booked days, then each
+ * extension's days) and puts the travel charge on day 1. Per day: the worker's pay, the platform fee on it, the
+ * cash the farmer hands over, and the app commission taken for it. In paise so the days add up to the lines exactly.
+ */
+const dailyCashSchedule = (lines, travelP, commissionRate) => {
+  const days = [];
+  for (const line of lines) {
+    if (line.kind === 'travel') continue;
+    const n = Math.max(1, Number(line.days) || 1);
+    const workerP = toP(line.workerAmount);
+    const feeP = toP(line.platformFee);
+    for (let i = 0; i < n; i++) {
+      const last = i === n - 1;
+      days.push({
+        workerP: last ? workerP - Math.floor(workerP / n) * (n - 1) : Math.floor(workerP / n),
+        feeP: last ? feeP - Math.floor(feeP / n) * (n - 1) : Math.floor(feeP / n),
+        travelP: 0
+      });
+    }
+  }
+  if (days.length && travelP > 0) days[0].travelP = travelP;
+  return days.map((d, i) => ({
+    dayNumber: i + 1,
+    workerAmount: toINR(d.workerP),
+    platformFee: toINR(d.feeP),
+    travelCharge: toINR(d.travelP),
+    cashAmount: toINR(d.workerP + d.feeP + d.travelP),
+    commission: toINR(Math.floor((d.workerP * commissionRate) / 100))
+  }));
+};
+
+/**
  * Cash a worker collects from the farmer on a cash booking — the ONE place this is computed (worker screens, farmer
  * bill and settlement all use it). Per part of the job (the booked work, then each cash extension):
  *   amount = worker's pay + platform fee on that pay.
@@ -400,6 +432,39 @@ exports.buildWorkerCashCollection = (assignment, request, extensions = [], { gro
   const commission = Number(assignment.commissionAmount) || 0;
   const platformFee = toINR(feeP);
 
+  // DAILY: the farmer pays each day's wage at the end of that day. `today` is what this screen's day collects.
+  let schedule = null;
+  let today = null;
+  if (isDaily) {
+    schedule = dailyCashSchedule(lines, travelP, Number(assignment.commissionRate ?? 10));
+    const done = assignment.cashDays || [];
+    const collectedP = sumP(done, d => toP(d.cashAmount));
+    const dayIdx = Math.max(1, Number(assignment.currentDayIndex) || 1);
+    const totalDays = Math.max(schedule.length, Number(assignment.bookedDays) || 0, 1);
+    const isLastDay = dayIdx >= totalDays;
+    const planned = schedule[dayIdx - 1];
+    // the last day also settles whatever earlier days did not cover, so the days always add up to the full amount
+    const todayP = isLastDay || !planned ? Math.max(0, totalP - collectedP) : toP(planned.cashAmount);
+    const workerTodayP = isLastDay || !planned ? Math.max(0, grossP - sumP(done, d => toP(d.workerAmount))) : toP(planned.workerAmount);
+    const feeTodayP = isLastDay || !planned ? Math.max(0, feeP - sumP(done, d => toP(d.platformFee))) : toP(planned.platformFee);
+    const commissionTodayP = isLastDay || !planned ? Math.max(0, toP(commission) - sumP(done, d => toP(d.commission))) : toP(planned.commission);
+    const travelTodayP = isLastDay || !planned ? Math.max(0, travelP - sumP(done, d => toP(d.travelCharge))) : toP(planned.travelCharge);
+    today = {
+      dayNumber: dayIdx,
+      totalDays,
+      isLastDay,
+      amount: toINR(todayP),
+      workerAmount: toINR(workerTodayP),
+      platformFee: toINR(feeTodayP),
+      travelCharge: toINR(travelTodayP),
+      commission: toINR(commissionTodayP),
+      // what the worker keeps from today's cash: pay less the commission, plus the travel charge (his own money)
+      youKeep: toINR(workerTodayP - commissionTodayP + travelTodayP),
+      collectedSoFar: toINR(collectedP),
+      remainingAfterToday: toINR(Math.max(0, totalP - collectedP - todayP))
+    };
+  }
+
   return {
     isCashBooking: true,
     totalToCollect: toINR(totalP),
@@ -413,6 +478,8 @@ exports.buildWorkerCashCollection = (assignment, request, extensions = [], { gro
     totalEarnings: toINR(toP(assignment.netEarning ?? (toINR(grossP) - commission)) + travelP),
     walletDeduction: Math.round((platformFee + commission) * 100) / 100,
     lines,
+    schedule,
+    today,
     instruction: `Collect ₹${toINR(totalP)} cash from the farmer${travelP > 0 ? ` (includes ₹${toINR(travelP)} travel charge, which is yours)` : ''}. After the job, the platform fee (₹${platformFee}) and app commission (₹${commission}) are taken from your wallet.`
   };
 };

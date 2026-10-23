@@ -118,7 +118,11 @@ const WorkCompletionModal = ({ isOpen, onClose, job, onComplete, loading, onOpen
   };
 
   const isCashBooking = job?.paymentMethod === 'cash' || Boolean(job?.isCashBooking) || Boolean(job?.cashCollection?.isCashBooking);
-  const cashToCollect = typeof job?.cashCollection?.totalToCollect === 'number'
+  // DAILY cash booking: the farmer pays each day's wage at the end of that day, so this screen collects only today's part
+  const dailyToday = job?.cashCollection?.today || null;
+  const cashToCollect = dailyToday
+    ? dailyToday.amount
+    : typeof job?.cashCollection?.totalToCollect === 'number'
     ? job.cashCollection.totalToCollect
     : (typeof job?.cashToCollect === 'number'
       ? job.cashToCollect
@@ -306,17 +310,59 @@ const WorkCompletionModal = ({ isOpen, onClose, job, onComplete, loading, onOpen
                         <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-200/70 px-2 py-0.5 rounded-md">
                           Cash On Service
                         </span>
-                        <h4 className="text-xs font-bold text-slate-700 mt-0.5">Collect Cash Directly in Hand</h4>
+                        <h4 className="text-xs font-bold text-slate-700 mt-0.5">
+                          {dailyToday ? `Collect today's cash — Day ${dailyToday.dayNumber} of ${dailyToday.totalDays}` : 'Collect Cash Directly in Hand'}
+                        </h4>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Collect From Farmer</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{dailyToday ? 'Collect Today' : 'Collect From Farmer'}</p>
                       <p className="text-2xl font-black text-emerald-900">₹{cashToCollect.toFixed(2)}</p>
                     </div>
                   </div>
 
                   {/* Cash Breakdown */}
-                  {cashLines.length > 0 ? (
+                  {dailyToday ? (
+                    <div className="bg-white rounded-xl p-3 border border-emerald-200/80 text-xs space-y-2 shadow-xs">
+                      <div className="flex justify-between gap-3">
+                        <span className="text-slate-600">Your pay for today</span>
+                        <span className="font-bold text-slate-800">{rupees(dailyToday.workerAmount)}</span>
+                      </div>
+                      <div className="flex justify-between gap-3">
+                        <span className="text-slate-600">Platform fee on it</span>
+                        <span className="font-bold text-slate-800">{rupees(dailyToday.platformFee)}</span>
+                      </div>
+                      {dailyToday.travelCharge > 0 && (
+                        <div className="flex justify-between gap-3">
+                          <span className="text-slate-600">Travel charge <span className="text-[10px] text-slate-400">(yours in full)</span></span>
+                          <span className="font-bold text-slate-800">{rupees(dailyToday.travelCharge)}</span>
+                        </div>
+                      )}
+                      <div className="pt-1.5 border-t border-slate-100 flex justify-between font-black text-emerald-900">
+                        <span>Cash to collect today</span>
+                        <span>{rupees(dailyToday.amount)}</span>
+                      </div>
+                      <div className="pt-1.5 border-t border-dashed border-slate-200 space-y-1 text-[11px]">
+                        <p className="font-bold text-slate-700">After today, from your wallet:</p>
+                        <div className="flex justify-between text-slate-600">
+                          <span>Platform fee (collected above)</span>
+                          <span>−{rupees(dailyToday.platformFee)}</span>
+                        </div>
+                        <div className="flex justify-between text-slate-600">
+                          <span>App commission on today's pay</span>
+                          <span>−{rupees(dailyToday.commission)}</span>
+                        </div>
+                        <div className="flex justify-between font-black text-emerald-800 pt-1">
+                          <span>You keep from today</span>
+                          <span>{rupees(dailyToday.youKeep)}</span>
+                        </div>
+                      </div>
+                      <div className="pt-1.5 border-t border-dashed border-slate-200 space-y-0.5 text-[11px] text-slate-500">
+                        <div className="flex justify-between"><span>Already collected on earlier days</span><span>{rupees(dailyToday.collectedSoFar)}</span></div>
+                        <div className="flex justify-between"><span>{dailyToday.isLastDay ? 'Left to collect after today' : 'Still to collect on later days'}</span><span>{rupees(dailyToday.remainingAfterToday)}</span></div>
+                      </div>
+                    </div>
+                  ) : cashLines.length > 0 ? (
                     <div className="bg-white rounded-xl p-3 border border-emerald-200/80 text-xs space-y-2 shadow-xs">
                       {cashLines.map((line, i) => (
                         <div key={i} className="flex justify-between gap-3">
@@ -384,7 +430,7 @@ const WorkCompletionModal = ({ isOpen, onClose, job, onComplete, loading, onOpen
                     />
                     <div className="flex-1 text-xs">
                       <span className="font-black text-slate-900 block leading-tight">
-                        I confirm I have received ₹{cashToCollect.toFixed(2)} cash from {farmerName}
+                        I confirm I have received ₹{cashToCollect.toFixed(2)} cash{dailyToday ? ` for day ${dailyToday.dayNumber}` : ''} from {farmerName}
                       </span>
                       <span className="text-[10px] text-slate-500 font-medium mt-0.5 block">
                         Do not complete without receiving physical cash in hand.

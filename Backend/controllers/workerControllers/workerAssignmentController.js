@@ -726,6 +726,9 @@ exports.verifyCompletionOtp = async (req, res) => {
             $push: { dailyLogs: nextDayLog(next), auditLog: audit('day_completed', 'worker', workerId, { day: after.workedDays }) }
           }
         );
+        // a cash booking is collected day by day: record this day's cash, commission and fee now (a miss is caught up at the final settlement)
+        try { await settlement.settleCashDay(assignmentId, dayIdx); } catch (e) { console.error('[verifyCompletionOtp] cash day record failed:', e); }
+
         // a decrease that landed while we were advancing must still stop the worker
         const post = await IndWorkerAssignment.findById(assignmentId);
         if (post.isDecreased) {
