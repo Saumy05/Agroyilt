@@ -117,6 +117,13 @@ const AppLogin = () => {
     await sendOtpForRole(phone.replace(/\D/g, ''), selectedRole);
   };
 
+  // No account on this number: take the person straight to registration
+  const goToRegister = () => {
+    setIsLoading(false);
+    toastManager.info('No account found with this mobile number. Please register first.');
+    navigate('/app/register');
+  };
+
   // Step 1: look up the accounts on this number
   const handlePhoneSubmit = async (e) => {
     if (e) e.preventDefault();
@@ -138,9 +145,7 @@ const AppLogin = () => {
       setMpinNotSetRoles(notSet);
 
       if (roles.length === 0) {
-        const msg = 'No account found with this mobile number. Please register first.';
-        setFormError(msg);
-        setIsLoading(false);
+        goToRegister();
         return;
       }
 
@@ -160,7 +165,7 @@ const AppLogin = () => {
       setIsLoading(false);
       const status = error.response?.status;
       let msg = 'Unable to check this number. Please try again.';
-      if (status === 404) msg = 'No account found with this mobile number. Please register first.';
+      if (status === 404) { goToRegister(); return; }
       else if (status === 429) msg = error.response?.data?.message || 'Too many attempts. Please wait a minute and try again.';
       else if (!error.response || error.code === 'ERR_NETWORK') msg = 'Unable to connect to the server. Please check your internet connection.';
       setFormError(msg);
@@ -295,9 +300,7 @@ const AppLogin = () => {
       const roles = identifyRes.data?.roles || [];
 
       if (roles.length === 0) {
-        const msg = "No account found with this mobile number. Please register first.";
-        setFormError(msg);
-        setIsLoading(false);
+        goToRegister();
         return;
       }
 
