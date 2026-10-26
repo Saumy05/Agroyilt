@@ -24,40 +24,36 @@ const sendSMS = async (phone, message, options = {}) => {
       return { success: false, message: 'SMS configuration missing' };
     }
 
-    // Build parameters
+    // Format phone number with country code (91)
+    const cleanPhone = String(phone).replace(/\D/g, '');
+    const formattedNumber = cleanPhone.startsWith('91') && cleanPhone.length > 10 ? cleanPhone : `91${cleanPhone}`;
+
+    // Build parameters matching SMSIndiaHub SendSMS API
+    const templateId = options.templateId || process.env.SMS_INDIA_HUB_DLT_TEMPLATE_ID;
+    const peId = options.peId || process.env.SMS_INDIA_HUB_PE_ID;
+
     const params = {
-      apikey: process.env.SMS_INDIA_HUB_API_KEY,
-      msisdn: phone,
-      sid: process.env.SMS_INDIA_HUB_SENDER_ID,
-      msg: message,
-      fl: 0,
-      gwid: 2,
+      APIKey: process.env.SMS_INDIA_HUB_API_KEY,
+      senderid: process.env.SMS_INDIA_HUB_SENDER_ID,
+      channel: 'Trans',
+      DCS: 0,
+      flashsms: 0,
+      number: formattedNumber,
+      text: message,
+      route: 0,
     };
 
-    // Add User/Password if specifically provided (Legacy support)
-    if (process.env.SMS_INDIA_HUB_USERNAME) {
-      params.user = process.env.SMS_INDIA_HUB_USERNAME;
-    }
-
-    // Add DLT Template ID and PE ID if available
-    const templateId = options.templateId || process.env.SMS_INDIA_HUB_DLT_TEMPLATE_ID;
     if (templateId) {
-      params.TemplateId = templateId;
-      params.templateid = templateId;
+      params.DLTTemplateId = templateId;
     }
-
-    const peId = options.peId || process.env.SMS_INDIA_HUB_PE_ID;
     if (peId) {
-      params.peid = peId;
       params.PEId = peId;
-      params.entityid = peId;
-      params.EntityId = peId;
     }
 
-    // Use HTTPS for secure transmission
-    const baseUrl = process.env.SMS_BASE_URL || 'https://cloud.smsindiahub.in/vendorsms/pushsms.aspx';
-    console.log('[SMS] Sending request to (HTTPS):', baseUrl);
-    console.log('[SMS] Params (masked):', { ...params, password: '***', apikey: '***' });
+    // Use official HTTPS endpoint
+    const baseUrl = process.env.SMS_BASE_URL || 'https://cloud.smsindiahub.in/api/mt/SendSMS';
+    console.log('[SMS] Sending request to:', baseUrl);
+    console.log('[SMS] Params (masked):', { ...params, APIKey: '***' });
 
     const response = await axios.get(baseUrl, { params });
 
