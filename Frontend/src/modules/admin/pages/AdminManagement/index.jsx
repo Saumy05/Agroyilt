@@ -534,7 +534,9 @@ const AdminFormModal = ({ admin, states, cities, onClose, onSave, defaultTab = '
       onSave();
       onClose();
     } catch (err) {
-      toastManager.error(err.response?.data?.message || 'Operation failed');
+      const data = err.response?.data;
+      const detail = Array.isArray(data?.errors) ? data.errors.map((e) => e.msg).filter(Boolean).join('; ') : '';
+      toastManager.error(detail || data?.message || 'Operation failed');
     } finally {
       setLoading(false);
     }

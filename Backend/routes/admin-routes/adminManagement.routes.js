@@ -36,7 +36,8 @@ const createAdminValidation = [
   body('email').isEmail().withMessage('Valid email is required'),
   body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
   body('role').optional().isIn(['super_admin', 'admin']).withMessage('Invalid role'),
-  body('scopeType').optional().isIn(['GLOBAL', 'CITY', 'DISTRICT', 'SUB_DISTRICT']).withMessage('Invalid scope type'),
+  // the same values the Admin model allows (the admin form sends GLOBAL_INDIA and STATE)
+  body('scopeType').optional().isIn(['GLOBAL_INDIA', 'STATE', 'DISTRICT', 'SUB_DISTRICT', 'GLOBAL', 'CITY']).withMessage('Invalid scope type'),
   body('salary.minRegistrationsForIncentive').optional().custom(val => {
     if (val === '' || val === null || val === undefined) return true;
     const num = Number(val);

@@ -4,6 +4,7 @@ const adminAgreementService = {
   list: async (params = {}) => (await api.get('/admin/agreements', { params })).data,
   get: async (id) => (await api.get(`/admin/agreements/${id}`)).data,
   audit: async (id) => (await api.get(`/admin/agreements/${id}/audit`)).data,
+  evidencePdf: async (id) => (await api.get(`/admin/agreements/${id}/audit.pdf`, { responseType: 'blob' })).data,
   pdf: async (id) => (await api.get(`/admin/agreements/${id}/pdf`, { responseType: 'blob' })).data,
   flagDispute: async (id, notes) => (await api.post(`/admin/agreements/${id}/dispute`, { notes })).data,
   resolveDispute: async (id, notes) => (await api.post(`/admin/agreements/${id}/dispute/resolve`, { notes })).data,

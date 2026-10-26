@@ -299,9 +299,9 @@ const LeasePaymentsPage = () => {
               <div className="bg-white border border-gray-200 p-3 rounded-xl">
                 <span className="text-gray-400 block text-[10px]">Terms</span>
                 <span className="font-bold text-gray-800">
-                  {data.leaseType === 'fixed-rent' ? `${inr(agreement.agreedPrice)}/acre/year` : `${agreement.agreedShare}% Crop Share (owner's share)`}
+                  {data.leaseType === 'fixed-rent' ? `${inr(agreement.totalRent)} for ${agreement.durationMonths} months` : `${agreement.agreedShare}% Crop Share (owner's share)`}
                 </span>
-                {data.leaseType === 'fixed-rent' && <span className="block text-[10px] text-gray-500">Total {inr(agreement.totalRent)} · {data.sizeInAcres} acres</span>}
+                {data.leaseType === 'fixed-rent' && <span className="block text-[10px] text-gray-500">{inr(agreement.agreedPrice)}/acre/year × {data.sizeInAcres} acres · about {inr(agreement.totalRent / (agreement.durationMonths || 1))} a month</span>}
               </div>
               <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-100">
                 <span className="text-emerald-700 block text-[10px]">Paid so far</span>
@@ -319,7 +319,9 @@ const LeasePaymentsPage = () => {
             {isTenant && (
               <div className="bg-white border border-gray-200 rounded-xl p-3 space-y-1">
                 <p className="text-[11px] text-gray-500">
-                  Payment comes from your wallet; if the wallet is short, you pay the full amount online. A platform fee of {agreement.commissionPercentage || 0}% is deducted from the owner's amount.
+                  Payment comes from your wallet; if the wallet is short, you pay the full amount online. {data.leaseType === 'crop-share'
+                    ? `A platform fee of ${agreement.commissionPercentage || 0}% of the total crop value is deducted from the owner's share.`
+                    : `A platform fee of ${agreement.commissionPercentage || 0}% is deducted from the owner's amount.`}
                 </p>
                 {walletBalance !== null && (
                   <p className="font-bold text-gray-800 flex items-center justify-between">
@@ -446,6 +448,9 @@ const LeasePaymentsPage = () => {
                     {sharePreview > 0 && (
                       <p className="text-[11px] text-emerald-800">
                         Owner's share ({agreement.agreedShare}%): <b>{inr(sharePreview.toFixed(2))}</b>
+                        {(agreement.commissionPercentage || 0) > 0 && (
+                          <> · platform fee ({agreement.commissionPercentage}% of crop value): <b>{inr(Math.min(sharePreview, (Number(harvest.harvestValue) || 0) * agreement.commissionPercentage / 100).toFixed(2))}</b></>
+                        )}
                       </p>
                     )}
                     <input

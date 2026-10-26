@@ -4,9 +4,19 @@
  */
 class FlutterBridge {
   constructor() {
-    this.isFlutter =
-      typeof window !== "undefined" &&
-      window.flutter_inappwebview;
+    this._isFlutter = false;
+  }
+
+  /**
+   * True inside the Flutter app. Checked live: the bridge object can appear after this file loads, and a value read once
+   * at load made the first tap (e.g. the camera) take the browser path instead of the native one.
+   */
+  get isFlutter() {
+    return this._isFlutter || (typeof window !== "undefined" && !!window.flutter_inappwebview);
+  }
+
+  set isFlutter(value) {
+    this._isFlutter = !!value;
   }
 
   /**

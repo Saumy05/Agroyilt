@@ -235,7 +235,9 @@ const LandLeases = () => {
               <div className="bg-gray-50 rounded-xl p-3">
                 <span className="text-gray-400 block">Terms</span>
                 {detail.leaseType === 'fixed-rent'
-                  ? `${inr(detail.agreement?.agreedPrice ?? detail.pricePerAcre)}/acre/year`
+                  ? (detail.agreement?.totalRent
+                    ? <><b>{inr(detail.agreement.totalRent)}</b> for {detail.agreement.durationMonths} months<span className="block text-[10px] text-gray-500">{inr(detail.agreement.agreedPrice ?? detail.pricePerAcre)}/acre/year × {detail.sizeInAcres} acres</span></>
+                    : `${inr(detail.pricePerAcre)}/acre/year (asking)`)
                   : `${detail.agreement?.agreedShare ?? detail.sharePercentage}% owner share`}
               </div>
               <div className="bg-gray-50 rounded-xl p-3">
@@ -244,7 +246,7 @@ const LandLeases = () => {
               </div>
               <div className="bg-emerald-50 rounded-xl p-3"><span className="text-emerald-600 block">Collected</span><b>{inr(detail.totals.collected)}</b></div>
               <div className="bg-amber-50 rounded-xl p-3">
-                <span className="text-amber-600 block">Commission ({detail.agreement?.commissionPercentage ?? 0}%)</span>
+                <span className="text-amber-600 block">Commission ({detail.agreement?.commissionPercentage ?? 0}%{detail.leaseType === 'crop-share' ? ' of harvest value' : ''})</span>
                 <b>{inr(detail.totals.totalCommission ?? detail.totals.commission)}</b>
                 {detail.totals.commission > 0 && detail.totals.commission < (detail.totals.totalCommission ?? 0) && (
                   <span className="text-[10px] text-amber-500 block mt-0.5">₹{detail.totals.commission.toLocaleString('en-IN')} collected</span>
@@ -295,7 +297,7 @@ const LandLeases = () => {
               {(detail.offers || []).map((o) => (
                 <div key={o._id} className="flex items-center justify-between border border-gray-100 rounded-xl p-2.5 text-xs mb-1.5">
                   <span>{o.farmerName} {o.farmerPhone}</span>
-                  <span>{o.proposedPrice ? `${inr(o.proposedPrice)}/acre` : `${o.proposedShare}%`} • {o.durationMonths} mo</span>
+                  <span>{o.proposedPrice ? `${inr(o.proposedPrice * detail.sizeInAcres * ((o.durationMonths || 12) / 12))} (${inr(o.proposedPrice)}/acre/yr)` : `${o.proposedShare}%`} • {o.durationMonths} mo</span>
                   <Badge value={o.status} />
                 </div>
               ))}

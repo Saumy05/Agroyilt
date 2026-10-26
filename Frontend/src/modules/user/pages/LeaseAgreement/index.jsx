@@ -135,14 +135,27 @@ const LeaseAgreementPage = () => {
   };
 
   const downloadPdf = async () => {
+    let link = null;
     try {
       const res = await leaseAgreementService.pdfLink(agreementId);
-      if (res?.success) {
-        await flutterBridge.downloadFile(res.data.url, res.data.fileName);
-        toastManager.success('Downloading the PDF…');
+      if (!res?.success) {
+        toastManager.error(res?.message || 'Could not download the PDF');
+        return;
       }
+      link = res.data;
+      const result = await flutterBridge.downloadFile(link.url, link.fileName);
+      // The app answers { success: false } when it could not save the file; only say "downloading" when it did not refuse
+      if (result && result.success === false) throw new Error(result.error || 'The app could not save the file');
+      toastManager.success('Downloading the PDF…');
     } catch (err) {
-      toastManager.error(err.response?.data?.message || 'Could not download the PDF');
+      if (!link) {
+        toastManager.error(err.response?.data?.message || 'Could not download the PDF');
+        return;
+      }
+      // Last resort: open the (ten-minute) link, so the phone's browser can download it
+      console.warn('[Agreement] PDF download failed, opening the link:', err?.message);
+      toastManager.error('Could not save the PDF directly. Opening it instead…');
+      window.open(link.url, '_blank');
     }
   };
 

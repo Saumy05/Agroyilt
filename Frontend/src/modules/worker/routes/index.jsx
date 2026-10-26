@@ -4,6 +4,7 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import PageTransition from '../components/common/PageTransition';
 import BottomNav from '../components/layout/BottomNav';
 import ErrorBoundary from '../components/common/ErrorBoundary';
+import AutoTranslate from '../../../components/AutoTranslate';
 import ProtectedRoute from '../../../components/auth/ProtectedRoute';
 import PublicRoute from '../../../components/auth/PublicRoute';
 import { importOrReload } from '../../../utils/importOrReload';
@@ -329,6 +330,8 @@ const WorkerRoutes = () => {
 
   return (
     <ErrorBoundary>
+      {/* Follows the language chosen in Settings: translates the English-only screens */}
+      <AutoTranslate />
       {/* Main content area - leaves space for bottom nav when needed */}
       <div className={shouldShowBottomNav ? "pb-24" : ""}>
         <Suspense fallback={<LoadingFallback />}>

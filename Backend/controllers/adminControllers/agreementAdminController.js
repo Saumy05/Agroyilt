@@ -7,7 +7,7 @@ const svc = require('../../services/leaseAgreementService');
 const render = require('../../services/agreementRenderService');
 const { notifyLease } = require('../../services/landLeaseNotifyService');
 const Settings = require('../../models/Settings');
-const { streamAgreementPdf } = require('../../services/agreementPdfService');
+const { streamAgreementPdf, streamEvidencePdf } = require('../../services/agreementPdfService');
 const { ensureDefaultTemplates } = require('../../services/agreementDefaults');
 
 const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -37,6 +37,24 @@ const summaryRow = (ag) => ({
   khasraNumber: ag.termsSnapshot?.khasraNumber, village: ag.termsSnapshot?.village, landAreaAcres: ag.termsSnapshot?.landAreaAcres,
   createdAt: ag.createdAt, executedAt: ag.executedAt, expiresAt: ag.expiresAt, disputed: !!ag.dispute?.flagged
 });
+
+/** The evidence record of an agreement: who did what, when, from where, on exactly which text. Fingerprinted so a later copy can be checked. */
+const buildEvidenceRecord = (ag, adminId) => {
+  const v = svc.view(ag, null, { forAdmin: true });
+  const record = {
+    purpose: 'Electronic record of a lease agreement and its digital signatures, prepared for evidence (Section 65B of the Indian Evidence Act / Section 63 of the Bharatiya Sakshya Adhiniyam). A responsible person must sign the certificate that accompanies it.',
+    agreement: { referenceNo: ag.referenceNo, type: ag.type, language: ag.language, status: v.status, templateVersion: ag.templateVersion, createdAt: ag.createdAt, executedAt: ag.executedAt },
+    document: { contentHashSha256: ag.contentHash, characters: ag.renderedContent.length },
+    parties: { landowner: { name: ag.landowner.name, mobile: ag.landowner.mobile, userId: String(ag.landowner.userId) }, farmer: { name: ag.farmer.name, mobile: ag.farmer.mobile, userId: String(ag.farmer.userId) } },
+    signatures: v.signatures,
+    signedTextMatchesRecord: ['landowner', 'farmer'].map(r => ({ party: r, signed: !!ag.signatures[r].signed, hashMatches: ag.signatures[r].signed ? ag.signatures[r].contentHash === ag.contentHash : null })),
+    timeline: v.timeline,
+    generatedAt: new Date().toISOString(),
+    generatedByAdmin: String(adminId || '')
+  };
+  record.recordHashSha256 = crypto.createHash('sha256').update(JSON.stringify(record)).digest('hex');
+  return record;
+};
 
 const agreementAdminController = {
   // GET /api/admin/agreements?status=&type=&from=&to=&search=&page=&limit=
@@ -96,24 +114,26 @@ const agreementAdminController = {
       if (!isId(req.params.id)) return res.status(404).json({ success: false, message: 'Agreement not found' });
       const ag = await LeaseAgreement.findById(req.params.id);
       if (!ag) return res.status(404).json({ success: false, message: 'Agreement not found' });
-      const v = svc.view(ag, null, { forAdmin: true });
-      const record = {
-        purpose: 'Electronic record of a lease agreement and its digital signatures, prepared for evidence (Section 65B of the Indian Evidence Act / Section 63 of the Bharatiya Sakshya Adhiniyam). A responsible person must sign the certificate that accompanies it.',
-        agreement: { referenceNo: ag.referenceNo, type: ag.type, language: ag.language, status: v.status, templateVersion: ag.templateVersion, createdAt: ag.createdAt, executedAt: ag.executedAt },
-        document: { contentHashSha256: ag.contentHash, characters: ag.renderedContent.length },
-        parties: { landowner: { name: ag.landowner.name, mobile: ag.landowner.mobile, userId: String(ag.landowner.userId) }, farmer: { name: ag.farmer.name, mobile: ag.farmer.mobile, userId: String(ag.farmer.userId) } },
-        signatures: v.signatures,
-        signedTextMatchesRecord: ['landowner', 'farmer'].map(r => ({ party: r, signed: !!ag.signatures[r].signed, hashMatches: ag.signatures[r].signed ? ag.signatures[r].contentHash === ag.contentHash : null })),
-        timeline: v.timeline,
-        generatedAt: new Date().toISOString(),
-        generatedByAdmin: String(adminIdOf(req) || '')
-      };
-      // a fingerprint of this record, so a later copy can be checked against what was issued
-      record.recordHashSha256 = crypto.createHash('sha256').update(JSON.stringify(record)).digest('hex');
-      res.status(200).json({ success: true, data: record });
+      res.status(200).json({ success: true, data: buildEvidenceRecord(ag, adminIdOf(req)) });
     } catch (error) {
       console.error('Admin audit error:', error);
       res.status(500).json({ success: false, message: 'Failed to build the audit record' });
+    }
+  },
+
+  // GET /api/admin/agreements/:id/audit.pdf — the same record as a PDF to print, sign and file
+  downloadEvidencePdf: async (req, res) => {
+    try {
+      if (!isId(req.params.id)) return res.status(404).json({ success: false, message: 'Agreement not found' });
+      const ag = await LeaseAgreement.findById(req.params.id);
+      if (!ag) return res.status(404).json({ success: false, message: 'Agreement not found' });
+      const settings = await Settings.findOne({ type: 'global' }).select('companyName appName').lean();
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${ag.referenceNo}-evidence-record.pdf"`);
+      streamEvidencePdf(buildEvidenceRecord(ag, adminIdOf(req)), res, { settings: settings || {} });
+    } catch (error) {
+      console.error('Admin evidence PDF error:', error);
+      if (!res.headersSent) res.status(500).json({ success: false, message: 'Could not make the evidence record' });
     }
   },
 

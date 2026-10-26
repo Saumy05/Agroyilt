@@ -11,9 +11,11 @@ import workerService from '../../../../services/workerService';
 import { registerFCMToken, removeFCMToken } from '../../../../services/pushNotificationService';
 import BankDetailsSection from '../../../../components/common/BankDetailsSection';
 import LogoutModal from '../../../../components/common/LogoutModal';
+import { useLanguage } from '../../../../context/LanguageContext';
 
 const Settings = () => {
   const navigate = useNavigate();
+  const { currentCode, changeLanguage } = useLanguage();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [settings, setSettings] = useState({
@@ -48,6 +50,10 @@ const Settings = () => {
         const res = await workerService.getProfile();
         if (res.success && res.worker?.settings) {
           setSettings(res.worker.settings);
+          // The worker's saved language also applies on this device
+          if (['en', 'hi'].includes(res.worker.settings.language)) {
+            changeLanguage(res.worker.settings.language === 'hi' ? 'Hindi' : 'English');
+          }
           // Sync with localStorage for legacy components
           localStorage.setItem('workerSettings', JSON.stringify(res.worker.settings));
 
@@ -113,6 +119,7 @@ const Settings = () => {
   const handleLanguageChange = async (lang) => {
     const updated = { ...settings, language: lang };
     setSettings(updated);
+    changeLanguage(lang === 'hi' ? 'Hindi' : 'English');
     await updateDBSettings(updated);
   };
 
@@ -245,7 +252,7 @@ const Settings = () => {
             <h3 className="font-bold text-gray-800">Language</h3>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2" translate="no">
             {[
               { code: 'en', name: 'English' },
               { code: 'hi', name: 'हिंदी' },
@@ -253,12 +260,12 @@ const Settings = () => {
               <button
                 key={lang.code}
                 onClick={() => handleLanguageChange(lang.code)}
-                className={`w-full py-3 px-4 rounded-lg text-left transition-all ${settings.language === lang.code
+                className={`w-full py-3 px-4 rounded-lg text-left transition-all ${currentCode === lang.code
                   ? 'text-white'
                   : 'bg-gray-50 text-gray-700'
                   }`}
                 style={
-                  settings.language === lang.code
+                  currentCode === lang.code
                     ? {
                       background: themeColors.button,
                       boxShadow: `0 2px 8px ${themeColors.button}40`,

@@ -224,4 +224,120 @@ const streamAgreementPdf = (ag, res, { settings = {}, forAdmin = false } = {}) =
   doc.end();
 };
 
-module.exports = { streamAgreementPdf };
+// ── evidence record ──────────────────────────────────────────────────────────────────────────────
+
+const yesNo = (v) => (v === null || v === undefined ? '-' : v ? 'Yes' : 'No');
+
+/**
+ * Streams the evidence record (see agreementAdminController.getAudit) as a PDF an admin can print, sign and file:
+ * who signed, when, from where, on exactly which text, the timeline, and a blank certificate for the person who vouches for it.
+ * @param {object} record  the record built by getAudit
+ * @param {object} res  Express response (or any writable stream)
+ */
+const streamEvidencePdf = (record, res, { settings = {} } = {}) => {
+  const ag = record.agreement;
+  const doc = new PDFDocument({ size: 'A4', margins: { top: MARGIN, bottom: MARGIN + 10, left: MARGIN, right: MARGIN }, bufferPages: true, info: { Title: `Evidence record ${ag.referenceNo}`, Author: settings.companyName || 'AgroYilt', Subject: 'Electronic record of a lease agreement' } });
+  doc.registerFont('regular', FONT.regular);
+  doc.registerFont('bold', FONT.bold);
+  doc.pipe(res);
+  const w = doc.page.width - MARGIN * 2;
+
+  const heading = (text) => {
+    ensureSpace(doc, 60);
+    doc.moveDown(0.7).font('bold').fontSize(12).fillColor(SLATE).text(text, MARGIN, doc.y, { width: w });
+    doc.moveTo(MARGIN, doc.y + 1).lineTo(MARGIN + w, doc.y + 1).lineWidth(0.5).strokeColor('#e2e8f0').stroke();
+    doc.moveDown(0.4);
+  };
+  const row = (label, value) => {
+    ensureSpace(doc, 24);
+    const y = doc.y;
+    doc.font('bold').fontSize(9).fillColor(GREY).text(label, MARGIN, y, { width: 140 });
+    const afterLabel = doc.y;
+    doc.font('regular').fontSize(9.5).fillColor(SLATE).text(String(value ?? '-') || '-', MARGIN + 150, y, { width: w - 150 });
+    doc.y = Math.max(afterLabel, doc.y) + 3;
+  };
+
+  doc.font('bold').fontSize(9).fillColor(GREEN).text((settings.companyName || settings.appName || 'AgroYilt').toUpperCase(), MARGIN, doc.y);
+  doc.moveDown(0.3).font('bold').fontSize(17).fillColor(SLATE).text('Evidence Record', { width: w });
+  doc.font('regular').fontSize(10).fillColor(GREY).text(`Lease agreement ${ag.referenceNo}`, { width: w });
+  doc.moveDown(0.5).fontSize(9).text(record.purpose, { width: w, lineGap: 1.5 });
+
+  heading('1. The agreement');
+  row('Agreement number', ag.referenceNo);
+  row('Type · language', `${ag.type} · ${ag.language === 'hi' ? 'Hindi' : 'English'}`);
+  row('Status', record.agreement.status);
+  row('Template version', ag.templateVersion);
+  row('Made on', fmtDateTime(ag.createdAt));
+  row('Signed by both on', ag.executedAt ? fmtDateTime(ag.executedAt) : 'Not signed by both');
+  row('Document fingerprint (SHA-256)', record.document.contentHashSha256);
+  row('Length of the text', `${record.document.characters} characters`);
+
+  heading('2. The parties');
+  row('Landowner', `${record.parties.landowner.name} · ${record.parties.landowner.mobile}`);
+  row('Farmer / tenant', `${record.parties.farmer.name} · ${record.parties.farmer.mobile}`);
+
+  heading('3. Signatures');
+  ['landowner', 'farmer'].forEach((role) => {
+    const sig = record.signatures[role] || {};
+    const match = (record.signedTextMatchesRecord || []).find(m => m.party === role);
+    ensureSpace(doc, 140);
+    doc.font('bold').fontSize(10).fillColor(GREEN).text(role === 'landowner' ? 'Landowner' : 'Farmer / tenant', MARGIN, doc.y);
+    doc.moveDown(0.2);
+    row('Signed', sig.signed ? 'Yes' : 'No');
+    if (sig.signed) {
+      row('Name locked at signing', sig.lockedName);
+      row('Signed at', fmtDateTime(sig.signedAt));
+      row('One-time code verified', `${yesNo(sig.otpVerified)}${sig.otpVerifiedAt ? ` (${fmtDateTime(sig.otpVerifiedAt)})` : ''}`);
+      row('IP address', sig.ipAddress);
+      row('Device', [sig.device?.platform, sig.device?.model, sig.device?.appVersion].filter(Boolean).join(' · '));
+      row('Browser / app agent', sig.userAgent);
+      row('Consent given', sig.consentText);
+      row('Text signed matches record', yesNo(match?.hashMatches));
+    }
+    doc.moveDown(0.3);
+  });
+
+  heading('4. Timeline');
+  (record.timeline || []).forEach((t) => {
+    ensureSpace(doc, 34);
+    const y = doc.y;
+    doc.font('regular').fontSize(8.5).fillColor(GREY).text(fmtDateTime(t.timestamp), MARGIN, y, { width: 120 });
+    doc.font('bold').fontSize(9).fillColor(SLATE).text(String(t.action).replace(/_/g, ' '), MARGIN + 125, y, { width: 120 });
+    const detail = [t.role, t.details, t.ipAddress ? `IP ${t.ipAddress}` : ''].filter(Boolean).join(' · ');
+    doc.font('regular').fontSize(8.5).fillColor(SLATE).text(detail, MARGIN + 250, y, { width: w - 250 });
+    doc.y = Math.max(doc.y, y + 12) + 3;
+  });
+
+  heading('5. Record fingerprint');
+  row('Generated at', fmtDateTime(record.generatedAt));
+  row('Record fingerprint (SHA-256)', record.recordHashSha256);
+  doc.font('regular').fontSize(8).fillColor(GREY).text('The fingerprint covers every field above. A later copy of this record can be checked against it.', MARGIN, doc.y + 2, { width: w });
+
+  // certificate for the person who vouches for the record
+  ensureSpace(doc, 230);
+  doc.moveDown(1).font('bold').fontSize(12).fillColor(SLATE).text('Certificate', MARGIN, doc.y, { width: w });
+  doc.moveDown(0.3).font('regular').fontSize(9.5).text(
+    'I certify that this electronic record was produced from the AgroYilt system during its normal use; that the system was working properly when it was produced; and that the information in it is a true copy of what the system holds. '
+    + 'The information is true to the best of my knowledge and belief.', { width: w, lineGap: 2 });
+  doc.moveDown(2);
+  const lineY = doc.y;
+  [['Name', 0], ['Designation', 1], ['Signature', 2], ['Date', 3]].forEach(([label, i]) => {
+    const x = MARGIN + (i % 2) * (w / 2 + 10);
+    const y = lineY + Math.floor(i / 2) * 42;
+    doc.moveTo(x, y + 18).lineTo(x + w / 2 - 20, y + 18).lineWidth(0.6).strokeColor('#94a3b8').stroke();
+    doc.font('regular').fontSize(8.5).fillColor(GREY).text(label, x, y + 21, { width: w / 2 - 20, lineBreak: false });
+  });
+
+  const range = doc.bufferedPageRange();
+  for (let i = range.start; i < range.start + range.count; i++) {
+    doc.switchToPage(i);
+    const bottom = doc.page.margins.bottom;
+    doc.page.margins.bottom = 0;
+    doc.font('regular').fontSize(8).fillColor(GREY)
+      .text(`Evidence record ${ag.referenceNo}  ·  Page ${i - range.start + 1} of ${range.count}`, MARGIN, doc.page.height - MARGIN + 4, { width: w, align: 'center', lineBreak: false });
+    doc.page.margins.bottom = bottom;
+  }
+  doc.end();
+};
+
+module.exports = { streamAgreementPdf, streamEvidencePdf };

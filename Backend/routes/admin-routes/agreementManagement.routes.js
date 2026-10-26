@@ -21,6 +21,7 @@ router.delete('/agreement-templates/:id', c.deleteTemplate);
 router.get('/agreements', c.list);
 router.get('/agreements/:id', c.getById);
 router.get('/agreements/:id/audit', c.getAudit);
+router.get('/agreements/:id/audit.pdf', c.downloadEvidencePdf);
 router.get('/agreements/:id/pdf', c.downloadPdf);
 router.post('/agreements/:id/dispute', c.flagDispute);
 router.post('/agreements/:id/dispute/resolve', c.resolveDispute);

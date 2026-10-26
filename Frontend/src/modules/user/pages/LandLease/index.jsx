@@ -40,6 +40,32 @@ import { compressImage } from '../../../../utils/imageCompression';
 import FieldAreaMeasurementModal from '../../components/FieldAreaMeasurementModal';
 import BoundarySketch from '../../components/common/BoundarySketch';
 import PinPickerScreen from '../../components/common/PinPickerScreen';
+import { reverseGeocode } from '../../../../utils/reverseGeocode';
+import { calculatePolygonCenter } from '../../../../utils/geoAreaCalculator';
+
+// What the farmer was doing, kept for the browser session so a refresh brings them back to the same tab and the same half-filled listing
+// "example.com/photo.jpg" is accepted too; only http(s) links are kept. Returns the clean link, or null.
+const parsePhotoLink = (raw) => {
+  try {
+    const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+    return ['http:', 'https:'].includes(url.protocol) && url.hostname.includes('.') ? url.href : null;
+  } catch {
+    return null;
+  }
+};
+
+const readSavedState = (key) => {
+  try {
+    return JSON.parse(sessionStorage.getItem(key)) || {};
+  } catch {
+    return {};
+  }
+};
+
+// The rent is quoted per acre per YEAR; what is actually paid depends on the acres and the months of the lease
+const rentForTerm = (acres, pricePerAcreYear, months) =>
+  Math.round(Number(acres) * Number(pricePerAcreYear) * ((Number(months) || 12) / 12) * 100) / 100;
+const inrFmt = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
 const LandLeasePage = () => {
   const navigate = useNavigate();
@@ -48,9 +74,12 @@ const LandLeasePage = () => {
   const leaseTypes = useLeaseTypes();
   const defaultLeaseType = leaseTypes.fixedRent ? 'fixed-rent' : 'crop-share';
 
+  const savedStateKey = `landLeaseState:${currentUser?._id || currentUser?.id || 'anon'}`;
+  const [saved] = useState(() => readSavedState(savedStateKey));
+
   // Active Main Tab
-  const [activeTab, setActiveTab] = useState('explore'); // 'explore' | 'list' | 'my-leases'
-  const [myLeasesSubTab, setMyLeasesSubTab] = useState('listings'); // 'listings' | 'offers'
+  const [activeTab, setActiveTab] = useState(['explore', 'list', 'my-leases'].includes(saved.tab) ? saved.tab : 'explore'); // 'explore' | 'list' | 'my-leases'
+  const [myLeasesSubTab, setMyLeasesSubTab] = useState(['listings', 'offers'].includes(saved.sub) ? saved.sub : 'listings'); // 'listings' | 'offers'
 
   // Data states
   const [leases, setLeases] = useState([]);
@@ -95,7 +124,7 @@ const LandLeasePage = () => {
   });
 
   // Listing Form State
-  const [listingForm, setListingForm] = useState({
+  const [listingForm, setListingForm] = useState(() => ({
     title: '',
     description: '',
     sizeInAcres: '',
@@ -120,13 +149,14 @@ const LandLeasePage = () => {
     suitableCrops: 'Wheat, Mustard, Gram',
     images: '',
     boundaryPoints: [], // corners of the land marked on the map (optional, recommended)
-    pin: null // { lat, lng }: where the land is (required unless the border is marked)
-  });
+    pin: null, // { lat, lng }: where the land is (required unless the border is marked)
+    ...(saved.form || {}) // a half-filled listing from before a refresh
+  }));
   const [pinTool, setPinTool] = useState(null); // { land } when adding a location to an existing listing, {} for the new listing
   // Full-screen border tool: { land } when fixing an existing listing, {} when marking for the new listing
   const [boundaryTool, setBoundaryTool] = useState(null);
   const [acceptDialog, setAcceptDialog] = useState(null); // { landId, offer } while the owner chooses the agreement language
-  const [listingPhotos, setListingPhotos] = useState([]);
+  const [listingPhotos, setListingPhotos] = useState(Array.isArray(saved.photos) ? saved.photos : []);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [showManualUrlInput, setShowManualUrlInput] = useState(false);
@@ -134,6 +164,20 @@ const LandLeasePage = () => {
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
   const [submittingListing, setSubmittingListing] = useState(false);
+
+  // Remember the tab and the listing being filled (photos only by link: a photo held as inline data is too big to keep)
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(savedStateKey, JSON.stringify({
+        tab: activeTab,
+        sub: myLeasesSubTab,
+        form: listingForm,
+        photos: listingPhotos.filter((u) => typeof u === 'string' && !u.startsWith('data:'))
+      }));
+    } catch {
+      // storage full or blocked: the page simply starts fresh after a refresh
+    }
+  }, [savedStateKey, activeTab, myLeasesSubTab, listingForm, listingPhotos]);
 
   // Fetch available land leases
   const fetchLeases = async () => {
@@ -173,6 +217,11 @@ const LandLeasePage = () => {
   useEffect(() => {
     fetchLeases();
   }, [leaseTypeFilter]);
+
+  // Needed on Explore too, so a land the farmer already made an offer on shows its offer state
+  useEffect(() => {
+    fetchMyLeases();
+  }, []);
 
   useEffect(() => {
     if (activeTab === 'my-leases') {
@@ -216,6 +265,17 @@ const LandLeasePage = () => {
   }, [leases, leaseTypeFilter, sizeFilter, searchQuery, hideOwnListings, currentUser]);
 
   // Open Offer Modal
+  // The offer this farmer already made on a land (any status), so the card shows its state instead of "Make Offer"
+  const myOfferOn = (landId) => myOffers.find((o) => String(o.landId) === String(landId))?.myOffer || null;
+
+  const goToMyOffers = () => {
+    setSelectedLandDetail(null);
+    setActiveTab('my-leases');
+    setMyLeasesSubTab('offers');
+  };
+
+  const offerStateLabel = (offer) => (offer.status === 'accepted' ? 'Offer accepted' : offer.status === 'rejected' ? 'Offer rejected' : 'Offer sent');
+
   const handleOpenOfferModal = (land) => {
     setOfferModalLand(land);
     setOfferForm({
@@ -238,7 +298,6 @@ const LandLeasePage = () => {
     if (!offerModalLand) return;
 
     const send = (confirmHighPrice) => landLeaseService.submitOffer(offerModalLand._id, {
-      proposedPrice: offerModalLand.leaseType === 'fixed-rent' ? Number(offerForm.proposedPrice) : undefined,
       proposedShare: offerModalLand.leaseType === 'crop-share' ? Number(offerForm.proposedShare) : undefined,
       durationMonths: Number(offerForm.durationMonths) || 12,
       proposedCrops: offerForm.proposedCrops,
@@ -419,15 +478,38 @@ const LandLeasePage = () => {
 
   // Add URL photo manually
   const handleAddManualUrl = () => {
-    if (!manualUrlInput.trim()) return;
+    const raw = manualUrlInput.trim();
+    if (!raw) return;
     if (listingPhotos.length >= 5) {
       toastManager.error('Maximum 5 photos allowed');
-      return;
+      return false;
     }
-    setListingPhotos((prev) => [...prev, manualUrlInput.trim()]);
+    const href = parsePhotoLink(raw);
+    if (!href) {
+      toastManager.error('That is not a valid web link. It should look like https://example.com/farm.jpg');
+      return false;
+    }
+    setListingPhotos((prev) => [...prev, href]);
     setManualUrlInput('');
     setShowManualUrlInput(false);
     toastManager.success('Photo link added');
+    return true;
+  };
+
+  // Fill the place names from the marked point. Only empty fields are filled: what the farmer typed is never replaced.
+  const fillPlaceFromMap = async (lat, lng) => {
+    const place = await reverseGeocode(lat, lng);
+    if (!place) return;
+    setListingForm((f) => ({
+      ...f,
+      village: f.village || place.village,
+      tehsil: f.tehsil || place.tehsil,
+      city: f.city || f.tehsil || place.tehsil,
+      district: f.district || place.district,
+      state: !f.state || f.state === 'Rajasthan' ? (place.state || f.state) : f.state, // 'Rajasthan' is only the form's starting value
+      pincode: f.pincode || place.pincode
+    }));
+    toastManager.info(`Place filled from the map: ${[place.village, place.tehsil, place.district].filter(Boolean).join(', ')}. Please check it.`);
   };
 
   // The border was marked: for a new listing keep it in the form; for an existing listing save it now
@@ -454,6 +536,8 @@ const LandLeasePage = () => {
       boundaryPoints: field.points,
       sizeInAcres: String(Math.round(field.acres * 100) / 100)
     }));
+    const centre = calculatePolygonCenter(field.points);
+    fillPlaceFromMap(centre?.lat, centre?.lng);
   };
 
   // A pin was dropped: keep it in the form, or save it now for an existing listing
@@ -475,6 +559,7 @@ const LandLeasePage = () => {
       return;
     }
     setListingForm((f) => ({ ...f, pin }));
+    fillPlaceFromMap(pin?.lat, pin?.lng);
   };
 
   // Handle Create Listing
@@ -499,6 +584,9 @@ const LandLeasePage = () => {
 
       // Photos to save: use uploaded photos if available, else manual URL or realistic fallback
       let finalImages = [...listingPhotos];
+      // A link that was typed but not added with "Add" still counts
+      const typedLink = parsePhotoLink(manualUrlInput.trim());
+      if (typedLink && finalImages.length < 5 && !finalImages.includes(typedLink)) finalImages.push(typedLink);
       if (finalImages.length === 0 && listingForm.images && listingForm.images.trim()) {
         finalImages = listingForm.images
           .split(',')
@@ -527,7 +615,8 @@ const LandLeasePage = () => {
             listingForm.village ? `Village ${listingForm.village}` : '',
             listingForm.tehsil ? `Tehsil ${listingForm.tehsil}` : '',
             listingForm.district ? `District ${listingForm.district}` : '',
-            listingForm.state
+            listingForm.state,
+            listingForm.pincode ? `PIN ${listingForm.pincode}` : ''
           ].filter(Boolean).join(', ')
         },
         leaseType: listingForm.leaseType,
@@ -955,6 +1044,14 @@ const LandLeasePage = () => {
                             <FiCheckCircle className="w-3 h-3" />
                             <span>Manage</span>
                           </button>
+                        ) : myOfferOn(land._id) ? (
+                          <button
+                            onClick={goToMyOffers}
+                            className="py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 shadow-2xs bg-amber-100 text-amber-900 border border-amber-300 active:scale-95"
+                          >
+                            <FiCheckCircle className="w-3 h-3" />
+                            <span>{offerStateLabel(myOfferOn(land._id))}</span>
+                          </button>
                         ) : (
                           <button
                             disabled={land.status === 'leased'}
@@ -1166,6 +1263,34 @@ const LandLeasePage = () => {
                     placeholder="e.g. Ranpur"
                     value={listingForm.village}
                     onChange={(e) => setListingForm({ ...listingForm, village: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white text-gray-900 font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-800 mb-1">
+                    PIN code <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    required
+                    maxLength={6}
+                    pattern="[1-9][0-9]{5}"
+                    title="6-digit PIN code"
+                    placeholder="e.g. 324001"
+                    value={listingForm.pincode}
+                    onChange={(e) => setListingForm({ ...listingForm, pincode: e.target.value.replace(/\D/g, '').slice(0, 6) })}
+                    className="w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white text-gray-900 font-medium"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block font-bold text-gray-800 mb-1">Nearby place / landmark</label>
+                  <input
+                    type="text"
+                    maxLength={120}
+                    placeholder="e.g. Near Shiv mandir, Kota road"
+                    value={listingForm.addressLine1}
+                    onChange={(e) => setListingForm({ ...listingForm, addressLine1: e.target.value })}
                     className="w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white text-gray-900 font-medium"
                   />
                 </div>
@@ -1460,10 +1585,17 @@ const LandLeasePage = () => {
                       </div>
                       <div className="flex gap-2">
                         <input
-                          type="url"
+                          type="text"
+                          inputMode="url"
                           placeholder="https://example.com/farm-image.jpg"
                           value={manualUrlInput}
                           onChange={(e) => setManualUrlInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault(); // Enter must not publish the whole listing
+                              handleAddManualUrl();
+                            }
+                          }}
                           className="flex-1 px-3 py-1.5 bg-white rounded-lg border border-gray-300 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-700 text-gray-800"
                         />
                         <button
@@ -1634,8 +1766,15 @@ const LandLeasePage = () => {
                         <div className="bg-gray-50 p-2 rounded-xl">
                           <span className="text-gray-400 block text-[10px]">Model</span>
                           <span className="font-bold text-gray-800">
-                            {item.leaseType === 'fixed-rent' ? `₹${item.pricePerAcre}/acre` : `${item.sharePercentage}% Crop Share`}
+                            {item.leaseType === 'fixed-rent'
+                              ? (item.agreement?.totalRent
+                                ? `${inrFmt(item.agreement.totalRent)} for ${item.agreement.durationMonths} months`
+                                : `₹${item.pricePerAcre}/acre/year`)
+                              : `${item.sharePercentage}% Crop Share`}
                           </span>
+                          {item.leaseType === 'fixed-rent' && item.agreement?.totalRent && (
+                            <span className="block text-[10px] text-gray-500">₹{Number(item.agreement.agreedPrice || item.pricePerAcre).toLocaleString('en-IN')}/acre/year</span>
+                          )}
                         </div>
                         <div className="bg-gray-50 p-2 rounded-xl">
                           <span className="text-gray-400 block text-[10px]">Soil</span>
@@ -1690,9 +1829,11 @@ const LandLeasePage = () => {
 
                                   <div className="text-xs text-emerald-800 font-bold mt-1">
                                     {item.leaseType === 'fixed-rent'
-                                      ? `Proposed rent: ₹${offer.proposedPrice?.toLocaleString('en-IN') || item.pricePerAcre}/acre/year`
+                                      ? `Proposed rent: ${inrFmt(rentForTerm(item.sizeInAcres, offer.proposedPrice || item.pricePerAcre, offer.durationMonths))} for ${offer.durationMonths || 12} months`
                                       : `Proposed share: ${offer.proposedShare || item.sharePercentage}% Crop Share`}
-                                    <span className="text-gray-400 font-normal ml-2">({offer.durationMonths || 12} months)</span>
+                                    {item.leaseType === 'fixed-rent'
+                                      ? <span className="text-gray-400 font-normal ml-2">(₹{Number(offer.proposedPrice || item.pricePerAcre).toLocaleString('en-IN')}/acre/year)</span>
+                                      : <span className="text-gray-400 font-normal ml-2">({offer.durationMonths || 12} months)</span>}
                                   </div>
 
                                   {offer.message && (
@@ -1794,9 +1935,12 @@ const LandLeasePage = () => {
                         <span className="text-gray-400 block text-[10px]">Your offer</span>
                         <span className="font-extrabold text-emerald-900">
                           {item.leaseType === 'fixed-rent'
-                            ? `₹${item.myOffer?.proposedPrice || item.pricePerAcre}/acre/year`
+                            ? `${inrFmt(rentForTerm(item.sizeInAcres, item.myOffer?.proposedPrice || item.pricePerAcre, item.myOffer?.durationMonths))} for ${item.myOffer?.durationMonths || 12} months`
                             : `${item.myOffer?.proposedShare || item.sharePercentage}% Crop Share`}
                         </span>
+                        {item.leaseType === 'fixed-rent' && (
+                          <span className="block text-[10px] text-gray-500">₹{Number(item.myOffer?.proposedPrice || item.pricePerAcre).toLocaleString('en-IN')}/acre/year × {item.sizeInAcres} acres</span>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -1845,14 +1989,12 @@ const LandLeasePage = () => {
                     </label>
                     <input
                       type="number"
-                      required
-                      placeholder={`Owner's ask: ₹${offerModalLand.pricePerAcre}`}
+                      readOnly
                       value={offerForm.proposedPrice}
-                      onChange={(e) => setOfferForm({ ...offerForm, proposedPrice: e.target.value })}
-                      className="w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-700 font-bold text-gray-900"
+                      className="w-full px-3.5 py-2.5 bg-gray-100 rounded-xl border border-gray-200 font-bold text-gray-900 cursor-not-allowed"
                     />
                     <span className="text-[11px] text-gray-400 block mt-1">
-                      Owner-set rent: ₹{Number(offerModalLand.pricePerAcre || 0).toLocaleString('en-IN')}/acre
+                      Fixed by the owner: ₹{Number(offerModalLand.pricePerAcre || 0).toLocaleString('en-IN')}/acre/year. You choose the lease duration below.
                     </span>
                   </div>
                 ) : (
@@ -2116,6 +2258,14 @@ const LandLeasePage = () => {
                   >
                     <FiCheckCircle className="w-3.5 h-3.5" />
                     <span>Manage in My Listings</span>
+                  </button>
+                ) : myOfferOn(selectedLandDetail._id) ? (
+                  <button
+                    onClick={goToMyOffers}
+                    className="py-2.5 px-4 bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5"
+                  >
+                    <FiCheckCircle className="w-3.5 h-3.5" />
+                    <span>{offerStateLabel(myOfferOn(selectedLandDetail._id))} · View</span>
                   </button>
                 ) : (
                   <button

@@ -81,7 +81,7 @@ const HI_BATAI = [
 // ── sections ───────────────────────────────────────────────────────────────────────────────────
 const EN_LAND = `## 1. The land
 Khasra / Khata No.: {{khasra_no}}
-Village: {{village}}, Tehsil: {{tehsil}}, District: {{district}}, State: {{state}}
+Location: {{land_location}}
 Area: {{land_area}}
 
 The land is identified by the khasra number above and by its place on the map (latitude and longitude), shown below. This place forms part of this agreement, and both parties have seen it before signing.
@@ -92,7 +92,7 @@ The land is identified by the khasra number above and by its place on the map (l
 
 const HI_LAND = `## 1. भूमि का विवरण
 खसरा / खाता संख्या: {{khasra_no}}
-ग्राम: {{village}}, तहसील: {{tehsil}}, जिला: {{district}}, राज्य: {{state}}
+स्थान: {{land_location}}
 क्षेत्रफल: {{land_area}}
 
 भूमि की पहचान ऊपर दी गई खसरा संख्या और नीचे दिखाए गए नक्शे पर उसके स्थान (अक्षांश और देशांतर) से की गई है। यह स्थान इस अनुबंध का हिस्सा है, और दोनों पक्षों ने हस्ताक्षर से पहले इसे देख लिया है।

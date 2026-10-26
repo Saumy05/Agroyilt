@@ -13,8 +13,8 @@ const escapeHtml = require('escape-html');
 const { round2, splitAmount, FIRST_PAYMENT_GRACE_DAYS } = require('./landLeaseScheduleService');
 
 const LABELS = {
-  en: { acres: 'acres', months: 'months', perAcreYear: 'per acre per year', corner: 'Corner', pin: 'Land location (pin)', pinRow: 'Pin', latitude: 'Latitude', longitude: 'Longitude', area: 'Area of the marked border' },
-  hi: { acres: 'एकड़', months: 'महीने', perAcreYear: 'प्रति एकड़ प्रति वर्ष', corner: 'कोना', pin: 'भूमि का स्थान (पिन)', pinRow: 'पिन', latitude: 'अक्षांश (Latitude)', longitude: 'देशांतर (Longitude)', area: 'चिह्नित सीमा का क्षेत्रफल' }
+  en: { acres: 'acres', months: 'months', perAcreYear: 'per acre per year', corner: 'Corner', pin: 'Land location (pin)', pinRow: 'Pin', latitude: 'Latitude', longitude: 'Longitude', area: 'Area of the marked border', village: 'Village', tehsil: 'Tehsil', district: 'District', state: 'State', pincode: 'PIN code' },
+  hi: { acres: 'एकड़', months: 'महीने', perAcreYear: 'प्रति एकड़ प्रति वर्ष', corner: 'कोना', pin: 'भूमि का स्थान (पिन)', pinRow: 'पिन', latitude: 'अक्षांश (Latitude)', longitude: 'देशांतर (Longitude)', area: 'चिह्नित सीमा का क्षेत्रफल', village: 'ग्राम', tehsil: 'तहसील', district: 'जिला', state: 'राज्य', pincode: 'पिन कोड' }
 };
 
 /** Placeholders a template may use (the admin screen lists these). */
@@ -23,7 +23,8 @@ const PLACEHOLDERS = [
   ['landowner_name', 'Landowner name'], ['landowner_mobile', 'Landowner mobile'],
   ['farmer_name', 'Tenant farmer name'], ['farmer_mobile', 'Tenant farmer mobile'],
   ['khasra_no', 'Khasra / Khata number'], ['land_area', 'Land area'], ['boundary_area', 'Area of the marked border'],
-  ['village', 'Village'], ['tehsil', 'Tehsil'], ['district', 'District'], ['state', 'State'], ['full_address', 'Full address'],
+  ['village', 'Village'], ['tehsil', 'Tehsil'], ['district', 'District'], ['state', 'State'], ['pincode', 'PIN code'], ['full_address', 'Full address'],
+  ['land_location', 'Complete location of the land: nearby place, village, tehsil, district, state and PIN code'],
   ['rent_amount', 'Rent per acre per year (fixed rent)'], ['total_rent', 'Total rent for the term (fixed rent)'],
   ['share_percentage', "Landowner's share of the crop, % (batai)"], ['tenant_share_percentage', "Tenant's share of the crop, % (batai)"],
   ['duration', 'Length of the lease'], ['available_from', 'Date the land is available from'], ['start_rule', 'When the lease starts'],
@@ -67,6 +68,8 @@ const buildTerms = ({ lease, offer, commissionPercentage = 0 }) => {
     pin: Number.isFinite(Number(loc.lat)) && Number.isFinite(Number(loc.lng)) ? { lat: Number(loc.lat), lng: Number(loc.lng) } : null,
     village: loc.village || '', tehsil: loc.tehsil || '', district: loc.district || '', state: loc.state || '',
     fullAddress: loc.fullAddress || '',
+    addressLine: loc.addressLine1 || '',
+    pincode: loc.pincode || '',
     durationMonths: months,
     pricePerAcrePerYear: price,
     totalRent,
@@ -102,6 +105,16 @@ const startRuleText = (terms, lang) => (lang === 'hi'
   ? `दोनों पक्षों में से बाद में हस्ताक्षर करने वाले के हस्ताक्षर की तारीख से (या ${fmtDate(terms.availableFrom)} से, यदि वह बाद की हो)`
   : `the date the later of the two parties signs this agreement (or ${fmtDate(terms.availableFrom)} if that is later)`);
 
+/** The whole place of the land on one line; only the parts that are filled in. Older agreements have no pincode / nearby place. */
+const landLocationText = (terms, L) => [
+  clean(terms.addressLine, 120),
+  terms.village ? `${L.village} ${clean(terms.village, 80)}` : '',
+  terms.tehsil ? `${L.tehsil} ${clean(terms.tehsil, 80)}` : '',
+  terms.district ? `${L.district} ${clean(terms.district, 80)}` : '',
+  terms.state ? `${L.state} ${clean(terms.state, 60)}` : '',
+  terms.pincode ? `${L.pincode} ${clean(terms.pincode, 10)}` : ''
+].filter(Boolean).join(', ');
+
 /** Values for the {{placeholders}}. */
 const placeholderValues = ({ terms, owner, farmer, referenceNo, agreementDate, language, standardClauses }) => {
   const L = LABELS[language] || LABELS.en;
@@ -117,7 +130,9 @@ const placeholderValues = ({ terms, owner, farmer, referenceNo, agreementDate, l
     land_area: `${round2(terms.landAreaAcres)} ${L.acres}`,
     boundary_area: terms.boundaryAreaAcres ? `${round2(terms.boundaryAreaAcres)} ${L.acres}` : '',
     village: clean(terms.village, 80), tehsil: clean(terms.tehsil, 80), district: clean(terms.district, 80), state: clean(terms.state, 60),
+    pincode: clean(terms.pincode, 10),
     full_address: clean(terms.fullAddress, 240),
+    land_location: landLocationText(terms, L),
     rent_amount: fixed ? `${inr(terms.pricePerAcrePerYear)} ${L.perAcreYear}` : '',
     total_rent: fixed ? inr(terms.totalRent) : '',
     share_percentage: terms.sharePercentage != null ? String(terms.sharePercentage) : '',

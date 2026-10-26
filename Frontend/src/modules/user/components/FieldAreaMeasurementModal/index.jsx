@@ -314,8 +314,8 @@ const FieldAreaMeasurementModal = ({
 
           {/* TOOLBAR CONTROLS */}
           <div className="px-3 sm:px-4 py-2 bg-slate-50 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-2 shrink-0">
-            {/* Left: Mode Tabs & Region Selector */}
-            <div className="flex items-center gap-2">
+            {/* Left: Mode Tabs & Region Selector (wraps on a phone so the region box stays on the screen) */}
+            <div className="flex flex-wrap items-center gap-2 min-w-0 max-w-full">
               <div className="flex bg-slate-200/80 p-0.5 rounded-xl border border-slate-300/60">
                 <button
                   type="button"
@@ -344,15 +344,15 @@ const FieldAreaMeasurementModal = ({
               </div>
 
               {/* Regional Bigha Rate Selector */}
-              <div className="relative">
+              <div className="relative min-w-0 max-w-full">
                 <select
                   value={selectedRegion}
                   onChange={(e) => setSelectedRegion(e.target.value)}
-                  className="bg-white border border-slate-300 text-slate-800 text-[11px] font-bold rounded-xl px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-2xs cursor-pointer"
+                  className="max-w-full w-full truncate bg-white border border-slate-300 text-slate-800 text-[11px] font-bold rounded-xl px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-2xs cursor-pointer"
                 >
                   {REGIONAL_BIGHA_RATES.map((r) => (
                     <option key={r.key} value={r.key}>
-                      📍 {r.name} ({r.rate} Bigha/Acre)
+                      📍 {r.name} ({r.rate})
                     </option>
                   ))}
                 </select>
@@ -576,6 +576,7 @@ const FieldAreaMeasurementModal = ({
               </span>
               <span>
                 Regional Standard: <strong className="text-slate-700">{areaData.regionLabel}</strong>
+                {(() => { const r = REGIONAL_BIGHA_RATES.find((x) => x.key === selectedRegion); return r ? ` (${r.rate} Bigha/Acre)` : ''; })()}
               </span>
             </div>
 

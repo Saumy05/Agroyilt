@@ -1,5 +1,6 @@
 const Notification = require('../../models/Notification');
 const { validationResult } = require('express-validator');
+const { userNotificationLink } = require('../../utils/notificationLink');
 const { sendNotificationToUser, sendNotificationToVendor, sendNotificationToWorker } = require('../../services/firebaseAdmin');
 
 /**
@@ -99,6 +100,11 @@ const createNotification = async ({
     // Send Push Notification (If not skipped)
     if (!skipPush) {
       // Prepare payload
+      // A farmer's push opens the page the in-app list would open, unless the sender chose a page of its own
+      const defaultLink = userId && !data?.link && !pushData.link
+        ? userNotificationLink({ type: pushData.type || type, relatedType, relatedId, data })
+        : null;
+
       // Use explicit pushData if provided, otherwise merge generic data
       const payload = {
         title: title,
@@ -107,6 +113,7 @@ const createNotification = async ({
         data: {
           ...data,
           ...pushData,
+          ...(defaultLink ? { link: defaultLink } : {}),
           type: pushData.type || type, // Allow overriding type for push specifically
           relatedId: relatedId ? String(relatedId) : '',
           relatedType: relatedType ? String(relatedType) : '',

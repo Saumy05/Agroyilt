@@ -95,18 +95,16 @@ const AgreementDetail = () => {
     }
   };
 
-  // the evidence record (Section 65B data) saved as a file
+  // the evidence record (Section 65B data) as a PDF to print, sign and file
   const downloadEvidence = async () => {
     try {
-      const res = await adminAgreementService.audit(id);
-      if (!res?.success) return;
-      const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' });
+      const blob = await adminAgreementService.evidencePdf(id);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url; a.download = `${ag.referenceNo}-evidence-record.json`; a.click();
+      a.href = url; a.download = `${ag.referenceNo}-evidence-record.pdf`; a.click();
       URL.revokeObjectURL(url);
-    } catch (err) {
-      toastManager.error(err.response?.data?.message || 'Could not build the evidence record');
+    } catch {
+      toastManager.error('Could not build the evidence record');
     }
   };
 

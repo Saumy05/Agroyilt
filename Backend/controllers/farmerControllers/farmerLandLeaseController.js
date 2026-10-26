@@ -2,7 +2,7 @@ const LandLease = require('../../models/LandLease');
 const User = require('../../models/User');
 const mongoose = require('mongoose');
 const Settings = require('../../models/Settings');
-const { buildAgreement, commissionSplit, round2 } = require('../../services/landLeaseScheduleService');
+const { buildAgreement, round2 } = require('../../services/landLeaseScheduleService');
 const { payItem, createOnlineOrder, verifyOnlinePayment } = require('../../services/landLeasePaymentService');
 const { notifyLease } = require('../../services/landLeaseNotifyService');
 const landBoundary = require('../../services/landBoundaryService');
@@ -713,14 +713,12 @@ const farmerLandLeaseController = {
     try {
       const { id } = req.params;
       const {
-        proposedPrice,
         proposedShare,
         durationMonths = 12,
         proposedCrops,
         message,
-        payFirstInstallment,
-        confirmHighPrice
-      } = req.body;
+        payFirstInstallment
+      } = req.body; // no proposedPrice: a fixed-rent offer is always at the owner's rent
 
       const lease = await LandLease.findById(id);
       if (!lease) {
@@ -757,12 +755,10 @@ const farmerLandLeaseController = {
         });
       }
 
-      const bid = lease.leaseType === 'fixed-rent' ? Number(proposedPrice || lease.pricePerAcre) : Number(proposedShare || lease.sharePercentage);
+      // The rent is the owner's: a fixed-rent offer cannot change it (the owner confirmed it when listing). Only the duration etc. are the farmer's.
+      const bid = lease.leaseType === 'fixed-rent' ? Number(lease.pricePerAcre) : Number(proposedShare || lease.sharePercentage);
       if (!(bid > 0) || (lease.leaseType === 'crop-share' && bid > 100)) {
         return res.status(400).json({ success: false, message: 'अमान्य प्रस्ताव राशि या हिस्सा (Invalid offer amount or share)' });
-      }
-      if (lease.leaseType === 'fixed-rent' && bid > HIGH_PRICE_PER_ACRE && confirmHighPrice !== true) {
-        return res.status(400).json(priceConfirmError(bid));
       }
       const months = Number(durationMonths);
       if (!(months >= 1 && months <= 120)) {
@@ -1118,12 +1114,15 @@ const farmerLandLeaseController = {
 
       const share = lease.agreement?.agreedShare ?? lease.sharePercentage;
       const amount = round2((value * share) / 100);
+      // The platform's commission is a % of the whole harvest value, taken out of the owner's share (never more than the share itself)
+      const commission = Math.min(amount, round2((value * (Number(lease.agreement?.commissionPercentage) || 0)) / 100));
       lease.settlements.push({
         cropName: String(cropName).trim(),
         harvestValue: value,
         sharePercentage: share,
         amount,
-        ...commissionSplit(amount, lease.agreement?.commissionPercentage),
+        commission,
+        ownerAmount: round2(amount - commission),
         note: String(note).trim(),
         status: 'submitted'
       });
