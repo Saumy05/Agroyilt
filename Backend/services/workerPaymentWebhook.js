@@ -51,7 +51,15 @@ const handleCapturedPayment = async ({ orderId, paymentId, amountPaise, notes })
     return { handled: true, note: r.applied ? undefined : `Dues payment already ${r.payment?.status}` };
   }
   // a vendor paying their dues to the platform (order notes carry type: 'vendor_settlement')
-  return require('./vendorSettlementService').handleCapturedPayment({ orderId, paymentId, notes });
+  const vendorOutcome = await require('./vendorSettlementService').handleCapturedPayment({ orderId, paymentId, notes });
+  if (vendorOutcome.handled) return vendorOutcome;
+
+  // a user's wallet top-up, soil-test report or subscription plan
+  const userOutcome = await require('./onlinePaymentService').handleCapturedPayment({ orderId, paymentId, notes });
+  if (userOutcome.handled) return userOutcome;
+
+  // a tenant's land-lease rent / crop-share payment (the order notes name the lease item)
+  return require('./landLeasePaymentService').handleCapturedPayment({ orderId, paymentId, notes });
 };
 
 module.exports = { handleCapturedPayment };

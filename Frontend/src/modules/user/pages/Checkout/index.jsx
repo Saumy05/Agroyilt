@@ -1011,6 +1011,26 @@ const Checkout = () => {
       if (response.success) {
         const { orderId, amount, key } = response.data;
 
+        // Razorpay can say "failed"/closed after a UPI app paid; the server may already have activated the plan (verify call or webhook)
+        let expiryBefore = 0;
+        try {
+          const before = await userAuthService.getProfile();
+          expiryBefore = before?.user?.plans?.expiry ? new Date(before.user.plans.expiry).getTime() : 0;
+        } catch { /* no baseline: any active copy of this plan counts */ }
+        const recoverIfPaid = async (failMessage) => {
+          toastManager.info('Checking payment status...');
+          const paid = await waitForServerPayment(async () => {
+            const u = await userAuthService.getProfile();
+            const active = u?.user?.plans;
+            return !!active?.isActive && String(active.planId) === String(plan.id) && new Date(active.expiry).getTime() > expiryBefore;
+          });
+          if (paid) {
+            toastManager.success('Subscription activated successfully!');
+            navigate('/user');
+          } else if (failMessage) {
+            toastManager.error(failMessage);
+          }
+        };
         const options = {
           key,
           amount: amount * 100,
@@ -1037,9 +1057,11 @@ const Checkout = () => {
           },
           theme: {
             color: themeColors.primary
-          }
+          },
+          modal: { ondismiss: () => { recoverIfPaid(); } }
         };
         const rzp = new window.Razorpay(options);
+        rzp.on('payment.failed', (resp) => { recoverIfPaid(resp?.error?.description || 'Payment failed'); });
         rzp.open();
       }
     } catch (error) {

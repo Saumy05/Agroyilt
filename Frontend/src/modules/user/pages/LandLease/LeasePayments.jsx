@@ -4,6 +4,7 @@ import { FiArrowLeft, FiCheck, FiClock, FiCreditCard, FiAlertTriangle, FiFileTex
 import landLeaseService from '../../services/landLeaseService';
 import { walletService } from '../../../../services/walletService';
 import { toastManager } from '../../../../utils/toastManager';
+import { waitForServerPayment } from '../../../../utils/paymentRecovery';
 import authStorage from '../../../../utils/authStorage';
 
 const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
@@ -111,6 +112,23 @@ const LeasePaymentsPage = () => {
       const { orderId, amount, currency, keyId } = orderRes.data;
       const user = authStorage.getUserData('user') || {};
 
+      // Razorpay can say "failed"/closed after a UPI app paid; the server may already have applied it (verify call or webhook)
+      const recoverIfPaid = async (failMessage) => {
+        toastManager.info('Checking payment status...');
+        const paid = await waitForServerPayment(async () => {
+          const r = await landLeaseService.getPayments(landId);
+          const list = r?.data?.[kind === 'installment' ? 'installments' : 'settlements'] || [];
+          return list.find(x => String(x._id) === String(item._id))?.status === 'paid';
+        });
+        if (paid) {
+          toastManager.success(successMsg);
+          await Promise.all([load(), loadBalance()]);
+        } else if (failMessage) {
+          toastManager.error(failMessage);
+        }
+        return paid;
+      };
+
       return await new Promise((resolve) => {
         const checkout = new window.Razorpay({
           key: keyId || import.meta.env.VITE_RAZORPAY_KEY_ID,
@@ -140,9 +158,9 @@ const LeasePaymentsPage = () => {
             await Promise.all([load(), loadBalance()]); // the server may have refunded it to the wallet, or left it to finish
             resolve(false);
           },
-          modal: { ondismiss: () => resolve(false) }
+          modal: { ondismiss: () => { recoverIfPaid().then(resolve); } }
         });
-        checkout.on?.('payment.failed', (r) => toastManager.error(r?.error?.description || 'Payment failed'));
+        checkout.on?.('payment.failed', (r) => { recoverIfPaid(r?.error?.description || 'Payment failed').then(resolve); });
         checkout.open();
       });
     } catch (err) {

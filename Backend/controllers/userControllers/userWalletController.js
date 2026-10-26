@@ -4,6 +4,7 @@ const WalletTransaction = require('../../models/WalletTransaction');
 const Transaction = require('../../models/Transaction');
 const { validationResult } = require('express-validator');
 const { createOrder, verifyPayment } = require('../../services/razorpayService');
+const onlinePaymentService = require('../../services/onlinePaymentService');
 
 /**
  * Get wallet balance (Single Source of Truth: Wallet collection)
@@ -119,12 +120,7 @@ const verifyWalletTopup = async (req, res) => {
     }
 
     const userId = req.user.id;
-    const {
-      razorpay_order_id,
-      razorpay_payment_id,
-      razorpay_signature,
-      amount
-    } = req.body;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
 
     const isValid = verifyPayment(razorpay_order_id, razorpay_payment_id, razorpay_signature);
     if (!isValid) {
@@ -134,55 +130,25 @@ const verifyWalletTopup = async (req, res) => {
       });
     }
 
-    let wallet = await Wallet.findOne({ userId, userModel: 'User' });
-    if (!wallet) {
-      wallet = await Wallet.create({ userId, userModel: 'User', balance: 0 });
+    // amount + user come from the order the server created; one payment credits once (the webhook may have got there first)
+    const result = await onlinePaymentService.applyWalletTopup({
+      orderId: razorpay_order_id, paymentId: razorpay_payment_id, userId
+    });
+    if (!result.ok) {
+      return res.status(result.code || 400).json({ success: false, message: result.reason });
     }
 
-    const previousBalance = wallet.balance || 0;
-    const topupAmount = Number(amount);
-    wallet.balance = previousBalance + topupAmount;
-    await wallet.save();
-
-    // Sync User model
-    await User.findByIdAndUpdate(userId, { 'wallet.balance': wallet.balance });
-
-    const idempotencyKey = `topup_${razorpay_payment_id}`;
-
-    // 1. Create WalletTransaction
-    await WalletTransaction.create({
-      walletId: wallet._id,
-      type: 'credit',
-      amount: topupAmount,
-      reason: 'topup',
-      referenceId: razorpay_payment_id,
-      gatewayTransactionId: razorpay_payment_id,
-      idempotencyKey,
-      status: 'completed'
-    });
-
-    // 2. Create Transaction record for unified passbook
-    await Transaction.create({
-      userId,
-      type: 'credit',
-      amount: topupAmount,
-      status: 'completed',
-      paymentMethod: 'razorpay',
-      description: 'Wallet Top-up via Razorpay',
-      balanceBefore: previousBalance,
-      balanceAfter: wallet.balance,
-      referenceId: razorpay_payment_id,
-      metadata: {
-        orderId: razorpay_order_id,
-        signature: razorpay_signature
-      }
-    });
+    let balance = result.balance;
+    if (balance === undefined) {
+      const wallet = await Wallet.findOne({ userId, userModel: 'User' });
+      balance = wallet?.balance || 0;
+    }
 
     return res.status(200).json({
       success: true,
       message: 'Money added to wallet successfully',
       data: {
-        balance: wallet.balance
+        balance
       }
     });
   } catch (error) {

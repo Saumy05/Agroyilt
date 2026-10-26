@@ -236,9 +236,10 @@ const refundToWallet = async ({ lease, tenantId, paymentId, amount }) => {
 /**
  * Online step 2: the checkout succeeded. Verify the signature and the payment with Razorpay, then credit the owner.
  */
-const verifyOnlinePayment = async ({ leaseId, tenantId, kind, itemId, orderId, paymentId, signature }) => {
-  if (!orderId || !paymentId || !signature) return { ok: false, code: 400, reason: 'Payment details are missing.' };
-  if (!razorpayService.verifyPayment(orderId, paymentId, signature)) {
+const verifyOnlinePayment = async ({ leaseId, tenantId, kind, itemId, orderId, paymentId, signature, viaWebhook = false }) => {
+  if (!orderId || !paymentId || (!signature && !viaWebhook)) return { ok: false, code: 400, reason: 'Payment details are missing.' };
+  // the webhook's own signature was checked at the door; a client call must present Razorpay's checkout signature
+  if (!viaWebhook && !razorpayService.verifyPayment(orderId, paymentId, signature)) {
     return { ok: false, code: 400, reason: 'Payment verification failed.' };
   }
 
@@ -282,4 +283,18 @@ const verifyOnlinePayment = async ({ leaseId, tenantId, kind, itemId, orderId, p
   return complete({ lease, kind, item, tenantId, paymentKey, method: 'razorpay' });
 };
 
-module.exports = { payItem, createOnlineOrder, verifyOnlinePayment };
+/** Webhook entry: the payment was captured while the app may have been closed. @returns {{handled: boolean, retry?: boolean, note?: string}} */
+const handleCapturedPayment = async ({ orderId, paymentId, notes }) => {
+  if (!notes?.leaseId || !notes?.itemId || !KINDS[notes?.kind] || !notes?.tenantId) return { handled: false };
+  try {
+    const r = await verifyOnlinePayment({
+      leaseId: notes.leaseId, tenantId: notes.tenantId, kind: notes.kind, itemId: notes.itemId, orderId, paymentId, viaWebhook: true
+    });
+    return { handled: true, retry: !r.ok && (r.code === 500 || r.code === 402), note: r.ok ? undefined : r.reason };
+  } catch (e) {
+    console.error('[landLease webhook]', e);
+    return { handled: true, retry: true, note: e.message };
+  }
+};
+
+module.exports = { payItem, createOnlineOrder, verifyOnlinePayment, handleCapturedPayment };

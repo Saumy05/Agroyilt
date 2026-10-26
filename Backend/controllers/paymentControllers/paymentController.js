@@ -607,27 +607,16 @@ const createPlanOrder = async (req, res) => {
 
 const verifyPlanPayment = async (req, res) => {
   try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, planId } = req.body;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
 
-    // Import verifyPayment if needed, but it's destructured at top
     const isValid = verifyPayment(razorpay_order_id, razorpay_payment_id, razorpay_signature);
     if (!isValid) return res.status(400).json({ success: false, message: 'Invalid signature' });
 
-    const plan = await Plan.findById(planId);
-    const user = await User.findById(req.user.id);
-
-    const validityDays = plan.validityDays || 30;
-    user.plans = {
-      isActive: true,
-      planId: plan._id,
-      name: plan.name,
-      expiry: new Date(Date.now() + validityDays * 24 * 60 * 60 * 1000),
-      price: plan.price,
-      rentalDiscountPercentage: plan.rentalDiscountPercentage || 0,
-      marketplaceDiscountPercentage: plan.marketplaceDiscountPercentage || 0
-    };
-
-    await user.save();
+    // the plan + user come from the order the server created; one payment activates once (the webhook may have got there first)
+    const result = await require('../../services/onlinePaymentService').applyPlanPayment({
+      orderId: razorpay_order_id, paymentId: razorpay_payment_id, userId: req.user.id
+    });
+    if (!result.ok) return res.status(result.code || 400).json({ success: false, message: result.reason });
 
     res.status(200).json({ success: true, message: 'Plan activated' });
   } catch (error) {

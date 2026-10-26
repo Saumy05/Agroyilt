@@ -20,6 +20,7 @@ import Header from '../../components/layout/Header';
 import BottomNav from '../../components/layout/BottomNav';
 import soilTestService from '../../../../services/soilTestService';
 import { toastManager } from '../../../../utils/toastManager';
+import { waitForServerPayment } from '../../../../utils/paymentRecovery';
 import { motion, AnimatePresence } from 'framer-motion';
 import flutterBridge from '../../../../utils/flutterBridge';
 import authStorage from '../../../../utils/authStorage';
@@ -202,6 +203,21 @@ const SoilTesting = () => {
             const res = await soilTestService.payForReport(req._id, 'online');
             
             if (res.success && res.data?.orderId) {
+                // Razorpay can say "failed"/closed after a UPI app paid; the server may already have unlocked it (verify call or webhook)
+                const recoverIfPaid = async (failMessage) => {
+                    toastManager.info('Checking payment status...');
+                    const paid = await waitForServerPayment(async () => {
+                        const r = await soilTestService.getMyRequests();
+                        return !!(r.success && r.data?.find(x => x._id === req._id)?.paymentStatus === 'paid');
+                    });
+                    if (paid) {
+                        toastManager.success('Payment verified successfully!');
+                        setPaymentModal(null);
+                        fetchMyRequests(false);
+                    } else if (failMessage) {
+                        toastManager.error(failMessage);
+                    }
+                };
                 const options = {
                     key: res.data.key,
                     amount: res.data.amount * 100,
@@ -229,12 +245,13 @@ const SoilTesting = () => {
                         name: authStorage.getUserData('user')?.name || 'Farmer',
                         contact: authStorage.getUserData('user')?.phone || ''
                     },
-                    theme: { color: '#0d9488' }
+                    theme: { color: '#0d9488' },
+                    modal: { ondismiss: () => { recoverIfPaid(); } }
                 };
                 
                 const rzp = new window.Razorpay(options);
                 rzp.on('payment.failed', function (response) {
-                    toastManager.error('Payment failed: ' + response.error.description);
+                    recoverIfPaid('Payment failed: ' + response.error?.description);
                 });
                 rzp.open();
             }

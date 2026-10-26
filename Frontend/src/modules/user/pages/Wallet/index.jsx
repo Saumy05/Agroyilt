@@ -17,6 +17,7 @@ import { IoWallet, IoWalletOutline, IoReceiptOutline } from 'react-icons/io5';
 import { MdAccountBalanceWallet } from 'react-icons/md';
 import { toastManager } from '../../../../utils/toastManager';
 import { walletService } from '../../../../services/walletService';
+import { waitForServerPayment } from '../../../../utils/paymentRecovery';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import NotificationBell from '../../components/common/NotificationBell';
 import { themeColors } from '../../../../theme';
@@ -138,6 +139,35 @@ const Wallet = () => {
 
       if (res.success) {
         setShowAddMoney(false);
+        const refreshAfterTopup = async (balance) => {
+          setWalletBalance(balance);
+          setAmountToAdd('');
+          const tRes = await walletService.getTransactions({ page: 1, limit: txLimit });
+          if (tRes.success) {
+            setTransactions(tRes.data || []);
+            if (tRes.pagination) setTxPagination(tRes.pagination);
+            if (tRes.summary) setTxSummary(tRes.summary);
+            setTxPage(1);
+          }
+        };
+        // Razorpay can say "failed"/closed after a UPI app paid; the server may already have credited it (verify call or webhook)
+        const balanceBefore = Number(walletBalance) || 0;
+        const recoverIfPaid = async (failMessage) => {
+          toastManager.info('Checking payment status...');
+          let newBalance = null;
+          const paid = await waitForServerPayment(async () => {
+            const b = await walletService.getBalance();
+            const now = Number(b?.data?.balance);
+            if (b?.success && now > balanceBefore) { newBalance = now; return true; }
+            return false;
+          });
+          if (paid) {
+            toastManager.success('Money added to wallet successfully!');
+            await refreshAfterTopup(newBalance);
+          } else if (failMessage) {
+            toastManager.error(failMessage);
+          }
+        };
         const options = {
           key: res.data.key,
           amount: Math.round(res.data.amount * 100),
@@ -156,25 +186,18 @@ const Wallet = () => {
 
               if (verifyRes.success) {
                 toastManager.success('Money added to wallet successfully!');
-                setWalletBalance(verifyRes.data.balance);
-                setAmountToAdd('');
-                const tRes = await walletService.getTransactions({ page: 1, limit: txLimit });
-                if (tRes.success) {
-                  setTransactions(tRes.data || []);
-                  if (tRes.pagination) setTxPagination(tRes.pagination);
-                  if (tRes.summary) setTxSummary(tRes.summary);
-                  setTxPage(1);
-                }
+                await refreshAfterTopup(verifyRes.data.balance);
               }
             } catch (error) {
               toastManager.error('Payment verification failed');
             }
           },
-          theme: { color: themeColors?.brand?.teal || '#347989' }
+          theme: { color: themeColors?.brand?.teal || '#347989' },
+          modal: { ondismiss: () => { recoverIfPaid(); } }
         };
         const rzp = new window.Razorpay(options);
         rzp.on('payment.failed', function (response) {
-          toastManager.error(response.error.description || 'Payment Failed');
+          recoverIfPaid(response.error?.description || 'Payment Failed');
         });
         rzp.open();
       }
