@@ -142,7 +142,8 @@ const reopenParkedAssignment = async (assignment) => {
     {
       $set: {
         awaitingExtension: false, currentDayIndex: next, completionStatus: 'PENDING',
-        journeyStatus: 'NOT_STARTED', visitOtpStatus: 'PENDING', workStatus: 'NOT_STARTED'
+        journeyStatus: 'NOT_STARTED', visitOtpStatus: 'PENDING', workStatus: 'NOT_STARTED',
+        breakStatus: 'NOT_ON_BREAK', breakStartedAt: null, breakDurationMinutes: 0
       },
       $unset: { completionOtpVerifiedAt: '', workCompletedAt: '' },
       $push: { dailyLogs: _nextDayLog(next), auditLog: { at: new Date(), actor: 'system', event: 'extension_reopened', meta: { nextDay: next } } }

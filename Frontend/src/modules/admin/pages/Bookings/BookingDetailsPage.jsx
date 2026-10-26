@@ -1,3 +1,4 @@
+import { fmtMinutesExact } from '../../../../utils/serverClock';
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -247,6 +248,31 @@ const BookingDetailsPage = () => {
                             )}
                         </div>
                     </div>
+
+                    {/* Work and break time per day: the same figures the worker and the farmer see */}
+                    {booking.workerTiming && booking.workerTiming.days?.length > 0 && (
+                        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                            <h2 className="font-bold text-gray-800 flex items-center gap-2 mb-1">
+                                <FiClock className="text-primary-600" /> Work & Break Time
+                            </h2>
+                            <p className="text-[11px] text-gray-400 mb-4">
+                                Break allowance: {booking.workerTiming.breakAllowanceMinutes} min per working day, shared by all that day's breaks. Work time leaves the break out.
+                            </p>
+                            <div className="space-y-2">
+                                {booking.workerTiming.days.map((d) => {
+                                    const t = (v) => (v ? new Date(v).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : '—');
+                                    return (
+                                        <div key={d.day} className="flex flex-wrap items-center justify-between gap-2 border border-gray-100 rounded-xl p-3 text-xs">
+                                            <span className="font-bold text-gray-800">{booking.workerTiming.bookingType === 'DAILY' ? `Day ${d.day}` : 'Work'}</span>
+                                            <span className="text-gray-500">Started {t(d.workStartedAt)}{d.workEndedAt ? ` · Ended ${t(d.workEndedAt)}` : (d.workStartedAt ? ' · running' : '')}</span>
+                                            <span className="text-amber-700 font-semibold">Break {fmtMinutesExact(d.breakMinutes)}{d.onBreak ? ' (on break now)' : ''}</span>
+                                            <span className="font-bold text-gray-900">Work {d.workMinutes == null ? '—' : fmtMinutesExact(d.workMinutes)}</span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Payment Summary: from the final bill when there is one, else from the booking's quote */}
                     {(() => {

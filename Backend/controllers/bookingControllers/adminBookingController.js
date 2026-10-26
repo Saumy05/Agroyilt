@@ -163,6 +163,7 @@ const getBookingById = async (req, res) => {
 
     // Worker bookings have no vendor bill: show the worker's wage split (what the booking was for) instead
     let workerPayment = null;
+    let workerTiming = null;
     if (booking.providerType === 'WORKER') {
       try {
         const IndWorkerAssignment = require('../../models/IndWorkerAssignment');
@@ -171,6 +172,8 @@ const getBookingById = async (req, res) => {
           $or: [{ legacyBookingId: booking._id }, ...(booking.workerRequestId ? [{ parentRequestId: booking.workerRequestId }] : [])]
         });
         workerPayment = require('../../services/workerFinancialService').buildWorkerPaymentSummary(assignment, booking);
+        // work and break time per day: the same figures the worker and the farmer see
+        if (assignment) workerTiming = require('../../services/workerBreakService').timingForAdmin(assignment);
       } catch (e) {
         console.warn('[admin getBookingById] worker payment skipped:', e.message);
       }
@@ -178,7 +181,7 @@ const getBookingById = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: { ...booking.toObject(), bill: bill || null, moneyEvents, workerPayment }
+      data: { ...booking.toObject(), bill: bill || null, moneyEvents, workerPayment, workerTiming }
     });
   } catch (error) {
     console.error('Get booking error:', error);

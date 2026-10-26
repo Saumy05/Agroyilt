@@ -461,35 +461,20 @@ const getJobById = async (req, res) => {
             jobData.shiftDurationHours = assignment.shiftDurationHours || pReq.shiftDurationHours || 9;
             jobData.breakDurationHours = assignment.breakDurationHours || pReq.breakDurationHours || 1;
             jobData.workDurationHours  = assignment.workDurationHours || pReq.workDurationHours || 8;
-            let bStatus = (currentDayLog?.breakStatus) || assignment.breakStatus || 'NOT_ON_BREAK';
-            let bStarted = (currentDayLog?.breakStartedAt) || assignment.breakStartedAt || null;
-            let bDurMins = (currentDayLog?.breakDurationMinutes !== undefined) ? currentDayLog.breakDurationMinutes : (assignment.breakDurationMinutes || 0);
-            const bMaxMins = assignment.breakMaxMinutes || 60;
-
-            if (bStatus === 'ON_BREAK' && bStarted) {
-              const elapsedMs = Date.now() - new Date(bStarted).getTime();
-              if (elapsedMs >= bMaxMins * 60 * 1000) {
-                bStatus = 'NOT_ON_BREAK';
-                bStarted = null;
-                bDurMins += bMaxMins;
-                assignment.breakStatus = 'NOT_ON_BREAK';
-                assignment.breakStartedAt = null;
-                assignment.lastBreakResumedBy = 'system';
-                assignment.breakDurationMinutes = (assignment.breakDurationMinutes || 0) + bMaxMins;
-                if (currentDayLog) {
-                  currentDayLog.breakStatus = 'NOT_ON_BREAK';
-                  currentDayLog.breakStartedAt = null;
-                  currentDayLog.lastBreakResumedBy = 'system';
-                  currentDayLog.breakDurationMinutes = (currentDayLog.breakDurationMinutes || 0) + bMaxMins;
-                }
-                assignment.save().catch(e => console.error('[autoResumeBreak getJobById]', e));
-              }
+            // The day's break from the shared service (one allowance per day, exact minutes): the same numbers the farmer and admin see
+            const breakSvc = require('../../services/workerBreakService');
+            const bv = breakSvc.breakView(assignment);
+            if (bv.expired) {
+              const minutes = breakSvc.endBreak(assignment, 'system');
+              assignment.auditLog.push({ at: new Date(), actor: 'system', event: 'break_auto_resumed', meta: { dayNumber: assignment.currentDayIndex || 1, minutes } });
+              assignment.save().catch(e => console.error('[autoResumeBreak getJobById]', e));
             }
 
-            jobData.breakStatus        = bStatus;
-            jobData.breakStartedAt     = bStarted;
-            jobData.breakDurationMinutes = bDurMins;
-            jobData.breakMaxMinutes    = bMaxMins;
+            jobData.breakStatus        = bv.breakStatus;
+            jobData.breakStartedAt     = bv.breakStartedAt;
+            jobData.breakDurationMinutes = bv.breakDurationMinutes;
+            jobData.breakMaxMinutes    = bv.breakMaxMinutes;
+            jobData.breakRemainingSeconds = bv.remainingSeconds;
             jobData.lastBreakStartedBy = (currentDayLog?.lastBreakStartedBy) || assignment.lastBreakStartedBy || null;
             jobData.serverTime = new Date();
           }

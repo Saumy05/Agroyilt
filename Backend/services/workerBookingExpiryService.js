@@ -450,6 +450,10 @@ const checkAndExpireWorkerRequests = async () => {
     try { await require('./workerExtensionService').expireUnpaidExtensions(); }
     catch (e) { console.error('[ExpiryService] extension sweep failed:', e.message); }
 
+    // 3c. Breaks whose day allowance ran out resume by themselves, even when nobody is looking at the booking
+    try { await require('./workerBreakService').resumeExpiredBreaks(); }
+    catch (e) { console.error('[ExpiryService] break sweep failed:', e.message); }
+
     // 4. Money safety net: retry settlements stuck in FAILED/PROCESSING and refunds that never landed.
     try { await require('./workerSettlementService').reconcile(); }
     catch (e) { console.error('[ExpiryService] settlement reconcile failed:', e.message); }

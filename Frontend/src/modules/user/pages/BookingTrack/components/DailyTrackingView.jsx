@@ -1,20 +1,22 @@
 import React, { useState, useEffect } from 'react';
+import { nowMs, fmtMinutesExact } from '../../../../../utils/serverClock';
 import {
   FiCalendar, FiClock, FiCheck, FiUsers, FiUserX,
   FiPlus, FiKey, FiAlertCircle, FiArrowRight, FiShield, FiCopy,
   FiCoffee, FiPlay, FiPause
 } from 'react-icons/fi';
 
-const BreakCountdown = ({ breakStartedAt, breakMaxMinutes = 60, onComplete }) => {
+// `usedMinutes` = break time already used earlier today: the day's allowance is shared by all its breaks (20 min used -> 40:00 left)
+const BreakCountdown = ({ breakStartedAt, breakMaxMinutes = 60, usedMinutes = 0, onComplete }) => {
   const [remainingSecs, setRemainingSecs] = useState(0);
 
   useEffect(() => {
     if (!breakStartedAt) return;
     const startMs = new Date(breakStartedAt).getTime();
-    const totalMs = (breakMaxMinutes || 60) * 60 * 1000;
+    const totalMs = Math.max(0, (breakMaxMinutes || 60) - (Number(usedMinutes) || 0)) * 60 * 1000;
 
     const tick = () => {
-      const elapsedMs = Date.now() - startMs;
+      const elapsedMs = nowMs() - startMs;
       const leftMs = Math.max(0, totalMs - elapsedMs);
       const secs = Math.floor(leftMs / 1000);
       setRemainingSecs(secs);
@@ -24,7 +26,7 @@ const BreakCountdown = ({ breakStartedAt, breakMaxMinutes = 60, onComplete }) =>
     tick();
     const timer = setInterval(tick, 1000);
     return () => clearInterval(timer);
-  }, [breakStartedAt, breakMaxMinutes, onComplete]);
+  }, [breakStartedAt, breakMaxMinutes, usedMinutes, onComplete]);
 
   const mins = String(Math.floor(remainingSecs / 60)).padStart(2, '0');
   const secs = String(remainingSecs % 60).padStart(2, '0');
@@ -262,7 +264,7 @@ const DailyTrackingView = ({
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-black text-amber-900">☕ 1-Hour Lunch Break Active</span>
+                            <span className="text-xs font-black text-amber-900">☕ Break Active</span>
                             <span className="text-[10px] font-bold px-2 py-0.5 bg-amber-200/70 text-amber-900 rounded-full">
                               Started by {w.lastBreakStartedBy === 'worker' ? 'Worker' : 'You'}
                             </span>
@@ -272,9 +274,10 @@ const DailyTrackingView = ({
                             <BreakCountdown
                               breakStartedAt={w.breakStartedAt}
                               breakMaxMinutes={w.breakMaxMinutes || 60}
+                              usedMinutes={w.breakDurationMinutes}
                               onComplete={() => onResumeBreak && onResumeBreak(w.assignmentId || w.bookingId)}
                             />
-                            <span className="text-amber-600 text-[10px]">• Auto-resumes after 60 mins</span>
+                            <span className="text-amber-600 text-[10px]">• Resumes by itself when today's break time is over</span>
                           </p>
                         </div>
                       </div>
@@ -300,7 +303,7 @@ const DailyTrackingView = ({
                         <span>Working actively. Today’s End OTP appears when {w.workerName?.split(' ')[0] || 'worker'} taps Stop Work.</span>
                         {w.breakDurationMinutes > 0 && (
                           <span className="text-amber-700 font-bold ml-1.5 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-                            ☕ Break taken: {w.breakDurationMinutes}m
+                            ☕ Break used today: {fmtMinutesExact(w.breakDurationMinutes)}
                           </span>
                         )}
                       </div>

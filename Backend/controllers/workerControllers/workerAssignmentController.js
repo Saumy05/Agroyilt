@@ -135,6 +135,7 @@ const notify = async ({ recipientType, recipientId, type, title, message, relate
 // ── helpers ─────────────────────────────────────────────────────────────────────────────────────────
 const { verifyOtp, stampOtp } = require('../../services/assignmentOtpService');
 const extSvc = require('../../services/workerExtensionService');
+const breakSvc = require('../../services/workerBreakService');
 const settlement = require('../../services/workerSettlementService');
 const { issueOtp } = require('../../utils/otpUtil');
 
@@ -729,7 +730,7 @@ exports.verifyCompletionOtp = async (req, res) => {
         await IndWorkerAssignment.updateOne(
           { _id: assignmentId },
           {
-            $set: { currentDayIndex: next, journeyStatus: 'NOT_STARTED', visitOtpStatus: 'PENDING', workStatus: 'NOT_STARTED', completionStatus: 'PENDING' },
+            $set: { currentDayIndex: next, journeyStatus: 'NOT_STARTED', visitOtpStatus: 'PENDING', workStatus: 'NOT_STARTED', completionStatus: 'PENDING', ...breakSvc.newDayBreakReset() },
             $push: { dailyLogs: nextDayLog(next), auditLog: audit('day_completed', 'worker', workerId, { day: after.workedDays }) }
           }
         );
@@ -1034,21 +1035,14 @@ const cascadeBreakToOfflineMembers = async (leaderAssignment, mode, actor, byUse
       let payload;
       if (mode === 'start') {
         const working = ['IN_PROGRESS', 'ARRIVED'].includes(log?.workStatus || a.workStatus) || a.visitOtpStatus === 'VERIFIED';
-        if (onBreak || !working) continue;
+        if (onBreak || !working || breakSvc.allowanceLeftMinutes(a) < 0.5) continue;
         a.breakStatus = 'ON_BREAK'; a.breakStartedAt = now; a.lastBreakStartedBy = actor;
         if (log) { log.breakStatus = 'ON_BREAK'; log.breakStartedAt = now; log.lastBreakStartedBy = actor; }
         a.auditLog.push(audit('break_started', actor, byUserId, { dayNumber: dayIdx, startedBy: actor, withLeader: true }));
-        payload = { breakStatus: 'ON_BREAK', breakStartedAt: now, breakMaxMinutes: 60, startedBy: actor };
+        payload = { breakStatus: 'ON_BREAK', breakStartedAt: now, breakMaxMinutes: a.breakMaxMinutes || 60, startedBy: actor };
       } else {
         if (!onBreak) continue;
-        const since = (log?.breakStartedAt) || a.breakStartedAt || now;
-        const elapsed = Math.max(1, Math.round((now.getTime() - new Date(since).getTime()) / 60000));
-        a.breakStatus = 'NOT_ON_BREAK'; a.breakStartedAt = null; a.lastBreakResumedBy = actor;
-        a.breakDurationMinutes = (Number(a.breakDurationMinutes) || 0) + elapsed;
-        if (log) {
-          log.breakStatus = 'NOT_ON_BREAK'; log.breakStartedAt = null; log.lastBreakResumedBy = actor;
-          log.breakDurationMinutes = (Number(log.breakDurationMinutes) || 0) + elapsed;
-        }
+        const elapsed = breakSvc.endBreak(a, actor, now.getTime());
         a.auditLog.push(audit('break_resumed', actor, byUserId, { dayNumber: dayIdx, elapsedMinutes: elapsed, resumedBy: actor, withLeader: true }));
         payload = { breakStatus: 'NOT_ON_BREAK', resumedBy: actor, breakDurationMinutes: elapsed, totalBreakMinutes: a.breakDurationMinutes };
       }
@@ -1110,6 +1104,12 @@ exports.startBreak = async (req, res) => {
       return res.status(409).json({ success: false, message: 'Work is already on break.', data: assignment });
     }
 
+    // one break allowance per day, shared by all of that day's breaks
+    const minutesLeft = breakSvc.allowanceLeftMinutes(assignment);
+    if (minutesLeft < 0.5) {
+      return res.status(400).json({ success: false, message: `Today's ${assignment.breakMaxMinutes || 60}-minute break time is already used up.` });
+    }
+
     const now = new Date();
     assignment.breakStatus = 'ON_BREAK';
     assignment.breakStartedAt = now;
@@ -1133,7 +1133,9 @@ exports.startBreak = async (req, res) => {
       dayNumber: dayIdx,
       breakStatus: 'ON_BREAK',
       breakStartedAt: now,
-      breakMaxMinutes: 60,
+      breakMaxMinutes: assignment.breakMaxMinutes || 60,
+      breakDurationMinutes: breakSvc.breakView(assignment, now.getTime()).breakDurationMinutes, // already used today, before this break
+      breakRemainingSeconds: Math.floor(minutesLeft * 60),
       startedBy: actor,
       serverTimestamp: now
     };
@@ -1147,8 +1149,8 @@ exports.startBreak = async (req, res) => {
       recipientType: targetRecipient.type,
       recipientId:   targetRecipient.id,
       type:          'break_started',
-      title:         '☕ 1-Hour Break Started',
-      message:       `${isWorkerUser ? 'Worker' : 'Farmer'} started the 1-hour rest/lunch break. Work will auto-resume in 60 mins.`,
+      title:         '☕ Break Started',
+      message:       `${isWorkerUser ? 'Worker' : 'Farmer'} started a break. ${Math.round(minutesLeft)} min of today's break time is left; work resumes by itself when it is over.`,
       relatedId:     assignment.parentRequestId,
       relatedType:   'WorkerBookingRequest',
       data:          payload
@@ -1156,7 +1158,7 @@ exports.startBreak = async (req, res) => {
 
     return res.json({
       success: true,
-      message: '1-hour break started successfully.',
+      message: `Break started. ${Math.round(minutesLeft)} min of today's break time left.`,
       data: assignment
     });
   } catch (err) {
@@ -1199,20 +1201,8 @@ exports.resumeBreak = async (req, res) => {
     }
 
     const now = new Date();
-    const breakStart = (isDaily && currentLog?.breakStartedAt) || assignment.breakStartedAt || now;
-    const elapsedMinutes = Math.max(1, Math.round((now.getTime() - new Date(breakStart).getTime()) / 60000));
-
-    assignment.breakStatus = 'NOT_ON_BREAK';
-    assignment.breakStartedAt = null;
-    assignment.lastBreakResumedBy = actor;
-    assignment.breakDurationMinutes = (Number(assignment.breakDurationMinutes) || 0) + elapsedMinutes;
-
-    if (isDaily && currentLog) {
-      currentLog.breakStatus = 'NOT_ON_BREAK';
-      currentLog.breakStartedAt = null;
-      currentLog.lastBreakResumedBy = actor;
-      currentLog.breakDurationMinutes = (Number(currentLog.breakDurationMinutes) || 0) + elapsedMinutes;
-    }
+    // the exact length of this break (never rounded up to a whole minute, never more than today's allowance)
+    const elapsedMinutes = breakSvc.endBreak(assignment, actor, now.getTime());
 
     assignment.auditLog.push(audit('break_resumed', actor, req.user._id, { dayNumber: dayIdx, elapsedMinutes, resumedBy: actor }));
     await assignment.save();

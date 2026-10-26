@@ -24,6 +24,7 @@ import AddWorkersModal from './components/AddWorkersModal';
 import workerBookingService from '../../../../services/workerBookingService';
 import { walletService } from '../../../../services/walletService';
 import { requestRef } from '../../../../utils/bookingRef';
+import { fmtMinutesExact } from '../../../../utils/serverClock';
 
 
 // Helper to format relative time
@@ -1505,7 +1506,7 @@ const BookingTrack = () => {
                             <span>{worker.workerName?.split(' ')[0]} is working. End OTP appears on <strong>Stop Work</strong>.</span>
                             {worker.breakDurationMinutes > 0 && (
                               <span className="text-amber-700 font-bold ml-1 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-                                ☕ Break: {worker.breakDurationMinutes}m
+                                ☕ Break: {fmtMinutesExact(worker.breakDurationMinutes)}
                               </span>
                             )}
                           </div>

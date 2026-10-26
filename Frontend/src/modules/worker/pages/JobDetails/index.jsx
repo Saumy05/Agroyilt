@@ -1,3 +1,4 @@
+import { syncServerClock, nowMs } from '../../../../utils/serverClock';
 import React, { useState, useEffect, useLayoutEffect, useRef, lazy, Suspense } from 'react';
 import { useNavigate, useParams, useLocation, useSearchParams } from 'react-router-dom';
 import { FiMapPin, FiPhone, FiClock, FiUser, FiCheck, FiX, FiArrowRight, FiNavigation, FiTool, FiCheckCircle, FiDollarSign, FiCamera, FiPlus, FiTrash, FiXCircle, FiAward, FiFileText, FiAlertTriangle, FiCreditCard } from 'react-icons/fi';
@@ -40,13 +41,14 @@ const ActiveWorkStopwatch = ({ job }) => {
     else if (job?.startedAt) start = new Date(job.startedAt);
     else if (job?.inProgressAt) start = new Date(job.inProgressAt);
 
-    const startTime = start ? start.getTime() : Date.now();
+    syncServerClock(job?.serverTime);
+    const startTime = start ? start.getTime() : nowMs();
     const doneBreakMs = (Number(job?.breakDurationMinutes) || 0) * 60 * 1000;
     const onBreak = job?.breakStatus === 'ON_BREAK' && job?.breakStartedAt;
     const breakStart = onBreak ? new Date(job.breakStartedAt).getTime() : null;
 
     const updateTimer = () => {
-      const now = Date.now();
+      const now = nowMs();
       const runningBreakMs = breakStart ? Math.max(0, now - breakStart) : 0;
       const totalBreakMs = doneBreakMs + runningBreakMs;
       setWork(fmtClock(now - startTime - totalBreakMs));
@@ -74,7 +76,7 @@ const ActiveWorkStopwatch = ({ job }) => {
               <p className="text-[11px] font-black uppercase tracking-wider text-amber-200">On Break</p>
             </div>
             <p className="text-2xl font-mono font-black tracking-wider text-white mt-0.5">{breakUsed}</p>
-            <p className="text-[10px] text-amber-200 font-semibold">Work timer paused • Auto-resumes after 60m</p>
+            <p className="text-[10px] text-amber-200 font-semibold">Work timer paused • Resumes by itself when today's break time is over</p>
           </div>
         </div>
         <div className="text-right text-xs text-amber-100">
@@ -97,7 +99,7 @@ const ActiveWorkStopwatch = ({ job }) => {
             <p className="text-[11px] font-black uppercase tracking-wider text-amber-100">Live Work Timer</p>
           </div>
           <p className="text-2xl font-mono font-black tracking-wider text-white mt-0.5">{work}</p>
-          {breakTaken && <p className="text-[10px] text-amber-100 font-semibold">Break taken: {breakUsed} (not counted)</p>}
+          {breakTaken && <p className="text-[10px] text-amber-100 font-semibold">Break used today: {breakUsed} (not counted in work time)</p>}
         </div>
       </div>
       <div className="text-right text-xs text-amber-100">
@@ -109,16 +111,17 @@ const ActiveWorkStopwatch = ({ job }) => {
 };
 
 // Countdown for Worker Lunch Break
-const WorkerBreakCountdown = ({ breakStartedAt, breakMaxMinutes = 60, onComplete }) => {
+// `usedMinutes` = break time already used earlier today: the day's allowance is shared by all its breaks (20 min used -> 40:00 left)
+const WorkerBreakCountdown = ({ breakStartedAt, breakMaxMinutes = 60, usedMinutes = 0, onComplete }) => {
   const [remainingSecs, setRemainingSecs] = useState(0);
 
   useEffect(() => {
     if (!breakStartedAt) return;
     const startMs = new Date(breakStartedAt).getTime();
-    const totalMs = (breakMaxMinutes || 60) * 60 * 1000;
+    const totalMs = Math.max(0, (breakMaxMinutes || 60) - (Number(usedMinutes) || 0)) * 60 * 1000;
 
     const tick = () => {
-      const elapsedMs = Date.now() - startMs;
+      const elapsedMs = nowMs() - startMs;
       const leftMs = Math.max(0, totalMs - elapsedMs);
       const secs = Math.floor(leftMs / 1000);
       setRemainingSecs(secs);
@@ -128,7 +131,7 @@ const WorkerBreakCountdown = ({ breakStartedAt, breakMaxMinutes = 60, onComplete
     tick();
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
-  }, [breakStartedAt, breakMaxMinutes, onComplete]);
+  }, [breakStartedAt, breakMaxMinutes, usedMinutes, onComplete]);
 
   const mins = String(Math.floor(remainingSecs / 60)).padStart(2, '0');
   const secs = String(remainingSecs % 60).padStart(2, '0');
@@ -1074,13 +1077,14 @@ const JobDetails = () => {
                       <span className="text-base">☕</span>
                       <div>
                         <span className="font-black text-amber-200 block text-xs uppercase tracking-wider">Lunch Break Active</span>
-                        <span className="text-[11px] text-amber-100">60-Min Rest Period</span>
+                        <span className="text-[11px] text-amber-100">Today's break time: {Math.round(job.breakMaxMinutes || 60)} min in total</span>
                       </div>
                     </div>
                     <div className="text-right">
                       <WorkerBreakCountdown
                         breakStartedAt={job.breakStartedAt}
                         breakMaxMinutes={job.breakMaxMinutes || 60}
+                        usedMinutes={job.breakDurationMinutes}
                         onComplete={handleResumeBreak}
                       />
                     </div>

@@ -381,35 +381,22 @@ exports.getTrackingSnapshot = async (req, res) => {
       const repTime  = parentRequest?.reportingTime || b.reportingTime || '09:00';
       const breakMax = b.breakMaxMinutes || 60;
 
-      let activeBreakStatus = (currentDayLog?.breakStatus) || b.breakStatus || 'NOT_ON_BREAK';
-      let activeBreakStartedAt = (currentDayLog?.breakStartedAt) || b.breakStartedAt || null;
-      let totalBreakMins = (currentDayLog?.breakDurationMinutes !== undefined) ? currentDayLog.breakDurationMinutes : (b.breakDurationMinutes || 0);
-
-      if (activeBreakStatus === 'ON_BREAK' && activeBreakStartedAt) {
-        const elapsedBreakMs = Date.now() - new Date(activeBreakStartedAt).getTime();
-        if (elapsedBreakMs >= breakMax * 60 * 1000) {
-          activeBreakStatus = 'NOT_ON_BREAK';
-          activeBreakStartedAt = null;
-          totalBreakMins += breakMax;
-          IndWorkerAssignment.findById(b._id).then(asgn => {
-            if (asgn && asgn.breakStatus === 'ON_BREAK') {
-              asgn.breakStatus = 'NOT_ON_BREAK';
-              asgn.breakStartedAt = null;
-              asgn.lastBreakResumedBy = 'system';
-              asgn.breakDurationMinutes = (asgn.breakDurationMinutes || 0) + breakMax;
-              if (isDailyBooking && asgn.dailyLogs) {
-                const dLog = asgn.dailyLogs.find(l => l.dayNumber === (asgn.currentDayIndex || 1));
-                if (dLog) {
-                  dLog.breakStatus = 'NOT_ON_BREAK';
-                  dLog.breakStartedAt = null;
-                  dLog.lastBreakResumedBy = 'system';
-                  dLog.breakDurationMinutes = (dLog.breakDurationMinutes || 0) + breakMax;
-                }
-              }
-              asgn.save().catch(e => console.error('[autoResumeBreak]', e));
-            }
-          }).catch(() => {});
-        }
+      // The day's break, from the shared service: one allowance per day, exact minutes, resumes by itself when it is used up
+      const breakSvc = require('../../services/workerBreakService');
+      const bv = breakSvc.breakView(b);
+      let activeBreakStatus = bv.breakStatus;
+      let activeBreakStartedAt = bv.breakStartedAt;
+      const totalBreakMins = bv.breakDurationMinutes;
+      if (bv.expired && isIndAssign) {
+        // write the automatic resume back (the scheduler does the same for breaks nobody is looking at)
+        IndWorkerAssignment.findById(b._id).then((asgn) => {
+          if (asgn && breakSvc.breakView(asgn).expired) {
+            const minutes = breakSvc.endBreak(asgn, 'system');
+            asgn.auditLog.push({ at: new Date(), actor: 'system', event: 'break_auto_resumed', meta: { dayNumber: asgn.currentDayIndex || 1, minutes } });
+            return asgn.save();
+          }
+          return null;
+        }).catch((e) => console.error('[autoResumeBreak]', e.message));
       }
 
       // DAILY, before today's work has started: yesterday's day is closed, but the assignment still carries
@@ -445,7 +432,9 @@ exports.getTrackingSnapshot = async (req, res) => {
         breakStatus:        activeBreakStatus,
         breakStartedAt:     activeBreakStartedAt,
         breakDurationMinutes: totalBreakMins,
-        breakMaxMinutes:    breakMax,
+        breakMaxMinutes:    bv.breakMaxMinutes,
+        breakRemainingSeconds: bv.remainingSeconds,
+        serverTime:         bv.serverTime,
         lastBreakStartedBy: (currentDayLog?.lastBreakStartedBy) || b.lastBreakStartedBy || null,
         lastBreakResumedBy: (currentDayLog?.lastBreakResumedBy) || b.lastBreakResumedBy || null,
         // OTP codes reach the farmer only through visitOtp / completionOtp below — never via raw day logs

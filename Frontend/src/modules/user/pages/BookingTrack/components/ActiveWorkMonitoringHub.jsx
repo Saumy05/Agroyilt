@@ -6,6 +6,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { toastManager } from '../../../../../utils/toastManager';
 import { workLength } from '../../../../../utils/workerPayment';
+import { syncServerClock, nowMs } from '../../../../../utils/serverClock';
 
 // The last minutes of a booking in which the farmer may ask for more time (the server enforces it too)
 const EXTENSION_WINDOW_MINUTES = 10;
@@ -23,6 +24,7 @@ const ActiveWorkMonitoringHub = ({
   showEndOtpCard = true,
   showNextStepTip = true
 }) => {
+  syncServerClock(trackingData?.serverTime);
   const [elapsed, setElapsed] = useState('00:00:00');
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
@@ -64,7 +66,7 @@ const ActiveWorkMonitoringHub = ({
     if (!candidate && primaryWorker?.otpVerifiedAt) {
       candidate = new Date(primaryWorker.otpVerifiedAt).getTime();
     }
-    return candidate || Date.now();
+    return candidate || nowMs();
   }, [activeWorkers, primaryWorker]);
 
   // Break of the worker whose start drives the clock: the work time leaves out finished breaks and the one running now
@@ -98,7 +100,7 @@ const ActiveWorkMonitoringHub = ({
   // Live stopwatch ticking every 1 second (frozen once work has stopped)
   useEffect(() => {
     const updateStopwatch = () => {
-      const now = stopTimestamp || Date.now();
+      const now = stopTimestamp || nowMs();
       const runningBreakMs = onBreak && !stopTimestamp ? Math.max(0, now - breakStartMs) : 0;
       const totalBreakMs = doneBreakMs + runningBreakMs;
       const diffMs = Math.max(0, now - startTimestamp - totalBreakMs);
