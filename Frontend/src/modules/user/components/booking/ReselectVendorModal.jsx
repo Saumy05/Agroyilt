@@ -252,7 +252,7 @@ const ReselectVendorModal = ({ isOpen, onClose, booking, onVendorSelected }) => 
                             </h4>
                             <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded-full border border-amber-200">
                               <FiStar className="fill-amber-400 text-amber-400" size={9} />
-                              {item.vendor.rating ? item.vendor.rating.toFixed(1) : '4.8'}
+                              {item.vendor.rating ? item.vendor.rating.toFixed(1) : 'New'}
                             </span>
                             <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-full">
                               <FiMapPin size={9} className="text-emerald-600" />

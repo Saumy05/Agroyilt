@@ -30,8 +30,8 @@ const StatsCards = memo(({ stats }) => {
     },
     {
       title: 'Rating',
-      value: stats.rating > 0 ? stats.rating.toFixed(1) : '5.0',
-      subtitle: 'Customer reviews',
+      value: stats.rating > 0 ? stats.rating.toFixed(1) : 'New',
+      subtitle: stats.rating > 0 ? 'Customer reviews' : 'No reviews yet',
       icon: FiStar,
       color: '#F59E0B', // Amber
       bgLight: 'bg-amber-50',

@@ -227,14 +227,14 @@ const Bookings = () => {
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="bg-transparent text-[11px] text-gray-600 focus:outline-none w-20"
+              className="bg-transparent text-[11px] text-gray-600 focus:outline-none w-[7.5rem]"
             />
             <span className="text-gray-400 text-[10px]">to</span>
             <input
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="bg-transparent text-[11px] text-gray-600 focus:outline-none w-20"
+              className="bg-transparent text-[11px] text-gray-600 focus:outline-none w-[7.5rem]"
             />
           </div>
 

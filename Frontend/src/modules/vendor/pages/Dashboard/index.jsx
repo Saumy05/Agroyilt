@@ -241,7 +241,7 @@ const Dashboard = memo(() => {
                   </span>
                   <span className="inline-block w-1 h-1 rounded-full bg-emerald-300"></span>
                   <span className="text-[10px] font-semibold text-emerald-100/90">
-                    ★ {stats.rating > 0 ? stats.rating.toFixed(1) : '5.0'}
+                    ★ {stats.rating > 0 ? stats.rating.toFixed(1) : 'New'}
                   </span>
                 </div>
                 <h2 className="text-base font-bold text-white truncate leading-tight">{vendorProfile.name}</h2>

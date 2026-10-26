@@ -517,7 +517,7 @@ const AvailableVendors = () => {
                       <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-500 font-semibold whitespace-nowrap">
                         <span className="flex items-center gap-0.5 text-amber-600 font-black shrink-0">
                           <FiStar size={10} className="fill-amber-400 text-amber-400" />
-                          {group.vendor.rating ? group.vendor.rating.toFixed(1) : '4.8'}
+                          {group.vendor.rating ? group.vendor.rating.toFixed(1) : 'New'}
                         </span>
                         <span className="text-slate-300">•</span>
                         <span className="flex items-center gap-1 text-slate-500 truncate">
@@ -730,7 +730,7 @@ const AvailableVendors = () => {
                       <p className="text-[11px] text-slate-500 font-semibold mt-0.5 flex items-center gap-1.5 flex-wrap">
                         <span className="text-amber-600 font-black flex items-center gap-0.5">
                           <FiStar size={10} className="fill-amber-400 text-amber-400" />
-                          {selectedVendorGroup.vendor.rating ? selectedVendorGroup.vendor.rating.toFixed(1) : '4.8'}
+                          {selectedVendorGroup.vendor.rating ? selectedVendorGroup.vendor.rating.toFixed(1) : 'New'}
                         </span>
                         <span>•</span>
                         <span>{selectedVendorGroup.equipments.length} models available for your slot</span>
