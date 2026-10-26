@@ -1667,6 +1667,7 @@ const BookingTrack = () => {
         requestId={trackingData?.requestId || id}
         bookingType={trackingData?.bookingType || 'HOURLY'}
         workers={workersList}
+        platformRate={trackingData?.platformChargeRate}
         onExtensionCreated={() => fetchSnapshot(false)}
       />
 
@@ -1678,6 +1679,7 @@ const BookingTrack = () => {
         bookingType={trackingData?.bookingType || 'DAILY'}
         defaultRate={trackingData?.maxDailyRate || trackingData?.minDailyRate || 500}
         remainingDays={Math.max(1, (trackingData?.numberOfDays || 1) - (workersList[0]?.currentDayIndex || 1) + 1)}
+        platformRate={trackingData?.platformChargeRate}
         onWorkersAdded={() => fetchSnapshot(false)}
       />
     </div>

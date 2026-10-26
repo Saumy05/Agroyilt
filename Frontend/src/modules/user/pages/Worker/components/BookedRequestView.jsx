@@ -568,6 +568,7 @@ const BookedRequestView = ({ request, onRefresh }) => {
         requestId={id}
         bookingType={request.bookingType || 'HOURLY'}
         workers={workers}
+        platformRate={request.platformChargeRate}
         onExtensionCreated={refreshAll}
       />
       <AddWorkersModal
@@ -577,6 +578,7 @@ const BookedRequestView = ({ request, onRefresh }) => {
         bookingType={request.bookingType || 'DAILY'}
         defaultRate={isDaily ? (request.maxDailyRate || request.minDailyRate || 500) : (request.maxRate || request.minRate || 100)}
         remainingDays={Math.max(1, (request.numberOfDays || 1) - currentDay + 1)}
+        platformRate={request.platformChargeRate}
         onWorkersAdded={refreshAll}
       />
       <ReplaceWorkerModal

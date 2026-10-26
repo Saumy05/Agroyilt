@@ -19,6 +19,7 @@ const AddWorkersModal = ({
   bookingType = 'DAILY',
   defaultRate = 500,
   remainingDays = 1,
+  platformRate = null,
   onWorkersAdded
 }) => {
   const isDaily = bookingType === 'DAILY';
@@ -32,7 +33,9 @@ const AddWorkersModal = ({
 
   const rate = Number(defaultRate) || 500;
   const subtotal = isDaily ? rate * daysCount * workersCount : rate * workersCount;
-  const platformFee = Math.round(subtotal * 0.1);
+  // the real platform fee % (admin setting); 10% only while it is not known
+  const feeRate = Number.isFinite(Number(platformRate)) && platformRate !== null ? Number(platformRate) : 10;
+  const platformFee = Math.round((subtotal * feeRate) / 100);
   const totalPayable = subtotal + platformFee;
 
   const handleConfirm = async () => {
@@ -210,7 +213,7 @@ const AddWorkersModal = ({
               <span className="font-bold text-slate-800">₹{subtotal}</span>
             </div>
             <div className="flex items-center justify-between text-xs text-slate-600">
-              <span>Platform Service Fee (10%)</span>
+              <span>Platform Service Fee ({feeRate}%)</span>
               <span className="font-bold text-slate-800">₹{platformFee}</span>
             </div>
             <div className="border-t border-amber-200 pt-2 flex items-center justify-between">

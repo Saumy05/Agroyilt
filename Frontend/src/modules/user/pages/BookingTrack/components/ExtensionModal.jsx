@@ -11,7 +11,7 @@ import api from '../../../../../services/api';
  * DAILY: additional working days.
  * Workers accept/reject independently. Farmer pays ONLY for accepted workers.
  */
-const ExtensionModal = ({ isOpen, onClose, requestId, bookingType = 'HOURLY', workers = [], onExtensionCreated }) => {
+const ExtensionModal = ({ isOpen, onClose, requestId, bookingType = 'HOURLY', workers = [], platformRate = null, onExtensionCreated }) => {
   const isDaily = bookingType === 'DAILY';
 
   // Duration selection
@@ -48,6 +48,10 @@ const ExtensionModal = ({ isOpen, onClose, requestId, bookingType = 'HOURLY', wo
       return sum + Math.round(rate * (Number(extensionMinutes) / 60));
     }
   }, 0);
+
+  // the platform fee the farmer pays on top of the workers' pay: the same % as the bill (admin: worker platform charge)
+  const feeRate = Number.isFinite(Number(platformRate)) && platformRate !== null ? Number(platformRate) : null;
+  const platformFee = feeRate === null ? null : Math.round((estimatedCost * feeRate) / 100);
 
   const handleRequestExtension = async () => {
     if (selectedWorkerIds.length === 0) {
@@ -240,9 +244,15 @@ const ExtensionModal = ({ isOpen, onClose, requestId, bookingType = 'HOURLY', wo
               {isDaily ? `+${additionalDays} day(s)` : `+${extensionMinutes} mins`}
             </span>
           </div>
+          {platformFee !== null && (
+            <div className="flex items-center justify-between text-xs text-slate-500 mb-1.5">
+              <span>Platform fee ({feeRate}%):</span>
+              <span className="font-bold text-slate-800">₹{platformFee}</span>
+            </div>
+          )}
           <div className="pt-2 border-t border-slate-200 flex items-center justify-between">
-            <span className="font-black text-sm text-slate-800">Estimated Total Service:</span>
-            <span className="font-black text-base text-emerald-600">₹{estimatedCost}</span>
+            <span className="font-black text-sm text-slate-800">{platformFee !== null ? 'Estimated Total to Pay:' : 'Estimated Total Service:'}</span>
+            <span className="font-black text-base text-emerald-600">₹{estimatedCost + (platformFee || 0)}</span>
           </div>
           <p className="text-[10px] text-slate-400 mt-1">
             * Plus platform fee as configured by Admin. Billed upon worker acceptance.

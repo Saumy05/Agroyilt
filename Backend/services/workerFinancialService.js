@@ -393,16 +393,34 @@ exports.buildWorkerCashCollection = (assignment, request, extensions = [], { gro
       minutes: isDaily ? null : Number(share.extensionMinutes || ext.extensionMinutes || 0),
       days: isDaily ? Number(share.additionalDays || ext.additionalDays || 0) : null,
       grossP,
+      feeRate: rate,
       feeP: Math.round((grossP * rate) / 100),
       inCash: ext.paymentMode === 'cash'
     });
   }
 
   const grossP = toP(grossOverride ?? assignment.grossAmount ?? 0);
-  const baseGrossP = Math.max(0, grossP - sumP(extParts, e => e.grossP));
-  const baseFeeP = Math.round((baseGrossP * baseRate) / 100);
   const extDays = sumP(extParts, e => e.days || 0);
   const base = baseSchedule(request, confirmed);
+
+  let baseGrossP = Math.max(0, grossP - sumP(extParts, e => e.grossP));
+  // DAILY: the pay is what the days worked come to (a farmer may have stopped the worker early), so it fills the booked days first
+  // and then the extension days, in order. Extension days nobody worked are not collected and carry no platform fee.
+  const dayRateP = toP(assignment.agreedRate || 0);
+  if (isDaily && dayRateP > 0) {
+    const baseDaysBooked = Math.max(1, (Number(assignment.bookedDays) || base.days || 1) - extDays);
+    let left = grossP;
+    baseGrossP = Math.min(left, dayRateP * baseDaysBooked);
+    left -= baseGrossP;
+    for (const e of extParts) {
+      const full = e.grossP;
+      e.grossP = Math.min(left, full);
+      left -= e.grossP;
+      if (full > 0 && e.grossP < full && e.days) e.days = Math.round(e.days * (e.grossP / full)); // the days actually worked
+      e.feeP = Math.round((e.grossP * e.feeRate) / 100);
+    }
+  }
+  const baseFeeP = Math.round((baseGrossP * baseRate) / 100);
 
   const lines = [
     {
@@ -412,7 +430,7 @@ exports.buildWorkerCashCollection = (assignment, request, extensions = [], { gro
       workerAmount: toINR(baseGrossP), platformFee: toINR(baseFeeP), amount: toINR(baseGrossP + baseFeeP)
     },
     // an online-paid extension is not collected in cash (cash bookings only create cash extensions)
-    ...extParts.filter(e => e.inCash).map(e => ({
+    ...extParts.filter(e => e.inCash && e.grossP > 0).map(e => ({
       kind: 'extension', extensionId: e.extensionId, minutes: e.minutes, days: e.days,
       workerAmount: toINR(e.grossP), platformFee: toINR(e.feeP), amount: toINR(e.grossP + e.feeP)
     }))

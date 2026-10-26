@@ -1945,6 +1945,11 @@ exports.getFarmerRequestById = async (req, res) => {
     } catch (extErr) {}
 
     const requestData = request.toObject ? request.toObject() : { ...request };
+    // the platform fee % the farmer is charged on worker pay now: the extension and add-worker popups show the same rate as the bill
+    try {
+      const rate = Number((await getWorkerFinancialSettings()).workerPlatformChargePercentage);
+      requestData.platformChargeRate = Number.isFinite(rate) ? rate : null;
+    } catch (_) { requestData.platformChargeRate = null; }
 
     // SECTION 22: Farmer panel must ONLY see Team Leader + member_accepted
     if (request.bookingMode === 'TEAM_LEADER' || request.requestType === 'team_leader') {

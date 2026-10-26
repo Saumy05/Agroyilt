@@ -492,9 +492,12 @@ exports.getTrackingSnapshot = async (req, res) => {
     const isAllCompleted = summary.totalWorkers > 0 && summary.completed === summary.totalWorkers;
     const parentStatus = parentRequest?.status || (isAllCompleted ? 'completed' : (summary.journeyStarted > 0 || summary.inProgress > 0 ? 'in_progress' : 'confirmed'));
 
+    // the platform fee % the farmer is charged on worker pay (the extension and add-worker popups show the same rate as the bill)
+    const platformChargeRate = Number((await require('../../services/workerFinancialService').getWorkerFinancialSettings().catch(() => null))?.workerPlatformChargePercentage);
     return res.json({
       success: true,
       data: {
+        platformChargeRate: Number.isFinite(platformChargeRate) ? platformChargeRate : null,
         trackingId: id,
         requestId: parentRequest ? parentRequest._id.toString() : (bookings[0]?.workerRequestId?.toString() || id),
         bookingId: bookings[0]?._id?.toString() || id,
