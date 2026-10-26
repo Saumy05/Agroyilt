@@ -386,7 +386,9 @@ const settleAssignment = async (assignmentId, { useStoredAmounts = false } = {})
     // a worker who finishes goes back online — unless the account is suspended/inactive
     await Worker.updateOne({ _id: a.workerId, status: { $nin: ['suspended', 'inactive'] } }, { $set: { status: 'ONLINE' } });
     if (a.legacyBookingId) {
-      await Booking.updateOne({ _id: a.legacyBookingId }, { $set: { status: 'completed', settlementStatus: 'completed', completedAt: new Date(), paymentStatus: isCash ? 'collected_by_vendor' : 'success' } });
+      // finalAmount follows what the job was really worth (extensions added, an hourly job priced by the time worked, days stopped early)
+      const finalGross = Number((done || a).grossAmount);
+      await Booking.updateOne({ _id: a.legacyBookingId }, { $set: { status: 'completed', settlementStatus: 'completed', completedAt: new Date(), paymentStatus: isCash ? 'collected_by_vendor' : 'success', ...(Number.isFinite(finalGross) && finalGross >= 0 ? { finalAmount: finalGross } : {}) } });
     }
     return { claimed: true, assignment: done || a };
   } catch (error) {

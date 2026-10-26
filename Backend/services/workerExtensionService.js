@@ -14,6 +14,7 @@
 const IndWorkerExtension = require('../models/IndWorkerExtension');
 const IndWorkerAssignment = require('../models/IndWorkerAssignment');
 const WorkerBookingRequest = require('../models/WorkerBookingRequest');
+const Booking = require('../models/Booking');
 const ledger = require('./ledgerService');
 const { getWorkerFinancialSettings } = require('./workerFinancialService');
 
@@ -81,11 +82,14 @@ const closeEvaluationIfDone = async (extensionId, { force = false } = {}) => {
   const anyAccepted = t.acceptedCount > 0;
 
   const next = anyAccepted ? 'PAYMENT_PENDING' : (fresh.workerExtensions.some(w => w.status === 'EXPIRED') ? 'EXPIRED' : 'REJECTED');
+  // the farmer has the same number of minutes to pay as the workers had to answer (admin: Extension Expiry)
+  const payWindowMin = anyAccepted ? (Number((await getWorkerFinancialSettings()).extensionExpiryMinutes) || 30) : 0;
   const moved = await IndWorkerExtension.findOneAndUpdate(
     { _id: ext._id, status: { $in: OPEN } },
     {
       $set: {
         status: next, isActive: anyAccepted, acceptedWorkerCount: t.acceptedCount,
+        ...(anyAccepted ? { paymentExpiresAt: new Date(Date.now() + payWindowMin * 60 * 1000) } : {}),
         totalServiceAmount: toINR(t.servicePaise), platformFeeRate: t.platformRate, platformFeeAmount: toINR(t.platformPaise),
         totalPayable: toINR(t.totalPaise), totalPayableAmount: toINR(t.totalPaise), farmerTotalAmount: toINR(t.totalPaise)
       }
@@ -94,6 +98,9 @@ const closeEvaluationIfDone = async (extensionId, { force = false } = {}) => {
   );
   const result = moved || (await IndWorkerExtension.findById(ext._id));
 
+  // nobody accepted: a booking whose last day was waiting for this extension is released
+  if (moved && !anyAccepted) await releaseParkedAssignments(moved);
+
   if (moved && anyAccepted && moved.paymentMode === 'cash') {
     await applyExtension(moved._id, { actor: 'system' });
     // cash: nothing to collect online — the extension is final once applied (commission is taken at settlement)
@@ -101,6 +108,106 @@ const closeEvaluationIfDone = async (extensionId, { force = false } = {}) => {
     return IndWorkerExtension.findById(ext._id);
   }
   return result;
+};
+
+// ── DAILY: the last booked day is done but an extension is still being decided ─────────────────────────────────────
+/**
+ * Is an extension for more days still being decided for this assignment? (workers answering, or the farmer paying within the deadline)
+ * While it is, finishing the last booked day must not settle the assignment: the extra days would have nothing to attach to.
+ */
+const hasLiveDailyExtension = async (assignment) => {
+  const now = Date.now();
+  const exts = await IndWorkerExtension.find({
+    parentRequestId: assignment.parentRequestId, bookingType: 'DAILY',
+    status: { $in: [...OPEN, 'PAYMENT_PENDING'] },
+    'workerExtensions.assignmentId': assignment._id
+  }).select('status expiresAt paymentExpiresAt paymentStatus workerExtensions').lean();
+  return exts.some((e) => {
+    const mine = (e.workerExtensions || []).find((w) => String(w.assignmentId) === String(assignment._id));
+    if (!mine) return false;
+    // workers still answering: a worker who has not answered counts until the answering time is over; one who accepted counts
+    // until the evaluation closes (it then moves to payment or, for the others, is rejected)
+    if (OPEN.includes(e.status)) return (mine.status === 'REQUESTED' && now <= new Date(e.expiresAt).getTime()) || mine.status === 'ACCEPTED';
+    // PAYMENT_PENDING: only the accepted worker, and only until the payment deadline (a payment in progress still counts)
+    return mine.status === 'ACCEPTED' && (e.paymentStatus === 'processing' || (e.paymentExpiresAt && now <= new Date(e.paymentExpiresAt).getTime()));
+  });
+};
+
+/** A parked assignment whose extension was applied continues with the next day. */
+const reopenParkedAssignment = async (assignment) => {
+  const { _nextDayLog } = require('../controllers/workerControllers/workerAssignmentController');
+  const next = (Number(assignment.workedDays) || 0) + 1;
+  await IndWorkerAssignment.updateOne(
+    { _id: assignment._id, awaitingExtension: true },
+    {
+      $set: {
+        awaitingExtension: false, currentDayIndex: next, completionStatus: 'PENDING',
+        journeyStatus: 'NOT_STARTED', visitOtpStatus: 'PENDING', workStatus: 'NOT_STARTED'
+      },
+      $unset: { completionOtpVerifiedAt: '', workCompletedAt: '' },
+      $push: { dailyLogs: _nextDayLog(next), auditLog: { at: new Date(), actor: 'system', event: 'extension_reopened', meta: { nextDay: next } } }
+    }
+  );
+};
+
+/**
+ * Settle the assignments that were waiting for this extension but did not get it (the extension was rejected, expired or the
+ * worker said no). An assignment with another extension still live keeps waiting. Safe to run repeatedly.
+ */
+const releaseParkedAssignments = async (extOrId) => {
+  try {
+    const ext = extOrId && extOrId.workerExtensions ? extOrId : await IndWorkerExtension.findById(extOrId);
+    if (!ext || ext.bookingType !== 'DAILY') return;
+    for (const w of ext.workerExtensions) {
+      const a = await IndWorkerAssignment.findOne({ _id: w.assignmentId, awaitingExtension: true, appliedExtensionIds: { $ne: ext._id } });
+      if (!a) continue;
+      if (w.status === 'ACCEPTED' && ext.status === 'PAYMENT_PENDING') continue; // still to be paid
+      if (await hasLiveDailyExtension(a)) continue;
+      const claimed = await IndWorkerAssignment.findOneAndUpdate(
+        { _id: a._id, awaitingExtension: true },
+        { $set: { awaitingExtension: false }, $push: { auditLog: { at: new Date(), actor: 'system', event: 'extension_not_taken', meta: { extensionId: ext._id } } } },
+        { new: true }
+      );
+      if (!claimed) continue;
+      const { _settleAndFinish } = require('../controllers/workerControllers/workerAssignmentController');
+      await _settleAndFinish(a._id);
+    }
+  } catch (err) {
+    console.error('[releaseParkedAssignments] failed (the next sweep retries):', err.message);
+  }
+};
+
+/**
+ * Extensions the workers accepted but the farmer never paid for within the deadline expire (nothing was charged), and a booking
+ * that was waiting for them is released. Run by the expiry scheduler. Older ones with no deadline use the extension-expiry minutes
+ * from their last change.
+ */
+const expireUnpaidExtensions = async () => {
+  // evaluations whose answering time ran out are closed here too (they would otherwise wait for someone to open the screen)
+  const overdue = await IndWorkerExtension.find({ status: { $in: OPEN }, expiresAt: { $lt: new Date() } }).select('_id').limit(100).lean();
+  for (const o of overdue) await closeEvaluationIfDone(o._id).catch((e) => console.error('[extension sweep] close failed:', e.message));
+
+  const windowMin = Number((await getWorkerFinancialSettings()).extensionExpiryMinutes) || 30;
+  const now = new Date();
+  const stale = await IndWorkerExtension.find({
+    status: 'PAYMENT_PENDING', paymentStatus: { $nin: ['processing', 'success'] },
+    $or: [
+      { paymentExpiresAt: { $lt: now } },
+      { paymentExpiresAt: null, updatedAt: { $lt: new Date(now.getTime() - windowMin * 60 * 1000) } }
+    ]
+  }).limit(100);
+  let expired = 0;
+  for (const e of stale) {
+    const moved = await IndWorkerExtension.findOneAndUpdate(
+      { _id: e._id, status: 'PAYMENT_PENDING', paymentStatus: { $nin: ['processing', 'success'] } },
+      { $set: { status: 'EXPIRED', isActive: false } },
+      { new: true }
+    );
+    if (!moved) continue;
+    expired++;
+    await releaseParkedAssignments(moved);
+  }
+  return expired;
 };
 
 /**
@@ -121,7 +228,9 @@ const applyExtension = async (extensionId, { actor = 'system' } = {}) => {
 
     const upd = await IndWorkerAssignment.findOneAndUpdate(
       {
-        _id: w.assignmentId, assignmentStatus: 'CONFIRMED', settlementStatus: 'PENDING', completionStatus: 'PENDING',
+        _id: w.assignmentId, assignmentStatus: 'CONFIRMED', settlementStatus: 'PENDING',
+        // a DAILY assignment that finished its last booked day and is waiting for this very extension can take it too
+        $or: [{ completionStatus: 'PENDING' }, { awaitingExtension: true }],
         isDecreased: { $ne: true }, appliedExtensionIds: { $ne: ext._id }
       },
       [{
@@ -135,6 +244,11 @@ const applyExtension = async (extensionId, { actor = 'system' } = {}) => {
     );
     if (upd) {
       appliedAny = true;
+      if (upd.awaitingExtension) await reopenParkedAssignment(upd);
+      // the booking record the worker's job list and the admin lists read carries the new amount too
+      if (upd.legacyBookingId) {
+        await Booking.updateOne({ _id: upd.legacyBookingId }, { $inc: { finalAmount: g } }).catch(() => {});
+      }
       try {
         await require('../controllers/workerControllers/extensionController')._notifyExtensionApplied({ ext, worker: w, assignment: upd });
       } catch (_) { /* notification is best effort */ }
@@ -163,8 +277,15 @@ const applyExtension = async (extensionId, { actor = 'system' } = {}) => {
         { _id: parent._id },
         { $set, $push: { auditLog: { at: new Date(), actor, event: 'extension_applied', meta: { extensionId: ext._id } } } }
       );
+      // keep the worker's booking records (the worker's job list, the admin lists) in step with the request
+      const bookingSet = isDaily
+        ? (($set.endDate) ? { endDate: $set.endDate } : null)
+        : { durationMinutes: $set.durationMinutes };
+      if (bookingSet) await Booking.updateMany({ workerRequestId: parent._id }, { $set: bookingSet }).catch(() => {});
     }
   }
+  // workers whose answer was no (or who could not be extended) must not stay parked waiting for this extension
+  await releaseParkedAssignments(ext);
   return { unapplied, appliedAny };
 };
 
@@ -309,4 +430,4 @@ const payFromWallet = async ({ extensionId, parentRequestId, farmerId }) => {
   return result;
 };
 
-module.exports = { closeEvaluationIfDone, applyExtension, confirmExtensionPayment, payFromWallet, computeTotals, refundExtensionAmount, OPEN, toP, toINR };
+module.exports = { closeEvaluationIfDone, applyExtension, hasLiveDailyExtension, releaseParkedAssignments, expireUnpaidExtensions, confirmExtensionPayment, payFromWallet, computeTotals, refundExtensionAmount, OPEN, toP, toINR };

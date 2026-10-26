@@ -446,6 +446,10 @@ const checkAndExpireWorkerRequests = async () => {
     try { await require('./workerBookingCancelService').autoCancelNoShows(); }
     catch (e) { console.error('[ExpiryService] no-show sweep failed:', e.message); }
 
+    // 3b. Extensions the farmer never paid for expire; a booking waiting for one is released (and settled)
+    try { await require('./workerExtensionService').expireUnpaidExtensions(); }
+    catch (e) { console.error('[ExpiryService] extension sweep failed:', e.message); }
+
     // 4. Money safety net: retry settlements stuck in FAILED/PROCESSING and refunds that never landed.
     try { await require('./workerSettlementService').reconcile(); }
     catch (e) { console.error('[ExpiryService] settlement reconcile failed:', e.message); }

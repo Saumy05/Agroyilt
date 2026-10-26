@@ -453,6 +453,9 @@ const indWorkerAssignmentSchema = new mongoose.Schema(
 
     // extensions already applied to this assignment (makes applying them idempotent)
     appliedExtensionIds: [{ type: mongoose.Schema.Types.ObjectId }],
+    // DAILY: the last booked day is done but an extension for more days is still being decided (workers answering / farmer paying).
+    // The assignment waits here instead of settling; it continues if the extension is paid, and settles if it is not.
+    awaitingExtension: { type: Boolean, default: false },
 
     // Settlement claim (atomic PENDING/FAILED -> PROCESSING) so a crashed run can be detected/retried
     settlementClaimedAt: { type: Date, default: null },

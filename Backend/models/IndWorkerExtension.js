@@ -65,6 +65,10 @@ const indWorkerExtensionSchema = new mongoose.Schema({
   // Workers have until expiresAt to respond. Past this => EXPIRED (not REJECTED).
   expiresAt: { type: Date, required: true, index: true },
 
+  // Once workers have accepted, the farmer has until paymentExpiresAt to pay. Past it the extension EXPIRES (nothing was charged)
+  // and a booking that was waiting for it is released. Set when the extension moves to PAYMENT_PENDING.
+  paymentExpiresAt: { type: Date, default: null, index: true },
+
   // ── Per-worker extension entries ─────────────────────────────────────────────
   workerExtensions: [{
     assignmentId: {

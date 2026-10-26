@@ -134,6 +134,7 @@ const notify = async ({ recipientType, recipientId, type, title, message, relate
 
 // ── helpers ─────────────────────────────────────────────────────────────────────────────────────────
 const { verifyOtp, stampOtp } = require('../../services/assignmentOtpService');
+const extSvc = require('../../services/workerExtensionService');
 const settlement = require('../../services/workerSettlementService');
 const { issueOtp } = require('../../utils/otpUtil');
 
@@ -157,6 +158,8 @@ const nextDayLog = (dayNumber) => {
     workStatus: 'NOT_STARTED'
   };
 };
+
+exports._nextDayLog = nextDayLog;
 
 const { managedOfflineMembers, actingWorkerId } = require('../../services/offlineMemberProxy');
 
@@ -715,7 +718,11 @@ exports.verifyCompletionOtp = async (req, res) => {
     if (isDaily) {
       const after = await IndWorkerAssignment.findOneAndUpdate({ _id: assignmentId }, { $inc: { workedDays: 1 } }, { new: true });
       const totalBookedDays = Number(after.bookedDays) || 1;
-      const terminal = after.isDecreased || after.workedDays >= totalBookedDays;
+      const reachedEnd = after.workedDays >= totalBookedDays;
+      // The last booked day is done, but the farmer asked for more days and that is still being decided (workers answering or the
+      // farmer paying): wait for it instead of settling, so the extra days have a booking to join. It settles if the extension is not taken.
+      const waitForExtension = reachedEnd && !after.isDecreased && await extSvc.hasLiveDailyExtension(after);
+      const terminal = after.isDecreased || (reachedEnd && !waitForExtension);
 
       if (!terminal) {
         const next = after.workedDays + 1;
@@ -755,8 +762,28 @@ exports.verifyCompletionOtp = async (req, res) => {
 
       await IndWorkerAssignment.updateOne(
         { _id: assignmentId },
-        { $set: { completionStatus: 'OTP_VERIFIED', completionOtpVerifiedAt: now, workCompletedAt: now }, $push: { auditLog: audit('completion_verified', 'worker', workerId, { workedDays: after.workedDays }) } }
+        {
+          $set: { completionStatus: 'OTP_VERIFIED', completionOtpVerifiedAt: now, workCompletedAt: now, ...(waitForExtension ? { awaitingExtension: true } : {}) },
+          $push: { auditLog: audit(waitForExtension ? 'waiting_for_extension' : 'completion_verified', 'worker', workerId, { workedDays: after.workedDays }) }
+        }
       );
+      if (waitForExtension) {
+        emitSafe(`booking_req:${after.parentRequestId}`, 'assignment_day_completed', {
+          requestId: after.parentRequestId, assignmentId: after._id, workerId: after.workerId,
+          completedDay: after.workedDays, nextDay: null, totalDays: totalBookedDays, awaitingExtension: true, serverTimestamp: new Date()
+        });
+        await notify({
+          recipientType: 'user', recipientId: after.farmerId, type: 'day_completed',
+          title: `Day ${after.workedDays} Work Completed`,
+          message: 'The worker finished the last booked day. Your extension for more days is still waiting: complete it to continue, or the booking will be settled.',
+          relatedId: after.parentRequestId, relatedType: 'WorkerBookingRequest', data: { assignmentId: after._id }
+        });
+        return res.json({
+          success: true,
+          message: `Day ${after.workedDays} completed. The farmer's request for more days is still being decided; you will be told if the work continues.`,
+          data: await IndWorkerAssignment.findById(assignmentId)
+        });
+      }
     }
 
     const r = await settleAndFinish(assignmentId);
@@ -814,9 +841,10 @@ const respondCompletion = async (res, assignment, r) => {
  */
 const finalizeDecreasedBetweenDays = async (assignmentId) => {
   const claimed = await IndWorkerAssignment.findOneAndUpdate(
-    { _id: assignmentId, assignmentStatus: 'CONFIRMED', isDecreased: true, completionStatus: 'PENDING', visitOtpStatus: { $ne: 'VERIFIED' }, workedDays: { $gt: 0 } },
+    // (also an assignment parked after its last day while waiting for an extension: the farmer stopped it, so it settles now)
+    { _id: assignmentId, assignmentStatus: 'CONFIRMED', isDecreased: true, $or: [{ completionStatus: 'PENDING' }, { awaitingExtension: true }], visitOtpStatus: { $ne: 'VERIFIED' }, workedDays: { $gt: 0 } },
     {
-      $set: { completionStatus: 'OTP_VERIFIED', completionOtpVerifiedAt: new Date(), workCompletedAt: new Date() },
+      $set: { completionStatus: 'OTP_VERIFIED', completionOtpVerifiedAt: new Date(), workCompletedAt: new Date(), awaitingExtension: false },
       $pull: { dailyLogs: { workStatus: 'NOT_STARTED', visitOtpStatus: 'PENDING' } },
       $push: { auditLog: audit('decreased_between_days', 'system', null, null) }
     },
