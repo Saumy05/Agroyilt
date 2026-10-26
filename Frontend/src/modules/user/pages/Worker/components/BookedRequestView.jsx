@@ -63,6 +63,9 @@ const BookedRequestView = ({ request, onRefresh }) => {
   const [revealed, setRevealed] = useState({});
   const [showDone, setShowDone] = useState(false);
   const [modal, setModal] = useState(null); // 'extend' | 'add' | 'dispute' | { decrease: worker } | { replace: worker } | { rate: worker }
+  // The popups that carry a worker keep it in an object. Never read those fields off the plain-string modals ('extend', 'add', 'dispute'):
+  // 'extend'.replace is String.prototype.replace, which is truthy, and it used to open "Replace worker from tomorrow" together with the extend popup.
+  const workerModal = modal && typeof modal === 'object' ? modal : {};
   const [qrModal, setQrModal] = useState(null); // { targetId, title, amount }
   const [rated, setRated] = useState(() => {
     try { return JSON.parse(localStorage.getItem(`rated_workers_${id}`) || '{}'); } catch { return {}; }
@@ -576,17 +579,17 @@ const BookedRequestView = ({ request, onRefresh }) => {
         onWorkersAdded={refreshAll}
       />
       <ReplaceWorkerModal
-        isOpen={Boolean(modal?.replace)}
+        isOpen={Boolean(workerModal.replace)}
         onClose={() => setModal(null)}
-        worker={modal?.replace}
+        worker={workerModal.replace}
         requestId={id}
         remainingDays={Math.max(1, (request.numberOfDays || 1) - currentDay)}
         onDone={refreshAll}
       />
       <DecreaseWorkerModal
-        isOpen={Boolean(modal?.decrease)}
+        isOpen={Boolean(workerModal.decrease)}
         onClose={() => setModal(null)}
-        worker={modal?.decrease}
+        worker={workerModal.decrease}
         requestId={id}
         onDecreased={refreshAll}
       />
@@ -597,14 +600,14 @@ const BookedRequestView = ({ request, onRefresh }) => {
         bookingId={id}
       />
       <RatingModal
-        isOpen={Boolean(modal?.rate)}
+        isOpen={Boolean(workerModal.rate)}
         onClose={() => setModal(null)}
-        onSubmit={(data) => rateWorker(modal.rate, data)}
+        onSubmit={(data) => rateWorker(workerModal.rate, data)}
         bookingName={request.workTitle}
-        workerName={modal?.rate?.workerName}
+        workerName={workerModal.rate?.workerName}
       />
       <RatingModal
-        isOpen={Boolean(modal?.rateAll)}
+        isOpen={Boolean(workerModal.rateAll)}
         onClose={() => setModal(null)}
         onSubmit={rateAllWorkers}
         bookingName={request.workTitle}
