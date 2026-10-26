@@ -98,7 +98,10 @@ const buildDocs = (request, { method, orderId, paymentId }) => {
   const assignmentDocs = [];
   const bookingDocs = [];
 
-  [...new Set((request.selectedWorkerIds || []).map(String))].forEach((wId, idx) => {
+  const hired = [...new Set((request.selectedWorkerIds || []).map(String))];
+  const parentRef = require('../utils/bookingRef').requestRef(request._id);
+  hired.forEach((wId, idx) => {
+    const jobNumber = require('../utils/bookingRef').jobRef(parentRef, idx, hired.length); // the same reference on the farmer's, worker's and admin's screens
     // the rate frozen when the farmer selected this worker (never a later change), same duration the quote used
     const offeredRate = workerBookingMath.rateFor(request, wId);
 
@@ -116,6 +119,7 @@ const buildDocs = (request, { method, orderId, paymentId }) => {
     const visit = issueOtp();
     const a = {
       parentRequestId: request._id,
+      bookingNumber: jobNumber,
       bookingType: request.bookingType || 'HOURLY',
       farmerId: request.farmerId,
       workerId: wId,
@@ -175,7 +179,7 @@ const buildDocs = (request, { method, orderId, paymentId }) => {
     const dailyEndStr = `${String(dailyEndH).padStart(2, '0')}:${String(isNaN(rSM) ? 0 : rSM).padStart(2, '0')}`;
 
     bookingDocs.push({
-      bookingNumber: `WRK-${Date.now()}-${idx}-${crypto.randomInt(1000, 10000)}`,
+      bookingNumber: jobNumber,
       userId: request.farmerId,
       workerId: wId,
       providerType: 'WORKER',

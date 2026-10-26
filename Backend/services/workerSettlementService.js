@@ -494,7 +494,7 @@ const processBookingRefund = async (parentId) => {
     if (duePaise <= 0) return { success: true, message: 'No refund due', refundAmount: 0 };
 
     const amount = toINR(duePaise);
-    const bookingRef = parent.bookingNumber || `WRK-${parent._id.toString().slice(-6).toUpperCase()}`;
+    const bookingRef = parent.bookingNumber || require('../utils/bookingRef').requestRef(parent._id);
     const res = await creditFarmerOnce({
       parent, amount, key: `refund_${parent._id}_booking`, reason: 'refund',
       description: `Unused Reserve Refund for ${parent.workTitle || 'Worker'} Booking (#${bookingRef})`,

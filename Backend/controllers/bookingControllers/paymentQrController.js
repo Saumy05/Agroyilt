@@ -225,7 +225,7 @@ exports.generateAdminPaymentQr = async (req, res) => {
       targetDoc = assignment;
       farmerId = assignment.farmerId?._id || assignment.farmerId;
       farmerName = assignment.farmerId?.name || 'Farmer';
-      referenceNumber = `WRK-${assignment._id.toString().slice(-6).toUpperCase()}`;
+      referenceNumber = assignment.bookingNumber || require('../../utils/bookingRef').requestRef(assignment.parentRequestId || assignment._id);
 
       // The QR collects exactly what the farmer owes the worker (pay + platform fee + travel), and only when a QR may be used
       const due = await assignmentQrDue(assignment);

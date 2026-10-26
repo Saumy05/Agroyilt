@@ -86,6 +86,8 @@ const indWorkerAssignmentSchema = new mongoose.Schema(
     },
 
     // Idempotency key for assignment creation
+    // The booking reference of this job (the request's reference, numbered when the request hired several workers)
+    bookingNumber: { type: String, index: true },
     creationIdempotencyKey: {
       type: String,
       unique: true,

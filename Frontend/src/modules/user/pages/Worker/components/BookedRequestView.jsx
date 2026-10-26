@@ -20,6 +20,7 @@ import ActiveWorkMonitoringHub from '../../BookingTrack/components/ActiveWorkMon
 import FarmerWorkerQrModal from './FarmerWorkerQrModal';
 import AddOnLinks from './AddOnLinks';
 import { workLength } from '../../../../../utils/workerPayment';
+import { requestRef } from '../../../../../utils/bookingRef';
 
 // One worker's journey through a job (per day for DAILY bookings)
 const STEPS = ['On the way', 'Arrived', 'Working', 'Stopped', 'Done'];
@@ -330,7 +331,7 @@ const BookedRequestView = ({ request, onRefresh }) => {
           </button>
           <div className="min-w-0 flex-1">
             <h1 className="text-base font-black text-slate-900 truncate">{request.workTitle}</h1>
-            <p className="text-[11px] text-slate-500">#{String(id).slice(-8).toUpperCase()} · {request.paymentMethod === 'cash' ? 'Cash on service' : 'Paid online'}</p>
+            <p className="text-[11px] text-slate-500">#{request.bookingNumber || requestRef(id)} · {request.paymentMethod === 'cash' ? 'Cash on service' : 'Paid online'}</p>
           </div>
           <span className={`px-3 py-1 rounded-full text-xs font-black shrink-0 ${allDone ? 'bg-violet-100 text-violet-800' : anyStarted ? 'bg-blue-100 text-blue-800' : 'bg-emerald-100 text-emerald-800'}`}>
             {statusLabel}
@@ -540,7 +541,7 @@ const BookedRequestView = ({ request, onRefresh }) => {
             <button
               type="button"
               onClick={() => {
-                const bNum = request.bookingNumber || String(request._id || '').substring(0, 8);
+                const bNum = request.bookingNumber || requestRef(request._id);
                 const title = request.workTitle || 'Worker Hiring';
                 navigate(`/user/help-support?category=WORKER&bookingNumber=${encodeURIComponent(bNum)}&bookingId=${request._id}&subject=${encodeURIComponent(`Help with worker request #${bNum} (${title})`)}&openCreate=true`);
               }}

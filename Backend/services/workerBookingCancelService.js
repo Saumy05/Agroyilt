@@ -99,7 +99,7 @@ const cancelWorkerBooking = async ({ requestId, farmerId = null, actor = 'farmer
       const snap = request.financialSnapshot || {};
       const amount = Number(snap.totalPayable || snap.maximumWorkerAmount || 0);
       if (amount > 0) {
-        const bookingRef = request.bookingNumber || `WRK-${request._id.toString().slice(-6).toUpperCase()}`;
+        const bookingRef = request.bookingNumber || require('../utils/bookingRef').requestRef(request._id);
         const res = await settlement.creditFarmerOnce({
           parent: request, amount, key: `cancel_refund_${request._id}`, reason: 'refund',
           description: `Full Refund for Cancelled ${request.workTitle || 'Worker'} Booking (#${bookingRef})`

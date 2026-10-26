@@ -313,6 +313,7 @@ const WorkerBookings = () => {
                   <div className="flex items-start justify-between gap-2 pb-3 border-b border-slate-100">
                     <div className="min-w-0">
                       <p className="font-black text-slate-900 text-sm truncate">{r.workTitle || r.workCategory || 'Farm Labor Request'}</p>
+                      {r.bookingNumber && <p className="text-[11px] font-mono font-bold text-slate-500">#{r.bookingNumber}</p>}
                       <p className="text-[11px] text-slate-400 font-medium">
                         Requested {r.createdAt ? new Date(r.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'N/A'}
                       </p>

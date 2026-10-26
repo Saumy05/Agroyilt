@@ -3132,8 +3132,9 @@ exports.legacyFarmerConfirmRequest = async (req, res) => {
     }
 
     // Create bookings for all still-available workers
+    const legacyParentRef = require('../../utils/bookingRef').requestRef(request._id);
     const bookingDocs = stillAvailable.map((wId, idx) => ({
-      bookingNumber: `WRK-${Date.now()}-${idx}`,
+      bookingNumber: require('../../utils/bookingRef').jobRef(legacyParentRef, idx, stillAvailable.length),
       userId:        farmerId,
       workerId:      wId,
       providerType:  'WORKER',
@@ -3257,7 +3258,7 @@ const announceCancellation = async ({ request, workerIds, refundAmount, wasConfi
   }
 
   for (const wId of workerIds) {
-    const bookingRef = request.bookingNumber || `WRK-${request._id.toString().slice(-6).toUpperCase()}`;
+    const bookingRef = request.bookingNumber || require('../../utils/bookingRef').requestRef(request._id);
     await notify({
       recipientType: 'worker',
       recipientId: wId,

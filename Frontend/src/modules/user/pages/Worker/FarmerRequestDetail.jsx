@@ -11,6 +11,7 @@ import workerBookingService from '../../../../services/workerBookingService';
 import WorkerPaymentBill from '../../components/booking/WorkerPaymentBill';
 import BookedRequestView from './components/BookedRequestView';
 import AddOnLinks from './components/AddOnLinks';
+import { requestRef } from '../../../../utils/bookingRef';
 
 const STATUS_CONFIG = {
   pending:                    { color: 'bg-amber-100 text-amber-700 border-amber-200',    label: 'Waiting for Responses' },
@@ -220,7 +221,7 @@ const FarmerRequestDetail = () => {
             </button>
             <div>
               <h1 className="text-lg font-bold text-slate-900">Request Details</h1>
-              <p className="text-xs text-slate-500">ID: {request._id?.substring(0, 8)}...</p>
+              <p className="text-xs text-slate-500">Booking ID: {request.bookingNumber || requestRef(request._id)}</p>
             </div>
           </div>
 

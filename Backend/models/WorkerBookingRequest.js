@@ -28,6 +28,9 @@ const workerBookingRequestSchema = new mongoose.Schema({
     index: true
   },
 
+  // The one booking reference shown to the farmer, the worker and the admin (see utils/bookingRef.js). Made from the _id when saved.
+  bookingNumber:          { type: String, index: true },
+
   // Work Details
   workCategory:           { type: String, default: '' },
   workTitle:              { type: String, default: '' },
@@ -349,6 +352,9 @@ const workerBookingRequestSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 // ── Indexes ──────────────────────────────────────────────────────────────────
+workerBookingRequestSchema.pre('validate', function () {
+  if (!this.bookingNumber) this.bookingNumber = require('../utils/bookingRef').requestRef(this._id);
+});
 workerBookingRequestSchema.index({ farmerId: 1, status: 1 });
 workerBookingRequestSchema.index({ finalBookingIds: 1 });
 workerBookingRequestSchema.index({ finalBookingId: 1 });

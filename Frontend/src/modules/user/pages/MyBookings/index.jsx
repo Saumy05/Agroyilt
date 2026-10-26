@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { requestRef } from '../../../../utils/bookingRef';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   FiArrowLeft,
@@ -407,7 +408,8 @@ const MyBookings = () => {
       ? booking.bookedItems.map(item => item.card?.title || item.title).filter(Boolean).join(', ')
       : null;
 
-    const bookingNum = booking.bookingNumber || (booking._id || booking.id || '').substring(0, 8);
+    // a worker request has no booking number of its own in older data: its reference comes from its id (the same one the worker and admin see)
+    const bookingNum = booking.bookingNumber || ((booking.workTitle || booking.requiredWorkers) ? requestRef(booking._id || booking.id) : (booking._id || booking.id || '').substring(0, 8));
 
     return (
       <div

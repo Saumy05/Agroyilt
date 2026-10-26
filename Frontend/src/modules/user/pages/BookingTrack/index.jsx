@@ -23,6 +23,7 @@ import ExtensionModal from './components/ExtensionModal';
 import AddWorkersModal from './components/AddWorkersModal';
 import workerBookingService from '../../../../services/workerBookingService';
 import { walletService } from '../../../../services/walletService';
+import { requestRef } from '../../../../utils/bookingRef';
 
 
 // Helper to format relative time
@@ -178,7 +179,7 @@ const BookingTrack = () => {
           const singleWorker = {
             assignmentId: b._id,
             bookingId: b._id,
-            bookingNumber: b.bookingNumber || `WRK-${b._id.slice(-6).toUpperCase()}`,
+            bookingNumber: b.bookingNumber || requestRef(b.parentRequestId || b._id),
             workerId: w._id || b.workerId,
             workerName: w.name || 'Assigned Worker',
             workerPhone: w.phone || '',

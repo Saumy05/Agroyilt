@@ -1048,7 +1048,7 @@ const getOpenWorkerRequests = async (req, res) => {
 
     const [requests, total] = await Promise.all([
       WorkerBookingRequest.find(query)
-        .select('farmerId workCategory workTitle bookingType bookingMode rateUnit scheduledDate startTime endTime startDate endDate numberOfDays location requiredWorkers minRate maxRate minDailyRate maxDailyRate status eligibleWorkersCount dispatchedWorkersCount acceptedWorkersCount rejectedWorkersCount createdAt updatedAt cancelledAt cancelledBy rejectionReason expiresAt')
+        .select('farmerId workCategory workTitle bookingType bookingMode rateUnit scheduledDate startTime endTime startDate endDate numberOfDays location requiredWorkers minRate maxRate minDailyRate maxDailyRate status eligibleWorkersCount dispatchedWorkersCount acceptedWorkersCount rejectedWorkersCount bookingNumber createdAt updatedAt cancelledAt cancelledBy rejectionReason expiresAt')
         .populate('farmerId', 'name phone')
         .sort(closed ? { updatedAt: -1 } : { createdAt: -1 })
         .skip((pageNum - 1) * limitNum)
@@ -1057,9 +1057,10 @@ const getOpenWorkerRequests = async (req, res) => {
       WorkerBookingRequest.countDocuments(query)
     ]);
 
+    const { requestRef } = require('../../utils/bookingRef');
     res.status(200).json({
       success: true,
-      data: requests,
+      data: requests.map((r) => ({ ...r, bookingNumber: r.bookingNumber || requestRef(r._id) })),
       pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) }
     });
   } catch (error) {

@@ -419,7 +419,7 @@ exports.getTrackingSnapshot = async (req, res) => {
       return {
         assignmentId: b._id.toString(),
         bookingId: b.legacyBookingId ? b.legacyBookingId.toString() : b._id.toString(),
-        bookingNumber: b.bookingNumber || `WRK-${b._id.toString().slice(-6).toUpperCase()}`,
+        bookingNumber: b.bookingNumber || require('../../utils/bookingRef').requestRef(b.parentRequestId || b._id),
         bookingType: isDailyBooking ? 'DAILY' : 'HOURLY',
         workerId: w._id ? w._id.toString() : (b.workerId ? b.workerId.toString() : b._id.toString()),
         workerName: w.name || 'Assigned Worker',
