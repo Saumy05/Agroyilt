@@ -14,6 +14,7 @@ const { validateDob } = require('../../utils/age');
 
 // Farmer worker requests that haven't turned into a paid booking yet
 const OPEN_REQUEST_STATUSES = ['pending', 'matching', 'awaiting_farmer_confirmation'];
+const CLOSED_REQUEST_STATUSES = ['cancelled', 'expired', 'rejected']; // requests that ended without a booking
 
 /**
  * Get all workers with filters and pagination
@@ -669,13 +670,14 @@ const getAllWorkerJobs = async (req, res) => {
     const total = await Booking.countDocuments(query);
 
     // Quick stats for worker bookings tab
-    const [allCount, completedCount, inProgressCount, pendingCount, cancelledCount, openRequestsCount] = await Promise.all([
+    const [allCount, completedCount, inProgressCount, pendingCount, cancelledCount, openRequestsCount, closedRequestsCount] = await Promise.all([
       Booking.countDocuments({ workerId: { $exists: true, $ne: null } }),
       Booking.countDocuments({ workerId: { $exists: true, $ne: null }, status: { $in: [BOOKING_STATUS.COMPLETED, 'work_done', 'completed'] } }),
       Booking.countDocuments({ workerId: { $exists: true, $ne: null }, status: { $in: ['in_progress', 'confirmed', 'accepted', 'journey_started', 'started'] } }),
       Booking.countDocuments({ workerId: { $exists: true, $ne: null }, status: { $in: ['pending', 'awaiting_payment'] } }),
       Booking.countDocuments({ workerId: { $exists: true, $ne: null }, status: BOOKING_STATUS.CANCELLED }),
-      WorkerBookingRequest.countDocuments({ status: { $in: OPEN_REQUEST_STATUSES } })
+      WorkerBookingRequest.countDocuments({ status: { $in: OPEN_REQUEST_STATUSES } }),
+      WorkerBookingRequest.countDocuments({ status: { $in: CLOSED_REQUEST_STATUSES } })
     ]);
 
     res.status(200).json({
@@ -687,7 +689,8 @@ const getAllWorkerJobs = async (req, res) => {
         inProgress: inProgressCount,
         pending: pendingCount,
         cancelled: cancelledCount,
-        openRequests: openRequestsCount
+        openRequests: openRequestsCount,
+        closedRequests: closedRequestsCount
       },
       pagination: {
         page: parseInt(page),
@@ -1023,11 +1026,13 @@ const deleteWorker = async (req, res) => {
  */
 const getOpenWorkerRequests = async (req, res) => {
   try {
-    const { page = 1, limit = 12, search } = req.query;
+    const { page = 1, limit = 12, search, scope } = req.query;
     const pageNum = Math.max(parseInt(page) || 1, 1);
     const limitNum = Math.min(Math.max(parseInt(limit) || 12, 1), 100);
 
-    const query = { status: { $in: OPEN_REQUEST_STATUSES } };
+    // scope=closed: requests the farmer cancelled, that timed out, or that no worker took (the "Cancelled Requests" tab)
+    const closed = scope === 'closed';
+    const query = { status: { $in: closed ? CLOSED_REQUEST_STATUSES : OPEN_REQUEST_STATUSES } };
 
     if (search && search.trim()) {
       const searchRegex = { $regex: search.trim(), $options: 'i' };
@@ -1043,9 +1048,9 @@ const getOpenWorkerRequests = async (req, res) => {
 
     const [requests, total] = await Promise.all([
       WorkerBookingRequest.find(query)
-        .select('farmerId workCategory workTitle bookingType bookingMode rateUnit scheduledDate startTime endTime startDate endDate numberOfDays location requiredWorkers minRate maxRate minDailyRate maxDailyRate status eligibleWorkersCount dispatchedWorkersCount acceptedWorkersCount rejectedWorkersCount createdAt')
+        .select('farmerId workCategory workTitle bookingType bookingMode rateUnit scheduledDate startTime endTime startDate endDate numberOfDays location requiredWorkers minRate maxRate minDailyRate maxDailyRate status eligibleWorkersCount dispatchedWorkersCount acceptedWorkersCount rejectedWorkersCount createdAt updatedAt cancelledAt cancelledBy rejectionReason expiresAt')
         .populate('farmerId', 'name phone')
-        .sort({ createdAt: -1 })
+        .sort(closed ? { updatedAt: -1 } : { createdAt: -1 })
         .skip((pageNum - 1) * limitNum)
         .limit(limitNum)
         .lean(),

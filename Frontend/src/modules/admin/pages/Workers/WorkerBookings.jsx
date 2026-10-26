@@ -32,8 +32,15 @@ import { to12HourText } from '../../../../utils/bookingDisplay';
 const OPEN_REQUEST_STATUS = {
   pending: { label: 'Waiting for workers', bg: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' },
   matching: { label: 'Finding workers', bg: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' },
-  awaiting_farmer_confirmation: { label: 'Waiting for farmer to select & pay', bg: 'bg-blue-50 text-blue-700 border-blue-200', dot: 'bg-blue-500' }
+  awaiting_farmer_confirmation: { label: 'Waiting for farmer to select & pay', bg: 'bg-blue-50 text-blue-700 border-blue-200', dot: 'bg-blue-500' },
+  // requests that ended without a booking (Cancelled Requests tab)
+  cancelled: { label: 'Cancelled', bg: 'bg-rose-50 text-rose-700 border-rose-200', dot: 'bg-rose-500' },
+  expired: { label: 'Expired (no one took it)', bg: 'bg-slate-100 text-slate-600 border-slate-200', dot: 'bg-slate-400' },
+  rejected: { label: 'No worker accepted', bg: 'bg-slate-100 text-slate-600 border-slate-200', dot: 'bg-slate-400' }
 };
+
+// Both request tabs show requests, not bookings
+const REQUEST_TABS = ['open_requests', 'cancelled_requests'];
 
 const formatDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : null);
 
@@ -63,11 +70,12 @@ const WorkerBookings = () => {
     try {
       setLoading(true);
 
-      if (filterStatus === 'open_requests') {
+      if (REQUEST_TABS.includes(filterStatus)) {
         const reqRes = await workerService.getOpenWorkerRequests({
           page,
           limit: pagination.limit,
-          search: debouncedSearch.trim() || undefined
+          search: debouncedSearch.trim() || undefined,
+          scope: filterStatus === 'cancelled_requests' ? 'closed' : undefined
         });
         if (reqRes.success) {
           setRequests(reqRes.data || []);
@@ -168,6 +176,7 @@ const WorkerBookings = () => {
     { key: 'awaiting_payment', label: 'Awaiting Payment', count: stats.pending },
     { key: 'cancelled', label: 'Cancelled', count: stats.cancelled },
     { key: 'open_requests', label: 'Open Requests', count: stats.openRequests },
+    { key: 'cancelled_requests', label: 'Cancelled Requests', count: stats.closedRequests },
   ];
 
   return (
@@ -223,7 +232,7 @@ const WorkerBookings = () => {
             <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg" />
             <input
               type="text"
-              placeholder={filterStatus === 'open_requests' ? 'Search by Farmer name, Phone, or Work title...' : 'Search by Booking #, Farmer name, Worker name, Phone, or Service...'}
+              placeholder={REQUEST_TABS.includes(filterStatus) ? 'Search by Farmer name, Phone, or Work title...' : 'Search by Booking #, Farmer name, Worker name, Phone, or Service...'}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
@@ -274,12 +283,14 @@ const WorkerBookings = () => {
         <div className="flex justify-center py-20 bg-white rounded-3xl border border-slate-200">
           <LogoLoader />
         </div>
-      ) : filterStatus === 'open_requests' ? (
+      ) : REQUEST_TABS.includes(filterStatus) ? (
         requests.length === 0 ? (
           <div className="text-center py-16 bg-white rounded-3xl border border-dashed border-slate-300 p-6">
-            <h3 className="text-lg font-black text-slate-800">No open requests</h3>
+            <h3 className="text-lg font-black text-slate-800">{filterStatus === 'cancelled_requests' ? 'No cancelled requests' : 'No open requests'}</h3>
             <p className="text-slate-500 text-sm mt-1 max-w-sm mx-auto">
-              Farmer requests that are still waiting for workers or for the farmer to pay will appear here.
+              {filterStatus === 'cancelled_requests'
+                ? 'Farmer requests that were cancelled, expired, or that no worker accepted will appear here.'
+                : 'Farmer requests that are still waiting for workers or for the farmer to pay will appear here.'}
             </p>
           </div>
         ) : (
@@ -338,6 +349,14 @@ const WorkerBookings = () => {
                       </div>
                     )}
                   </div>
+
+                  {filterStatus === 'cancelled_requests' && (
+                    <p className="text-[11px] text-slate-500 bg-slate-50 rounded-xl px-3 py-2 border border-slate-100">
+                      {r.status === 'cancelled' ? 'Cancelled' : r.status === 'expired' ? 'Expired' : 'Closed'}
+                      {r.cancelledBy ? ` by ${r.cancelledBy}` : ''} on {new Date(r.cancelledAt || r.updatedAt || r.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      {r.rejectionReason ? ` · ${r.rejectionReason}` : ''}
+                    </p>
+                  )}
 
                   <div className="grid grid-cols-4 gap-2 pt-3 border-t border-slate-100 text-center">
                     {[

@@ -99,14 +99,16 @@ const FarmerRequestDetail = () => {
     setSelectedWorkerIds(prev => {
       if (prev.includes(workerId)) {
         if (prev.length <= 1) {
-          toast.error('At least 1 worker must stay selected. To drop everyone, cancel the request instead.');
+          toast.error('At least 1 worker must stay selected. To change your choice, tap the worker you want instead.');
           return prev;
         }
         return prev.filter(id => id !== workerId);
       }
       if (prev.length >= request.requiredWorkers) {
-         toast.error(`You can only select up to ${request.requiredWorkers} workers.`);
-         return prev;
+        // A request for one worker: tapping another worker switches the choice (no need to un-select first)
+        if (request.requiredWorkers === 1) return [workerId];
+        toast.error(`You can select up to ${request.requiredWorkers} workers. Tap a selected worker to remove them first.`);
+        return prev;
       }
       return [...prev, workerId];
     });

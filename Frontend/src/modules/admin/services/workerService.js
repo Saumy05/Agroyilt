@@ -90,6 +90,7 @@ export const workerService = {
     if (params.page) qp.append('page', params.page);
     if (params.limit) qp.append('limit', params.limit);
     if (params.search) qp.append('search', params.search);
+    if (params.scope) qp.append('scope', params.scope);
 
     const response = await api.get(`/admin/workers/requests${qp.toString() ? `?${qp.toString()}` : ''}`);
     return response.data;
