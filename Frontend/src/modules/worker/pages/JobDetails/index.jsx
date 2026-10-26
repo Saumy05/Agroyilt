@@ -1115,7 +1115,9 @@ const JobDetails = () => {
 
           {isAssignmentJob && <LifecycleStepper status={statusLower} cash={job?.cashCollection?.isCashBooking ? job.cashCollection : null} />}
 
-          {renderActionButtons(false)}
+          {/* The next step's button lives in the sticky bar at the bottom only (it was shown twice). A completed job has no bar,
+              so its "payment settled" card stays here. */}
+          {statusLower === 'completed' && renderActionButtons(false)}
         </div>
 
         {/* Customer Info Card */}
