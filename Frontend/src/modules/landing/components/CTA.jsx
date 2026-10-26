@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import ctaBg from '../landing_images/fertilizer_seeds4.jpg';
 import TranslatedText from '../../../components/TranslatedText';
+import PlayStoreButton from './PlayStoreButton';
 
 const CTA = () => {
     return (
@@ -43,6 +44,7 @@ const CTA = () => {
                             >
                                 <TranslatedText>Register Equipment</TranslatedText>
                             </Link>
+                            <PlayStoreButton className="bg-yellow-400 text-green-900 hover:bg-yellow-300 text-lg" />
                         </div>
 
                         <p className="mt-12 text-green-200 text-sm font-medium uppercase tracking-widest flex items-center justify-center space-x-3">

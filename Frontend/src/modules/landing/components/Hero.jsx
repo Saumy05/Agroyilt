@@ -6,6 +6,7 @@ import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import harvesterHero from '../landing_images/hero_premium.png';
 import TranslatedText from '../../../components/TranslatedText';
+import PlayStoreButton from './PlayStoreButton';
 
 // Register ScrollTrigger once with safe config.
 // ignoreMobileResize: true prevents GSAP from attaching a media-query listener
@@ -207,6 +208,7 @@ const Hero = () => {
                 <TranslatedText>Worker Join</TranslatedText>
               </motion.div>
             </Link>
+            <PlayStoreButton className="bg-white text-green-800 hover:bg-yellow-400" />
           </motion.div>
 
           {/* Stats */}

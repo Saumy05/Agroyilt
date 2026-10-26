@@ -3,9 +3,8 @@
  * Detects: Desktop browser, Mobile browser, Flutter WebView
  *
  * Rules:
- *  - Desktop browser → shows landing page at /
- *  - Mobile browser  → redirects / to /app (app entry screen)
- *  - Flutter WebView → redirects / to /app (app entry screen)
+ *  - Any browser (desktop or phone) → shows the landing page at /
+ *  - Flutter WebView                → redirects / to /app (app entry screen)
  */
 
 /**

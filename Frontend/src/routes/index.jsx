@@ -19,20 +19,22 @@ import WorkflowPage from '../modules/landing/pages/WorkflowPage';
 import FAQPage from '../modules/landing/pages/FAQPage';
 import { TermsPage, PrivacyPage } from '../modules/legal/LegalPage';
 import { LocationPermissionChecker } from '../components/common';
-import { isMobileApp } from '../utils/platformUtils';
+import { isFlutterWebView } from '../utils/platformUtils';
 import authStorage from '../utils/authStorage';
 
 const AppRoutes = () => {
   const location = useLocation();
-  const [isMobile, setIsMobile] = React.useState(isMobileApp());
+  // Only the AgroYilt app's own WebView goes straight to the app entry screen; a phone browser sees the website
+  const [inApp, setInApp] = React.useState(isFlutterWebView());
 
   // AppEntry verifies any stored login with the server before opening a dashboard
   const getMobileRedirect = () => '/app';
 
   React.useEffect(() => {
-    const handleResize = () => setIsMobile(isMobileApp());
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    // The WebView bridge can appear just after the page loads
+    const onReady = () => setInApp(true);
+    window.addEventListener('flutterInAppWebViewPlatformReady', onReady);
+    return () => window.removeEventListener('flutterInAppWebViewPlatformReady', onReady);
   }, []);
 
   React.useEffect(() => {
@@ -76,14 +78,13 @@ const AppRoutes = () => {
 
         {/*
           Landing experience:
-          - Desktop browser  → shows the existing landing page
-          - Mobile browser   → redirects to /app (native-feel entry screen)
-          - Flutter WebView  → redirects to /app (native-feel entry screen)
+          - Any browser (desktop or phone) → shows the landing page
+          - Flutter WebView (the app)      → redirects to /app (native-feel entry screen)
         */}
         <Route
           path="/"
           element={
-            isMobile
+            inApp
               ? <Navigate to={getMobileRedirect()} replace />
               : <LandingPage />
           }

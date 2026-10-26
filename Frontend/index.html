@@ -61,7 +61,7 @@
     content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https: blob:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: http: https:; media-src 'self' data: blob: http: https:; font-src 'self' data: https:; connect-src 'self' https: wss: ws: http://localhost:* http://127.0.0.1:* blob:; frame-src 'self' https:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self';">
   <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 
-  <!-- Mobile entry (/ and /app): match the green entry screen so there is no white flash after the native splash -->
+  <!-- Mobile entry (/app, and / inside the app): match the green entry screen so there is no white flash after the native splash -->
   <style>
     html.app-splash,
     html.app-splash body,
@@ -72,8 +72,9 @@
   <script>
     (function () {
       var p = location.pathname;
-      var isEntry = p === '/' || p === '/app' || p === '/app/';
       var isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent) || window.innerWidth <= 820;
+      // The green entry screen is /app, and / only inside the app's WebView (a phone browser shows the website at /)
+      var isEntry = p === '/app' || p === '/app/' || (p === '/' && !!window.flutter_inappwebview);
       if (isEntry && isMobile) {
         document.documentElement.classList.add('app-splash');
         document.querySelector('meta[name="theme-color"]').setAttribute('content', '#1B5E20');
