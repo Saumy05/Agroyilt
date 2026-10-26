@@ -1071,6 +1071,43 @@ exports.createFarmerRequest = async (req, res) => {
       }
     }
 
+    // ── Compute expiresAt with smart clamping ─────────────────────────────────
+    // BUG FIX: The accept-window TTL must NEVER expire before the scheduled job starts.
+    // Example: farmer posts at 13:31 with a 30-min window → TTL = 14:01.
+    //          But if the job is at 14:15, the request silently expires at 14:01 before
+    //          workers can respond, leaving dispatchedTo=[] and status='expired'.
+    // Fix: expiresAt = max(now + acceptWindowMs, scheduledJobStart - 15min)
+    //      so workers always have at least 5 min to see and accept the request.
+    const acceptWindowMs = await getAcceptWindowMs();
+    const ttlExpiry = new Date(Date.now() + acceptWindowMs);
+
+    // Compute the scheduled job start time as a Date (HOURLY: scheduledDate + startTime, DAILY: startDate 00:00 IST)
+    let scheduledJobStart = null;
+    if (!isDaily && scheduledDate && startTime) {
+      try {
+        const istDate = getIstDateString(new Date(scheduledDate));
+        if (istDate) scheduledJobStart = new Date(`${istDate}T${startTime}:00+05:30`);
+      } catch (_) {}
+    } else if (isDaily && startDate) {
+      try {
+        const istDate = getIstDateString(new Date(startDate));
+        if (istDate) scheduledJobStart = new Date(`${istDate}T00:00:00+05:30`);
+      } catch (_) {}
+    }
+
+    let requestExpiresAt = ttlExpiry;
+    if (scheduledJobStart && !isNaN(scheduledJobStart.getTime())) {
+      // Keep request open until at least 15 min before the job starts (min floor: 5 min from now)
+      const jobMinus15 = new Date(scheduledJobStart.getTime() - 15 * 60 * 1000);
+      const floorExpiry = new Date(Date.now() + 5 * 60 * 1000);
+      if (jobMinus15 > ttlExpiry) {
+        requestExpiresAt = jobMinus15; // extend TTL to cover time until the job
+      }
+      // Never set expiresAt in the past or < 5 min from now
+      if (requestExpiresAt < floorExpiry) requestExpiresAt = floorExpiry;
+    }
+    console.log(`[createFarmerRequest] expiresAt: ${requestExpiresAt.toISOString()} | ttlExpiry: ${ttlExpiry.toISOString()} | scheduledJobStart: ${scheduledJobStart?.toISOString() || 'N/A'}`);
+
     // ── Build request document ─────────────────────────────────────────────
     let requestDoc = {
       farmerId,
@@ -1102,7 +1139,7 @@ exports.createFarmerRequest = async (req, res) => {
       breakDurationHours: Number(req.body.breakDurationHours) || 1,
       workDurationHours:  Number(req.body.workDurationHours) || 8,
       status: 'matching',
-      expiresAt: new Date(Date.now() + await getAcceptWindowMs()) // nobody accepted by then: the request expires
+      expiresAt: requestExpiresAt
     };
 
     const targetedWorkerId = req.body.targetedWorkerId || req.body.workerId;
@@ -1347,11 +1384,19 @@ function buildSkillQuery(requiredSkills, extra = {}) {
 
   if (!requiredSkills || !requiredSkills.length) return base;
 
-  const regex = requiredSkills.map(s => new RegExp(`^${s}$`, 'i'));
+  const escapeRegex = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  const regex = requiredSkills
+    .map(s => (typeof s === 'string' ? s.trim() : ''))
+    .filter(Boolean)
+    .map(s => new RegExp(`^${escapeRegex(s)}$`, 'i'));
+
   const words = requiredSkills
-    .flatMap(s => (typeof s === 'string' ? s.split(/[\s,]+/) : []))
+    .flatMap(s => (typeof s === 'string' ? s.replace(/[()\/\\,]/g, ' ').split(/\s+/) : []))
+    .map(w => w.trim())
     .filter(w => w && w.length > 2);
-  words.forEach(w => regex.push(new RegExp(w, 'i')));
+
+  words.forEach(w => regex.push(new RegExp(escapeRegex(w), 'i')));
 
   return {
     ...base,

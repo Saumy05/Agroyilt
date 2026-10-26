@@ -61,3 +61,5 @@ refactor_cash3.js
 refactor_controller.js
 refactor_routes.js  
  
+# database backups (real user data)
+backups/

@@ -39,10 +39,19 @@ const sendSMS = async (phone, message, options = {}) => {
       params.user = process.env.SMS_INDIA_HUB_USERNAME;
     }
 
-    // Add DLT Template ID if available
+    // Add DLT Template ID and PE ID if available
     const templateId = options.templateId || process.env.SMS_INDIA_HUB_DLT_TEMPLATE_ID;
     if (templateId) {
       params.TemplateId = templateId;
+      params.templateid = templateId;
+    }
+
+    const peId = options.peId || process.env.SMS_INDIA_HUB_PE_ID;
+    if (peId) {
+      params.peid = peId;
+      params.PEId = peId;
+      params.entityid = peId;
+      params.EntityId = peId;
     }
 
     // Use HTTPS for secure transmission
@@ -100,8 +109,9 @@ const sendSMS = async (phone, message, options = {}) => {
  * @param {string} otp - OTP code
  */
 const sendOTP = async (phone, otp) => {
-  // DLT-compliant message format (must match registered template)
-  const appName = 'Agroyilt';
+  // DLT-compliant message format (must match registered template in SMSIndiaHub):
+  // Template: Welcome to the {#var#} powered by Appzeto.Your OTP for registration is {#var#}.BGADEC
+  const appName = 'Agroylit';
   const message = `Welcome to the ${appName} powered by Appzeto.Your OTP for registration is ${otp}.BGADEC`;
 
   console.log(`[SMS] Attempting to send OTP to ${phone}`);
