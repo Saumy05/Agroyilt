@@ -74,6 +74,7 @@ exports.updateSettings = async (req, res, next) => {
       workerPenaltyMaxAmount,
       workerPenaltyPercentage,
       extensionExpiryMinutes,
+      workerRequestAcceptMinutes,
       // Worker dues & cash
       maxWorkerDues,
       workerCashPaymentEnabled,
@@ -242,6 +243,13 @@ exports.updateSettings = async (req, res, next) => {
       if (workerPenaltyMaxAmount !== undefined) settings.workerPenaltyMaxAmount = Math.max(0, Number(workerPenaltyMaxAmount) || 0);
       if (workerPenaltyPercentage !== undefined) settings.workerPenaltyPercentage = Math.min(100, Math.max(0, Number(workerPenaltyPercentage) || 0));
       if (extensionExpiryMinutes !== undefined) settings.extensionExpiryMinutes = Math.max(1, Number(extensionExpiryMinutes) || 30);
+      if (workerRequestAcceptMinutes !== undefined) {
+        const val = Math.floor(Number(workerRequestAcceptMinutes));
+        if (!Number.isFinite(val) || val < 5 || val > 1440) {
+          return res.status(400).json({ success: false, message: 'Time to wait for a worker to accept must be between 5 and 1440 minutes.' });
+        }
+        settings.workerRequestAcceptMinutes = val;
+      }
       // Dues above this block a worker from new jobs (see services/workerDuesService.syncDuesRestriction)
       if (maxWorkerDues !== undefined) settings.maxWorkerDues = Math.max(0, Number(maxWorkerDues) || 0);
       if (workerCashPaymentEnabled !== undefined) settings.workerCashPaymentEnabled = Boolean(workerCashPaymentEnabled);

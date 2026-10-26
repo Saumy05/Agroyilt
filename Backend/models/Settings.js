@@ -299,6 +299,14 @@ const settingsSchema = new mongoose.Schema({
     default: 30,
     min: 1
   },
+  // How long a farmer's worker request waits for a worker to accept. If nobody accepts in this time the request expires
+  // (the farmer is told, nothing was charged). Once a worker accepts, the farmer gets the usual longer time to choose and pay.
+  workerRequestAcceptMinutes: {
+    type: Number,
+    default: 30,
+    min: 5,
+    max: 1440
+  },
 
   // ==========================================
   // WORKER PENALTY SETTINGS (HOURLY ONLY)

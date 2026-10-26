@@ -74,6 +74,7 @@ const AdminSettings = () => {
     workerPenaltyMaxAmount: 500,
     workerPenaltyPercentage: 5,
     extensionExpiryMinutes: 30,
+    workerRequestAcceptMinutes: 30,
     maxWorkerDues: 500,
     supportMaxOpenClaims: 5,
     workerJourneyWindowMinutes: 120,
@@ -400,6 +401,7 @@ const AdminSettings = () => {
             workerPenaltyMaxAmount: res.settings.workerPenaltyMaxAmount ?? 500,
             workerPenaltyPercentage: res.settings.workerPenaltyPercentage ?? 5,
             extensionExpiryMinutes: res.settings.extensionExpiryMinutes ?? 30,
+            workerRequestAcceptMinutes: res.settings.workerRequestAcceptMinutes ?? 30,
             maxWorkerDues: res.settings.maxWorkerDues ?? 500,
             supportMaxOpenClaims: res.settings.supportMaxOpenClaims ?? 5,
             workerJourneyWindowMinutes: res.settings.workerJourneyWindowMinutes ?? 120,
@@ -625,6 +627,7 @@ const AdminSettings = () => {
         maxIndependentWorkerRequest: Number(systemSettings.maxIndependentWorkerRequest) || 5,
         workerSearchRadiusKm: Number(systemSettings.workerSearchRadiusKm) || 25,
         extensionExpiryMinutes: Number(systemSettings.extensionExpiryMinutes) || 30,
+        workerRequestAcceptMinutes: Math.min(1440, Math.max(5, Math.floor(Number(systemSettings.workerRequestAcceptMinutes)) || 30)),
         supportMaxOpenClaims: Math.min(50, Math.max(1, Math.floor(Number(systemSettings.supportMaxOpenClaims)) || 5)),
         workerJourneyWindowMinutes: Math.max(0, Number(systemSettings.workerJourneyWindowMinutes) || 0),
         workerEarlyStartMinutes: Math.max(0, Number(systemSettings.workerEarlyStartMinutes) || 0)
@@ -1768,6 +1771,13 @@ const AdminSettings = () => {
                           min="1" max="180"
                           className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-gray-500 transition-all font-bold text-gray-800" />
                         <p className="text-[10px] text-gray-400 mt-1">Time workers have to accept extension requests.</p>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Wait for a Worker to Accept (Mins)</label>
+                        <input type="number" name="workerRequestAcceptMinutes" value={systemSettings.workerRequestAcceptMinutes} onChange={handleSystemChange}
+                          min="5" max="1440"
+                          className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-gray-500 transition-all font-bold text-gray-800" />
+                        <p className="text-[10px] text-gray-400 mt-1">A farmer's worker request expires if no worker accepts in this time. Once one accepts, the farmer gets longer to choose and pay.</p>
                       </div>
                     </div>
                   </div>

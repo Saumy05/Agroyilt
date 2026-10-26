@@ -46,7 +46,21 @@ const ONLINE_STATUSES = [
 ];
 
 // Request expires after 24 hours
-const REQUEST_TTL_MS = 24 * 60 * 60 * 1000;
+const REQUEST_TTL_MS = 24 * 60 * 60 * 1000; // time the farmer has to choose and pay once a worker has accepted
+
+/**
+ * How long a new request waits for a worker to accept before it expires (admin: Settings > Worker settings, default 30 min).
+ * A request nobody accepted in that time expires on its own; the first acceptance gives the farmer REQUEST_TTL_MS more.
+ */
+const getAcceptWindowMs = async () => {
+  try {
+    const s = await Settings.findOne({ type: 'global' }).select('workerRequestAcceptMinutes').lean();
+    const min = Number(s?.workerRequestAcceptMinutes);
+    return (Number.isFinite(min) && min >= 5 ? min : 30) * 60 * 1000;
+  } catch (_) {
+    return 30 * 60 * 1000;
+  }
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1085,7 +1099,7 @@ exports.createFarmerRequest = async (req, res) => {
       breakDurationHours: Number(req.body.breakDurationHours) || 1,
       workDurationHours:  Number(req.body.workDurationHours) || 8,
       status: 'matching',
-      expiresAt: new Date(Date.now() + REQUEST_TTL_MS)
+      expiresAt: new Date(Date.now() + await getAcceptWindowMs()) // nobody accepted by then: the request expires
     };
 
     const targetedWorkerId = req.body.targetedWorkerId || req.body.workerId;
@@ -1460,6 +1474,8 @@ async function dispatchWave(request, workers, farmerName, isSubsequentWave = fal
  * A7: After delayMs, if no Team Leader has accepted, auto-fall back to independent worker pool.
  */
 async function scheduleTeamLeaderFallback(request, normalSkills, radiusKm, delayMs = 30 * 60 * 1000) {
+  // the fallback must happen well before the request expires (half of the admin's wait-for-acceptance time at most)
+  delayMs = Math.min(delayMs, Math.floor((await getAcceptWindowMs()) / 2));
   setTimeout(async () => {
     try {
       const fresh = await WorkerBookingRequest.findById(request._id).lean();
@@ -2950,7 +2966,11 @@ exports.workerRespondToFarmerRequest = async (req, res) => {
 
     const moved = await WorkerBookingRequest.findOneAndUpdate(
       { _id: updated._id, status: { $in: RESPONDABLE } },
-      { $set: { acceptedWorkersCount: acceptedCount, rejectedWorkersCount: rejectedCount, ...(nextStatus !== updated.status ? { status: nextStatus } : {}) } },
+      {
+        $set: { acceptedWorkersCount: acceptedCount, rejectedWorkersCount: rejectedCount, ...(nextStatus !== updated.status ? { status: nextStatus } : {}) },
+        // someone accepted: the farmer now gets the longer time to choose and pay (never shortens an existing deadline)
+        ...(action === 'accept' ? { $max: { expiresAt: new Date(Date.now() + REQUEST_TTL_MS) } } : {})
+      },
       { new: true }
     );
     const statusChanged = !!moved && nextStatus !== updated.status;
