@@ -78,7 +78,8 @@ const AdminSettings = () => {
     maxWorkerDues: 500,
     supportMaxOpenClaims: 5,
     workerJourneyWindowMinutes: 120,
-    workerEarlyStartMinutes: 30
+    workerEarlyStartMinutes: 30,
+    farmerAutoApproval: false
   });
   const [systemLoading, setSystemLoading] = useState(false);
 
@@ -405,7 +406,8 @@ const AdminSettings = () => {
             maxWorkerDues: res.settings.maxWorkerDues ?? 500,
             supportMaxOpenClaims: res.settings.supportMaxOpenClaims ?? 5,
             workerJourneyWindowMinutes: res.settings.workerJourneyWindowMinutes ?? 120,
-            workerEarlyStartMinutes: res.settings.workerEarlyStartMinutes ?? 30
+            workerEarlyStartMinutes: res.settings.workerEarlyStartMinutes ?? 30,
+            farmerAutoApproval: res.settings.farmerAutoApproval === true
           });
           // Load support settings
           setSupportSettings({
@@ -630,7 +632,8 @@ const AdminSettings = () => {
         workerRequestAcceptMinutes: Math.min(1440, Math.max(5, Math.floor(Number(systemSettings.workerRequestAcceptMinutes)) || 30)),
         supportMaxOpenClaims: Math.min(50, Math.max(1, Math.floor(Number(systemSettings.supportMaxOpenClaims)) || 5)),
         workerJourneyWindowMinutes: Math.max(0, Number(systemSettings.workerJourneyWindowMinutes) || 0),
-        workerEarlyStartMinutes: Math.max(0, Number(systemSettings.workerEarlyStartMinutes) || 0)
+        workerEarlyStartMinutes: Math.max(0, Number(systemSettings.workerEarlyStartMinutes) || 0),
+        farmerAutoApproval: Boolean(systemSettings.farmerAutoApproval)
       };
       await updateSettings(payload);
       toastManager.success('System preferences & worker rules updated');
@@ -1747,6 +1750,21 @@ const AdminSettings = () => {
                 </div>
 
                 <form onSubmit={handleSystemSave} className="space-y-6">
+                  {/* Farmer sign-up approval */}
+                  <div className="border border-gray-200 rounded-xl p-4">
+                    <h3 className="text-sm font-bold text-gray-800 mb-2">Farmer Sign-up Approval</h3>
+                    <label className="flex items-center gap-3 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg cursor-pointer">
+                      <input
+                        type="checkbox" name="farmerAutoApproval"
+                        checked={Boolean(systemSettings.farmerAutoApproval)}
+                        onChange={handleSystemChange}
+                        className="w-4 h-4 accent-green-600"
+                      />
+                      <span className="text-sm font-bold text-gray-800">Approve new farmers automatically</span>
+                    </label>
+                    <p className="text-[10px] text-gray-400 mt-1">Off (default): every new farmer waits for an admin to approve them. On: new farmers are approved as soon as they register and go straight to the registration fee, if one is set. Farmers already waiting are not changed, and vendors and workers always need approval.</p>
+                  </div>
+
                   {/* Worker Routing Rules */}
                   <div>
                     <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-3">Worker Dispatch & Routing</h3>

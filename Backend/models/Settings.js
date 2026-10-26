@@ -95,6 +95,11 @@ const settingsSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  // Farmer sign-up approval: off = every new farmer waits for an admin to approve; on = new farmers are approved on registration
+  farmerAutoApproval: {
+    type: Boolean,
+    default: false
+  },
   // The admin can switch a lease type off: it is no longer offered for new listings, offers or leases (existing leases carry on)
   landLeaseFixedRentEnabled: {
     type: Boolean,

@@ -247,7 +247,7 @@ const Signup = () => {
         toastManager.success(
           <div className="flex flex-col">
             <span className="font-bold">Successfully Registered!</span>
-            <span className="text-xs">Your farmer account is pending admin approval.</span>
+            <span className="text-xs">{response.user?.approvalStatus === 'approved' ? 'Set your MPIN to continue.' : 'Your farmer account is pending admin approval.'}</span>
           </div>,
           { icon: <FiCheckCircle className="text-green-500" /> }
         );

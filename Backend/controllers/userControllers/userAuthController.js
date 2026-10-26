@@ -176,6 +176,11 @@ const register = async (req, res) => {
       });
     }
 
+    // Admin setting: approve new farmers on registration instead of waiting for an admin (off by default)
+    const Settings = require('../../models/Settings');
+    const globalSettings = await Settings.findOne({ type: 'global' }).select('farmerAutoApproval').lean();
+    const autoApproved = globalSettings?.farmerAutoApproval === true;
+
     // Create user
     const user = await User.create({
       name,
@@ -185,7 +190,8 @@ const register = async (req, res) => {
       isPhoneVerified: true,
       isEmailVerified: !!normalizedEmail ? false : true,
       isMpinSet: false,
-      approvalStatus: 'pending'
+      approvalStatus: autoApproved ? 'approved' : 'pending',
+      ...(autoApproved ? { approvalDate: new Date() } : {})
     });
 
     // Process Referral Attribution if referral code provided
@@ -205,6 +211,16 @@ const register = async (req, res) => {
       }
     }
 
+    // Same follow-up as an admin approval: the referrer's reward qualifies on approval
+    if (autoApproved) {
+      try {
+        const referralService = require('../../services/referralService');
+        await referralService.qualifyAndRewardReferral({ referredUserId: user._id, event: 'approval' });
+      } catch (refErr) {
+        console.error('Referral qualification error for auto-approved farmer:', refErr);
+      }
+    }
+
     // Auto-create unique referral code for this new farmer
     try {
       const referralService = require('../../services/referralService');
@@ -213,8 +229,8 @@ const register = async (req, res) => {
       console.error('Auto-generate referral code error for farmer:', e);
     }
 
-    // Notify Admins about new Farmer registration
-    try {
+    // Notify Admins about new Farmer registration (nothing for them to approve when auto-approved)
+    if (!autoApproved) try {
       const { createNotification } = require('../notificationControllers/notificationController');
       const Admin = require('../../models/Admin');
       const admins = await Admin.find({ isActive: true }).select('_id');
@@ -245,7 +261,7 @@ const register = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: 'Registration successful! Pending admin approval.',
+      message: autoApproved ? 'Registration successful!' : 'Registration successful! Pending admin approval.',
       user: {
         id: user._id,
         name: user.name,
