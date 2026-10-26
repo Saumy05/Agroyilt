@@ -7,6 +7,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toastManager } from '../../../../../utils/toastManager';
 import { workLength } from '../../../../../utils/workerPayment';
 
+// The last minutes of a booking in which the farmer may ask for more time (the server enforces it too)
+const EXTENSION_WINDOW_MINUTES = 10;
+
 /**
  * ActiveWorkMonitoringHub
  *
@@ -120,6 +123,9 @@ const ActiveWorkMonitoringHub = ({
   // Progress and schedule metrics
   const elapsedMinutes = Math.floor(elapsedSeconds / 60);
   const progressPercent = Math.min(100, Math.round((elapsedMinutes / durationMinutes) * 100));
+  // Extra time can only be asked for in the last minutes of the booked time (the server checks the same); daily bookings add days any time
+  const extensionOpen = isDaily || elapsedSeconds / 60 >= durationMinutes - EXTENSION_WINDOW_MINUTES;
+  const extensionOpensInMinutes = extensionOpen ? 0 : Math.ceil(durationMinutes - EXTENSION_WINDOW_MINUTES - elapsedSeconds / 60);
   const isOvertime = !isDaily && elapsedMinutes > durationMinutes;
   const overtimeMinutes = isOvertime ? elapsedMinutes - durationMinutes : 0;
 
@@ -380,17 +386,27 @@ const ActiveWorkMonitoringHub = ({
         ) : null
       )}
 
-      {/* ── Extend Time Action Button ── */}
+      {/* ── Extend Time Action Button: only in the last 10 minutes of the booked time (and after, while work goes on) ── */}
       {onOpenExtensionModal && (
         <div className="pt-1">
           <button
             type="button"
-            onClick={onOpenExtensionModal}
-            className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-md shadow-emerald-600/20 active:scale-98 transition-all flex items-center justify-center gap-2"
+            onClick={extensionOpen ? onOpenExtensionModal : undefined}
+            disabled={!extensionOpen}
+            className={`w-full py-3 font-black text-xs uppercase tracking-wider rounded-2xl transition-all flex items-center justify-center gap-2 ${
+              extensionOpen
+                ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-md shadow-emerald-600/20 active:scale-98'
+                : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+            }`}
           >
             <FiClock className="w-4 h-4" />
             <span>Need More Time? Extend Booking (+30 min / +1 hr)</span>
           </button>
+          {!extensionOpen && (
+            <p className="text-[11px] text-slate-500 font-medium text-center mt-1.5">
+              Available in the last {EXTENSION_WINDOW_MINUTES} minutes of the booking{extensionOpensInMinutes ? ` (in about ${workLength({ minutes: extensionOpensInMinutes })})` : ''}.
+            </p>
+          )}
         </div>
       )}
     </div>

@@ -514,7 +514,8 @@ const BookedRequestView = ({ request, onRefresh }) => {
         <div className={card}>
           <h2 className="font-black text-slate-900 mb-3">Manage booking</h2>
           <div className="grid grid-cols-2 gap-2.5">
-            {!allDone && anyStarted && (
+            {/* Hourly bookings are extended from the live work card (last 10 minutes only); this tile is for adding days */}
+            {!allDone && anyStarted && isDaily && (
               <button type="button" onClick={() => setModal('extend')} className="p-3 rounded-2xl border border-slate-200 text-left">
                 <FiPlusCircle className="text-emerald-600 mb-1" />
                 <span className="block text-sm font-bold text-slate-900">{isDaily ? 'Add days' : 'Extend time'}</span>

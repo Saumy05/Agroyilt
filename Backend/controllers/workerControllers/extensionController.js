@@ -183,6 +183,27 @@ exports._announceExtensionConfirmed = announceExtensionConfirmed;
  * POST /api/user/farmer-worker-request/:id/extension
  * Body: { selectedWorkerIds: [], extensionMinutes: 30, additionalDays: 1 }
  */
+/** An hourly booking can only be extended in the last minutes before it is due to finish (and any time after, while work goes on). */
+const EXTENSION_WINDOW_MINUTES = 10;
+
+/**
+ * When the booked time ends and from when "need more time" is allowed. The clock is the one the farmer sees: the earliest work
+ * start + the booked minutes (extensions already added) + the breaks taken, since a break does not use up the booked time.
+ */
+const hourlyExtensionWindow = (request, assignments, now = Date.now()) => {
+  const started = assignments
+    .filter((a) => a.workStartedAt)
+    .sort((a, b) => new Date(a.workStartedAt) - new Date(b.workStartedAt))[0];
+  if (!started) return { open: false, notStarted: true };
+  const runningBreakMin = started.breakStatus === 'ON_BREAK' && started.breakStartedAt
+    ? Math.max(0, (now - new Date(started.breakStartedAt).getTime()) / 60000) : 0;
+  const breakMs = ((Number(started.breakDurationMinutes) || 0) + runningBreakMin) * 60000;
+  const endsAt = new Date(started.workStartedAt).getTime() + (Number(request.durationMinutes) || 60) * 60000 + breakMs;
+  const opensAt = endsAt - EXTENSION_WINDOW_MINUTES * 60000;
+  return { open: now >= opensAt, opensAt, endsAt };
+};
+exports._hourlyExtensionWindow = hourlyExtensionWindow;
+
 exports.createExtension = async (req, res) => {
   try {
     const farmerId = req.user._id;
@@ -235,6 +256,21 @@ exports.createExtension = async (req, res) => {
     });
     if (assignments.length === 0) {
       return res.status(400).json({ success: false, message: 'No valid active assignments found for selected workers' });
+    }
+
+    if (!isDaily) {
+      const win = hourlyExtensionWindow(request, assignments);
+      if (!win.open) {
+        const at = win.opensAt ? new Date(win.opensAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }) : null;
+        return res.status(409).json({
+          success: false,
+          code: 'EXTENSION_NOT_YET',
+          message: win.notStarted
+            ? 'Work has not started yet. You can ask for more time in the last 10 minutes of the booking.'
+            : `You can ask for more time in the last ${EXTENSION_WINDOW_MINUTES} minutes of the booking${at ? `, from ${at}` : ''}.`,
+          opensAt: win.opensAt || null
+        });
+      }
     }
 
     const settings = await getWorkerFinancialSettings();

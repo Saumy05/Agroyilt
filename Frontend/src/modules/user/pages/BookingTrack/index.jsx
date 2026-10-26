@@ -877,7 +877,8 @@ const BookingTrack = () => {
                 {trackingData?.bookingType === 'DAILY' ? 'Daily Schedule' : 'Hourly Booking'}
               </span>
 
-              {!isAllCompleted && (
+              {/* Hourly bookings are extended from the live work card (last 10 minutes only); this button is for adding days */}
+              {!isAllCompleted && trackingData?.bookingType === 'DAILY' && (
                 <button
                   type="button"
                   id="farmer-extend-time-btn"
