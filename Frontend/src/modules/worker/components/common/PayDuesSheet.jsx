@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { FiX, FiCreditCard, FiUser } from 'react-icons/fi';
 import workerWalletService from '../../../../services/workerWalletService';
 import { toastManager } from '../../../../utils/toastManager';
+import { waitForServerPayment } from '../../../../utils/paymentRecovery';
 
 const loadRazorpay = () => new Promise((resolve) => {
   if (window.Razorpay) return resolve(true);
@@ -39,6 +40,22 @@ const PayDuesSheet = ({ isOpen, onClose, dues, hasPendingOffline, onDone }) => {
       const order = await workerWalletService.createDuesOrder(amount === '' ? undefined : value);
       const key = order.data.key || import.meta.env.VITE_RAZORPAY_KEY_ID;
       if (!key) throw new Error('Online payment is not configured.');
+      // Razorpay can say "failed"/closed after a UPI app paid; the server may already have applied it (verify call or webhook)
+      const recoverIfPaid = async (failMessage) => {
+        toastManager.info('Checking payment status...');
+        const paid = await waitForServerPayment(async () => {
+          const w = await workerWalletService.getWallet();
+          return Number(w?.data?.outstandingDues) < Number(dues);
+        });
+        if (paid) {
+          toastManager.success('Dues paid');
+          onDone();
+          close();
+        } else if (failMessage) {
+          toastManager.error(failMessage);
+        }
+        setBusy(false);
+      };
       const rzp = new window.Razorpay({
         key,
         amount: Math.round(order.data.amount * 100),
@@ -63,9 +80,10 @@ const PayDuesSheet = ({ isOpen, onClose, dues, hasPendingOffline, onDone }) => {
             setBusy(false);
           }
         },
-        modal: { ondismiss: () => setBusy(false) },
+        modal: { ondismiss: () => { recoverIfPaid(); } },
         theme: { color: '#0F766E' }
       });
+      rzp.on('payment.failed', (resp) => { recoverIfPaid(resp?.error?.description || 'Payment failed'); });
       rzp.open();
     } catch (err) {
       toastManager.error(err?.message || 'Could not start the payment');

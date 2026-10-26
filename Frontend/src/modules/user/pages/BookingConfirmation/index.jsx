@@ -19,6 +19,7 @@ import {
   FiCreditCard
 } from 'react-icons/fi';
 import { bookingService } from '../../../../services/bookingService';
+import { waitForServerPayment } from '../../../../utils/paymentRecovery';
 import { paymentService } from '../../../../services/paymentService';
 import { useSocket } from '../../../../context/SocketContext';
 import NotificationBell from '../../components/common/NotificationBell';
@@ -107,6 +108,23 @@ const BookingConfirmation = () => {
   const [showReselectModal, setShowReselectModal] = useState(false);
   const [paying, setPaying] = useState(false);
 
+  // Razorpay can say "failed"/closed after a UPI app paid; the server may already have the payment (verify call or webhook)
+  const recoverIfPaid = async (failMessage) => {
+    toastManager.info('Checking payment status...');
+    const paid = await waitForServerPayment(async () => {
+      const r = await bookingService.getById(id);
+      return !!(r.success && r.data?.paymentStatus === 'success');
+    });
+    if (paid) {
+      toastManager.success('Payment successful!');
+      const refetch = await bookingService.getById(id);
+      if (refetch.success) setBooking(refetch.data);
+    } else if (failMessage) {
+      toastManager.error(failMessage);
+    }
+    setPaying(false);
+  };
+
   const handleOnlinePayment = async () => {
     if (paying || !booking) return;
 
@@ -156,7 +174,7 @@ const BookingConfirmation = () => {
         },
         modal: {
           ondismiss: function () {
-            setPaying(false);
+            recoverIfPaid();
           }
         },
         prefill: {
@@ -170,8 +188,7 @@ const BookingConfirmation = () => {
 
       const razorpay = new window.Razorpay(options);
       razorpay.on('payment.failed', function (resp) {
-        toastManager.error(`Payment failed: ${resp.error?.description || 'Transaction unsuccessful'}`);
-        setPaying(false);
+        recoverIfPaid(`Payment failed: ${resp.error?.description || 'Transaction unsuccessful'}`);
       });
       razorpay.open();
     } catch (error) {

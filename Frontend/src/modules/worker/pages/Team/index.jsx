@@ -15,6 +15,7 @@ import DobInput from '../../../../components/common/DobInput';
 import { getDobError, toDateInputValue } from '../../../../utils/age';
 import workerRequestService from '../../../../services/workerRequestService';
 import { useWorkCategories } from '../../../../hooks/useWorkCategories';
+import { waitForServerPayment } from '../../../../utils/paymentRecovery';
 
 const loadRazorpay = () => new Promise((resolve) => {
   if (window.Razorpay) return resolve(true);
@@ -81,6 +82,20 @@ const WorkerTeam = () => {
     const order = orderRes.data.data;
     const key = order.key || import.meta.env.VITE_RAZORPAY_KEY_ID;
     if (!key) throw new Error('Online payment is not configured.');
+    // Razorpay can say "failed"/closed after a UPI app paid; the server may already have activated the member (verify call or webhook)
+    const recoverIfPaid = async (failMessage) => {
+      const paid = await waitForServerPayment(async () => {
+        const r = await api.get('/workers/team/me');
+        const m = (r.data?.members || []).find(x => String(x._id) === String(memberId));
+        return !!m && m.registrationFeeStatus === 'PAID';
+      });
+      if (paid) {
+        toastManager.success('Registration fee paid');
+        return true;
+      }
+      if (failMessage) throw new Error(failMessage);
+      return false;
+    };
     return new Promise((resolve, reject) => {
       const rzp = new window.Razorpay({
         key,
@@ -102,8 +117,11 @@ const WorkerTeam = () => {
             reject(err);
           }
         },
-        modal: { ondismiss: () => resolve(false) },
+        modal: { ondismiss: () => { recoverIfPaid().then(resolve, reject); } },
         theme: { color: '#059669' }
+      });
+      rzp.on('payment.failed', (resp) => {
+        recoverIfPaid(resp?.error?.description || 'Payment failed').then(resolve, reject);
       });
       rzp.open();
     });

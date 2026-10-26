@@ -8,6 +8,7 @@ import workerBookingService from '../../../../services/workerBookingService';
 import { walletService } from '../../../../services/walletService';
 import authStorage from '../../../../utils/authStorage';
 import usePaymentMethods from '../../../../hooks/usePaymentMethods';
+import { waitForServerPayment } from '../../../../utils/paymentRecovery';
 
 const WorkerSelectionPayment = () => {
   const { id } = useParams();
@@ -95,6 +96,13 @@ const WorkerSelectionPayment = () => {
     });
   };
 
+  // Razorpay can report "failed"/dismissed after a UPI app pays (slow UPI callback in the app's webview), while the
+  // server already confirmed the booking (verify call or webhook). Ask the server before showing a failure.
+  const confirmedOnServer = () => waitForServerPayment(async () => {
+    const res = await workerBookingService.getFarmerRequestById(id);
+    return res?.data?.paymentStatus === 'success';
+  });
+
   const handlePayment = async () => {
     try {
       setProcessing(true);
@@ -155,7 +163,15 @@ const WorkerSelectionPayment = () => {
           color: '#059669', // Emerald-600
         },
         modal: {
-          ondismiss: function () {
+          ondismiss: async function () {
+            toast.loading('Checking payment status...', { id: 'check-toast' });
+            const paid = await confirmedOnServer();
+            toast.dismiss('check-toast');
+            if (paid) {
+              toast.success('Payment successful! Booking Confirmed.');
+              navigate(`/user/farmer-worker-request/${id}`);
+              return;
+            }
             toast.error('Payment cancelled');
             setProcessing(false);
           }
@@ -163,7 +179,15 @@ const WorkerSelectionPayment = () => {
       };
 
       const paymentObject = new window.Razorpay(options);
-      paymentObject.on('payment.failed', function (resp) {
+      paymentObject.on('payment.failed', async function (resp) {
+        toast.loading('Checking payment status...', { id: 'check-toast' });
+        const paid = await confirmedOnServer();
+        toast.dismiss('check-toast');
+        if (paid) {
+          toast.success('Payment successful! Booking Confirmed.');
+          navigate(`/user/farmer-worker-request/${id}`);
+          return;
+        }
         toast.error(`Payment failed: ${resp.error?.description || 'Transaction unsuccessful'}`);
         setProcessing(false);
       });

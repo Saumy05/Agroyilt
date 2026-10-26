@@ -77,5 +77,10 @@ const settlementSchema = new mongoose.Schema({
 // Indexes
 settlementSchema.index({ vendorId: 1, createdAt: -1 });
 settlementSchema.index({ status: 1, createdAt: -1 });
+// one gateway payment can clear a vendor's dues at most once (verify call and webhook race on this)
+settlementSchema.index(
+  { paymentReference: 1 },
+  { unique: true, partialFilterExpression: { paymentMethod: 'razorpay', paymentReference: { $type: 'string' } } }
+);
 
 module.exports = mongoose.model('Settlement', settlementSchema);

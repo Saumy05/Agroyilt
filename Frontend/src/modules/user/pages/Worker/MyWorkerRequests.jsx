@@ -10,6 +10,7 @@ import toast from 'react-hot-toast';
 import workerBookingService from '../../../../services/workerBookingService';
 import { walletService } from '../../../../services/walletService';
 import authStorage from '../../../../utils/authStorage';
+import { waitForServerPayment } from '../../../../utils/paymentRecovery';
 import usePaymentMethods from '../../../../hooks/usePaymentMethods';
 
 // ── Status styles ───────────────────────────────────────────────────────────
@@ -216,6 +217,23 @@ const MyWorkerRequests = () => {
       const { orderId, amount, currency } = orderRes.data;
       const razorpayKey = orderRes.data.key || import.meta.env.VITE_RAZORPAY_KEY_ID;
 
+      // Razorpay can say "failed"/closed after a UPI app paid; the server may already have confirmed it (verify call or webhook)
+      const recoverIfPaid = async (failMessage) => {
+        toast.loading('Checking payment status...', { id: 'check-toast' });
+        const paid = await waitForServerPayment(async () => {
+          const r = await workerBookingService.getFarmerRequestById(req._id);
+          return r?.data?.paymentStatus === 'success';
+        });
+        toast.dismiss('check-toast');
+        if (paid) {
+          toast.success('Payment successful! Group Booking Confirmed.');
+          fetchRequests();
+        } else {
+          toast.error(failMessage);
+        }
+        setProcessingPaymentId(null);
+      };
+
       const options = {
         key: razorpayKey,
         amount: amount.toString(),
@@ -247,14 +265,12 @@ const MyWorkerRequests = () => {
           color: '#059669',
         },
         modal: {
-          ondismiss: function () {
-            toast.error('Payment cancelled');
-            setProcessingPaymentId(null);
-          }
+          ondismiss: function () { recoverIfPaid('Payment cancelled'); }
         }
       };
 
       const razorpayInstance = new window.Razorpay(options);
+      razorpayInstance.on('payment.failed', (resp) => { recoverIfPaid(`Payment failed: ${resp.error?.description || 'Transaction unsuccessful'}`); });
       razorpayInstance.open();
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Failed to start payment.', { id: 'pay-toast' });

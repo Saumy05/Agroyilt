@@ -105,6 +105,20 @@ const getPaymentDetails = async (paymentId) => {
 };
 
 /**
+ * Get order details (the amount and notes the SERVER fixed when it created the order)
+ */
+const getOrderDetails = async (orderId) => {
+  try {
+    if (!razorpay) return { success: false, error: 'Razorpay not initialized.' };
+    const order = await razorpay.orders.fetch(orderId);
+    return { success: true, order };
+  } catch (error) {
+    console.error('Razorpay get order error:', error.message);
+    return { success: false, error: error.error?.description || error.message };
+  }
+};
+
+/**
  * Refund payment
  */
 const refundPayment = async (paymentId, amount = null, notes = {}) => {
@@ -187,6 +201,7 @@ module.exports = {
   createOrder,
   verifyPayment,
   getPaymentDetails,
+  getOrderDetails,
   refundPayment
 };
 

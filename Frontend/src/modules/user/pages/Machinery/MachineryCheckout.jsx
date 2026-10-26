@@ -8,6 +8,7 @@ import {
 import { motion } from 'framer-motion';
 import { toastManager } from '../../../../utils/toastManager';
 import { bookingService } from '../../../../services/bookingService';
+import { waitForServerPayment } from '../../../../utils/paymentRecovery';
 import { paymentService } from '../../../../services/paymentService';
 import { configService } from '../../../../services/configService';
 import authStorage from '../../../../utils/authStorage';
@@ -385,6 +386,11 @@ const MachineryCheckout = () => {
                     }
 
                     const razorpayKey = orderRes.data?.key || import.meta.env.VITE_RAZORPAY_KEY_ID;
+                    // Razorpay can say "failed"/closed after a UPI app paid; the server may already have the payment (verify call or webhook)
+                    const paidOnServer = () => waitForServerPayment(async () => {
+                        const r = await bookingService.getById(newBookingId);
+                        return !!(r.success && r.data?.paymentStatus === 'success');
+                    });
                     const options = {
                         key: razorpayKey,
                         amount: Math.round((orderRes.data.amount || payableTotal) * 100),
@@ -421,7 +427,13 @@ const MachineryCheckout = () => {
                             color: '#047857'
                         },
                         modal: {
-                            ondismiss: function () {
+                            ondismiss: async function () {
+                                if (await paidOnServer()) {
+                                    toastManager.success('Payment successful! Booking Confirmed.');
+                                    sessionStorage.removeItem(`machinery_booking_${equipment._id}`);
+                                    goToConfirmation(newBookingId);
+                                    return;
+                                }
                                 toastManager.warning('Payment was not completed. You can pay anytime from Booking Details.');
                                 sessionStorage.removeItem(`machinery_booking_${equipment._id}`);
                                 goToConfirmation(newBookingId);
@@ -430,7 +442,13 @@ const MachineryCheckout = () => {
                     };
 
                     const rzp = new window.Razorpay(options);
-                    rzp.on('payment.failed', function (resp) {
+                    rzp.on('payment.failed', async function (resp) {
+                        if (await paidOnServer()) {
+                            toastManager.success('Payment successful! Booking Confirmed.');
+                            sessionStorage.removeItem(`machinery_booking_${equipment._id}`);
+                            goToConfirmation(newBookingId);
+                            return;
+                        }
                         toastManager.error(`Payment failed: ${resp.error?.description || 'Transaction unsuccessful'}`);
                         sessionStorage.removeItem(`machinery_booking_${equipment._id}`);
                         goToConfirmation(newBookingId);

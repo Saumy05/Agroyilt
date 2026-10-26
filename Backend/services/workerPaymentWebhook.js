@@ -11,7 +11,7 @@ const WorkerBookingRequest = require('../models/WorkerBookingRequest');
 const IndWorkerExtension = require('../models/IndWorkerExtension');
 
 /** @returns {{handled: boolean, retry?: boolean, note?: string}} */
-const handleCapturedPayment = async ({ orderId, paymentId, amountPaise }) => {
+const handleCapturedPayment = async ({ orderId, paymentId, amountPaise, notes }) => {
   const request = await WorkerBookingRequest.findOne({
     $or: [{ 'paymentOrders.orderId': orderId }, { razorpayOrderId: orderId }]
   }).select('_id farmerId');
@@ -50,7 +50,8 @@ const handleCapturedPayment = async ({ orderId, paymentId, amountPaise }) => {
     const r = await require('./workerDuesService').applyDuesPayment(dues._id, { fromStatus: 'CREATED', set: { razorpayPaymentId: paymentId } });
     return { handled: true, note: r.applied ? undefined : `Dues payment already ${r.payment?.status}` };
   }
-  return { handled: false };
+  // a vendor paying their dues to the platform (order notes carry type: 'vendor_settlement')
+  return require('./vendorSettlementService').handleCapturedPayment({ orderId, paymentId, notes });
 };
 
 module.exports = { handleCapturedPayment };

@@ -7,6 +7,7 @@ const Worker = require('../../models/Worker');
 const { uploadPaymentScreenshot } = require('../../utils/cloudinaryUpload');
 const { createOrder, verifyPayment } = require('../../services/razorpayService');
 const withdrawalService = require('../../services/withdrawalService');
+const vendorSettlementService = require('../../services/vendorSettlementService');
 
 /**
  * Get vendor wallet with ledger balance
@@ -476,65 +477,24 @@ const createSettlementOrder = async (req, res) => {
 const verifySettlementPayment = async (req, res) => {
   try {
     const vendorId = req.user.id;
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, amount } = req.body;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
 
     const isValid = verifyPayment(razorpay_order_id, razorpay_payment_id, razorpay_signature);
     if (!isValid) {
       return res.status(400).json({ success: false, message: 'Invalid payment signature' });
     }
 
-    const vendor = await Vendor.findById(vendorId);
-    if (!vendor) {
-      return res.status(404).json({ success: false, message: 'Vendor not found' });
-    }
-
-    const currentDues = vendor.wallet?.dues || 0;
-    const settlementAmount = parseFloat(amount);
-    
-    // Create an auto-approved settlement record
-    const settlement = await Settlement.create({
-      vendorId,
-      amount: settlementAmount,
-      balanceBefore: currentDues,
-      balanceAfter: currentDues - settlementAmount,
-      paymentMethod: 'razorpay',
-      paymentReference: razorpay_payment_id,
-      status: 'completed', // Auto completed
-      adminNotes: 'Automated Razorpay Settlement'
+    // amount + vendor come from the order the server created; one payment clears dues once (webhook may have got there first)
+    const result = await vendorSettlementService.applyCapturedPayment({
+      orderId: razorpay_order_id, paymentId: razorpay_payment_id, vendorId
     });
-
-    // Update Vendor Wallet
-    vendor.wallet.dues -= settlementAmount;
-    if (vendor.wallet.dues < 0) vendor.wallet.dues = 0;
-    
-    vendor.wallet.totalSettled = (vendor.wallet.totalSettled || 0) + settlementAmount;
-
-    // Check if we should unblock the vendor
-    const cashLimit = vendor.wallet.cashLimit || 10000;
-    const netOwed = vendor.wallet.dues - (vendor.wallet.earnings || 0);
-    if (vendor.wallet.isBlocked && netOwed <= cashLimit) {
-      vendor.wallet.isBlocked = false;
-      vendor.wallet.blockReason = null;
-      vendor.wallet.blockedAt = null;
+    if (!result.ok) {
+      return res.status(result.code || 400).json({ success: false, message: result.reason });
     }
-
-    await vendor.save();
-
-    // Create Transaction Record
-    await Transaction.create({
-      vendorId,
-      type: 'settlement',
-      amount: settlementAmount,
-      status: 'completed',
-      paymentMethod: 'razorpay',
-      referenceId: razorpay_payment_id,
-      description: `Settlement of ₹${settlementAmount} paid via Razorpay`,
-      metadata: { settlementId: settlement._id.toString() }
-    });
 
     res.status(200).json({
       success: true,
-      message: 'Settlement completed successfully'
+      message: result.already ? 'Settlement already completed' : 'Settlement completed successfully'
     });
 
   } catch (error) {

@@ -6,6 +6,7 @@ import Header from '../../components/layout/Header';
 import BottomNav from '../../components/layout/BottomNav';
 import vendorWalletService from '../../../../services/vendorWalletService';
 import { toastManager } from '../../../../utils/toastManager';
+import { waitForServerPayment } from '../../../../utils/paymentRecovery';
 
 const SettlementRequest = () => {
   const navigate = useNavigate();
@@ -87,6 +88,25 @@ const SettlementRequest = () => {
       }
 
       const { orderId, amount: orderAmount, currency, key } = orderRes.data;
+      const dueBefore = wallet.amountDue;
+
+      // Razorpay can report "failed"/closed after a UPI app pays (slow UPI callback), while the server already applied the
+      // payment (verify call or webhook). Ask the server before showing a failure.
+      const settledOnServer = () => waitForServerPayment(async () => {
+        const r = await vendorWalletService.getWallet();
+        return !!(r?.success && r.data.amountDue < dueBefore);
+      });
+      const finishIfSettled = async (failMessage) => {
+        toastManager.info('Checking payment status...', { id: 'verify' });
+        if (await settledOnServer()) {
+          toastManager.success('Payment successful!', { id: 'verify' });
+          sessionStorage.removeItem('cash_limit_modal_dismissed');
+          navigate('/vendor/wallet', { replace: true });
+          return;
+        }
+        toastManager.error(failMessage, { id: 'verify' });
+        setSubmitting(false);
+      };
 
       const options = {
         key: key,
@@ -121,12 +141,15 @@ const SettlementRequest = () => {
         },
         theme: {
           color: themeColors.primary || '#3B82F6'
+        },
+        modal: {
+          ondismiss: () => { finishIfSettled('Payment cancelled'); }
         }
       };
 
       const rzp = new window.Razorpay(options);
       rzp.on('payment.failed', function (response) {
-        toastManager.error(response.error.description || 'Payment failed');
+        finishIfSettled(response.error?.description || 'Payment failed');
       });
       
       rzp.open();

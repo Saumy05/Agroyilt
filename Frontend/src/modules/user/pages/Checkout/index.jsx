@@ -9,6 +9,7 @@ import AddressSelectionModal from './components/AddressSelectionModal';
 import TimeSlotModal from './components/TimeSlotModal';
 import VendorSearchModal from './components/VendorSearchModal';
 import { bookingService } from '../../../../services/bookingService';
+import { waitForServerPayment } from '../../../../utils/paymentRecovery';
 import { paymentService } from '../../../../services/paymentService';
 import { cartService } from '../../../../services/cartService';
 import { configService } from '../../../../services/configService';
@@ -767,6 +768,11 @@ const Checkout = () => {
         return;
       }
 
+      const paidOnServer = () => waitForServerPayment(async () => {
+        const r = await bookingService.getById(target._id);
+        return !!(r.success && r.data?.paymentStatus === 'success');
+      });
+
       const options = {
         key: razorpayKey,
         amount: orderResponse.data.amount * 100,
@@ -822,7 +828,14 @@ const Checkout = () => {
           contact: contactDetails.phone || userPhone
         },
         modal: heldBooking ? {
-          ondismiss: () => {
+          ondismiss: async () => {
+            // Razorpay can close after a UPI app paid; the server may already have the payment (verify call or webhook)
+            if (await paidOnServer()) {
+              setBookingRequest(heldBooking);
+              setCurrentStep('waiting');
+              toastManager.success('Payment successful! Request sent to the vendor.');
+              return;
+            }
             // Not paid: the vendor has NOT been contacted. Payment can be retried from the booking page.
             setSearchingVendors(false);
             setShowVendorModal(false);
@@ -836,7 +849,17 @@ const Checkout = () => {
       };
 
       const razorpay = new window.Razorpay(options);
-      razorpay.on('payment.failed', function (response) {
+      razorpay.on('payment.failed', async function (response) {
+        if (await paidOnServer()) {
+          toastManager.success('Payment successful!');
+          if (heldBooking) {
+            setBookingRequest(heldBooking);
+            setCurrentStep('waiting');
+          } else {
+            goToConfirmation(bookingRequest._id);
+          }
+          return;
+        }
         toastManager.dismissAll();
         toastManager.error(`Payment failed: ${response.error.description || 'Unknown error'}`);
       });

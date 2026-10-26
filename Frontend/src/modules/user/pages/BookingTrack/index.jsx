@@ -13,6 +13,7 @@ import { GoogleMap, useJsApiLoader, OverlayView, InfoWindow } from '@react-googl
 import { GOOGLE_MAPS_LOADER_ID, GOOGLE_MAPS_LIBRARIES } from '../../../../utils/googleMapsLoader';
 import api from '../../../../services/api';
 import { toastManager } from '../../../../utils/toastManager';
+import { waitForServerPayment } from '../../../../utils/paymentRecovery';
 import { useSocket } from '../../../../context/SocketContext';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import DailyTrackingView from './components/DailyTrackingView';
@@ -592,11 +593,29 @@ const BookingTrack = () => {
           name: trackingData?.farmerName || '',
           contact: trackingData?.farmerPhone || ''
         },
-        theme: { color: '#059669' }
+        theme: { color: '#059669' },
+        modal: { ondismiss: () => { recoverIfPaid(); } }
+      };
+
+      // Razorpay can say "failed"/closed after a UPI app paid; the server may already have applied it (verify call or webhook)
+      const recoverIfPaid = async (failMessage) => {
+        toastManager.info('Checking payment status...');
+        const paid = await waitForServerPayment(async () => {
+          const r = await api.get(`/users/tracking/${id}`);
+          const e = r.data?.data?.extensions?.find(x => x._id === ext._id);
+          return !!e && e.status !== 'PAYMENT_PENDING';
+        });
+        if (paid) {
+          toastManager.success('Extension payment successful! Schedule updated.');
+          fetchSnapshot(false);
+        } else if (failMessage) {
+          toastManager.error(failMessage);
+        }
       };
 
       if (window.Razorpay) {
         const rzp = new window.Razorpay(options);
+        rzp.on('payment.failed', (resp) => { recoverIfPaid(resp?.error?.description || 'Payment failed'); });
         rzp.open();
       } else {
         toastManager.error('Razorpay SDK not ready. Please refresh.');

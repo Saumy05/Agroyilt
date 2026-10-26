@@ -139,7 +139,7 @@ exports.razorpayWebhook = async (req, res) => {
     // (covers the app dying after the farmer paid; whichever of verify / webhook arrives first wins)
     if (paymentEntity.order_id) {
       const workerOutcome = await require('../../services/workerPaymentWebhook').handleCapturedPayment({
-        orderId: paymentEntity.order_id, paymentId: gatewayTransactionId, amountPaise: Number(paymentEntity.amount) || 0
+        orderId: paymentEntity.order_id, paymentId: gatewayTransactionId, amountPaise: Number(paymentEntity.amount) || 0, notes: paymentEntity.notes
       });
       if (workerOutcome.handled) {
         logEntry.processedStatus = workerOutcome.retry ? 'failed' : 'processed';

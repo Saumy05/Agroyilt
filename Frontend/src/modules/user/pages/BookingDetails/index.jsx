@@ -38,6 +38,7 @@ import {
 } from 'react-icons/fi';
 import { FaRupeeSign } from 'react-icons/fa';
 import { bookingService } from '../../../../services/bookingService';
+import { waitForServerPayment } from '../../../../utils/paymentRecovery';
 import { formatDateDDMMYYYY } from '../../../../utils/formatDate';
 import { paymentService } from '../../../../services/paymentService';
 import { cartService } from '../../../../services/cartService';
@@ -653,7 +654,18 @@ const BookingDetails = () => {
         },
         modal: {
           onhighlight: function () { },
-          ondismiss: function () {
+          ondismiss: async function () {
+            // Razorpay can close/fail after a UPI app paid; the server may already have the payment (verify call or webhook)
+            toastManager.info('Checking payment status...');
+            const paid = await waitForServerPayment(async () => {
+              const r = await bookingService.getById(id);
+              return !!(r.success && r.data?.paymentStatus === 'success');
+            });
+            toastManager.dismiss();
+            if (paid) {
+              toastManager.success('Payment successful!');
+              loadBooking();
+            }
             setPaying(false);
           }
         },
