@@ -14,6 +14,7 @@ import Header from '../../components/layout/Header';
 import DobInput from '../../../../components/common/DobInput';
 import { getDobError, toDateInputValue } from '../../../../utils/age';
 import workerRequestService from '../../../../services/workerRequestService';
+import { useWorkCategories } from '../../../../hooks/useWorkCategories';
 
 const loadRazorpay = () => new Promise((resolve) => {
   if (window.Razorpay) return resolve(true);
@@ -25,6 +26,8 @@ const loadRazorpay = () => new Promise((resolve) => {
 });
 
 const WorkerTeam = () => {
+  // The work types are the admin's list, the same one farmers ask for
+  const { names: PRESET_SKILLS, canonicalList } = useWorkCategories();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [team, setTeam] = useState(null);
@@ -48,30 +51,10 @@ const WorkerTeam = () => {
   const [offlineForm, setOfflineForm] = useState({
     name: '',
     phone: '',
-    skills: ['General Labor'],
+    skills: ['General Farm Labour'],
     dailyRate: '',
     experienceYears: 1
   });
-
-  const PRESET_SKILLS = [
-    'General Labor',
-    'Harvesting',
-    'Sowing & Planting',
-    'Plowing & Tillage',
-    'Weeding',
-    'Fertilizing',
-    'Pesticide Spraying',
-    'Irrigation',
-    'Land Preparation',
-    'Threshing',
-    'Loading & Unloading',
-    'Tractor Operation',
-    'Pruning & Trimming',
-    'Fruit & Vegetable Picking',
-    'Cattle & Livestock Care',
-    'Polyhouse Work',
-    'Nursery Work'
-  ];
 
   const [customSkillInput, setCustomSkillInput] = useState('');
 
@@ -144,15 +127,15 @@ const WorkerTeam = () => {
 
   const openAddOfflineModal = () => {
     setEditingMemberId(null);
-    setOfflineForm({ name: '', phone: '', gender: 'male', dateOfBirth: '', skills: ['General Labor'], dailyRate: '', experienceYears: 1 });
+    setOfflineForm({ name: '', phone: '', gender: 'male', dateOfBirth: '', skills: ['General Farm Labour'], dailyRate: '', experienceYears: 1 });
     setIsOfflineModalOpen(true);
   };
 
   const openEditOfflineModal = (member) => {
     setEditingMemberId(member._id);
     const skillsList = Array.isArray(member.skills) && member.skills.length > 0 
-      ? member.skills 
-      : (member.serviceCategory ? [member.serviceCategory] : ['General Labor']);
+      ? canonicalList(member.skills) 
+      : (member.serviceCategory ? [member.serviceCategory] : ['General Farm Labour']);
     setOfflineForm({
       name: member.name || '',
       phone: member.phone || '',
@@ -238,7 +221,7 @@ const WorkerTeam = () => {
       if (res.data.success) {
         setIsOfflineModalOpen(false);
         setEditingMemberId(null);
-        setOfflineForm({ name: '', phone: '', gender: 'male', dateOfBirth: '', skills: ['General Labor'], dailyRate: '', experienceYears: 1 });
+        setOfflineForm({ name: '', phone: '', gender: 'male', dateOfBirth: '', skills: ['General Farm Labour'], dailyRate: '', experienceYears: 1 });
         setProfile(prev => ({ ...prev, workerType: 'TEAM_LEADER' }));
         fetchData();
       }

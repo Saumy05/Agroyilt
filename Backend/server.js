@@ -354,6 +354,8 @@ app.use('/api/weather', require('./routes/common-routes/weather.routes'));
 app.use('/api/field-area', require('./routes/common-routes/fieldArea.routes'));
 app.use('/api/availabilities', require('./routes/common-routes/availability.routes'));
 app.use('/api/public/equipment', require('./routes/public-routes/equipment.routes'));
+app.use('/api/work-categories', require('./routes/common-routes/workCategory.routes'));
+app.use('/api/admin/work-categories', require('./routes/admin-routes/workCategoryManagement.routes'));
 app.use('/api/v1/translate', require('./routes/common-routes/translation.routes'));
 
 // SEO Dynamic Sitemap

@@ -12,10 +12,10 @@ import { userAuthService } from '../../../../services/authService';
 import LocationPicker from '../Checkout/components/LocationPicker';
 import SavedAddressChooser from '../../components/common/SavedAddressChooser';
 import { MAX_SAVED_ADDRESSES, usableAddresses, pickDefaultAddress, addressKey, addressText, withNewDefault } from '../../../../utils/savedAddresses';
-import { WORKER_SERVICES } from '../../../../constants/workerServices';
+import { useWorkCategoryTemplates } from '../../../../hooks/useWorkCategories';
 
-// Work categories with rich metadata and templates for auto-filling
-const WORK_CATEGORY_DATA = {
+// Built-in categories, used until the admin's list loads (the admin manages the real list: Workers > Work Categories)
+const STATIC_WORK_CATEGORY_DATA = {
   'Harvesting': {
     icon: '🌾',
     title: 'Harvesting Work',
@@ -96,10 +96,6 @@ const WORK_CATEGORY_DATA = {
   }
 };
 
-const WORK_CATEGORIES = Object.keys(WORK_CATEGORY_DATA);
-
-// the same list workers pick their services from on their profile
-const COMMON_SKILLS = WORKER_SERVICES;
 
 const WorkCategorySelect = ({ value, onChange, error, categories, categoryData }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -258,6 +254,8 @@ const getShiftSummary = (startTime, endTime, hourlyRate, workersCount, durationH
 
 
 const WorkerRequestForm = () => {
+  // The categories (and their request templates) are the admin's list, the same one workers pick their services from
+  const { categoryData: WORK_CATEGORY_DATA, categoryNames: WORK_CATEGORIES, skillNames: COMMON_SKILLS, canonical } = useWorkCategoryTemplates(STATIC_WORK_CATEGORY_DATA);
   const navigate = useNavigate();
   const { id } = useParams();
   const location = useLocation();
@@ -407,7 +405,7 @@ const WorkerRequestForm = () => {
   const defaultStartTime = getDefaultStartTime();
   const defaultEndTime = calculateEndTime(defaultStartTime, 1);
 
-  const initialCat = targetedWorker?.skills?.[0] || targetedWorker?.primaryService || '';
+  const initialCat = canonical(targetedWorker?.skills?.[0] || targetedWorker?.primaryService || '');
   const initialTemplate = WORK_CATEGORY_DATA[initialCat];
 
   const [formData, setFormData] = useState({
@@ -492,7 +490,7 @@ const WorkerRequestForm = () => {
 
   useEffect(() => {
     if (targetedWorker) {
-      const cat = targetedWorker.skills?.[0] || targetedWorker.primaryService || '';
+      const cat = canonical(targetedWorker.skills?.[0] || targetedWorker.primaryService || '');
       const tmpl = WORK_CATEGORY_DATA[cat];
       setFormData(prev => ({
         ...prev,

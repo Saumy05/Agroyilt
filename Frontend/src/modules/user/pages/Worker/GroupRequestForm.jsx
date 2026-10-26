@@ -7,9 +7,10 @@ import {
 } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import workerBookingService from '../../../../services/workerBookingService';
+import { useWorkCategoryTemplates } from '../../../../hooks/useWorkCategories';
 
-// Work categories with rich metadata and templates for auto-filling
-const WORK_CATEGORY_DATA = {
+// Built-in categories, used until the admin's list loads (the admin manages the real list: Workers > Work Categories)
+const STATIC_WORK_CATEGORY_DATA = {
   'Harvesting': {
     icon: '🌾',
     title: 'Harvesting Work',
@@ -90,7 +91,6 @@ const WORK_CATEGORY_DATA = {
   }
 };
 
-const WORK_CATEGORIES = Object.keys(WORK_CATEGORY_DATA);
 
 const WorkCategorySelect = ({ value, onChange, error, categories, categoryData }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -237,6 +237,7 @@ const formatTime12H = (hhmm) => {
 };
 
 const GroupRequestForm = () => {
+  const { categoryData: WORK_CATEGORY_DATA, categoryNames: WORK_CATEGORIES } = useWorkCategoryTemplates(STATIC_WORK_CATEGORY_DATA);
   const navigate = useNavigate();
   const location = useLocation();
   const leader = location.state?.leader;

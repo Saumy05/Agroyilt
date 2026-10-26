@@ -19,7 +19,8 @@ import { getDobError, toDateInputValue } from '../../../../utils/age';
 // Zod schema
 import flutterBridge from '../../../../utils/flutterBridge';
 import authStorage from '../../../../utils/authStorage';
-import { WORKER_SERVICES, canonicalServices } from '../../../../constants/workerServices';
+import { canonicalServices } from '../../../../constants/workerServices';
+import { useWorkCategories } from '../../../../hooks/useWorkCategories';
 
 const workerProfileSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -43,6 +44,8 @@ const workerProfileSchema = z.object({
 });
 
 const EditProfile = () => {
+  // The work types are the admin's list (the same one farmers pick from when asking for workers)
+  const { names: workTypeNames, canonicalList, fromServer: workTypesLoaded } = useWorkCategories();
   const navigate = useNavigate();
   const location = useLocation();
   const [loading, setLoading] = useState(true);
@@ -432,7 +435,13 @@ const EditProfile = () => {
   });
 
   // The same work types a farmer picks from when asking for workers
-  const uniqueAvailableSkills = WORKER_SERVICES;
+  const uniqueAvailableSkills = workTypeNames;
+
+  // Skills saved under an old name are shown (and saved) under the current name, once the admin's list with its aliases has loaded
+  useEffect(() => {
+    if (workTypesLoaded) setFormData((prev) => ({ ...prev, skills: canonicalList(prev.skills) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workTypesLoaded]);
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">

@@ -28,6 +28,7 @@ import {
   FiCheck
 } from 'react-icons/fi';
 import toast from 'react-hot-toast';
+import { useWorkCategories } from '../../../../hooks/useWorkCategories';
 import workerService from '../../services/workerService';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import DobInput from '../../../../components/common/DobInput';
@@ -64,18 +65,8 @@ const AllWorkers = () => {
   const [actionLoading, setActionLoading] = useState(null);
 
   // Add Worker (admin creates the account directly)
-  // Same list workers pick from in their own Edit Profile screen
-  const WORKER_SKILL_OPTIONS = [
-    'Drive Tractor',
-    'Drive Harvester',
-    'Ploughing',
-    'Sowing / Seeding',
-    'Harvesting (Crop Cutting)',
-    'Crop Spraying',
-    'Weeding',
-    'Loading / Unloading',
-    'General Farm Helper'
-  ];
+  // The work types are the admin's own list (Workers > Work Categories), the same one workers and farmers use
+  const { names: WORKER_SKILL_OPTIONS } = useWorkCategories();
   const EMPTY_NEW_WORKER = {
     name: '',
     phone: '',

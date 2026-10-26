@@ -714,10 +714,14 @@ const SKILL_SYNONYMS = {
 };
 const expandSkillSynonyms = (skills) => {
   if (!Array.isArray(skills)) return skills;
+  // the admin-managed categories carry their own aliases (renamed categories, older names); the fixed table above stays as a safety net
+  const managed = require('../../services/workCategoryService').getAliasMap();
   const out = [];
   skills.forEach((s) => {
+    const key = String(s).trim().toLowerCase();
     out.push(s);
-    (SKILL_SYNONYMS[String(s).trim().toLowerCase()] || []).forEach((alt) => out.push(alt));
+    (SKILL_SYNONYMS[key] || []).forEach((alt) => out.push(alt));
+    (managed[key] || []).forEach((alt) => out.push(alt));
   });
   return [...new Set(out)];
 };
