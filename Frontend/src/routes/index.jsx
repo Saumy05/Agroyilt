@@ -8,6 +8,7 @@ import VendorRoutes from '../modules/vendor/routes';
 import WorkerRoutes from '../modules/worker/routes';
 import AdminRoutes from '../modules/admin/routes';
 import MobileAppRoutes from '../modules/app/routes'; // Mobile-only app module
+import ReferralInvite from '../modules/app/pages/ReferralInvite';
 import BlogListing from '../modules/landing/pages/BlogListing';
 import ArticleListing from '../modules/landing/pages/ArticleListing';
 import BlogDetail from '../modules/landing/pages/BlogDetail';
@@ -48,6 +49,7 @@ const AppRoutes = () => {
     isVendorRoute ||
     isWorkerRoute ||
     isAppRoute ||
+    location.pathname.startsWith('/r/') ||
     location.pathname.startsWith('/terms') ||
     location.pathname.startsWith('/privacy') ||
     [
@@ -65,6 +67,9 @@ const AppRoutes = () => {
         <Route path="/vendor/*" element={<VendorRoutes />} />
         <Route path="/worker/*" element={<WorkerRoutes />} />
         <Route path="/admin/*" element={<AdminRoutes />} />
+
+        {/* Shared referral link: Play Store on an Android phone, web registration elsewhere */}
+        <Route path="/r/:code" element={<ReferralInvite />} />
 
         {/* Mobile App Routes (/app, /app/register, /app/login) */}
         <Route path="/app/*" element={<MobileAppRoutes />} />

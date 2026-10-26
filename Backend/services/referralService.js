@@ -45,6 +45,16 @@ const normalizeQualificationEvent = (event) => {
 };
 
 /**
+ * The one link a person shares: the site's /r/<CODE> page. It sends an Android phone to the Play Store with the code attached,
+ * and everyone else to the web registration page with the code filled in. The site is the one the registration link lives on.
+ */
+const buildInviteLink = (config, code) => {
+  let origin = 'https://agroyilt.com';
+  try { origin = new URL(config.registrationUrl || origin).origin; } catch { /* keep the default */ }
+  return `${origin}/r/${encodeURIComponent(code)}`;
+};
+
+/**
  * Get or initialize global referral reward config
  */
 const getOrCreateConfig = async () => {
@@ -729,6 +739,7 @@ const getUserReferralStats = async (userId, userModel) => {
   return {
     referralCode: codeDoc.code,
     registerLink: config.registrationUrl || 'https://agroyilt.com/app/register',
+    inviteLink: buildInviteLink(config, codeDoc.code),
     totalReferred: codeDoc.totalReferred || 0,
     totalQualified: qualifiedCount,
     pendingQualifications: pendingCount,

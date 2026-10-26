@@ -28,6 +28,14 @@ export const referralService = {
   },
 
   /**
+   * Public: the Play Store and registration links the invite page (/r/<CODE>) sends people to
+   */
+  getInviteConfig: async () => {
+    const response = await api.get('/referrals/invite-config');
+    return response.data;
+  },
+
+  /**
    * Get authenticated user's referral code, link, and statistics
    */
   getMyReferralStats: async () => {

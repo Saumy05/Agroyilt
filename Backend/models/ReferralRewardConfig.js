@@ -16,6 +16,12 @@ const referralRewardConfigSchema = new mongoose.Schema({
     default: 'https://agroyilt.com/app/register',
     trim: true
   },
+  // Where the invite link sends an Android phone that does not have the app yet
+  playStoreUrl: {
+    type: String,
+    default: 'https://play.google.com/store/apps/details?id=com.agroyilt.app',
+    trim: true
+  },
   roles: {
     farmer: {
       enabled: { type: Boolean, default: false },

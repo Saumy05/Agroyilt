@@ -28,6 +28,7 @@ const ReferralManagement = () => {
   const [settings, setSettings] = useState({
     systemEnabled: true,
     registrationUrl: 'https://agroyilt.com/app/register',
+    playStoreUrl: 'https://play.google.com/store/apps/details?id=com.agroyilt.app',
     qualificationEvent: 'ADMIN_APPROVAL',
     version: 1,
     roles: {
@@ -112,6 +113,7 @@ const ReferralManagement = () => {
       const res = await referralService.updateAdminSettings({
         systemEnabled: settings.systemEnabled,
         registrationUrl: settings.registrationUrl || 'https://agroyilt.com/app/register',
+        playStoreUrl: settings.playStoreUrl || 'https://play.google.com/store/apps/details?id=com.agroyilt.app',
         qualificationEvent: settings.qualificationEvent,
         roles: {
           farmer: {
@@ -553,6 +555,23 @@ const ReferralManagement = () => {
             <p className="text-[11px] text-gray-400">
               Default: <code className="text-gray-600 bg-gray-100 px-1 py-0.5 rounded">https://agroyilt.com/app/register</code>. You can change this to point referrals to a custom landing page, app store link, or another domain anytime.
             </p>
+          </div>
+
+          {/* Play Store link: where an invited Android phone without the app goes */}
+          <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3">
+            <div>
+              <h4 className="text-sm font-bold text-gray-900 mb-0.5">Play Store Link</h4>
+              <p className="text-xs text-gray-500">
+                A shared referral link (agroyilt.com/r/CODE) sends an Android phone here, with the referral code attached. Everyone else goes to the registration link above.
+              </p>
+            </div>
+            <input
+              type="url"
+              value={settings.playStoreUrl || ''}
+              onChange={(e) => setSettings(prev => ({ ...prev, playStoreUrl: e.target.value }))}
+              placeholder="https://play.google.com/store/apps/details?id=com.agroyilt.app"
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-300 font-mono text-xs sm:text-sm text-gray-800 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+            />
           </div>
 
           {/* Submit Button */}

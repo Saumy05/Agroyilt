@@ -63,7 +63,7 @@ const Rewards = () => {
     }
   };
 
-  const registerLink = data.registerLink || 'https://agroyilt.com/app/register';
+  const registerLink = data.inviteLink || data.registerLink || 'https://agroyilt.com/app/register'; // the invite link carries the code and sends Android phones to the Play Store
 
   const handleCopy = (textToCopy, label = 'Referral Code') => {
     if (navigator.clipboard && window.isSecureContext) {

@@ -83,6 +83,28 @@ exports.getPublicStatus = async (req, res) => {
 };
 
 /**
+ * Public: where the invite page (/r/<CODE>) sends people. No secrets here: both links are public.
+ */
+exports.getInviteConfig = async (req, res) => {
+  try {
+    const config = await referralService.getOrCreateConfig();
+    return res.status(200).json({
+      success: true,
+      data: {
+        playStoreUrl: config.playStoreUrl || 'https://play.google.com/store/apps/details?id=com.agroyilt.app',
+        registrationUrl: config.registrationUrl || 'https://agroyilt.com/app/register'
+      }
+    });
+  } catch (error) {
+    console.error('[getInviteConfig error]:', error);
+    return res.status(200).json({
+      success: true,
+      data: { playStoreUrl: 'https://play.google.com/store/apps/details?id=com.agroyilt.app', registrationUrl: 'https://agroyilt.com/app/register' }
+    });
+  }
+};
+
+/**
  * Admin: Get referral system configuration & audit history
  */
 exports.getAdminSettings = async (req, res) => {
@@ -94,6 +116,7 @@ exports.getAdminSettings = async (req, res) => {
       data: {
         systemEnabled: config.systemEnabled,
         registrationUrl: config.registrationUrl || 'https://agroyilt.com/app/register',
+        playStoreUrl: config.playStoreUrl || 'https://play.google.com/store/apps/details?id=com.agroyilt.app',
         qualificationEvent: config.qualificationEvent,
         version: config.version,
         roles: {
@@ -127,7 +150,7 @@ exports.getAdminSettings = async (req, res) => {
  */
 exports.updateAdminSettings = async (req, res) => {
   try {
-    const { systemEnabled, qualificationEvent, roles, registrationUrl } = req.body;
+    const { systemEnabled, qualificationEvent, roles, registrationUrl, playStoreUrl } = req.body;
     const adminId = req.user.id || req.user._id;
     const adminEmail = req.user.email || 'admin@agroyilt.com';
 
@@ -162,6 +185,27 @@ exports.updateAdminSettings = async (req, res) => {
         notes: `Updated registration link to ${cleanUrl}`
       });
       config.registrationUrl = cleanUrl;
+    }
+
+    // Play Store link audit (only a Play Store address is accepted: it is where invited Android users are sent)
+    if (playStoreUrl !== undefined && playStoreUrl.trim() && playStoreUrl.trim() !== (config.playStoreUrl || '')) {
+      const cleanPlay = playStoreUrl.trim();
+      let validPlay = false;
+      try { validPlay = new URL(cleanPlay).hostname === 'play.google.com'; } catch { /* not a URL */ }
+      if (!validPlay) {
+        return res.status(400).json({ success: false, message: 'The Play Store link must be a https://play.google.com/... address' });
+      }
+      audits.push({
+        adminId,
+        adminEmail,
+        role: 'system',
+        field: 'playStoreUrl',
+        oldValue: config.playStoreUrl || 'https://play.google.com/store/apps/details?id=com.agroyilt.app',
+        newValue: cleanPlay,
+        timestamp: new Date(),
+        notes: `Updated Play Store link to ${cleanPlay}`
+      });
+      config.playStoreUrl = cleanPlay;
     }
 
     if (qualificationEvent) {
@@ -235,6 +279,7 @@ exports.updateAdminSettings = async (req, res) => {
         version: config.version,
         systemEnabled: config.systemEnabled,
         registrationUrl: config.registrationUrl,
+        playStoreUrl: config.playStoreUrl,
         qualificationEvent: config.qualificationEvent,
         roles: config.roles
       }
