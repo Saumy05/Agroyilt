@@ -524,7 +524,9 @@ const hasTimeConflict = async (workerId, scheduledDate, startTime, endTime, excl
             { workerId: workerObjId },
             { selectedWorkerIds: workerObjId },
             { finalWorkers: workerObjId },
-            { 'dispatchedTo': { $elemMatch: { workerId: workerObjId, status: 'accepted' } } }
+            // A worker who accepted holds the slot only while the farmer is still choosing. Once the booking is confirmed,
+            // only the workers actually hired (selectedWorkerIds / finalWorkers above) are busy: the others are free.
+            { status: { $in: ['accepted', 'awaiting_farmer_confirmation'] }, dispatchedTo: { $elemMatch: { workerId: workerObjId, status: 'accepted' } } }
           ]
     };
 
@@ -638,7 +640,8 @@ const hasDailyConflict = async (workerId, requestedStartDate, requestedEndDate, 
         : [
             { selectedWorkerIds: { $in: workerIdVariants } },
             { finalWorkers:      { $in: workerIdVariants } },
-            { 'dispatchedTo':    { $elemMatch: { workerId: { $in: workerIdVariants }, status: 'accepted' } } }
+            // accepted-but-not-hired workers hold the dates only until the farmer has chosen (see the hourly check)
+            { status: { $in: ['accepted', 'awaiting_farmer_confirmation', 'matching', 'pending'] }, dispatchedTo: { $elemMatch: { workerId: { $in: workerIdVariants }, status: 'accepted' } } }
           ]
     };
     if (excludeObjId) reqQuery._id = { $ne: excludeObjId };
@@ -1298,15 +1301,18 @@ async function getLiveTeamCapacity(leaderId, bookingType, schedule) {
         $or: [
           { selectedWorkerIds: { $in: memberIds } },
           { finalWorkers:      { $in: memberIds } },
-          { dispatchedTo: { $elemMatch: { workerId: { $in: memberIds }, status: 'accepted' } } }
+          { status: { $in: ['pending', 'awaiting_farmer_confirmation'] }, dispatchedTo: { $elemMatch: { workerId: { $in: memberIds }, status: 'accepted' } } }
         ]
-      }).select('selectedWorkerIds finalWorkers dispatchedTo').lean();
+      }).select('selectedWorkerIds finalWorkers dispatchedTo status').lean();
 
       for (const r of busyRequests) {
         for (const id of (r.selectedWorkerIds || [])) busySet.add(id.toString());
         for (const id of (r.finalWorkers      || [])) busySet.add(id.toString());
-        for (const d  of (r.dispatchedTo      || [])) {
-          if (d.status === 'accepted') busySet.add(d.workerId.toString());
+        // accepted-but-not-hired workers are busy only while the farmer is still choosing
+        if (['pending', 'awaiting_farmer_confirmation'].includes(r.status)) {
+          for (const d  of (r.dispatchedTo      || [])) {
+            if (d.status === 'accepted') busySet.add(d.workerId.toString());
+          }
         }
       }
     } else {
