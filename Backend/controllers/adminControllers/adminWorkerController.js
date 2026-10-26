@@ -1,4 +1,5 @@
 const Worker = require('../../models/Worker');
+const { forceWorkerOffline } = require('../../sockets');
 const { notifyAccountApproved } = require('../../services/approvalNotifier');
 const User = require('../../models/User');
 const Admin = require('../../models/Admin');
@@ -422,6 +423,7 @@ const rejectWorker = async (req, res) => {
     worker.isActive = false;
     worker.rejectionReason = reason || 'Application does not meet requirements';
     await worker.save();
+    await forceWorkerOffline(worker._id);
 
     await auditAdminAction(
       req,
@@ -488,6 +490,7 @@ const suspendWorker = async (req, res) => {
     worker.approvalStatus = 'suspended';
     worker.isActive = false;
     await worker.save();
+    await forceWorkerOffline(worker._id);
 
     res.status(200).json({
       success: true,
@@ -947,6 +950,7 @@ const toggleWorkerStatus = async (req, res) => {
 
     worker.isActive = isActive;
     await worker.save();
+    if (!worker.isActive) await forceWorkerOffline(worker._id);
 
     await auditAdminAction(
       req,

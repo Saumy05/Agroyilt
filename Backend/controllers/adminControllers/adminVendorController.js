@@ -1,6 +1,7 @@
 const Vendor = require('../../models/Vendor');
 const { notifyAccountApproved } = require('../../services/approvalNotifier');
 const { resolveVendorServices } = require('../../utils/vendorCategories');
+const { forceVendorOffline } = require('../../sockets');
 const Admin = require('../../models/Admin');
 const City = require('../../models/City');
 const Booking = require('../../models/Booking');
@@ -331,6 +332,7 @@ const suspendVendor = async (req, res) => {
     vendor.approvalStatus = VENDOR_STATUS.SUSPENDED;
     vendor.isActive = false;
     await vendor.save();
+    await forceVendorOffline(vendor._id);
 
     res.status(200).json({
       success: true,
@@ -554,6 +556,7 @@ const toggleVendorStatus = async (req, res) => {
 
     vendor.isActive = isActive;
     await vendor.save();
+    if (!vendor.isActive) await forceVendorOffline(vendor._id);
 
     // Log the action (optional but recommended)
     // console.log(`Vendor ${vendor._id} status changed to ${isActive}`);

@@ -371,6 +371,14 @@ const updateVendorOnlineStatus = async (vendorId, isOnline, socketId) => {
     const Vendor = require('../models/Vendor');
     const { setVendorOnline, setVendorAvailability } = require('../services/redisService');
 
+    // A deactivated / suspended vendor must never show as online (e.g. reconnecting with an old token)
+    if (isOnline) {
+      const vendor = await Vendor.findById(vendorId).select('isActive approvalStatus').lean();
+      if (!vendor || vendor.isActive === false || ['suspended', 'rejected'].includes(vendor.approvalStatus)) {
+        return;
+      }
+    }
+
     const updateData = {
       isOnline,
       currentSocketId: socketId,
@@ -400,6 +408,11 @@ const updateWorkerOnlineStatus = async (workerId, isOnline, socketId) => {
     const Worker = require('../models/Worker');
 
     if (isOnline) {
+      // A deactivated / suspended / rejected worker must never show as online (e.g. reconnecting with an old token)
+      const worker = await Worker.findById(workerId).select('isActive approvalStatus').lean();
+      if (!worker || worker.isActive === false || ['suspended', 'rejected'].includes(worker.approvalStatus)) {
+        return;
+      }
       // Socket connected: mark isOnline = true and record active socket ID
       await Worker.findByIdAndUpdate(workerId, {
         isOnline: true,
@@ -444,6 +457,57 @@ const updateWorkerOnlineStatus = async (workerId, isOnline, socketId) => {
   }
 };
 
+// Take a vendor offline and drop their live sockets (admin deactivate / suspend)
+const forceVendorOffline = async (vendorId) => {
+  const id = vendorId.toString();
+  try {
+    const Vendor = require('../models/Vendor');
+    const { setVendorOnline } = require('../services/redisService');
+
+    await Vendor.findByIdAndUpdate(id, {
+      isOnline: false,
+      availability: 'OFFLINE',
+      currentSocketId: null,
+      lastSeenAt: new Date()
+    });
+    await setVendorOnline(id, false);
+
+    if (io) {
+      io.to(`vendor:${id}`).emit('account_deactivated', {
+        message: 'Your account has been deactivated. Please contact support.'
+      });
+      io.in(`vendor:${id}`).disconnectSockets(true);
+    }
+  } catch (error) {
+    console.error('[Socket] Error forcing vendor offline:', error);
+  }
+};
+
+// Take a worker offline and drop their live sockets (admin deactivate / suspend / reject).
+// Only an ONLINE business status is reset; a worker mid-job keeps their status.
+const forceWorkerOffline = async (workerId) => {
+  const id = workerId.toString();
+  try {
+    const Worker = require('../models/Worker');
+
+    await Worker.findByIdAndUpdate(id, {
+      isOnline: false,
+      currentSocketId: null,
+      lastSeenAt: new Date()
+    });
+    await Worker.updateOne({ _id: id, status: 'ONLINE' }, { $set: { status: 'OFFLINE' } });
+
+    if (io) {
+      io.to(`worker:${id}`).emit('account_deactivated', {
+        message: 'Your account has been deactivated. Please contact support.'
+      });
+      io.in(`worker:${id}`).disconnectSockets(true);
+    }
+  } catch (error) {
+    console.error('[Socket] Error forcing worker offline:', error);
+  }
+};
+
 // Get io instance for emitting notifications
 const getIO = () => {
   if (!io) {
@@ -452,5 +516,5 @@ const getIO = () => {
   return io;
 };
 
-module.exports = { initializeSocket, getIO };
+module.exports = { initializeSocket, getIO, forceVendorOffline, forceWorkerOffline };
 

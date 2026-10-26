@@ -210,6 +210,15 @@ api.interceptors.response.use(
     // Handle 403 Forbidden - Role mismatch or Invalid Token
     if (error.response?.status === 403) {
       console.error('Access Denied (403):', error.response.data?.message);
+
+      // Account deactivated / suspended by admin while signed in: end this role's session
+      const role = getRoleForRequest(originalRequest?.url, originalRequest);
+      if (role !== 'admin' && /deactivated|suspended/i.test(error.response.data?.message || '')) {
+        authStorage.clearAuthSession(role);
+        if (!isOnLoginPage) {
+          handleLogout(role);
+        }
+      }
     }
 
     return Promise.reject(error);

@@ -10,6 +10,7 @@ import { toastManager } from '../utils/toastManager';
 import { playNotificationSound, isSoundEnabled, playAlertRing, playCancellationAlert, stopAlertRing } from '../utils/notificationSound';
 import { registerFCMToken } from '../services/pushNotificationService';
 import authStorage from '../utils/authStorage';
+import { handleLogout } from '../services/api';
 
 const SwipeableNotification = ({ t, data, onClick }) => {
   const x = useMotionValue(0);
@@ -186,6 +187,13 @@ export const SocketProvider = ({ children }) => {
 
     newSocket.on('disconnect', () => {
       // disconnected silently
+    });
+
+    // Admin deactivated / suspended this account: end the session
+    newSocket.on('account_deactivated', (data) => {
+      toast.error(data?.message || 'Your account has been deactivated. Please contact support.');
+      authStorage.clearAuthSession(userType);
+      handleLogout(userType);
     });
 
     newSocket.on('connect_error', () => {

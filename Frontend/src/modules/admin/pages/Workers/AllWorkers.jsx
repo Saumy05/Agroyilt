@@ -465,9 +465,7 @@ const AllWorkers = () => {
 
       {/* Table */}
       {loading ? (
-        <div className="flex justify-center items-center py-20">
-          <LogoLoader />
-        </div>
+        <LogoLoader fullScreen={false} />
       ) : workers.length === 0 ? (
         <div className="text-center py-16 bg-slate-50 rounded-2xl border border-dashed border-slate-300">
           <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
