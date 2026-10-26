@@ -7,7 +7,8 @@
  *  - Ending for non-payment, in two cases:
  *      1. the tenant promised to pay installment 1 at the start (advance) and it is still unpaid 3 days after the start:
  *         the owner may end the lease at once;
- *      2. two or more installments are overdue: the owner gives a 15-day notice. If the overdue rent is still unpaid when
+ *      2. two or more installments are overdue (one, when the rent is paid quarterly or half-yearly, because the installments
+ *         are far apart): the owner gives a 15-day notice. If the overdue rent is still unpaid when
  *         the notice runs out, the lease ends; if the tenant pays it in time, the notice lapses.
  *    An ended lease becomes `inactive` (the tenant and every payment record stay; unpaid rent can still be paid to the owner).
  */
@@ -20,6 +21,9 @@ const { audit } = require('./leaseAgreementService');
 const NOTICE_DAYS = 15;
 const LATE_AFTER_DAYS = 3;
 const OVERDUE_FOR_NOTICE = 2;
+const SPARSE_SCHEDULES = ['quarterly', 'half-yearly'];
+/** How many overdue installments let the owner give notice: one when installments are months apart, otherwise two. */
+const overdueForNotice = (lease) => (SPARSE_SCHEDULES.includes(lease.agreement?.paymentSchedule) ? 1 : OVERDUE_FOR_NOTICE);
 const DAY = 24 * 60 * 60 * 1000;
 
 const payLink = (leaseId) => ({ link: `/user/land-lease/${leaseId}/payments` });
@@ -44,7 +48,7 @@ const endEligibility = (lease, now = new Date()) => {
   if (lease.agreement?.advanceFirstInstallment && first && first.status === 'pending' && by && now > new Date(by)) {
     return { ...base, eligible: true, immediate: true, reason: 'first_installment' };
   }
-  if (overdue.length >= OVERDUE_FOR_NOTICE) return { ...base, eligible: true, immediate: false, reason: 'two_installments' };
+  if (overdue.length >= overdueForNotice(lease)) return { ...base, eligible: true, immediate: false, reason: 'overdue_installments' };
   return base;
 };
 
@@ -83,7 +87,7 @@ const giveNotice = async ({ leaseId, ownerId }) => {
   const e = endEligibility(lease);
   if (e.noticeOpen) return { ok: false, status: 409, message: 'A notice is already running for this lease.' };
   if (!e.eligible) {
-    return { ok: false, status: 400, message: 'The lease can be ended for unpaid rent only when the first installment promised at the start is more than 3 days late, or two installments are overdue.' };
+    return { ok: false, status: 400, message: 'The lease can be ended for unpaid rent only when the first installment due at the start is more than 3 days late, or the rent is overdue (two installments, or one when it is paid quarterly or half-yearly).' };
   }
   if (e.immediate) {
     const ended = await endLease(lease._id, { immediate: true });

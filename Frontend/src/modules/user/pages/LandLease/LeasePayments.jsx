@@ -6,6 +6,7 @@ import { walletService } from '../../../../services/walletService';
 import { toastManager } from '../../../../utils/toastManager';
 import { waitForServerPayment } from '../../../../utils/paymentRecovery';
 import authStorage from '../../../../utils/authStorage';
+import { planLabel } from './paymentPlan';
 
 const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '-');
@@ -302,7 +303,7 @@ const LeasePaymentsPage = () => {
                 <div>
                   <p className="font-black text-sm">First installment {isTenant ? 'is waiting for your payment' : 'is not paid yet'}</p>
                   <p className="mt-0.5">
-                    Promised at the start: {inr(firstInstallment.amount)}. It must be paid by {fmtDate(agreement.firstPaymentDueBy)}, or the owner can end the lease.
+                    Due at the start: {inr(firstInstallment.amount)}. It must be paid by {fmtDate(agreement.firstPaymentDueBy)}, or the owner can end the lease.
                   </p>
                 </div>
               </div>
@@ -319,7 +320,7 @@ const LeasePaymentsPage = () => {
                 <span className="font-bold text-gray-800">
                   {data.leaseType === 'fixed-rent' ? `${inr(agreement.totalRent)} for ${agreement.durationMonths} months` : `${agreement.agreedShare}% Crop Share (owner's share)`}
                 </span>
-                {data.leaseType === 'fixed-rent' && <span className="block text-[10px] text-gray-500">{inr(agreement.agreedPrice)}/acre/year × {data.sizeInAcres} acres · about {inr(agreement.totalRent / (agreement.durationMonths || 1))} a month</span>}
+                {data.leaseType === 'fixed-rent' && <span className="block text-[10px] text-gray-500">{inr(agreement.agreedPrice)}/acre/year × {data.sizeInAcres} acres · {planLabel({ schedule: agreement.paymentSchedule || 'monthly', advancePercent: agreement.advancePercent })} · {data.installments?.length === 1 ? 'one payment' : `${data.installments?.length || 0} installments`}</span>}
               </div>
               <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-100">
                 <span className="text-emerald-700 block text-[10px]">Paid so far</span>
@@ -368,7 +369,7 @@ const LeasePaymentsPage = () => {
             {/* Fixed-rent installments */}
             {data.leaseType === 'fixed-rent' && (
               <div className="space-y-2">
-                <h4 className="font-extrabold text-gray-900 text-xs">Monthly Installments</h4>
+                <h4 className="font-extrabold text-gray-900 text-xs">Rent Installments</h4>
                 {data.installments.map((item) => (
                   <div key={item._id} className={`bg-white border rounded-xl p-3 space-y-2 ${item.overdue ? 'border-red-200' : 'border-gray-200'}`}>
                     <div className="flex items-start justify-between gap-2">

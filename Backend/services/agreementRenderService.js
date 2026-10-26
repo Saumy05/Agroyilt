@@ -10,7 +10,7 @@
 
 const crypto = require('crypto');
 const escapeHtml = require('escape-html');
-const { round2, splitAmount, FIRST_PAYMENT_GRACE_DAYS } = require('./landLeaseScheduleService');
+const { round2, rentSchedule, planOf, FIRST_PAYMENT_GRACE_DAYS } = require('./landLeaseScheduleService');
 
 const LABELS = {
   en: { acres: 'acres', months: 'months', perAcreYear: 'per acre per year', corner: 'Corner', pin: 'Land location (pin)', pinRow: 'Pin', latitude: 'Latitude', longitude: 'Longitude', area: 'Area of the marked border', village: 'Village', tehsil: 'Tehsil', district: 'District', state: 'State', pincode: 'PIN code' },
@@ -58,6 +58,8 @@ const buildTerms = ({ lease, offer, commissionPercentage = 0 }) => {
   const price = fixed ? (Number(offer.proposedPrice) || Number(lease.pricePerAcre)) : null;
   const share = fixed ? null : (Number(offer.proposedShare) || Number(lease.sharePercentage));
   const totalRent = fixed ? round2(lease.sizeInAcres * price * (months / 12)) : null;
+  const plan = fixed ? planOf(lease, offer) : null;
+  const installments = fixed ? rentSchedule(totalRent, months, plan) : [];
   return {
     leaseType: lease.leaseType,
     khasraNumber: lease.khasraNumber,
@@ -73,9 +75,12 @@ const buildTerms = ({ lease, offer, commissionPercentage = 0 }) => {
     durationMonths: months,
     pricePerAcrePerYear: price,
     totalRent,
-    installmentCount: fixed ? months : null,
-    advanceFirstInstallment: fixed && !!offer.payFirstInstallmentOnStart,
-    firstInstallmentAmount: fixed ? splitAmount(totalRent, months)[0] : null,
+    paymentSchedule: plan ? plan.schedule : null,
+    advancePercent: plan ? plan.advancePercent : null,
+    installmentCount: fixed ? installments.length : null,
+    advanceFirstInstallment: fixed && plan.chargeFirstOnStart,
+    firstInstallmentAmount: fixed ? installments[0].amount : null,
+    laterInstallmentAmount: fixed && installments.length > 1 ? installments[1].amount : null,
     sharePercentage: share,
     crops: offer.proposedCrops || (lease.suitableCrops || []).join(', '),
     availableFrom: lease.availableFrom,
@@ -83,18 +88,46 @@ const buildTerms = ({ lease, offer, commissionPercentage = 0 }) => {
   };
 };
 
+const PERIOD_TEXT = {
+  monthly: { en: 'monthly', hi: 'मासिक', each: { en: 'a month', hi: 'प्रति माह' }, due: { en: 'the same date each month', hi: 'हर महीने उसी तारीख को' } },
+  quarterly: { en: 'quarterly', hi: 'तिमाही', each: { en: 'a quarter', hi: 'प्रति तिमाही' }, due: { en: 'the same date every 3 months', hi: 'हर 3 महीने बाद उसी तारीख को' } },
+  'half-yearly': { en: 'half-yearly', hi: 'छमाही', each: { en: 'half a year', hi: 'प्रति छमाही' }, due: { en: 'the same date every 6 months', hi: 'हर 6 महीने बाद उसी तारीख को' } }
+};
+
 const paymentTermsText = (terms, lang) => {
   const hi = lang === 'hi';
   if (terms.leaseType === 'fixed-rent') {
-    const each = terms.installmentCount ? round2(terms.totalRent / terms.installmentCount) : terms.totalRent;
-    const advance = terms.advanceFirstInstallment
+    const schedule = terms.paymentSchedule || 'monthly'; // agreements made before payment plans existed were monthly
+    const n = terms.installmentCount;
+    const each = n ? round2(terms.totalRent / n) : terms.totalRent;
+    const first = inr(terms.firstInstallmentAmount);
+    const one = schedule === 'upfront' || n === 1; // one payment, so it is "the payment", not "the first installment"
+    const charged = terms.advanceFirstInstallment
       ? (hi
-        ? ` पहली किस्त (${inr(terms.firstInstallmentAmount)}) दोनों पक्षों के हस्ताक्षर होते ही काश्तकार के AgroYilt वॉलेट से अपने आप काट ली जाएगी। यदि वह पट्टा शुरू होने के ${FIRST_PAYMENT_GRACE_DAYS} दिन के भीतर नहीं दी जाती, तो भूमि स्वामी तुरंत पट्टा समाप्त कर सकता है।`
-        : ` The first installment (${inr(terms.firstInstallmentAmount)}) is charged automatically from the tenant's AgroYilt wallet as soon as both parties have signed. If it is not paid within ${FIRST_PAYMENT_GRACE_DAYS} days after the lease starts, the landowner may end the lease at once.`)
+        ? ` ${one ? 'यह भुगतान' : 'पहली किस्त'} (${first}) दोनों पक्षों के हस्ताक्षर होते ही काश्तकार के AgroYilt वॉलेट से अपने आप काट ली जाएगी। यदि वह पट्टा शुरू होने के ${FIRST_PAYMENT_GRACE_DAYS} दिन के भीतर नहीं दी जाती, तो भूमि स्वामी तुरंत पट्टा समाप्त कर सकता है।`
+        : ` ${one ? 'The payment' : 'The first installment'} (${first}) is charged automatically from the tenant's AgroYilt wallet as soon as both parties have signed. If it is not paid within ${FIRST_PAYMENT_GRACE_DAYS} days after the lease starts, the landowner may end the lease at once.`)
+      : '';
+    if (schedule === 'upfront' || n === 1) {
+      return hi
+        ? `पूरा किराया (${inr(terms.totalRent)}) पट्टा आरंभ होने पर एक ही बार में AgroYilt ऐप के माध्यम से दिया जाएगा।${charged}`
+        : `The whole rent (${inr(terms.totalRent)}) is paid in one payment through the AgroYilt app when the lease starts.${charged}`;
+    }
+    if (schedule === 'advance-monthly') {
+      const rest = inr(terms.laterInstallmentAmount);
+      return hi
+        ? `किराये का ${terms.advancePercent}% (${first}) अग्रिम के रूप में पट्टा आरंभ होने पर दिया जाएगा। शेष किराया ${n - 1} मासिक किस्तों में (लगभग ${rest} प्रति माह) AgroYilt ऐप के माध्यम से दिया जाएगा, पहली मासिक किस्त पट्टा आरंभ होने के एक महीने बाद और आगे हर महीने उसी तारीख को।${charged}`
+        : `${terms.advancePercent}% of the rent (${first}) is paid in advance when the lease starts. The rest is paid in ${n - 1} monthly installments (about ${rest} a month) through the AgroYilt app, the first one a month after the lease starts and the others on the same date each month.${charged}`;
+    }
+    const period = PERIOD_TEXT[schedule] || PERIOD_TEXT.monthly;
+    const sparse = schedule === 'quarterly' || schedule === 'half-yearly'; // installments are months apart, so one missed installment is enough for a notice
+    const notice = sparse
+      ? (hi
+        ? ' किस्तों के बीच लंबा अंतर होने के कारण, यदि याद दिलाने के बाद भी कोई एक किस्त देय तिथि के बाद नहीं दी जाती, तो भूमि स्वामी 15 दिन का नोटिस देकर पट्टा समाप्त कर सकता है।'
+        : ' Because the installments are months apart, if even one installment stays unpaid after its due date, despite reminders, the landowner may end the lease by giving 15 days\' notice.')
       : '';
     return hi
-      ? `किराया ${terms.installmentCount} मासिक किस्तों में (लगभग ${inr(each)} प्रति माह) AgroYilt ऐप के माध्यम से दिया जाएगा। पहली किस्त पट्टा आरंभ होने पर और आगे हर महीने उसी तारीख को देय होगी।${advance}`
-      : `The rent is paid in ${terms.installmentCount} monthly installments (about ${inr(each)} a month) through the AgroYilt app. The first installment is due when the lease starts and the others on the same date each month.${advance}`;
+      ? `किराया ${n} ${period.hi} किस्तों में (लगभग ${inr(each)} ${period.each.hi}) AgroYilt ऐप के माध्यम से दिया जाएगा। पहली किस्त पट्टा आरंभ होने पर और आगे ${period.due.hi} देय होगी।${notice}${charged}`
+      : `The rent is paid in ${n} ${period.en} installments (about ${inr(each)} ${period.each.en}) through the AgroYilt app. The first installment is due when the lease starts and the others on ${period.due.en}.${notice}${charged}`;
   }
   return hi
     ? `हर फसल कटने के बाद काश्तकार ऐप में फसल की कुल कीमत दर्ज करेगा, भूमि स्वामी उसे पुष्टि करेगा, और काश्तकार भूमि स्वामी का ${terms.sharePercentage}% हिस्सा AgroYilt ऐप के माध्यम से देगा।`

@@ -261,9 +261,9 @@ const LeaseAgreementPage = () => {
         {/* Advance payment: installment 1 is charged from the farmer's wallet the moment both have signed */}
         {ag.advance?.required && live && (
           <div className={`rounded-2xl border p-3.5 text-sm ${ag.advance.short && ag.myRole === 'farmer' ? 'bg-amber-50 border-amber-300 text-amber-900' : 'bg-white border-slate-200 text-slate-800'}`}>
-            <p className="font-black">First installment paid at the start · शुरुआत में पहली किस्त</p>
+            <p className="font-black">Payment at the start · शुरुआत में भुगतान</p>
             <p className="mt-0.5 text-[13px]">
-              {inr(ag.advance.amount)} is taken from the farmer's wallet as soon as both have signed. If it is not paid within 3 days of the lease starting, the owner can end the lease.
+              {inr(ag.advance.amount)} (the first payment of the rent) is taken from the farmer's wallet as soon as both have signed. If it is not paid within 3 days of the lease starting, the owner can end the lease.
             </p>
             {ag.myRole === 'farmer' && (
               <p className="mt-1.5 text-[13px] font-bold flex flex-wrap items-center gap-x-2">

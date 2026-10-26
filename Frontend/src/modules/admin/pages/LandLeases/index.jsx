@@ -4,6 +4,8 @@ import adminLandLeaseService from '../../services/adminLandLeaseService';
 import { toastManager } from '../../../../utils/toastManager';
 
 const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
+const PLAN_TEXT = { monthly: 'Paid monthly', quarterly: 'Paid quarterly', 'half-yearly': 'Paid half-yearly', upfront: 'Full rent upfront' };
+const planText = (schedule, advancePercent) => (schedule === 'advance-monthly' ? `${advancePercent}% advance + monthly` : PLAN_TEXT[schedule] || PLAN_TEXT.monthly);
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '-');
 
 const STATUS_STYLE = {
@@ -236,8 +238,8 @@ const LandLeases = () => {
                 <span className="text-gray-400 block">Terms</span>
                 {detail.leaseType === 'fixed-rent'
                   ? (detail.agreement?.totalRent
-                    ? <><b>{inr(detail.agreement.totalRent)}</b> for {detail.agreement.durationMonths} months<span className="block text-[10px] text-gray-500">{inr(detail.agreement.agreedPrice ?? detail.pricePerAcre)}/acre/year × {detail.sizeInAcres} acres</span></>
-                    : `${inr(detail.pricePerAcre)}/acre/year (asking)`)
+                    ? <><b>{inr(detail.agreement.totalRent)}</b> for {detail.agreement.durationMonths} months<span className="block text-[10px] text-gray-500">{inr(detail.agreement.agreedPrice ?? detail.pricePerAcre)}/acre/year × {detail.sizeInAcres} acres · {planText(detail.agreement.paymentSchedule, detail.agreement.advancePercent)}</span></>
+                    : <>{inr(detail.pricePerAcre)}/acre/year (asking)<span className="block text-[10px] text-gray-500">{planText(detail.paymentPlan?.schedule, detail.paymentPlan?.advancePercent)}</span></>)
                   : `${detail.agreement?.agreedShare ?? detail.sharePercentage}% owner share`}
               </div>
               <div className="bg-gray-50 rounded-xl p-3">

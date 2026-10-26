@@ -2,7 +2,7 @@ const LandLease = require('../../models/LandLease');
 const User = require('../../models/User');
 const mongoose = require('mongoose');
 const Settings = require('../../models/Settings');
-const { buildAgreement, round2 } = require('../../services/landLeaseScheduleService');
+const { buildAgreement, round2, cleanPaymentPlan } = require('../../services/landLeaseScheduleService');
 const { payItem, createOnlineOrder, verifyOnlinePayment } = require('../../services/landLeasePaymentService');
 const { notifyLease } = require('../../services/landLeaseNotifyService');
 const landBoundary = require('../../services/landBoundaryService');
@@ -248,6 +248,7 @@ const farmerLandLeaseController = {
         leaseType,
         pricePerAcre,
         sharePercentage,
+        paymentPlan,
         availableFrom,
         availableTo,
         documents,
@@ -296,6 +297,13 @@ const farmerLandLeaseController = {
           success: false,
           message: 'कृपया प्रति एकड़ किराया दर्ज करें (Price per acre is required for fixed-rent)'
         });
+      }
+
+      let plan = null;
+      if (leaseType === 'fixed-rent') {
+        const checked = cleanPaymentPlan(paymentPlan);
+        if (checked.error) return res.status(400).json({ success: false, message: checked.error });
+        plan = checked.plan;
       }
 
       if (leaseType === 'fixed-rent' && Number(pricePerAcre) > HIGH_PRICE_PER_ACRE && confirmHighPrice !== true) {
@@ -387,6 +395,7 @@ const farmerLandLeaseController = {
         leaseType,
         pricePerAcre: leaseType === 'fixed-rent' ? Number(pricePerAcre) : null,
         sharePercentage: leaseType === 'crop-share' ? Number(sharePercentage) : null,
+        ...(plan ? { paymentPlan: plan } : {}),
         availableFrom: new Date(availableFrom),
         availableTo: new Date(availableTo),
         documents: documents || [],
@@ -668,6 +677,7 @@ const farmerLandLeaseController = {
           leaseType: land.leaseType,
           pricePerAcre: land.pricePerAcre,
           sharePercentage: land.sharePercentage,
+          paymentPlan: land.paymentPlan || null,
           status: land.status,
           endedReason: land.endedReason || null,
           images: land.images,
@@ -716,9 +726,8 @@ const farmerLandLeaseController = {
         proposedShare,
         durationMonths = 12,
         proposedCrops,
-        message,
-        payFirstInstallment
-      } = req.body; // no proposedPrice: a fixed-rent offer is always at the owner's rent
+        message
+      } = req.body; // no proposedPrice, no payment terms: a fixed-rent offer is always at the owner's rent and payment plan
 
       const lease = await LandLease.findById(id);
       if (!lease) {
@@ -778,7 +787,6 @@ const farmerLandLeaseController = {
         proposedShare: lease.leaseType === 'crop-share' ? bid : null,
         durationMonths: months,
         proposedCrops: proposedCrops || '',
-        payFirstInstallmentOnStart: lease.leaseType === 'fixed-rent' && payFirstInstallment === true,
         message: message || '',
         status: 'pending',
         createdAt: new Date()

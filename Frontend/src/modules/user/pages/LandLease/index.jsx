@@ -31,6 +31,7 @@ import {
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import landLeaseService from '../../services/landLeaseService';
+import { PAYMENT_PLAN_OPTIONS, MIN_ADVANCE_PERCENT, MAX_ADVANCE_PERCENT, planOfLand, rentInstallments, describeInstallments, planLabel } from './paymentPlan';
 import { toastManager } from '../../../../utils/toastManager';
 import authStorage from '../../../../utils/authStorage';
 import walletService from '../../../../services/walletService';
@@ -119,8 +120,7 @@ const LandLeasePage = () => {
     proposedShare: '',
     durationMonths: 12,
     proposedCrops: '',
-    message: '',
-    payFirstInstallment: false
+    message: ''
   });
 
   // Listing Form State
@@ -139,6 +139,9 @@ const LandLeasePage = () => {
     leaseType: 'fixed-rent',
     pricePerAcre: '',
     sharePercentage: '50',
+    paymentSchedule: 'monthly',
+    advancePercent: '25',
+    chargeFirstOnStart: false,
     availableFrom: new Date().toISOString().split('T')[0],
     availableTo: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     soilType: 'Alluvial Soil',
@@ -283,11 +286,10 @@ const LandLeasePage = () => {
       proposedShare: land.leaseType === 'crop-share' ? land.sharePercentage || 50 : '',
       durationMonths: 12,
       proposedCrops: (land.suitableCrops || []).join(', '),
-      message: '',
-      payFirstInstallment: false
+      message: ''
     });
     setOfferWallet(null);
-    if (land.leaseType === 'fixed-rent') {
+    if (land.leaseType === 'fixed-rent' && planOfLand(land).chargeFirstOnStart) {
       walletService.getBalance().then((r) => { if (r?.success) setOfferWallet(Number(r.data?.balance) || 0); }).catch(() => {});
     }
   };
@@ -302,7 +304,6 @@ const LandLeasePage = () => {
       durationMonths: Number(offerForm.durationMonths) || 12,
       proposedCrops: offerForm.proposedCrops,
       message: offerForm.message,
-      payFirstInstallment: offerModalLand.leaseType === 'fixed-rent' ? !!offerForm.payFirstInstallment : undefined,
       confirmHighPrice: confirmHighPrice || undefined
     });
 
@@ -622,6 +623,11 @@ const LandLeasePage = () => {
         leaseType: listingForm.leaseType,
         pricePerAcre: listingForm.leaseType === 'fixed-rent' ? Number(listingForm.pricePerAcre) : null,
         sharePercentage: listingForm.leaseType === 'crop-share' ? Number(listingForm.sharePercentage) : null,
+        paymentPlan: listingForm.leaseType === 'fixed-rent' ? {
+          schedule: listingForm.paymentSchedule,
+          advancePercent: listingForm.paymentSchedule === 'advance-monthly' ? Number(listingForm.advancePercent) : undefined,
+          chargeFirstOnStart: listingForm.chargeFirstOnStart
+        } : undefined,
         availableFrom: listingForm.availableFrom,
         availableTo: listingForm.availableTo,
         soilType: listingForm.soilType,
@@ -664,6 +670,9 @@ const LandLeasePage = () => {
           leaseType: defaultLeaseType,
           pricePerAcre: '',
           sharePercentage: '50',
+          paymentSchedule: 'monthly',
+          advancePercent: '25',
+          chargeFirstOnStart: false,
           availableFrom: new Date().toISOString().split('T')[0],
           availableTo: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
           soilType: 'Alluvial Soil',
@@ -1380,6 +1389,75 @@ const LandLeasePage = () => {
                       <span className="block font-medium text-emerald-700">₹{Math.round(Number(listingForm.sizeInAcres) * Number(listingForm.pricePerAcre) / 12).toLocaleString('en-IN')} per month · rent is per acre per year</span>
                     </p>
                   )}
+
+                  {/* When the rent is paid */}
+                  <div className="mt-3">
+                    <label className="block font-bold text-gray-800 mb-1">
+                      When should the rent be paid? <span className="text-red-500">*</span>
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {PAYMENT_PLAN_OPTIONS.map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setListingForm({ ...listingForm, paymentSchedule: opt.value })}
+                          className={`text-left px-3 py-2 rounded-xl border transition-all ${
+                            listingForm.paymentSchedule === opt.value
+                              ? 'bg-emerald-50 border-emerald-600 ring-1 ring-emerald-600'
+                              : 'bg-gray-50 border-gray-200'
+                          }`}
+                        >
+                          <span className="block font-bold text-gray-900 text-xs">{opt.label}</span>
+                          <span className="block text-[10px] font-medium text-gray-500 leading-tight">{opt.hint}</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {listingForm.paymentSchedule === 'advance-monthly' && (
+                      <div className="mt-2">
+                        <label className="block text-xs font-bold text-gray-700 mb-1">Advance at the start (% of the rent)</label>
+                        <input
+                          type="number"
+                          min={MIN_ADVANCE_PERCENT}
+                          max={MAX_ADVANCE_PERCENT}
+                          required
+                          value={listingForm.advancePercent}
+                          onChange={(e) => setListingForm({ ...listingForm, advancePercent: e.target.value })}
+                          className="w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white text-gray-900 font-bold"
+                        />
+                        <p className="mt-1 text-[10px] font-medium text-gray-500">Between {MIN_ADVANCE_PERCENT}% and {MAX_ADVANCE_PERCENT}%. The rest is paid monthly.</p>
+                      </div>
+                    )}
+
+                    {['monthly', 'quarterly', 'half-yearly'].includes(listingForm.paymentSchedule) && (
+                      <label className="mt-2 flex items-start gap-2.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={listingForm.chargeFirstOnStart}
+                          onChange={(e) => setListingForm({ ...listingForm, chargeFirstOnStart: e.target.checked })}
+                          className="w-4 h-4 mt-0.5 accent-emerald-700 shrink-0"
+                        />
+                        <span className="text-xs font-semibold text-gray-800 leading-snug">
+                          Take the first installment from the tenant's wallet when the lease starts
+                          <span className="block text-[11px] font-medium text-gray-500">The tenant must have the money in the wallet before signing.</span>
+                        </span>
+                      </label>
+                    )}
+
+                    {listingForm.paymentSchedule === 'upfront' || listingForm.paymentSchedule === 'advance-monthly' ? (
+                      <p className="mt-2 text-[11px] font-medium text-gray-500">The first payment is taken from the tenant's wallet when the lease starts. If it is not paid within 3 days you can end the lease.</p>
+                    ) : null}
+
+                    {Number(listingForm.pricePerAcre) > 0 && Number(listingForm.sizeInAcres) > 0 && (() => {
+                      const plan = { schedule: listingForm.paymentSchedule, advancePercent: Number(listingForm.advancePercent) || MIN_ADVANCE_PERCENT };
+                      const yearly = Number(listingForm.sizeInAcres) * Number(listingForm.pricePerAcre);
+                      return (
+                        <p className="mt-2 text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-lg px-2.5 py-1.5">
+                          For a 12-month lease: {describeInstallments(rentInstallments(yearly, 12, plan), plan)}
+                        </p>
+                      );
+                    })()}
+                  </div>
                 </div>
               ) : (
                 <div>
@@ -1834,6 +1912,7 @@ const LandLeasePage = () => {
                                     {item.leaseType === 'fixed-rent'
                                       ? <span className="text-gray-400 font-normal ml-2">(₹{Number(offer.proposedPrice || item.pricePerAcre).toLocaleString('en-IN')}/acre/year)</span>
                                       : <span className="text-gray-400 font-normal ml-2">({offer.durationMonths || 12} months)</span>}
+                                    {item.leaseType === 'fixed-rent' && <span className="block text-[10px] text-gray-500 font-semibold">{planLabel(planOfLand(item))}</span>}
                                   </div>
 
                                   {offer.message && (
@@ -1939,7 +2018,7 @@ const LandLeasePage = () => {
                             : `${item.myOffer?.proposedShare || item.sharePercentage}% Crop Share`}
                         </span>
                         {item.leaseType === 'fixed-rent' && (
-                          <span className="block text-[10px] text-gray-500">₹{Number(item.myOffer?.proposedPrice || item.pricePerAcre).toLocaleString('en-IN')}/acre/year × {item.sizeInAcres} acres</span>
+                          <span className="block text-[10px] text-gray-500">₹{Number(item.myOffer?.proposedPrice || item.pricePerAcre).toLocaleString('en-IN')}/acre/year × {item.sizeInAcres} acres · {planLabel(planOfLand(item))}</span>
                         )}
                       </div>
                     </div>
@@ -2032,34 +2111,33 @@ const LandLeasePage = () => {
                   </select>
                 </div>
 
-                {/* What this adds up to, and the option to pay installment 1 when the lease starts */}
+                {/* What this adds up to, and when the owner wants it paid */}
                 {offerModalLand.leaseType === 'fixed-rent' && Number(offerForm.proposedPrice) > 0 && (() => {
                   const months = Number(offerForm.durationMonths) || 12;
                   const total = Number(offerModalLand.sizeInAcres) * Number(offerForm.proposedPrice) * (months / 12);
-                  const each = total / months;
-                  const short = offerForm.payFirstInstallment && offerWallet !== null && offerWallet < each;
+                  const plan = planOfLand(offerModalLand);
+                  const amounts = rentInstallments(total, months, plan);
+                  const first = amounts[0];
+                  const short = plan.chargeFirstOnStart && offerWallet !== null && offerWallet < first;
                   return (
                     <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 space-y-2">
                       <p className="text-xs font-bold text-emerald-900">
                         {offerModalLand.sizeInAcres} acres × ₹{Number(offerForm.proposedPrice).toLocaleString('en-IN')} × {months}/12 year
-                        <span className="block text-base font-black">= ₹{Math.round(total).toLocaleString('en-IN')} total · ₹{Math.round(each).toLocaleString('en-IN')} a month</span>
+                        <span className="block text-base font-black">= ₹{Math.round(total).toLocaleString('en-IN')} total</span>
                       </p>
-                      <label className="flex items-start gap-2.5 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={!!offerForm.payFirstInstallment}
-                          onChange={(e) => setOfferForm({ ...offerForm, payFirstInstallment: e.target.checked })}
-                          className="w-4 h-4 mt-0.5 accent-emerald-700 shrink-0"
-                        />
-                        <span className="text-xs font-semibold text-gray-800 leading-snug">
-                          I will pay the first installment (₹{Math.round(each).toLocaleString('en-IN')}) as soon as the lease starts
-                          <span className="block text-[11px] font-medium text-gray-500">It is taken from my wallet when both of us have signed. Shows the owner I am serious.</span>
-                        </span>
-                      </label>
-                      {offerForm.payFirstInstallment && offerWallet !== null && (
+                      <p className="text-xs font-semibold text-gray-800 leading-snug">
+                        The owner wants it paid: <span className="font-black">{planLabel(plan).toLowerCase()}</span>
+                        <span className="block text-[11px] font-medium text-gray-600">{describeInstallments(amounts, plan)}</span>
+                      </p>
+                      {plan.chargeFirstOnStart && (
+                        <p className="text-[11px] font-medium text-gray-600">
+                          The first payment (₹{Math.round(first).toLocaleString('en-IN')}) is taken from your wallet as soon as both of you have signed.
+                        </p>
+                      )}
+                      {plan.chargeFirstOnStart && offerWallet !== null && (
                         <p className={`text-[11px] font-semibold ${short ? 'text-amber-700' : 'text-emerald-700'}`}>
                           Wallet: ₹{Math.round(offerWallet).toLocaleString('en-IN')}
-                          {short ? ` · add ₹${Math.ceil(each - offerWallet).toLocaleString('en-IN')} before you sign the agreement` : ' · enough'}
+                          {short ? ` · add ₹${Math.ceil(first - offerWallet).toLocaleString('en-IN')} before you sign the agreement` : ' · enough'}
                           {short && <button type="button" onClick={() => navigate('/user/wallet')} className="ml-2 underline font-black">Add money</button>}
                         </p>
                       )}
@@ -2196,6 +2274,9 @@ const LandLeasePage = () => {
                       ? `₹${Number(selectedLandDetail.pricePerAcre || 0).toLocaleString('en-IN')}/acre`
                       : `${selectedLandDetail.sharePercentage}% Crop Share`}
                   </span>
+                  {selectedLandDetail.leaseType === 'fixed-rent' && (
+                    <span className="block text-[10px] font-semibold text-emerald-700 mt-0.5">{planLabel(planOfLand(selectedLandDetail))}</span>
+                  )}
                 </div>
                 <div className="bg-gray-50 p-2.5 rounded-xl border border-gray-100">
                   <span className="text-gray-400 block text-[10px]">Soil Type</span>

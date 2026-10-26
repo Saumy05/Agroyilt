@@ -159,6 +159,12 @@ const landLeaseSchema = new mongoose.Schema({
     type: Number, // Only applicable for crop-share (% owner share)
     default: null
   },
+  // Fixed rent: when the tenant pays, chosen by the owner when listing. Listings made before this existed read as monthly.
+  paymentPlan: {
+    schedule: { type: String, enum: ['monthly', 'quarterly', 'half-yearly', 'upfront', 'advance-monthly'], default: 'monthly' },
+    advancePercent: { type: Number, default: null },        // advance-monthly only: % of the total rent paid at the start
+    chargeFirstOnStart: { type: Boolean, default: false }   // monthly / quarterly / half-yearly: installment 1 is charged from the wallet when the lease starts (always true for upfront and advance-monthly)
+  },
   soilType: {
     type: String,
     default: 'Alluvial Soil'
@@ -228,6 +234,8 @@ const landLeaseSchema = new mongoose.Schema({
     agreedShare: { type: Number, default: null }, // crop-share: owner %
     totalRent: { type: Number, default: null }, // fixed-rent: INR for the whole term
     commissionPercentage: { type: Number, default: 0 },
+    paymentSchedule: { type: String, default: 'monthly' },
+    advancePercent: { type: Number, default: null },           // advance-monthly only,     // the owner's plan frozen at acceptance (leases made before plans existed read as monthly)
     advanceFirstInstallment: { type: Boolean, default: false }, // installment 1 is charged from the tenant's wallet at the start
     firstPaymentDueBy: { type: Date, default: null }            // after this, an unpaid installment 1 lets the owner end the lease at once
   },
