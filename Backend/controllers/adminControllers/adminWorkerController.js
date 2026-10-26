@@ -1114,7 +1114,7 @@ const addWorker = async (req, res) => {
 
     const worker = await Worker.create({
       name: name.trim(),
-      email: email || null,
+      email: email || undefined, // never null: a sparse unique index still counts null, so a second worker without an email would be refused
       phone: cleanPhone,
       workerType: ['WORKER', 'TEAM_LEADER'].includes(workerType) ? workerType : 'WORKER',
       gender: ['male', 'female', 'other'].includes(String(gender || '').toLowerCase()) ? String(gender).toLowerCase() : 'male',

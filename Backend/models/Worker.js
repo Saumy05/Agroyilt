@@ -10,17 +10,13 @@ const workerSchema = new mongoose.Schema({
   },
   email: {
     type: String,
-    unique: true,
-    sparse: true, // Allow multiple nulls
     trim: true,
-    lowercase: true
+    lowercase: true // unique among real emails only: see the partial index below
   },
   phone: {
     type: String,
     required: false,  // Optional for offline members registered by a Team Leader
-    unique: true,
-    sparse: true,     // Allow multiple nulls (offline members may have no phone)
-    trim: true
+    trim: true        // unique among real phone numbers only: see the partial index below
   },
   gender: {
     type: String,
@@ -379,6 +375,11 @@ const workerSchema = new mongoose.Schema({
 });
 
 // Indexes for faster queries
+// One worker per phone number, but any number of workers without one (offline members). A partial index is used rather than
+// `sparse` because a worker saved with phone: null would still count as a duplicate of the other workers without a phone.
+// An existing database needs scripts/fix-worker-phone-index.js once, since Mongoose never changes an index that exists.
+workerSchema.index({ phone: 1 }, { unique: true, partialFilterExpression: { phone: { $type: 'string' } } });
+workerSchema.index({ email: 1 }, { unique: true, partialFilterExpression: { email: { $type: 'string' } } });
 workerSchema.index({ createdAt: -1 });
 workerSchema.index({ approvalStatus: 1, createdAt: -1 });
 workerSchema.index({ workerType: 1, createdAt: -1 });
