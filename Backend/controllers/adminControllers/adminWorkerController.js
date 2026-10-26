@@ -682,7 +682,7 @@ const getAllWorkerJobs = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: jobs,
+      data: await require('../../services/addOnService').attachAddOnOfToBookings(jobs),
       stats: {
         total: allCount,
         completed: completedCount,
@@ -1048,7 +1048,7 @@ const getOpenWorkerRequests = async (req, res) => {
 
     const [requests, total] = await Promise.all([
       WorkerBookingRequest.find(query)
-        .select('farmerId workCategory workTitle bookingType bookingMode rateUnit scheduledDate startTime endTime startDate endDate numberOfDays location requiredWorkers minRate maxRate minDailyRate maxDailyRate status eligibleWorkersCount dispatchedWorkersCount acceptedWorkersCount rejectedWorkersCount bookingNumber createdAt updatedAt cancelledAt cancelledBy rejectionReason expiresAt')
+        .select('farmerId workCategory workTitle bookingType bookingMode rateUnit scheduledDate startTime endTime startDate endDate numberOfDays location requiredWorkers minRate maxRate minDailyRate maxDailyRate status eligibleWorkersCount dispatchedWorkersCount acceptedWorkersCount rejectedWorkersCount bookingNumber addOnOfRequestId createdAt updatedAt cancelledAt cancelledBy rejectionReason expiresAt')
         .populate('farmerId', 'name phone')
         .sort(closed ? { updatedAt: -1 } : { createdAt: -1 })
         .skip((pageNum - 1) * limitNum)
@@ -1058,9 +1058,10 @@ const getOpenWorkerRequests = async (req, res) => {
     ]);
 
     const { requestRef } = require('../../utils/bookingRef');
+    const withLinks = await require('../../services/addOnService').attachAddOnOf(requests); // extra-worker requests say which booking they belong to
     res.status(200).json({
       success: true,
-      data: requests.map((r) => ({ ...r, bookingNumber: r.bookingNumber || requestRef(r._id) })),
+      data: withLinks.map((r) => ({ ...r, bookingNumber: r.bookingNumber || requestRef(r._id) })),
       pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) }
     });
   } catch (error) {

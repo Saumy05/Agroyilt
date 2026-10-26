@@ -116,7 +116,29 @@ const cancelWorkerBooking = async ({ requestId, farmerId = null, actor = 'farmer
     (request.selectedWorkerIds || []).forEach(id => id && workerIds.add(String(id)));
   }
 
+  // extra workers added to this booking go with it (the ones that have not started; a refund follows the usual rules)
+  await cancelAddOnsOf(request, actorId);
+
   return { ok: true, request, workerIds: [...workerIds], refundAmount, wasConfirmed };
+};
+
+/** Cancels the extra-worker requests of a booking that was just cancelled. Never throws into the caller. */
+const cancelAddOnsOf = async (parent, actorId = null) => {
+  try {
+    const addOns = await WorkerBookingRequest.find({ addOnOfRequestId: parent._id, status: { $in: CANCELLABLE } }).select('_id').lean();
+    for (const a of addOns) {
+      const res = await cancelWorkerBooking({
+        requestId: a._id, actor: 'system', actorId, reason: 'The booking this extra worker was added to was cancelled'
+      });
+      if (!res.ok) continue; // already started or settled: it stays
+      try {
+        const { announceCancellation } = require('../controllers/workerControllers/farmerWorkerRequestController');
+        await announceCancellation({ request: res.request, workerIds: res.workerIds, refundAmount: res.refundAmount, wasConfirmed: res.wasConfirmed, by: 'parent' });
+      } catch (e) { console.warn('[cancelAddOnsOf] announce failed:', e.message); }
+    }
+  } catch (e) {
+    console.warn('[cancelAddOnsOf] failed:', e.message);
+  }
 };
 
 /**

@@ -526,11 +526,11 @@ const BookedRequestView = ({ request, onRefresh }) => {
                 <span className="block text-[11px] text-slate-500">Workers accept first</span>
               </button>
             )}
-            {isDaily && !allDone && (
+            {!allDone && (
               <button type="button" onClick={() => setModal('add')} className="p-3 rounded-2xl border border-slate-200 text-left">
                 <FiUserPlus className="text-emerald-600 mb-1" />
                 <span className="block text-sm font-bold text-slate-900">Add workers</span>
-                <span className="block text-[11px] text-slate-500">For the remaining days</span>
+                <span className="block text-[11px] text-slate-500">{isDaily ? 'For the remaining days' : 'For the time left'}</span>
               </button>
             )}
             <button type="button" onClick={() => setModal('dispute')} className="p-3 rounded-2xl border border-slate-200 text-left">
@@ -575,7 +575,7 @@ const BookedRequestView = ({ request, onRefresh }) => {
         onClose={() => setModal(null)}
         requestId={id}
         bookingType={request.bookingType || 'DAILY'}
-        defaultRate={request.maxDailyRate || request.minDailyRate || 500}
+        defaultRate={isDaily ? (request.maxDailyRate || request.minDailyRate || 500) : (request.maxRate || request.minRate || 100)}
         remainingDays={Math.max(1, (request.numberOfDays || 1) - currentDay + 1)}
         onWorkersAdded={refreshAll}
       />

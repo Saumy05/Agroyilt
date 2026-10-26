@@ -314,6 +314,9 @@ const WorkerBookings = () => {
                     <div className="min-w-0">
                       <p className="font-black text-slate-900 text-sm truncate">{r.workTitle || r.workCategory || 'Farm Labor Request'}</p>
                       {r.bookingNumber && <p className="text-[11px] font-mono font-bold text-slate-500">#{r.bookingNumber}</p>}
+                      {r.addOnOf && (
+                        <p className="text-[11px] font-bold text-amber-800">➕ Extra worker for “{r.addOnOf.title}” (#{r.addOnOf.bookingNumber})</p>
+                      )}
                       <p className="text-[11px] text-slate-400 font-medium">
                         Requested {r.createdAt ? new Date(r.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'N/A'}
                       </p>
@@ -424,6 +427,11 @@ const WorkerBookings = () => {
                       <div>
                         <div className="flex items-center gap-1.5">
                           <span className="font-black text-slate-900 text-sm tracking-tight">{bookingIdDisplay}</span>
+                          {booking.addOnOf && (
+                            <span className="text-[10px] font-bold text-amber-800 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded-md" title={booking.addOnOf.title}>
+                              Extra worker for #{booking.addOnOf.bookingNumber}
+                            </span>
+                          )}
                           <button
                             onClick={() => handleCopy(booking.bookingNumber || booking._id, booking._id)}
                             className="text-slate-400 hover:text-blue-600 transition-colors p-0.5"
@@ -629,6 +637,11 @@ const WorkerBookings = () => {
                     <span className="text-xs bg-white/20 text-white px-2.5 py-0.5 rounded-full font-mono font-bold">
                       {selectedBooking.bookingNumber || `#${selectedBooking._id.slice(-6).toUpperCase()}`}
                     </span>
+                    {selectedBooking.addOnOf && (
+                      <span className="text-[11px] bg-amber-400/30 text-amber-100 px-2.5 py-0.5 rounded-full font-bold">
+                        Extra worker for #{selectedBooking.addOnOf.bookingNumber}
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-slate-300 mt-0.5">
                     Booked on {selectedBooking.createdAt ? new Date(selectedBooking.createdAt).toLocaleString('en-IN') : 'N/A'}

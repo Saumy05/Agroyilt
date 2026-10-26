@@ -121,8 +121,8 @@ const AddWorkersModal = ({
             </div>
           </div>
 
-          {/* Start Timing */}
-          <div>
+          {/* Start Timing (daily only: an hourly extra worker joins the same booked slot, in a little while) */}
+          {isDaily && (<div>
             <label className="text-xs font-bold text-slate-700 block mb-2">When are they needed?</label>
             <div className="grid grid-cols-2 gap-2">
               <button
@@ -151,7 +151,7 @@ const AddWorkersModal = ({
                 <span className="text-[10px] font-normal text-slate-400">Start next morning</span>
               </button>
             </div>
-          </div>
+          </div>)}
 
           {/* Number of Days (Daily only) */}
           {isDaily && (
@@ -190,7 +190,7 @@ const AddWorkersModal = ({
               <p className="text-[11px] text-amber-800 leading-snug mt-0.5">
                 {isDaily
                   ? 'Includes 8 hours of productive farm work + 1 hour lunch/rest break. Workers already assigned on this booking will not be re-invited.'
-                  : 'Billed strictly for active work hours (unpaid breaks excluded).'}
+                  : 'The extra worker joins the same booked slot in about 15 minutes and is paid only for the time left in it.'}
               </p>
             </div>
           </div>
@@ -199,8 +199,12 @@ const AddWorkersModal = ({
           <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-4 space-y-2">
             <div className="flex items-center justify-between text-xs text-slate-600">
               <span>Rate per Worker</span>
-              <span className="font-bold text-slate-800">₹{rate} / {isDaily ? 'day' : 'shift'}</span>
+              <span className="font-bold text-slate-800">₹{rate} / {isDaily ? 'day' : 'hour'}</span>
             </div>
+            {!isDaily && (
+              <p className="text-[11px] text-slate-500">The price is the hourly rate × the time left in the booked slot. You see the exact amount before paying.</p>
+            )}
+            {isDaily && (<>
             <div className="flex items-center justify-between text-xs text-slate-600">
               <span>Manpower Subtotal ({workersCount} {workersCount === 1 ? 'worker' : 'workers'} × {isDaily ? `${daysCount}d` : '1 shift'})</span>
               <span className="font-bold text-slate-800">₹{subtotal}</span>
@@ -213,6 +217,7 @@ const AddWorkersModal = ({
               <span className="text-xs font-black text-slate-900">Total Additional Cost</span>
               <span className="text-base font-black text-amber-950">₹{totalPayable}</span>
             </div>
+            </>)}
             <p className="text-[11px] text-slate-600 font-medium pt-1">
               ✓ Nothing is charged now. Once workers accept, you pick the ones you want and choose how to pay (only the options available in your area).
             </p>

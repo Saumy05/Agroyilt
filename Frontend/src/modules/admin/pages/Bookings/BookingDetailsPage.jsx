@@ -90,6 +90,11 @@ const BookingDetailsPage = () => {
                         </h1>
                         <p className="text-sm text-gray-500">
                             #{booking.bookingNumber || booking._id}
+                            {booking.addOnOf && (
+                                <span className="ml-2 text-[11px] font-bold text-amber-800 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-md">
+                                    Extra worker for “{booking.addOnOf.title}” (#{booking.addOnOf.bookingNumber})
+                                </span>
+                            )}
                         </p>
                     </div>
                 </div>

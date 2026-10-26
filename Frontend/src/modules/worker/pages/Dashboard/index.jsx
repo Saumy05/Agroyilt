@@ -186,6 +186,7 @@ const Dashboard = () => {
                 requestId:       reqDoc._id,
                 farmerId:        reqDoc.farmerId,
                 workTitle:       reqDoc.workTitle,
+                addOnOf:         reqDoc.addOnOf || null,
                 workCategory:    reqDoc.workCategory,
                 workDescription: reqDoc.workDescription,
                 requiredSkills:  reqDoc.requiredSkills,

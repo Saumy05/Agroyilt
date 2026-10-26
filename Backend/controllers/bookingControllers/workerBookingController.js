@@ -450,7 +450,7 @@ const getJobById = async (req, res) => {
 
         try {
           const WorkerBookingRequest = require('../../models/WorkerBookingRequest');
-          const pReq = pReqId ? await WorkerBookingRequest.findById(pReqId).select('financialSnapshot paymentMethod paymentStatus bookingType durationMinutes endTime numberOfDays auditLog scheduledDate startDate startTime reportingTime shiftDurationHours breakDurationHours workDurationHours') : null;
+          const pReq = pReqId ? await WorkerBookingRequest.findById(pReqId).select('addOnOfRequestId financialSnapshot paymentMethod paymentStatus bookingType durationMinutes endTime numberOfDays auditLog scheduledDate startDate startTime reportingTime shiftDurationHours breakDurationHours workDurationHours') : null;
           if (assignment && pReq) {
             const { computeStartWindows } = require('../../services/workerScheduleService');
             const { getWorkerFinancialSettings } = require('../../services/workerFinancialService');
@@ -477,6 +477,10 @@ const getJobById = async (req, res) => {
             jobData.breakRemainingSeconds = bv.remainingSeconds;
             jobData.lastBreakStartedBy = (currentDayLog?.lastBreakStartedBy) || assignment.lastBreakStartedBy || null;
             jobData.serverTime = new Date();
+          }
+          // an extra worker added to a running booking: say which booking (so the worker knows what the job belongs to)
+          if (pReq && pReq.addOnOfRequestId) {
+            jobData.addOnOf = await require('../../services/addOnService').addOnContext({ addOnOfRequestId: pReq.addOnOfRequestId });
           }
           const isCash = jobData.paymentMethod === 'cash' || Boolean(assignment?.isCashBooking) || (pReq && pReq.paymentMethod === 'cash');
           if (isCash && assignment) {

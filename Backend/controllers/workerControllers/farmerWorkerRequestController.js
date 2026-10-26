@@ -1425,8 +1425,12 @@ async function dispatchWave(request, workers, farmerName, isSubsequentWave = fal
     });
   }
 
+  // an extra-worker request says which running booking it belongs to
+  const addOnOf = await require('../../services/addOnService').addOnContext(request).catch(() => null);
+
   // Build notification payload
   const notifData = {
+    addOnOf,
     requestId:        request._id,
     _id:              request._id,
     farmerId:         request.farmerId,
@@ -1468,7 +1472,9 @@ async function dispatchWave(request, workers, farmerName, isSubsequentWave = fal
       recipientId:   w._id,
       type:          isLeader ? 'group_booking_request' : 'worker_booking_request',
       title:         isLeader ? '🌾 New Group Work Request' : '🌾 New Work Request',
-      message:       `A farmer needs ${request.requiredWorkers} worker(s) for ${request.workTitle}`,
+      message:       addOnOf
+        ? `${farmerName} needs ${request.requiredWorkers} extra worker(s) on the ongoing job "${addOnOf.title}" (#${addOnOf.bookingNumber})`
+        : `A farmer needs ${request.requiredWorkers} worker(s) for ${request.workTitle}`,
       relatedId:     request._id,
       relatedType:   'WorkerBookingRequest',
       data:          notifData
@@ -2054,7 +2060,7 @@ exports.getWorkerPendingFarmerRequests = async (req, res) => {
       }
     }
 
-    return res.json({ success: true, data: validPendingRequests });
+    return res.json({ success: true, data: await require('../../services/addOnService').attachAddOnOf(validPendingRequests) });
   } catch (err) {
     console.error('[getWorkerPendingFarmerRequests]', err);
     return res.status(500).json({ success: false, message: 'Failed to fetch pending requests.' });
@@ -3240,7 +3246,7 @@ const cancelSvc = require('../../services/workerBookingCancelService');
 /** Notifications + socket fan-out after a cancellation (shared by the farmer endpoint and the no-show sweeper). */
 const announceCancellation = async ({ request, workerIds, refundAmount, wasConfirmed, by = 'farmer' }) => {
   const farmerId = request.farmerId;
-  const who = by === 'system' ? 'automatically (the worker did not show up)' : by === 'worker' ? 'because the worker withdrew' : by === 'admin' ? 'by the admin' : 'by the farmer';
+  const who = by === 'parent' ? 'because the booking this extra worker was added to was cancelled' : by === 'system' ? 'automatically (the worker did not show up)' : by === 'worker' ? 'because the worker withdrew' : by === 'admin' ? 'by the admin' : 'by the farmer';
 
   if (wasConfirmed) {
     await notify({
@@ -4071,6 +4077,17 @@ exports.decreaseWorker = async (req, res) => {
   }
 };
 
+// ── extra workers: when the new worker can join ────────────────────────────────────────────────────────────────────
+const ADDON_LEAD_MINUTES = 15; // the new worker is asked to come this long after the farmer asks (rounded up to 5 minutes)
+const ADDON_MIN_HOURLY_MINUTES = 30; // an hourly add-on needs at least this much of the booked slot left
+const addOnToMinutes = (hm) => { const [h, m] = String(hm || '00:00').split(':').map(Number); return (h || 0) * 60 + (m || 0); };
+const addOnToHm = (mins) => `${String(Math.floor(mins / 60) % 24).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+const addOnJoinMinutes = () => {
+  const parts = new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date());
+  const nowMins = (parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10) % 24) * 60 + parseInt(parts.find(p => p.type === 'minute')?.value || '0', 10);
+  return Math.ceil((nowMins + ADDON_LEAD_MINUTES) / 5) * 5;
+};
+
 /**
  * Farmer asks for MORE workers on an active booking.
  * The add-on is its own WorkerBookingRequest (linked via addOnOfRequestId) and goes through the standard
@@ -4140,17 +4157,40 @@ exports.addExtraWorkers = async (req, res) => {
       }
       const start = b.startDate ? new Date(b.startDate) : new Date();
       if (isNaN(start.getTime())) return res.status(400).json({ success: false, message: 'Invalid startDate.' });
+      // An extra worker for TODAY joins a day that has already begun: the parent's reporting time is long past, so the worker
+      // is asked to come in a little while (a short lead, rounded to 5 minutes) instead of at the original time.
+      let reportingTime = parent.reportingTime || '09:00';
+      if (getIstDateString(start) === getIstDateString(new Date())) {
+        const join = addOnJoinMinutes();
+        if (join > 23 * 60) {
+          return res.status(409).json({ success: false, message: 'It is too late to bring an extra worker in today. Choose tomorrow.' });
+        }
+        if (join > addOnToMinutes(reportingTime)) reportingTime = addOnToHm(join);
+      }
       Object.assign(body, {
         bookingType: 'DAILY',
         startDate: start.toISOString().slice(0, 10),
         numberOfDays: days,
-        reportingTime: parent.reportingTime || '09:00',
+        reportingTime,
         minDailyRate: rate,
         maxDailyRate: rate
       });
     } else {
+      // HOURLY: the extra worker joins the same booked slot, but only for the time that is left: they start in a little while
+      // (not at the already-passed start time), so the farmer pays only for the remaining hours.
+      let startTime = parent.startTime;
+      if (getIstDateString(parent.scheduledDate) === getIstDateString(new Date())) {
+        const join = addOnJoinMinutes();
+        if (join > addOnToMinutes(startTime)) startTime = addOnToHm(join);
+      }
+      if (addOnToMinutes(parent.endTime) - addOnToMinutes(startTime) < ADDON_MIN_HOURLY_MINUTES) {
+        return res.status(409).json({
+          success: false,
+          message: `Too little of the booked time is left to add a worker (at least ${ADDON_MIN_HOURLY_MINUTES} minutes are needed). Extend the booking first if you need more time.`
+        });
+      }
       Object.assign(body, {
-        bookingType: 'HOURLY', scheduledDate: parent.scheduledDate, startTime: parent.startTime, endTime: parent.endTime, minRate: rate, maxRate: rate
+        bookingType: 'HOURLY', scheduledDate: parent.scheduledDate, startTime, endTime: parent.endTime, minRate: rate, maxRate: rate
       });
     }
     // a single named worker can be targeted; the worker must still ACCEPT (no one is assigned without consent)
@@ -4170,7 +4210,10 @@ exports.addExtraWorkers = async (req, res) => {
 
     const childId = created?.data?._id || created?.data?.requestId || created?.data?.id;
     if (childId) {
-      await WorkerBookingRequest.updateOne({ _id: childId }, { $set: { addOnOfRequestId: parent._id } });
+      // the add-on's number is the original booking's number plus A1, A2...: one glance tells which booking it belongs to
+      const earlier = await WorkerBookingRequest.countDocuments({ addOnOfRequestId: parent._id, _id: { $ne: childId } });
+      const parentRef = parent.bookingNumber || require('../../utils/bookingRef').requestRef(parent._id);
+      await WorkerBookingRequest.updateOne({ _id: childId }, { $set: { addOnOfRequestId: parent._id, bookingNumber: `${parentRef}-A${earlier + 1}` } });
       await WorkerBookingRequest.updateOne({ _id: parent._id }, { $push: { auditLog: { at: new Date(), actor: 'farmer', actorId: farmerId, event: 'add_workers_requested', meta: { requestId: childId, count } } } });
     }
 

@@ -719,6 +719,12 @@ const WorkerBookingRequestAlertModal = ({ isOpen, requestData, onClose, onReques
                     </div>
                   </div>
 
+                  {requestData.addOnOf && (
+                    <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] font-semibold text-amber-900">
+                      ➕ Extra worker needed on an ongoing job: “{requestData.addOnOf.title}” (#{requestData.addOnOf.bookingNumber}). Other workers are already on it.
+                    </div>
+                  )}
+
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 border border-purple-100">
                       <FiCalendar size={15} />

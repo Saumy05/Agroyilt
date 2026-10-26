@@ -99,7 +99,7 @@ const buildDocs = (request, { method, orderId, paymentId }) => {
   const bookingDocs = [];
 
   const hired = [...new Set((request.selectedWorkerIds || []).map(String))];
-  const parentRef = require('../utils/bookingRef').requestRef(request._id);
+  const parentRef = request.bookingNumber || require('../utils/bookingRef').requestRef(request._id); // an extra-worker request carries <original>-A1
   hired.forEach((wId, idx) => {
     const jobNumber = require('../utils/bookingRef').jobRef(parentRef, idx, hired.length); // the same reference on the farmer's, worker's and admin's screens
     // the rate frozen when the farmer selected this worker (never a later change), same duration the quote used
