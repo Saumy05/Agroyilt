@@ -9,6 +9,21 @@ const DEFAULT_REGISTER = 'https://agroyilt.com/app/register';
 const withParam = (url, query) => `${url}${url.includes('?') ? '&' : '?'}${query}`;
 
 /**
+ * A link that opens the Play Store APP on Android (the plain https link only opens the store's web page inside Chrome when
+ * Chrome is sent there by a redirect). If the Play Store app is missing, Chrome falls back to the https page.
+ */
+const playAppUrl = (playUrl, code) => {
+  try {
+    const id = new URL(playUrl).searchParams.get('id');
+    if (!id) return playUrl;
+    const referrer = code ? `&referrer=${encodeURIComponent(`ref=${code}`)}` : '';
+    return `intent://details?id=${encodeURIComponent(id)}${referrer}#Intent;scheme=market;package=com.android.vending;S.browser_fallback_url=${encodeURIComponent(withParam(playUrl, code ? `referrer=${encodeURIComponent(`ref=${code}`)}` : ''))};end`;
+  } catch {
+    return playUrl;
+  }
+};
+
+/**
  * The page a shared referral link (/r/<CODE>) opens.
  * - Android phone in a browser: the Play Store, with the code attached as the install referrer, so the app can pick it up after install.
  * - Everyone else (iPhone, computer, inside the app): the web registration page with the code filled in.
@@ -33,7 +48,7 @@ const ReferralInvite = () => {
   }, []);
 
   const webUrl = links ? (cleanCode ? withParam(links.registrationUrl, `ref=${encodeURIComponent(cleanCode)}`) : links.registrationUrl) : '';
-  const playUrl = links ? (cleanCode ? withParam(links.playStoreUrl, `referrer=${encodeURIComponent(`ref=${cleanCode}`)}`) : links.playStoreUrl) : '';
+  const playUrl = links ? playAppUrl(links.playStoreUrl, cleanCode) : '';
 
   // Keep the code on the clipboard too: a person who installs from the store can paste it if the app does not fill it in
   const copyCode = () => {
@@ -47,6 +62,7 @@ const ReferralInvite = () => {
       return undefined;
     }
     copyCode();
+    // Chrome may refuse to open an app without a tap: then this page stays and the button below does it
     const timer = setTimeout(() => window.location.replace(playUrl), 900);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
