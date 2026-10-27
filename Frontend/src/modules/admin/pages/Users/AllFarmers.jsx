@@ -4,6 +4,7 @@ import { FiSearch, FiUser, FiPhone, FiMail, FiCheckCircle, FiSlash, FiCheck, FiT
 import { toastManager } from '../../../../utils/toastManager';
 import { adminUserService } from '../../../../services/adminUserService';
 import { refreshAdminCounts } from '../../utils/adminCounts';
+import { FeeStatusBadge, LocationCell, FeeFilter } from '../../components/common/FeeAndLocation';
 
 const AllFarmers = () => {
   const [users, setUsers] = useState([]);
@@ -11,6 +12,7 @@ const AllFarmers = () => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // all, active, inactive
   const [approvalFilter, setApprovalFilter] = useState('all'); // all, pending, approved, rejected
+  const [feeFilter, setFeeFilter] = useState(''); // '', PAID, UNPAID
   const [createdByMe, setCreatedByMe] = useState(false);
   const [myRegistrationsCount, setMyRegistrationsCount] = useState(0);
   const [page, setPage] = useState(1);
@@ -100,6 +102,10 @@ const AllFarmers = () => {
         params.approvalStatus = approvalFilter;
       }
 
+      if (feeFilter) {
+        params.registrationFeeStatus = feeFilter;
+      }
+
       if (createdByMe) {
         params.createdByMe = 'true';
       }
@@ -123,7 +129,7 @@ const AllFarmers = () => {
 
   useEffect(() => {
     fetchUsers();
-  }, [page, debouncedSearch, statusFilter, approvalFilter, createdByMe]);
+  }, [page, debouncedSearch, statusFilter, approvalFilter, feeFilter, createdByMe]);
 
   const handleApprove = async (userId) => {
     try {
@@ -247,6 +253,8 @@ const AllFarmers = () => {
             <option value="active">Active Only</option>
             <option value="inactive">Blocked Only</option>
           </select>
+
+          <FeeFilter value={feeFilter} onChange={(v) => { setFeeFilter(v); setPage(1); }} />
         </div>
         {/* Status Filter Tabs */}
         <div className="flex items-center gap-2 pt-1 border-t border-gray-100 overflow-x-auto">
@@ -282,11 +290,12 @@ const AllFarmers = () => {
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mt-4">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[700px]">
+          <table className="w-full text-left border-collapse min-w-[860px]">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50">
                 <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Farmer</th>
                 <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Contact</th>
+                <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Location</th>
                 <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Status</th>
                 <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Joined Date</th>
                 <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider text-right">Actions</th>
@@ -295,11 +304,11 @@ const AllFarmers = () => {
             <tbody className="divide-y divide-gray-50">
               {loading ? (
                 <tr>
-                  <td colSpan="5" className="px-4 py-8 text-center text-xs text-gray-500">Loading farmers...</td>
+                  <td colSpan="6" className="px-4 py-8 text-center text-xs text-gray-500">Loading farmers...</td>
                 </tr>
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="px-4 py-8 text-center text-xs text-gray-500">No farmers found</td>
+                  <td colSpan="6" className="px-4 py-8 text-center text-xs text-gray-500">No farmers found</td>
                 </tr>
               ) : (
                 users.map((user) => {
@@ -338,6 +347,9 @@ const AllFarmers = () => {
                         </div>
                       </td>
                       <td className="px-4 py-3">
+                        <LocationCell entity={user} />
+                      </td>
+                      <td className="px-4 py-3">
                         <div className="flex flex-col gap-1">
                           <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider w-fit ${
                             isApproved
@@ -348,6 +360,7 @@ const AllFarmers = () => {
                           }`}>
                             {isApproved ? 'Approved' : isRejected ? 'Rejected' : 'Pending Approval'}
                           </span>
+                          <FeeStatusBadge status={user.registrationFeeStatus} amount={user.registrationFeeAmount} />
                           {!user.isActive && (
                             <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-gray-100 text-gray-600 w-fit">
                               Blocked
@@ -481,6 +494,8 @@ const AllFarmers = () => {
                   ['Registered', new Date(viewUser.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })],
                   ['Approval', (viewUser.approvalStatus || (viewUser.isActive ? 'approved' : 'pending')).replace(/^./, c => c.toUpperCase())],
                   ['Account', viewUser.isActive ? 'Active' : 'Blocked'],
+                  ['Registration Fee', <FeeStatusBadge status={viewUser.registrationFeeStatus} amount={viewUser.registrationFeeAmount} />],
+                  ['Location', <LocationCell entity={viewUser} />],
                   ['Created By', viewUser.createdByAdmin?.name || 'Self signup']
                 ].map(([label, value]) => (
                   <div key={label}>

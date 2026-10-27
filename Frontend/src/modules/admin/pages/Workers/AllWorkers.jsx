@@ -34,6 +34,8 @@ import LogoLoader from '../../../../components/common/LogoLoader';
 import DobInput from '../../../../components/common/DobInput';
 import { calculateAge, getDobError } from '../../../../utils/age';
 import { refreshAdminCounts } from '../../utils/adminCounts';
+import { FeeStatusBadge, LocationCell, FeeFilter } from '../../components/common/FeeAndLocation';
+import { getLocationInfo } from '../../utils/locationInfo';
 
 const StatusBadge = ({ status }) => {
   const styles = {
@@ -60,6 +62,7 @@ const AllWorkers = () => {
   const [searchParams] = useSearchParams();
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || ''); // e.g. opened from an Analytics card
   const [workerTypeFilter, setWorkerTypeFilter] = useState(''); // '' | 'INDEPENDENT' | 'TEAM_MEMBER' | 'TEAM_LEADER'
+  const [feeFilter, setFeeFilter] = useState(''); // '', PAID, UNPAID
   const [createdByMe, setCreatedByMe] = useState(false);
   const [typeCounts, setTypeCounts] = useState({ total: 0, independent: 0, teamMember: 0, teamLeader: 0, myRegistrations: 0 });
   const [actionLoading, setActionLoading] = useState(null);
@@ -125,6 +128,7 @@ const AllWorkers = () => {
         search: search.trim() || undefined,
         approvalStatus: statusFilter || undefined,
         workerType: workerTypeFilter || undefined,
+        registrationFeeStatus: feeFilter || undefined,
         createdByMe: createdByMe ? 'true' : undefined,
         limit: 100
       });
@@ -147,7 +151,7 @@ const AllWorkers = () => {
       fetchWorkers();
     }, 400);
     return () => clearTimeout(delayDebounceFn);
-  }, [search, statusFilter, workerTypeFilter, createdByMe]);
+  }, [search, statusFilter, workerTypeFilter, feeFilter, createdByMe]);
 
   // Open worker details modal and fetch full details
   const handleOpenDetails = async (worker, fromLeader = null) => {
@@ -452,6 +456,9 @@ const AllWorkers = () => {
             {tab.label}
           </button>
         ))}
+        <div className="ml-auto shrink-0">
+          <FeeFilter value={feeFilter} onChange={setFeeFilter} />
+        </div>
       </div>
 
       {/* Table */}
@@ -467,12 +474,13 @@ const AllWorkers = () => {
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[800px]">
+          <table className="w-full text-left border-collapse min-w-[960px]">
             <thead>
               <tr className="border-b border-slate-200 text-xs uppercase tracking-wider font-black text-slate-500">
                 <th className="py-4 px-4">Worker</th>
                 <th className="py-4 px-4">Type</th>
                 <th className="py-4 px-4">Skills</th>
+                <th className="py-4 px-4">Location</th>
                 <th className="py-4 px-4 text-center">Rating</th>
                 <th className="py-4 px-4">Status</th>
                 <th className="py-4 px-4 text-right">Actions</th>
@@ -559,6 +567,9 @@ const AllWorkers = () => {
                         )}
                       </div>
                     </td>
+                    <td className="py-4 px-4">
+                      <LocationCell entity={worker} />
+                    </td>
                     <td className="py-4 px-4 text-center">
                       <div className="flex items-center justify-center gap-1 font-black text-amber-500 text-sm">
                         <FiStar className="fill-amber-500" />
@@ -569,6 +580,7 @@ const AllWorkers = () => {
                     <td className="py-4 px-4">
                       <div className="flex flex-col gap-1">
                         <StatusBadge status={worker.approvalStatus} />
+                        <FeeStatusBadge status={worker.registrationFeeStatus} amount={worker.registrationFeeAmount} />
                         {worker.approvalStatus === 'rejected' && worker.rejectionReason && (
                           <span className="text-[10px] text-red-500 max-w-[150px] truncate" title={worker.rejectionReason}>
                             {worker.rejectionReason}
@@ -1121,6 +1133,16 @@ const AllWorkers = () => {
                               .join(', ')}
                             {selectedWorker.address?.landmark && ` (Near ${selectedWorker.address.landmark})`}
                           </p>
+                        )}
+                        {getLocationInfo(selectedWorker).mapUrl && (
+                          <a
+                            href={getLocationInfo(selectedWorker).mapUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-block font-bold text-blue-600 hover:underline pt-0.5"
+                          >
+                            View on map
+                          </a>
                         )}
                       </div>
                     </div>

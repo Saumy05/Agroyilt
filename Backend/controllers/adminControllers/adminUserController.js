@@ -41,6 +41,13 @@ const getAllUsers = async (req, res) => {
       }
     }
 
+    // Registration fee: UNPAID also matches docs that predate the field
+    if (req.query.registrationFeeStatus === 'PAID') {
+      query.registrationFeeStatus = 'PAID';
+    } else if (req.query.registrationFeeStatus === 'UNPAID') {
+      query.registrationFeeStatus = { $ne: 'PAID' };
+    }
+
     // Search by name, phone, or email
     if (search) {
       query.$or = [

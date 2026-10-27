@@ -23,6 +23,7 @@ export const workerService = {
     if (params.approvalStatus) qp.append('approvalStatus', params.approvalStatus);
     if (params.isActive !== undefined) qp.append('isActive', params.isActive);
     if (params.workerType) qp.append('workerType', params.workerType);
+    if (params.registrationFeeStatus) qp.append('registrationFeeStatus', params.registrationFeeStatus);
     
     const response = await api.get(`/admin/workers${qp.toString() ? `?${qp.toString()}` : ''}`);
     return response.data;

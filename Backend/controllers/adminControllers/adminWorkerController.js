@@ -40,6 +40,13 @@ const getAllWorkers = async (req, res) => {
       query.isActive = isActive === 'true';
     }
 
+    // Registration fee: UNPAID also matches docs that predate the field
+    if (req.query.registrationFeeStatus === 'PAID') {
+      query.registrationFeeStatus = 'PAID';
+    } else if (req.query.registrationFeeStatus === 'UNPAID') {
+      query.registrationFeeStatus = { $ne: 'PAID' };
+    }
+
     // Filter by Worker Type (TEAM_LEADER vs TEAM_MEMBER vs INDEPENDENT / WORKER)
     if (workerType && workerType !== 'all') {
       const typeUpper = workerType.toUpperCase();

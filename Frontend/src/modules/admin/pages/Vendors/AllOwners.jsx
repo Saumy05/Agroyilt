@@ -10,11 +10,13 @@ import { publicCatalogService } from '../../../../services/catalogService';
 import GoogleMapPicker from '../../../vendor/pages/AddressManagement/components/GoogleMapPicker';
 import { calculateAge } from '../../../../utils/age';
 import { refreshAdminCounts } from '../../utils/adminCounts';
+import { FeeStatusBadge, LocationCell, FeeFilter } from '../../components/common/FeeAndLocation';
 
 const AllOwners = () => {
   const [owners, setOwners] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('all'); // 'all', 'pending', 'approved', 'rejected'
+  const [feeFilter, setFeeFilter] = useState(''); // '', PAID, UNPAID
   const [createdByMe, setCreatedByMe] = useState(false);
   const [myRegistrationsCount, setMyRegistrationsCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
@@ -108,6 +110,11 @@ const AllOwners = () => {
           aadhar: owner.aadhar?.number,
           pan: owner.pan?.number,
           address: owner.address,       // ← address field add kiya
+          districtName: owner.districtName,
+          subDistrictName: owner.subDistrictName,
+          shopDetails: owner.shopDetails,
+          registrationFeeStatus: owner.registrationFeeStatus,
+          registrationFeeAmount: owner.registrationFeeAmount,
           cityId: owner.cityId,         // ← cityId add kiya
           createdByAdmin: owner.createdByAdmin,
           documents: {
@@ -149,9 +156,10 @@ const AllOwners = () => {
         (owner.phone || '').includes(searchQuery.trim()) ||
         serviceString.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
         (owner.businessName && owner.businessName.toLowerCase().includes(searchQuery.trim().toLowerCase()));
-      return matchesStatus && matchesSearch;
+      const matchesFee = !feeFilter || (feeFilter === 'PAID') === (owner.registrationFeeStatus === 'PAID');
+      return matchesStatus && matchesSearch && matchesFee;
     });
-  }, [owners, filterStatus, searchQuery]);
+  }, [owners, filterStatus, feeFilter, searchQuery]);
 
   const handleApprove = async (ownerId) => {
     try {
@@ -451,6 +459,8 @@ const AllOwners = () => {
                 </button>
               ))}
 
+              <FeeFilter value={feeFilter} onChange={setFeeFilter} />
+
               <button
                 type="button"
                 onClick={() => setCreatedByMe(prev => !prev)}
@@ -513,37 +523,19 @@ const AllOwners = () => {
                           </p>
                         </div>
                       </td>
-                      <td className="px-4 py-3 max-w-[200px]">
-                        {owner.address?.city || owner.address?.fullAddress ? (
-                          <div>
-                            <p className="font-bold text-gray-800 text-xs flex items-center gap-1">
-                              📍 {owner.address?.city || '—'}
-                            </p>
-                            {(owner.address?.addressLine1 || owner.address?.fullAddress) && (
-                              <p className="text-[10px] text-gray-500 mt-0.5 leading-tight">
-                                {owner.address?.addressLine1 || owner.address?.fullAddress}
-                              </p>
-                            )}
-                            {owner.address?.addressLine2 && (
-                              <p className="text-[10px] text-gray-500 leading-tight">
-                                {owner.address.addressLine2}
-                              </p>
-                            )}
-                            <p className="text-[10px] text-gray-400 mt-0.5">
-                              {[owner.address?.state, owner.address?.pincode].filter(Boolean).join(' – ')}
-                            </p>
-                          </div>
-                        ) : (
-                          <span className="text-[10px] text-gray-400 italic">Not set</span>
-                        )}
+                      <td className="px-4 py-3">
+                        <LocationCell entity={owner} />
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border ${owner.approvalStatus === 'approved' ? 'bg-green-50 text-green-700 border-green-100' :
-                          owner.approvalStatus === 'rejected' ? 'bg-red-50 text-red-700 border-red-100' :
-                            'bg-yellow-50 text-yellow-700 border-yellow-100'
-                          }`}>
-                          {owner.approvalStatus}
-                        </span>
+                        <div className="flex flex-col gap-1 items-start">
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border ${owner.approvalStatus === 'approved' ? 'bg-green-50 text-green-700 border-green-100' :
+                            owner.approvalStatus === 'rejected' ? 'bg-red-50 text-red-700 border-red-100' :
+                              'bg-yellow-50 text-yellow-700 border-yellow-100'
+                            }`}>
+                            {owner.approvalStatus}
+                          </span>
+                        <FeeStatusBadge status={owner.registrationFeeStatus} amount={owner.registrationFeeAmount} />
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
@@ -664,6 +656,14 @@ const AllOwners = () => {
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Status</label>
                 <div>{getStatusBadge(selectedOwner.approvalStatus)}</div>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Registration Fee</label>
+                <FeeStatusBadge status={selectedOwner.registrationFeeStatus} amount={selectedOwner.registrationFeeAmount} />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Location</label>
+                <LocationCell entity={selectedOwner} />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Registered On</label>
