@@ -1,4 +1,5 @@
 const User = require('../../models/User');
+const { registrationFeeQuery } = require('../../utils/registrationFeeQuery');
 const { notifyAccountApproved } = require('../../services/approvalNotifier');
 const Admin = require('../../models/Admin');
 const Booking = require('../../models/Booking');
@@ -41,12 +42,8 @@ const getAllUsers = async (req, res) => {
       }
     }
 
-    // Registration fee: UNPAID also matches docs that predate the field
-    if (req.query.registrationFeeStatus === 'PAID') {
-      query.registrationFeeStatus = 'PAID';
-    } else if (req.query.registrationFeeStatus === 'UNPAID') {
-      query.registrationFeeStatus = { $ne: 'PAID' };
-    }
+    // Registration fee: PAID / FREE (paid ₹0) / UNPAID
+    Object.assign(query, registrationFeeQuery(req.query.registrationFeeStatus));
 
     // Search by name, phone, or email
     if (search) {

@@ -12,7 +12,7 @@ const AllFarmers = () => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // all, active, inactive
   const [approvalFilter, setApprovalFilter] = useState('all'); // all, pending, approved, rejected
-  const [feeFilter, setFeeFilter] = useState(''); // '', PAID, UNPAID
+  const [feeFilter, setFeeFilter] = useState(''); // '', PAID, FREE, UNPAID
   const [createdByMe, setCreatedByMe] = useState(false);
   const [myRegistrationsCount, setMyRegistrationsCount] = useState(0);
   const [page, setPage] = useState(1);
@@ -360,7 +360,7 @@ const AllFarmers = () => {
                           }`}>
                             {isApproved ? 'Approved' : isRejected ? 'Rejected' : 'Pending Approval'}
                           </span>
-                          <FeeStatusBadge status={user.registrationFeeStatus} amount={user.registrationFeeAmount} />
+                          <FeeStatusBadge status={user.registrationFeeStatus} amount={user.registrationFeeAmount} role="USER" />
                           {!user.isActive && (
                             <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-gray-100 text-gray-600 w-fit">
                               Blocked
@@ -494,7 +494,7 @@ const AllFarmers = () => {
                   ['Registered', new Date(viewUser.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })],
                   ['Approval', (viewUser.approvalStatus || (viewUser.isActive ? 'approved' : 'pending')).replace(/^./, c => c.toUpperCase())],
                   ['Account', viewUser.isActive ? 'Active' : 'Blocked'],
-                  ['Registration Fee', <FeeStatusBadge status={viewUser.registrationFeeStatus} amount={viewUser.registrationFeeAmount} />],
+                  ['Registration Fee', <FeeStatusBadge status={viewUser.registrationFeeStatus} amount={viewUser.registrationFeeAmount} role="USER" />],
                   ['Location', <LocationCell entity={viewUser} />],
                   ['Created By', viewUser.createdByAdmin?.name || 'Self signup']
                 ].map(([label, value]) => (

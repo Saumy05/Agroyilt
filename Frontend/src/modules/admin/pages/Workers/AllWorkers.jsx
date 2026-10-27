@@ -62,7 +62,7 @@ const AllWorkers = () => {
   const [searchParams] = useSearchParams();
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || ''); // e.g. opened from an Analytics card
   const [workerTypeFilter, setWorkerTypeFilter] = useState(''); // '' | 'INDEPENDENT' | 'TEAM_MEMBER' | 'TEAM_LEADER'
-  const [feeFilter, setFeeFilter] = useState(''); // '', PAID, UNPAID
+  const [feeFilter, setFeeFilter] = useState(''); // '', PAID, FREE, UNPAID
   const [createdByMe, setCreatedByMe] = useState(false);
   const [typeCounts, setTypeCounts] = useState({ total: 0, independent: 0, teamMember: 0, teamLeader: 0, myRegistrations: 0 });
   const [actionLoading, setActionLoading] = useState(null);
@@ -580,7 +580,7 @@ const AllWorkers = () => {
                     <td className="py-4 px-4">
                       <div className="flex flex-col gap-1">
                         <StatusBadge status={worker.approvalStatus} />
-                        <FeeStatusBadge status={worker.registrationFeeStatus} amount={worker.registrationFeeAmount} />
+                        <FeeStatusBadge status={worker.registrationFeeStatus} amount={worker.registrationFeeAmount} role="WORKER" />
                         {worker.approvalStatus === 'rejected' && worker.rejectionReason && (
                           <span className="text-[10px] text-red-500 max-w-[150px] truncate" title={worker.rejectionReason}>
                             {worker.rejectionReason}
@@ -1053,9 +1053,9 @@ const AllWorkers = () => {
                       </div>
                       <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
                         <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Reg. Fee</span>
-                        <p className={`font-black text-xs mt-1 uppercase ${selectedWorker.registrationFeeStatus === 'PAID' ? 'text-emerald-600' : 'text-amber-600'}`}>
-                          {selectedWorker.registrationFeeStatus || 'UNPAID'}
-                        </p>
+                        <div className="mt-1">
+                          <FeeStatusBadge status={selectedWorker.registrationFeeStatus} amount={selectedWorker.registrationFeeAmount} role="WORKER" />
+                        </div>
                       </div>
                     </div>
 

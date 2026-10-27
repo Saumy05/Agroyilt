@@ -1,4 +1,5 @@
 const Worker = require('../../models/Worker');
+const { registrationFeeQuery } = require('../../utils/registrationFeeQuery');
 const { forceWorkerOffline } = require('../../sockets');
 const { notifyAccountApproved } = require('../../services/approvalNotifier');
 const User = require('../../models/User');
@@ -40,12 +41,8 @@ const getAllWorkers = async (req, res) => {
       query.isActive = isActive === 'true';
     }
 
-    // Registration fee: UNPAID also matches docs that predate the field
-    if (req.query.registrationFeeStatus === 'PAID') {
-      query.registrationFeeStatus = 'PAID';
-    } else if (req.query.registrationFeeStatus === 'UNPAID') {
-      query.registrationFeeStatus = { $ne: 'PAID' };
-    }
+    // Registration fee: PAID / FREE (paid ₹0) / UNPAID
+    Object.assign(query, registrationFeeQuery(req.query.registrationFeeStatus));
 
     // Filter by Worker Type (TEAM_LEADER vs TEAM_MEMBER vs INDEPENDENT / WORKER)
     if (workerType && workerType !== 'all') {

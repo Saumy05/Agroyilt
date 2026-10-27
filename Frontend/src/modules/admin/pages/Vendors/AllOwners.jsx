@@ -156,7 +156,8 @@ const AllOwners = () => {
         (owner.phone || '').includes(searchQuery.trim()) ||
         serviceString.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
         (owner.businessName && owner.businessName.toLowerCase().includes(searchQuery.trim().toLowerCase()));
-      const matchesFee = !feeFilter || (feeFilter === 'PAID') === (owner.registrationFeeStatus === 'PAID');
+      const feeState = owner.registrationFeeStatus !== 'PAID' ? 'UNPAID' : owner.registrationFeeAmount > 0 ? 'PAID' : 'FREE';
+      const matchesFee = !feeFilter || feeFilter === feeState;
       return matchesStatus && matchesSearch && matchesFee;
     });
   }, [owners, filterStatus, feeFilter, searchQuery]);
@@ -534,7 +535,7 @@ const AllOwners = () => {
                             }`}>
                             {owner.approvalStatus}
                           </span>
-                        <FeeStatusBadge status={owner.registrationFeeStatus} amount={owner.registrationFeeAmount} />
+                        <FeeStatusBadge status={owner.registrationFeeStatus} amount={owner.registrationFeeAmount} role="VENDOR" />
                         </div>
                       </td>
                       <td className="px-4 py-3">
@@ -659,7 +660,7 @@ const AllOwners = () => {
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Registration Fee</label>
-                <FeeStatusBadge status={selectedOwner.registrationFeeStatus} amount={selectedOwner.registrationFeeAmount} />
+                <FeeStatusBadge status={selectedOwner.registrationFeeStatus} amount={selectedOwner.registrationFeeAmount} role="VENDOR" />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Location</label>

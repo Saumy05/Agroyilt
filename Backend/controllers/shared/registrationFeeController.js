@@ -5,6 +5,7 @@ const Vendor = require('../../models/Vendor');
 const Worker = require('../../models/Worker');
 const { createOrder, verifyPayment } = require('../../services/razorpayService');
 const { generateTokenPair } = require('../../utils/tokenService');
+const { activateFreeRegistrations } = require('../../services/registrationFeeSyncService');
 
 const getModelForRole = (role) => {
   switch (role) {
@@ -325,10 +326,21 @@ const updateFeeConfig = async (req, res) => {
 
     await newConfig.save();
 
+    // fee turned off: activate accounts still waiting on it so the DB matches what the admin lists show
+    let activated = 0;
+    if (!(Number(newConfig.amount) > 0)) {
+      try {
+        activated = (await activateFreeRegistrations(newConfig.role)).modified || 0;
+      } catch (syncError) {
+        console.error('Activate free registrations error:', syncError);
+      }
+    }
+
     res.status(200).json({
       success: true,
       message: 'Fee configuration updated successfully.',
-      config: newConfig
+      config: newConfig,
+      activated
     });
   } catch (error) {
     console.error('Update fee config error:', error);
