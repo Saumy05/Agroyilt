@@ -23,7 +23,7 @@ import useReferralEnabled from '../../../../hooks/useReferralEnabled';
 
 const Rewards = () => {
   const navigate = useNavigate();
-  const { enabled: referralOn, loaded: referralLoaded } = useReferralEnabled('farmer');
+  const { enabled: referralOn, loaded: referralLoaded } = useReferralEnabled();
 
   // Page is unreachable while the admin has referrals off
   useEffect(() => {
@@ -37,6 +37,12 @@ const Rewards = () => {
     totalQualified: 0,
     pendingQualifications: 0,
     totalEarnedRupees: 0,
+    showRewardStructure: true,
+    roles: {
+      farmer: { enabled: true, rewardAmount: 0 },
+      vendor: { enabled: true, rewardAmount: 0 },
+      worker: { enabled: true, rewardAmount: 0 }
+    },
     rates: { farmer: 0, vendor: 0, worker: 0 },
     systemEnabled: true,
     history: []
@@ -287,40 +293,70 @@ const Rewards = () => {
           </div>
         </div>
 
-        {/* Role-Based Reward Structure */}
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
-          <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide mb-3 flex items-center gap-2">
-            <FiAward className="text-emerald-600" /> Reward Per Role Qualified
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="p-3 bg-emerald-50/70 border border-emerald-100 rounded-xl flex items-center justify-between sm:flex-col sm:items-start">
-              <div>
-                <span className="text-xs font-semibold text-emerald-900 block">🌾 Farmer</span>
-                <span className="text-[10px] text-emerald-700">On account qualification</span>
-              </div>
-              <span className="text-lg font-black text-emerald-700 sm:mt-2">₹{data.rates?.farmer ?? 0}</span>
-            </div>
+        {/* Role-Based Reward Structure (Only shown if enabled and at least one role has reward > 0) */}
+        {(() => {
+          const isFarmerActive = data.roles?.farmer
+            ? (data.roles.farmer.enabled && Number(data.roles.farmer.rewardAmount) > 0)
+            : (Number(data.rates?.farmer) > 0);
+          const farmerReward = data.roles?.farmer?.rewardAmount ?? data.rates?.farmer ?? 0;
 
-            <div className="p-3 bg-blue-50/70 border border-blue-100 rounded-xl flex items-center justify-between sm:flex-col sm:items-start">
-              <div>
-                <span className="text-xs font-semibold text-blue-900 block">🚛 Vendor</span>
-                <span className="text-[10px] text-blue-700">On vendor qualification</span>
-              </div>
-              <span className="text-lg font-black text-blue-700 sm:mt-2">₹{data.rates?.vendor ?? 0}</span>
-            </div>
+          const isVendorActive = data.roles?.vendor
+            ? (data.roles.vendor.enabled && Number(data.roles.vendor.rewardAmount) > 0)
+            : (Number(data.rates?.vendor) > 0);
+          const vendorReward = data.roles?.vendor?.rewardAmount ?? data.rates?.vendor ?? 0;
 
-            <div className="p-3 bg-orange-50/70 border border-orange-100 rounded-xl flex items-center justify-between sm:flex-col sm:items-start">
-              <div>
-                <span className="text-xs font-semibold text-orange-900 block">🛠️ Independent Worker</span>
-                <span className="text-[10px] text-orange-700">On worker qualification</span>
+          const isWorkerActive = data.roles?.worker
+            ? (data.roles.worker.enabled && Number(data.roles.worker.rewardAmount) > 0)
+            : (Number(data.rates?.worker) > 0);
+          const workerReward = data.roles?.worker?.rewardAmount ?? data.rates?.worker ?? 0;
+
+          const activeRoleCount = [isFarmerActive, isVendorActive, isWorkerActive].filter(Boolean).length;
+          const showRewardSection = data.showRewardStructure !== false && activeRoleCount > 0;
+
+          if (!showRewardSection) return null;
+
+          return (
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+              <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide mb-3 flex items-center gap-2">
+                <FiAward className="text-emerald-600" /> Reward Per Role Qualified
+              </h3>
+              <div className={`grid grid-cols-1 ${activeRoleCount === 2 ? 'sm:grid-cols-2' : activeRoleCount >= 3 ? 'sm:grid-cols-3' : ''} gap-3`}>
+                {isFarmerActive && (
+                  <div className="p-3 bg-emerald-50/70 border border-emerald-100 rounded-xl flex items-center justify-between sm:flex-col sm:items-start">
+                    <div>
+                      <span className="text-xs font-semibold text-emerald-900 block">🌾 Farmer</span>
+                      <span className="text-[10px] text-emerald-700">On account qualification</span>
+                    </div>
+                    <span className="text-lg font-black text-emerald-700 sm:mt-2">₹{farmerReward}</span>
+                  </div>
+                )}
+
+                {isVendorActive && (
+                  <div className="p-3 bg-blue-50/70 border border-blue-100 rounded-xl flex items-center justify-between sm:flex-col sm:items-start">
+                    <div>
+                      <span className="text-xs font-semibold text-blue-900 block">🚛 Vendor</span>
+                      <span className="text-[10px] text-blue-700">On vendor qualification</span>
+                    </div>
+                    <span className="text-lg font-black text-blue-700 sm:mt-2">₹{vendorReward}</span>
+                  </div>
+                )}
+
+                {isWorkerActive && (
+                  <div className="p-3 bg-orange-50/70 border border-orange-100 rounded-xl flex items-center justify-between sm:flex-col sm:items-start">
+                    <div>
+                      <span className="text-xs font-semibold text-orange-900 block">🛠️ Independent Worker</span>
+                      <span className="text-[10px] text-orange-700">On worker qualification</span>
+                    </div>
+                    <span className="text-lg font-black text-orange-700 sm:mt-2">₹{workerReward}</span>
+                  </div>
+                )}
               </div>
-              <span className="text-lg font-black text-orange-700 sm:mt-2">₹{data.rates?.worker ?? 0}</span>
+              <p className="text-[11px] text-gray-500 mt-3 leading-relaxed">
+                * Reward amounts are set by Admin and credited directly into your AgroYilt wallet upon admin verification of the new account.
+              </p>
             </div>
-          </div>
-          <p className="text-[11px] text-gray-500 mt-3 leading-relaxed">
-            * Reward amounts are set by Admin and credited directly into your AgroYilt wallet upon admin verification of the new account.
-          </p>
-        </div>
+          );
+        })()}
 
         {/* How It Works */}
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">

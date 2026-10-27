@@ -71,14 +71,30 @@ exports.getPublicStatus = async (req, res) => {
   try {
     const config = await referralService.getOrCreateConfig();
     const on = (role) => !!config.systemEnabled && !!config.roles?.[role]?.enabled;
+    const anyOn = !!config.systemEnabled && (on('farmer') || on('vendor') || on('worker'));
     return res.status(200).json({
       success: true,
-      data: { farmer: on('farmer'), vendor: on('vendor'), worker: on('worker') }
+      data: {
+        systemEnabled: !!config.systemEnabled,
+        farmer: on('farmer'),
+        vendor: on('vendor'),
+        worker: on('worker'),
+        anyEnabled: anyOn
+      }
     });
   } catch (error) {
     console.error('[getPublicStatus error]:', error);
     // Fail closed: if we can't tell, treat the program as off
-    return res.status(200).json({ success: true, data: { farmer: false, vendor: false, worker: false } });
+    return res.status(200).json({
+      success: true,
+      data: {
+        systemEnabled: false,
+        farmer: false,
+        vendor: false,
+        worker: false,
+        anyEnabled: false
+      }
+    });
   }
 };
 
@@ -115,6 +131,7 @@ exports.getAdminSettings = async (req, res) => {
       success: true,
       data: {
         systemEnabled: config.systemEnabled,
+        showRewardStructure: config.showRewardStructure !== false,
         registrationUrl: config.registrationUrl || 'https://agroyilt.com/app/register',
         playStoreUrl: config.playStoreUrl || 'https://play.google.com/store/apps/details?id=com.agroyilt.app',
         qualificationEvent: config.qualificationEvent,
@@ -150,7 +167,7 @@ exports.getAdminSettings = async (req, res) => {
  */
 exports.updateAdminSettings = async (req, res) => {
   try {
-    const { systemEnabled, qualificationEvent, roles, registrationUrl, playStoreUrl } = req.body;
+    const { systemEnabled, showRewardStructure, qualificationEvent, roles, registrationUrl, playStoreUrl } = req.body;
     const adminId = req.user.id || req.user._id;
     const adminEmail = req.user.email || 'admin@agroyilt.com';
 
@@ -169,6 +186,21 @@ exports.updateAdminSettings = async (req, res) => {
         timestamp: new Date()
       });
       config.systemEnabled = systemEnabled;
+    }
+
+    // Show reward structure toggle audit
+    if (showRewardStructure !== undefined && showRewardStructure !== config.showRewardStructure) {
+      audits.push({
+        adminId,
+        adminEmail,
+        role: 'system',
+        field: 'showRewardStructure',
+        oldValue: config.showRewardStructure !== false,
+        newValue: showRewardStructure,
+        timestamp: new Date(),
+        notes: `${showRewardStructure ? 'Enabled' : 'Disabled'} reward structure display in user UI`
+      });
+      config.showRewardStructure = showRewardStructure;
     }
 
     // Registration link URL audit
@@ -278,6 +310,7 @@ exports.updateAdminSettings = async (req, res) => {
       data: {
         version: config.version,
         systemEnabled: config.systemEnabled,
+        showRewardStructure: config.showRewardStructure !== false,
         registrationUrl: config.registrationUrl,
         playStoreUrl: config.playStoreUrl,
         qualificationEvent: config.qualificationEvent,

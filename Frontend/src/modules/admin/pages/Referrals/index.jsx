@@ -27,6 +27,7 @@ const ReferralManagement = () => {
   // Settings State
   const [settings, setSettings] = useState({
     systemEnabled: true,
+    showRewardStructure: true,
     registrationUrl: 'https://agroyilt.com/app/register',
     playStoreUrl: 'https://play.google.com/store/apps/details?id=com.agroyilt.app',
     qualificationEvent: 'ADMIN_APPROVAL',
@@ -112,6 +113,7 @@ const ReferralManagement = () => {
     try {
       const res = await referralService.updateAdminSettings({
         systemEnabled: settings.systemEnabled,
+        showRewardStructure: settings.showRewardStructure !== false,
         registrationUrl: settings.registrationUrl || 'https://agroyilt.com/app/register',
         playStoreUrl: settings.playStoreUrl || 'https://play.google.com/store/apps/details?id=com.agroyilt.app',
         qualificationEvent: settings.qualificationEvent,
@@ -283,14 +285,41 @@ const ReferralManagement = () => {
 
           {/* Role Reward Configuration Cards */}
           <div>
-            <h2 className="text-lg font-bold text-gray-900 mb-1">Role-Based Reward Rates</h2>
-            <p className="text-xs text-gray-500 mb-4">
-              Set the reward amount (in ₹) credited to the Referrer when a referred user signs up and qualifies for each role. Values are strictly processed in integer Paise on the backend.
-            </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Role-Based Reward Rates & App Visibility</h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Set reward amounts (in ₹). Roles set to ₹0 or toggled OFF are automatically removed from the user/vendor/worker UI.
+                </p>
+              </div>
+
+              {/* Master Toggle to Hide/Show Role Rewards Card in UI */}
+              <div className="flex items-center gap-3 p-2 px-3 bg-gray-50 border border-gray-200 rounded-xl">
+                <span className="text-xs font-bold text-gray-700">Show Reward Card in App:</span>
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={settings.showRewardStructure !== false}
+                    onChange={(e) => setSettings(prev => ({ ...prev, showRewardStructure: e.target.checked }))}
+                    className="sr-only peer"
+                  />
+                  <div className="w-10 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                </label>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                  settings.showRewardStructure !== false ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-200 text-gray-600'
+                }`}>
+                  {settings.showRewardStructure !== false ? 'Visible' : 'Hidden'}
+                </span>
+              </div>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
               {/* Farmer Reward Card */}
-              <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-4">
+              <div className={`p-5 rounded-2xl border transition-all space-y-4 ${
+                settings.roles.farmer.enabled && Number(settings.roles.farmer.rewardAmount) > 0
+                  ? 'bg-white border-emerald-200 shadow-sm'
+                  : 'bg-gray-50/70 border-gray-200 opacity-90'
+              }`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-2xl">🌾</span>
@@ -299,21 +328,30 @@ const ReferralManagement = () => {
                       <span className="text-[11px] text-gray-500">User Collection</span>
                     </div>
                   </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={settings.roles.farmer.enabled}
-                      onChange={(e) => setSettings(prev => ({
-                        ...prev,
-                        roles: {
-                          ...prev.roles,
-                          farmer: { ...prev.roles.farmer, enabled: e.target.checked }
-                        }
-                      }))}
-                      className="sr-only peer"
-                    />
-                    <div className="w-10 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
-                  </label>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                      settings.roles.farmer.enabled && Number(settings.roles.farmer.rewardAmount) > 0
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-rose-100 text-rose-800'
+                    }`}>
+                      {settings.roles.farmer.enabled && Number(settings.roles.farmer.rewardAmount) > 0 ? 'Active' : 'Disabled'}
+                    </span>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settings.roles.farmer.enabled}
+                        onChange={(e) => setSettings(prev => ({
+                          ...prev,
+                          roles: {
+                            ...prev.roles,
+                            farmer: { ...prev.roles.farmer, enabled: e.target.checked }
+                          }
+                        }))}
+                        className="sr-only peer"
+                      />
+                      <div className="w-10 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                    </label>
+                  </div>
                 </div>
 
                 <div>
@@ -337,14 +375,63 @@ const ReferralManagement = () => {
                       className="w-full pl-8 pr-4 py-2.5 rounded-xl border border-gray-300 font-bold text-gray-800 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
                     />
                   </div>
-                  <p className="text-[11px] text-gray-400 mt-1">
-                    Stored as {Number(settings.roles.farmer.rewardAmount || 0) * 100} Paise
-                  </p>
+                  <div className="flex items-center justify-between text-[11px] text-gray-400 mt-1">
+                    <span>Stored as {Number(settings.roles.farmer.rewardAmount || 0) * 100} Paise</span>
+                    <div className="flex gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setSettings(prev => ({
+                          ...prev,
+                          roles: { ...prev.roles, farmer: { ...prev.roles.farmer, enabled: true, rewardAmount: 10 } }
+                        }))}
+                        className="px-1.5 py-0.5 bg-gray-100 hover:bg-emerald-50 hover:text-emerald-700 rounded text-[10px] font-semibold text-gray-600 transition-colors"
+                      >
+                        ₹10
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSettings(prev => ({
+                          ...prev,
+                          roles: { ...prev.roles, farmer: { ...prev.roles.farmer, enabled: true, rewardAmount: 20 } }
+                        }))}
+                        className="px-1.5 py-0.5 bg-gray-100 hover:bg-emerald-50 hover:text-emerald-700 rounded text-[10px] font-semibold text-gray-600 transition-colors"
+                      >
+                        ₹20
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSettings(prev => ({
+                          ...prev,
+                          roles: { ...prev.roles, farmer: { ...prev.roles.farmer, enabled: false, rewardAmount: 0 } }
+                        }))}
+                        className="px-1.5 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded text-[10px] font-semibold transition-colors"
+                      >
+                        Disable (₹0)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* App UI Status indicator */}
+                <div className={`p-2.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 ${
+                  settings.roles.farmer.enabled && Number(settings.roles.farmer.rewardAmount) > 0
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-100'
+                    : 'bg-rose-50 text-rose-800 border border-rose-100'
+                }`}>
+                  {settings.roles.farmer.enabled && Number(settings.roles.farmer.rewardAmount) > 0 ? (
+                    <span>✅ Shown as <b>₹{settings.roles.farmer.rewardAmount}</b> in user app UI</span>
+                  ) : (
+                    <span>🚫 <b>Removed from user app UI</b> ({!settings.roles.farmer.enabled ? 'Disabled' : 'Reward is ₹0'})</span>
+                  )}
                 </div>
               </div>
 
               {/* Vendor Reward Card */}
-              <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-4">
+              <div className={`p-5 rounded-2xl border transition-all space-y-4 ${
+                settings.roles.vendor.enabled && Number(settings.roles.vendor.rewardAmount) > 0
+                  ? 'bg-white border-blue-200 shadow-sm'
+                  : 'bg-gray-50/70 border-gray-200 opacity-90'
+              }`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-2xl">🚛</span>
@@ -353,21 +440,30 @@ const ReferralManagement = () => {
                       <span className="text-[11px] text-gray-500">Vendor Collection</span>
                     </div>
                   </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={settings.roles.vendor.enabled}
-                      onChange={(e) => setSettings(prev => ({
-                        ...prev,
-                        roles: {
-                          ...prev.roles,
-                          vendor: { ...prev.roles.vendor, enabled: e.target.checked }
-                        }
-                      }))}
-                      className="sr-only peer"
-                    />
-                    <div className="w-10 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                  </label>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                      settings.roles.vendor.enabled && Number(settings.roles.vendor.rewardAmount) > 0
+                        ? 'bg-blue-100 text-blue-800'
+                        : 'bg-rose-100 text-rose-800'
+                    }`}>
+                      {settings.roles.vendor.enabled && Number(settings.roles.vendor.rewardAmount) > 0 ? 'Active' : 'Disabled'}
+                    </span>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settings.roles.vendor.enabled}
+                        onChange={(e) => setSettings(prev => ({
+                          ...prev,
+                          roles: {
+                            ...prev.roles,
+                            vendor: { ...prev.roles.vendor, enabled: e.target.checked }
+                          }
+                        }))}
+                        className="sr-only peer"
+                      />
+                      <div className="w-10 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
                 </div>
 
                 <div>
@@ -391,14 +487,63 @@ const ReferralManagement = () => {
                       className="w-full pl-8 pr-4 py-2.5 rounded-xl border border-gray-300 font-bold text-gray-800 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                     />
                   </div>
-                  <p className="text-[11px] text-gray-400 mt-1">
-                    Stored as {Number(settings.roles.vendor.rewardAmount || 0) * 100} Paise
-                  </p>
+                  <div className="flex items-center justify-between text-[11px] text-gray-400 mt-1">
+                    <span>Stored as {Number(settings.roles.vendor.rewardAmount || 0) * 100} Paise</span>
+                    <div className="flex gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setSettings(prev => ({
+                          ...prev,
+                          roles: { ...prev.roles, vendor: { ...prev.roles.vendor, enabled: true, rewardAmount: 10 } }
+                        }))}
+                        className="px-1.5 py-0.5 bg-gray-100 hover:bg-blue-50 hover:text-blue-700 rounded text-[10px] font-semibold text-gray-600 transition-colors"
+                      >
+                        ₹10
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSettings(prev => ({
+                          ...prev,
+                          roles: { ...prev.roles, vendor: { ...prev.roles.vendor, enabled: true, rewardAmount: 20 } }
+                        }))}
+                        className="px-1.5 py-0.5 bg-gray-100 hover:bg-blue-50 hover:text-blue-700 rounded text-[10px] font-semibold text-gray-600 transition-colors"
+                      >
+                        ₹20
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSettings(prev => ({
+                          ...prev,
+                          roles: { ...prev.roles, vendor: { ...prev.roles.vendor, enabled: false, rewardAmount: 0 } }
+                        }))}
+                        className="px-1.5 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded text-[10px] font-semibold transition-colors"
+                      >
+                        Disable (₹0)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* App UI Status indicator */}
+                <div className={`p-2.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 ${
+                  settings.roles.vendor.enabled && Number(settings.roles.vendor.rewardAmount) > 0
+                    ? 'bg-blue-50 text-blue-800 border border-blue-100'
+                    : 'bg-rose-50 text-rose-800 border border-rose-100'
+                }`}>
+                  {settings.roles.vendor.enabled && Number(settings.roles.vendor.rewardAmount) > 0 ? (
+                    <span>✅ Shown as <b>₹{settings.roles.vendor.rewardAmount}</b> in app UI</span>
+                  ) : (
+                    <span>🚫 <b>Removed from app UI</b> ({!settings.roles.vendor.enabled ? 'Disabled' : 'Reward is ₹0'})</span>
+                  )}
                 </div>
               </div>
 
               {/* Independent Worker Reward Card */}
-              <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-4">
+              <div className={`p-5 rounded-2xl border transition-all space-y-4 ${
+                settings.roles.worker.enabled && Number(settings.roles.worker.rewardAmount) > 0
+                  ? 'bg-white border-orange-200 shadow-sm'
+                  : 'bg-gray-50/70 border-gray-200 opacity-90'
+              }`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-2xl">🛠️</span>
@@ -407,21 +552,30 @@ const ReferralManagement = () => {
                       <span className="text-[11px] text-gray-500">Worker Collection</span>
                     </div>
                   </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={settings.roles.worker.enabled}
-                      onChange={(e) => setSettings(prev => ({
-                        ...prev,
-                        roles: {
-                          ...prev.roles,
-                          worker: { ...prev.roles.worker, enabled: e.target.checked }
-                        }
-                      }))}
-                      className="sr-only peer"
-                    />
-                    <div className="w-10 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-600"></div>
-                  </label>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                      settings.roles.worker.enabled && Number(settings.roles.worker.rewardAmount) > 0
+                        ? 'bg-orange-100 text-orange-800'
+                        : 'bg-rose-100 text-rose-800'
+                    }`}>
+                      {settings.roles.worker.enabled && Number(settings.roles.worker.rewardAmount) > 0 ? 'Active' : 'Disabled'}
+                    </span>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settings.roles.worker.enabled}
+                        onChange={(e) => setSettings(prev => ({
+                          ...prev,
+                          roles: {
+                            ...prev.roles,
+                            worker: { ...prev.roles.worker, enabled: e.target.checked }
+                          }
+                        }))}
+                        className="sr-only peer"
+                      />
+                      <div className="w-10 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-600"></div>
+                    </label>
+                  </div>
                 </div>
 
                 <div>
@@ -445,9 +599,54 @@ const ReferralManagement = () => {
                       className="w-full pl-8 pr-4 py-2.5 rounded-xl border border-gray-300 font-bold text-gray-800 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none"
                     />
                   </div>
-                  <p className="text-[11px] text-gray-400 mt-1">
-                    Stored as {Number(settings.roles.worker.rewardAmount || 0) * 100} Paise
-                  </p>
+                  <div className="flex items-center justify-between text-[11px] text-gray-400 mt-1">
+                    <span>Stored as {Number(settings.roles.worker.rewardAmount || 0) * 100} Paise</span>
+                    <div className="flex gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setSettings(prev => ({
+                          ...prev,
+                          roles: { ...prev.roles, worker: { ...prev.roles.worker, enabled: true, rewardAmount: 10 } }
+                        }))}
+                        className="px-1.5 py-0.5 bg-gray-100 hover:bg-orange-50 hover:text-orange-700 rounded text-[10px] font-semibold text-gray-600 transition-colors"
+                      >
+                        ₹10
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSettings(prev => ({
+                          ...prev,
+                          roles: { ...prev.roles, worker: { ...prev.roles.worker, enabled: true, rewardAmount: 20 } }
+                        }))}
+                        className="px-1.5 py-0.5 bg-gray-100 hover:bg-orange-50 hover:text-orange-700 rounded text-[10px] font-semibold text-gray-600 transition-colors"
+                      >
+                        ₹20
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSettings(prev => ({
+                          ...prev,
+                          roles: { ...prev.roles, worker: { ...prev.roles.worker, enabled: false, rewardAmount: 0 } }
+                        }))}
+                        className="px-1.5 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded text-[10px] font-semibold transition-colors"
+                      >
+                        Disable (₹0)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* App UI Status indicator */}
+                <div className={`p-2.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 ${
+                  settings.roles.worker.enabled && Number(settings.roles.worker.rewardAmount) > 0
+                    ? 'bg-orange-50 text-orange-800 border border-orange-100'
+                    : 'bg-rose-50 text-rose-800 border border-rose-100'
+                }`}>
+                  {settings.roles.worker.enabled && Number(settings.roles.worker.rewardAmount) > 0 ? (
+                    <span>✅ Shown as <b>₹{settings.roles.worker.rewardAmount}</b> in app UI</span>
+                  ) : (
+                    <span>🚫 <b>Removed from app UI</b> ({!settings.roles.worker.enabled ? 'Disabled' : 'Reward is ₹0'})</span>
+                  )}
                 </div>
               </div>
             </div>

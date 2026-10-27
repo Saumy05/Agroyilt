@@ -63,6 +63,7 @@ const getOrCreateConfig = async () => {
     config = await ReferralRewardConfig.create({
       type: 'global',
       systemEnabled: false,
+      showRewardStructure: true,
       registrationUrl: 'https://agroyilt.com/app/register',
       roles: {
         farmer: { enabled: false, rewardAmountPaise: 5000 },  // ₹50
@@ -736,6 +737,28 @@ const getUserReferralStats = async (userId, userModel) => {
   const qualifiedCount = codeDoc.totalQualified || 0;
   const totalEarned = Math.round((codeDoc.totalEarnedPaise || 0) / 100);
 
+  const getRoleRewardRupees = (roleKey) => {
+    const role = config.roles?.[roleKey];
+    if (!role) return 0;
+    const paise = typeof role.rewardAmountPaise === 'number' ? role.rewardAmountPaise : 0;
+    return Math.max(0, Math.round(paise / 100));
+  };
+
+  const rolesData = {
+    farmer: {
+      enabled: !!config.roles?.farmer?.enabled,
+      rewardAmount: getRoleRewardRupees('farmer')
+    },
+    vendor: {
+      enabled: !!config.roles?.vendor?.enabled,
+      rewardAmount: getRoleRewardRupees('vendor')
+    },
+    worker: {
+      enabled: !!config.roles?.worker?.enabled,
+      rewardAmount: getRoleRewardRupees('worker')
+    }
+  };
+
   return {
     referralCode: codeDoc.code,
     registerLink: config.registrationUrl || 'https://agroyilt.com/app/register',
@@ -744,10 +767,12 @@ const getUserReferralStats = async (userId, userModel) => {
     totalQualified: qualifiedCount,
     pendingQualifications: pendingCount,
     totalEarnedRupees: totalEarned,
+    showRewardStructure: config.showRewardStructure !== false,
+    roles: rolesData,
     rates: {
-      farmer: Math.round((config.roles.farmer?.rewardAmountPaise || 5000) / 100),
-      vendor: Math.round((config.roles.vendor?.rewardAmountPaise || 4000) / 100),
-      worker: Math.round((config.roles.worker?.rewardAmountPaise || 5000) / 100)
+      farmer: rolesData.farmer.enabled ? rolesData.farmer.rewardAmount : 0,
+      vendor: rolesData.vendor.enabled ? rolesData.vendor.rewardAmount : 0,
+      worker: rolesData.worker.enabled ? rolesData.worker.rewardAmount : 0
     },
     systemEnabled: config.systemEnabled,
     history: formattedHistory

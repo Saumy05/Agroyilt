@@ -11,6 +11,11 @@ const referralRewardConfigSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  // Controls whether the "Reward Per Role Qualified" card is shown in user apps
+  showRewardStructure: {
+    type: Boolean,
+    default: true
+  },
   registrationUrl: {
     type: String,
     default: 'https://agroyilt.com/app/register',

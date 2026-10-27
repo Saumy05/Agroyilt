@@ -3,7 +3,7 @@ import referralService from '../services/referralService';
 
 // Referral UI is admin-controlled and off by default: hidden until the server confirms it is on for the role.
 // One shared request per page load; role is 'farmer' | 'vendor' | 'worker' (omit for "any role").
-const OFF = { farmer: false, vendor: false, worker: false };
+const OFF = { systemEnabled: false, farmer: false, vendor: false, worker: false, anyEnabled: false };
 let cached = null;
 let inflight = null;
 
@@ -28,8 +28,12 @@ export function useReferralEnabled(role) {
   }, []);
 
   const loaded = status !== null;
-  const enabled = loaded && (role ? !!status[role] : Object.values(status).some(Boolean));
-  return { enabled, loaded };
+  const enabled = loaded && (
+    role
+      ? !!status[role]
+      : (status.anyEnabled ?? (status.farmer || status.vendor || status.worker))
+  );
+  return { enabled, loaded, status };
 }
 
 export default useReferralEnabled;
