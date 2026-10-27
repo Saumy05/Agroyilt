@@ -101,12 +101,13 @@ const Rewards = () => {
     document.body.removeChild(el);
   };
 
+  const shareMessage = `Join AgroYilt - India's Smart Agri Services & Equipment Platform! 🌾🚜\n\nReferral Code: *${data.referralCode}*\n\nDownload the app or register here:\n${registerLink}\n\n(Use referral code *${data.referralCode}* to get rewards!)`;
+
   const handleShareWhatsApp = () => {
-    const text = `Join AgroYilt - India's Smart Agri Services & Equipment Platform! 🌾🚜\n\nUse my Referral Code: *${data.referralCode}*\n\nRegister directly here:\n${registerLink}\n\n(Enter this referral code during registration to earn rewards!)`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+    window.open(`https://wa.me/?text=${encodeURIComponent(shareMessage)}`, '_blank');
   };
 
-  const shareText = `Join AgroYilt - India's Smart Agri Services & Equipment Platform! Use my Referral Code: ${data.referralCode} when registering.`;
+  const shareText = `Join AgroYilt! Use my Referral Code: ${data.referralCode}`;
 
   // Opens the phone's own share sheet when the browser has one; otherwise shows our own list of apps
   const handleNativeShare = async () => {
@@ -115,7 +116,7 @@ const Rewards = () => {
       return;
     }
     try {
-      await navigator.share({ title: 'Join AgroYilt', text: shareText, url: registerLink });
+      await navigator.share({ title: 'Join AgroYilt', text: shareMessage });
     } catch (e) {
       if (e?.name !== 'AbortError') setShowMore(true);
     }
@@ -126,7 +127,7 @@ const Rewards = () => {
       label: 'Telegram',
       icon: <FaTelegramPlane className="w-5 h-5" />,
       color: 'bg-[#229ED9]',
-      href: `https://t.me/share/url?url=${encodeURIComponent(registerLink)}&text=${encodeURIComponent(shareText)}`
+      href: `https://t.me/share/url?url=${encodeURIComponent(registerLink)}&text=${encodeURIComponent(`Join AgroYilt using Referral Code: ${data.referralCode}`)}`
     },
     {
       label: 'Facebook',
@@ -138,13 +139,13 @@ const Rewards = () => {
       label: 'SMS',
       icon: <FiMessageSquare className="w-5 h-5" />,
       color: 'bg-emerald-600',
-      href: `sms:?&body=${encodeURIComponent(`${shareText} ${registerLink}`)}`
+      href: `sms:?&body=${encodeURIComponent(shareMessage)}`
     },
     {
       label: 'Email',
       icon: <FiMail className="w-5 h-5" />,
       color: 'bg-rose-500',
-      href: `mailto:?subject=${encodeURIComponent('Join AgroYilt')}&body=${encodeURIComponent(`${shareText}\n\n${registerLink}`)}`
+      href: `mailto:?subject=${encodeURIComponent('Join AgroYilt')}&body=${encodeURIComponent(shareMessage)}`
     }
   ];
 

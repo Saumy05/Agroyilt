@@ -3,6 +3,7 @@ import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { FiChevronRight, FiChevronLeft, FiUser, FiTruck, FiTool, FiUsers, FiX, FiGift } from 'react-icons/fi';
 import { useBrand } from '../../../context/BrandContext';
 import useReferralEnabled from '../../../hooks/useReferralEnabled';
+import { extractReferralCode } from '../../../utils/referralStorage';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const roles = [
@@ -44,7 +45,8 @@ const AppRegister = () => {
   const [showWorkerTypeModal, setShowWorkerTypeModal] = useState(false);
 
   const { enabled: referralOn } = useReferralEnabled();
-  const refCode = (searchParams.get('ref') || searchParams.get('referralCode') || '').trim().toUpperCase();
+  const rawRef = searchParams.get('ref') || searchParams.get('referralCode') || '';
+  const refCode = extractReferralCode(rawRef);
 
   const handleProceed = () => {
     if (!selected) return;
@@ -54,7 +56,8 @@ const AppRegister = () => {
     }
     const role = roles.find(r => r.id === selected);
     if (role) {
-      navigate(role.route + location.search);
+      const search = refCode ? `?ref=${encodeURIComponent(refCode)}` : '';
+      navigate(role.route + search);
     }
   };
 
@@ -311,7 +314,7 @@ const AppRegister = () => {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '8px' }}>
                 <button
-                  onClick={() => navigate('/worker/signup?type=TEAM_LEADER' + (refCode ? `&ref=${refCode}` : ''))}
+                  onClick={() => navigate('/worker/signup?type=TEAM_LEADER' + (refCode ? `&ref=${encodeURIComponent(refCode)}` : ''))}
                   style={{
                     display: 'flex', alignItems: 'center', gap: '16px',
                     background: '#fff', border: '2px solid #E3F2FD', borderRadius: '16px',
@@ -330,7 +333,7 @@ const AppRegister = () => {
                 </button>
 
                 <button
-                  onClick={() => navigate('/worker/signup?type=WORKER' + (refCode ? `&ref=${refCode}` : ''))}
+                  onClick={() => navigate('/worker/signup?type=WORKER' + (refCode ? `&ref=${encodeURIComponent(refCode)}` : ''))}
                   style={{
                     display: 'flex', alignItems: 'center', gap: '16px',
                     background: '#fff', border: '2px solid #FFF3E0', borderRadius: '16px',

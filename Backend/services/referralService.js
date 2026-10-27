@@ -140,7 +140,11 @@ const validateReferralCode = async (code, candidateUserId = null) => {
     return { isValid: false, message: 'Referral code is required' };
   }
 
-  const normalizedCode = code.trim().toUpperCase();
+  let normalizedCode = code.trim().toUpperCase();
+  const agroMatch = normalizedCode.match(/^AGRO[A-Z0-9]{5}/);
+  if (agroMatch) {
+    normalizedCode = agroMatch[0];
+  }
   const config = await getOrCreateConfig();
 
   if (!config.systemEnabled) {
@@ -196,7 +200,11 @@ const createReferralAttribution = async ({
     return { success: false, message: 'Missing attribution parameters' };
   }
 
-  const normalizedCode = referralCode.trim().toUpperCase();
+  let normalizedCode = referralCode.trim().toUpperCase();
+  const agroMatch = normalizedCode.match(/^AGRO[A-Z0-9]{5}/);
+  if (agroMatch) {
+    normalizedCode = agroMatch[0];
+  }
 
   // Check if system is active
   const config = await getOrCreateConfig();

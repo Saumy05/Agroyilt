@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { FiCheckCircle, FiAlertCircle, FiLoader, FiGift } from 'react-icons/fi';
 import referralService from '../../services/referralService';
 import useReferralEnabled from '../../hooks/useReferralEnabled';
-import { readSavedReferral, saveReferral } from '../../utils/referralStorage';
+import { readSavedReferral, saveReferral, extractReferralCode } from '../../utils/referralStorage';
 
 const ReferralInputField = ({
   role,
@@ -25,10 +25,12 @@ const ReferralInputField = ({
   useEffect(() => {
     const urlRef = searchParams.get('ref') || searchParams.get('referralCode');
     if (urlRef) {
-      const cleanRef = urlRef.trim().toUpperCase();
-      setHasCode(true);
-      setInputCode(cleanRef);
-      handleValidate(cleanRef);
+      const cleanRef = extractReferralCode(urlRef);
+      if (cleanRef) {
+        setHasCode(true);
+        setInputCode(cleanRef);
+        handleValidate(cleanRef);
+      }
     }
   }, [searchParams]);
 
@@ -58,7 +60,8 @@ const ReferralInputField = ({
   }, [inputCode, hasCode]);
 
   const handleValidate = async (codeToTest) => {
-    const target = (codeToTest || inputCode).trim().toUpperCase();
+    const rawTarget = (codeToTest || inputCode).trim().toUpperCase();
+    const target = extractReferralCode(rawTarget) || rawTarget;
     if (!target) {
       setErrorMsg('Please enter a referral code');
       return;

@@ -95,9 +95,10 @@ const VendorReferrals = () => {
     document.body.removeChild(el);
   };
 
+  const shareMessage = `Join AgroYilt - India's Smart Agri Services & Equipment Platform! 🌾🚜\n\nReferral Code: *${data.referralCode}*\n\nDownload the app or register here:\n${registerLink}\n\n(Enter referral code *${data.referralCode}* to get started!)`;
+
   const handleShareWhatsApp = () => {
-    const text = `Join AgroYilt - India's Smart Agri Services & Equipment Platform! 🌾🚜\n\nUse my Referral Code: *${data.referralCode}*\n\nRegister directly here:\n${registerLink}\n\n(Enter this referral code during registration to get started!)`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+    window.open(`https://wa.me/?text=${encodeURIComponent(shareMessage)}`, '_blank');
   };
 
   const handleNativeShare = async () => {
@@ -105,7 +106,7 @@ const VendorReferrals = () => {
       try {
         await navigator.share({
           title: 'Join AgroYilt as Vendor/Farmer',
-          text: `Use my Referral Code: ${data.referralCode} when registering on AgroYilt!\nRegister here: ${registerLink}`,
+          text: shareMessage,
         });
       } catch (e) {
         // User cancelled
