@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { FiArrowRight, FiCalendar, FiTag, FiFileText } from 'react-icons/fi';
 import axios from 'axios';
@@ -39,15 +39,15 @@ const LiveContentSection = () => {
     if (loading || (blogs.length === 0 && articles.length === 0)) return null;
 
     return (
-        <section id="insights" className="py-12 md:py-24 bg-white relative overflow-hidden">
+        <section id="insights" className="py-8 sm:py-14 md:py-20 bg-white relative overflow-hidden">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-                <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 md:mb-16 gap-6">
+                <div className="flex flex-col md:flex-row md:items-end justify-between mb-6 sm:mb-10 md:mb-14 gap-3">
                     <div>
                         <motion.span 
                             initial={{ opacity: 0, x: -20 }}
                             whileInView={{ opacity: 1, x: 0 }}
                             viewport={{ once: true }}
-                            className="bg-green-100 text-green-700 px-4 py-1 rounded-full text-xs font-bold tracking-widest uppercase mb-4 inline-block shadow-sm"
+                            className="bg-green-100 text-green-700 px-3 sm:px-4 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-bold tracking-widest uppercase mb-2 sm:mb-3 inline-block shadow-sm"
                         >
                             <TranslatedText>Knowledge Center</TranslatedText>
                         </motion.span>
@@ -55,49 +55,50 @@ const LiveContentSection = () => {
                             initial={{ opacity: 0, y: 20 }}
                             whileInView={{ opacity: 1, y: 0 }}
                             viewport={{ once: true }}
-                            className="text-4xl md:text-5xl font-black text-gray-900"
+                            className="text-2xl sm:text-4xl md:text-5xl font-black text-gray-900"
                         >
                             <TranslatedText>Latest Blogs & Articles</TranslatedText>
                         </motion.h2>
                     </div>
                 </div>
 
-                <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-24">
+                <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-10 md:gap-16">
                     {/* Blogs Section */}
                     {blogs.length > 0 && (
-                        <div className="flex flex-col items-center">
-                            <div className="flex items-center justify-between w-full mb-8 border-b border-gray-100 pb-4 px-2">
-                                <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                        <div className="flex flex-col">
+                            <div className="flex items-center justify-between w-full mb-3 sm:mb-4 border-b border-gray-100 pb-2.5 px-1">
+                                <h3 className="text-base sm:text-lg font-bold text-gray-900 flex items-center gap-2">
                                     <FiFileText className="text-green-600" /> <TranslatedText>Recent Blogs</TranslatedText>
                                 </h3>
-                                <Link to="/blogs" className="text-green-600 font-bold text-xs flex items-center gap-1 hover:gap-2 transition-all">
-                                    <TranslatedText>Explore All</TranslatedText> <FiArrowRight />
+                                <Link to="/blogs" className="text-green-600 font-bold text-xs flex items-center gap-1 hover:gap-1.5 transition-all">
+                                    <TranslatedText>Explore All</TranslatedText> <FiArrowRight size={12} />
                                 </Link>
                             </div>
                             
-                            <div className="flex -space-x-4 md:-space-x-8 hover:space-x-1 transition-all duration-500 py-4">
-                                {blogs.map((blog, idx) => (
+                            <div className="space-y-2.5 w-full">
+                                {blogs.map((blog) => (
                                     <Link 
                                         to={`/blogs/${blog._id}`} 
                                         key={blog._id}
-                                        className="relative group cursor-pointer"
+                                        className="group block bg-gray-50 hover:bg-green-50/40 p-2.5 sm:p-3 rounded-2xl border border-gray-100 hover:border-green-200 transition-all shadow-sm"
                                     >
-                                        <motion.div
-                                            initial={{ opacity: 0, scale: 0.5 }}
-                                            whileInView={{ opacity: 1, scale: 1 }}
-                                            viewport={{ once: true }}
-                                            transition={{ delay: idx * 0.1 }}
-                                            className="w-24 h-24 md:w-40 md:h-40 rounded-full border-4 border-white shadow-xl overflow-hidden group-hover:z-30 group-hover:scale-110 transition-all duration-300 ring-4 ring-green-50"
-                                        >
-                                            <img 
-                                                src={blog.image || "https://placehold.jp/300x200.png"} 
-                                                alt={blog.title} 
-                                                className="w-full h-full object-cover group-hover:brightness-110 transition-all"
-                                            />
-                                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center p-4">
-                                                <span className="text-white text-[10px] md:text-sm font-bold text-center leading-tight line-clamp-2">{blog.title}</span>
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl overflow-hidden shrink-0 border border-gray-100 bg-gray-200">
+                                                <img 
+                                                    src={blog.image || "https://placehold.jp/300x200.png"} 
+                                                    alt={blog.title} 
+                                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                                />
                                             </div>
-                                        </motion.div>
+                                            <div className="min-w-0 flex-1">
+                                                <h4 className="text-xs sm:text-sm font-bold text-gray-900 group-hover:text-green-700 transition-colors line-clamp-2 leading-snug">
+                                                    {blog.title}
+                                                </h4>
+                                                <span className="text-[10px] sm:text-xs text-green-600 font-semibold mt-1 inline-flex items-center gap-1">
+                                                    <TranslatedText>Read Blog</TranslatedText> <FiArrowRight size={10} />
+                                                </span>
+                                            </div>
+                                        </div>
                                     </Link>
                                 ))}
                             </div>
@@ -106,39 +107,40 @@ const LiveContentSection = () => {
 
                     {/* Articles Section */}
                     {articles.length > 0 && (
-                        <div className="flex flex-col items-center">
-                            <div className="flex items-center justify-between w-full mb-8 border-b border-gray-100 pb-4 px-2">
-                                <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                        <div className="flex flex-col">
+                            <div className="flex items-center justify-between w-full mb-3 sm:mb-4 border-b border-gray-100 pb-2.5 px-1">
+                                <h3 className="text-base sm:text-lg font-bold text-gray-900 flex items-center gap-2">
                                     <FiTag className="text-orange-500" /> <TranslatedText>Featured Articles</TranslatedText>
                                 </h3>
-                                <Link to="/articles" className="text-orange-500 font-bold text-xs flex items-center gap-1 hover:gap-2 transition-all">
-                                    <TranslatedText>Explore All</TranslatedText> <FiArrowRight />
+                                <Link to="/articles" className="text-orange-500 font-bold text-xs flex items-center gap-1 hover:gap-1.5 transition-all">
+                                    <TranslatedText>Explore All</TranslatedText> <FiArrowRight size={12} />
                                 </Link>
                             </div>
                             
-                            <div className="flex -space-x-4 md:-space-x-8 hover:space-x-1 transition-all duration-500 py-4">
-                                {articles.map((article, idx) => (
+                            <div className="space-y-2.5 w-full">
+                                {articles.map((article) => (
                                     <Link 
                                         to={`/articles/${article._id}`} 
                                         key={article._id}
-                                        className="relative group cursor-pointer"
+                                        className="group block bg-gray-50 hover:bg-orange-50/40 p-2.5 sm:p-3 rounded-2xl border border-gray-100 hover:border-orange-200 transition-all shadow-sm"
                                     >
-                                        <motion.div
-                                            initial={{ opacity: 0, scale: 0.5 }}
-                                            whileInView={{ opacity: 1, scale: 1 }}
-                                            viewport={{ once: true }}
-                                            transition={{ delay: idx * 0.1 }}
-                                            className="w-24 h-24 md:w-40 md:h-40 rounded-full border-4 border-white shadow-xl overflow-hidden group-hover:z-30 group-hover:scale-110 transition-all duration-300 ring-4 ring-orange-50"
-                                        >
-                                            <img 
-                                                src={article.image || "https://placehold.jp/300x200.png"} 
-                                                alt={article.title} 
-                                                className="w-full h-full object-cover group-hover:brightness-110 transition-all"
-                                            />
-                                            <div className="absolute inset-0 bg-orange-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center p-4">
-                                                <span className="text-white text-[10px] md:text-sm font-bold text-center leading-tight line-clamp-2">{article.title}</span>
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl overflow-hidden shrink-0 border border-gray-100 bg-gray-200">
+                                                <img 
+                                                    src={article.image || "https://placehold.jp/300x200.png"} 
+                                                    alt={article.title} 
+                                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                                />
                                             </div>
-                                        </motion.div>
+                                            <div className="min-w-0 flex-1">
+                                                <h4 className="text-xs sm:text-sm font-bold text-gray-900 group-hover:text-orange-600 transition-colors line-clamp-2 leading-snug">
+                                                    {article.title}
+                                                </h4>
+                                                <span className="text-[10px] sm:text-xs text-orange-600 font-semibold mt-1 inline-flex items-center gap-1">
+                                                    <TranslatedText>Read Article</TranslatedText> <FiArrowRight size={10} />
+                                                </span>
+                                            </div>
+                                        </div>
                                     </Link>
                                 ))}
                             </div>

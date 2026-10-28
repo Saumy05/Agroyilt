@@ -1,13 +1,27 @@
-﻿import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { motion, useInView } from 'framer-motion';
 import { HiOutlineMap, HiOutlineCalendar, HiOutlineBadgeCheck, HiOutlineCloud, HiOutlineChartBar, HiOutlineLockClosed } from 'react-icons/hi';
 import { usePageTranslation } from '../../../hooks/usePageTranslation';
 import featureImg from '../landing_images/dron_spraying1.jpg';
 
-const FeatureCard = ({ feature, idx }) => {
+const FeatureCard = ({ feature, idx, isCompactMobile = false }) => {
   const [hovered, setHovered] = useState(false);
   const ref = React.useRef(null);
-  const isInView = useInView(ref, { once: true, margin: '-50px' });
+  const isInView = useInView(ref, { once: true, margin: '-30px' });
+
+  if (isCompactMobile) {
+    return (
+      <div className="bg-white p-3 rounded-xl sm:rounded-2xl border border-green-100 shadow-sm flex flex-col justify-between">
+        <div className="flex items-center space-x-2.5 mb-1.5">
+          <div className="w-8 h-8 rounded-lg bg-green-50 text-green-700 flex items-center justify-center shrink-0">
+            {React.cloneElement(feature.icon, { className: 'w-4 h-4' })}
+          </div>
+          <h3 className="text-xs sm:text-sm font-bold text-gray-900 leading-tight truncate">{feature.title}</h3>
+        </div>
+        <p className="text-[10px] sm:text-[11px] text-gray-500 leading-normal line-clamp-2">{feature.desc}</p>
+      </div>
+    );
+  }
 
   return (
     <motion.div
@@ -17,8 +31,7 @@ const FeatureCard = ({ feature, idx }) => {
       transition={{ delay: idx * 0.08, duration: 0.5, ease: 'easeOut' }}
       onHoverStart={() => setHovered(true)}
       onHoverEnd={() => setHovered(false)}
-      className="relative group overflow-hidden rounded-3xl border border-green-100 bg-white p-6 cursor-default flex-shrink-0 w-[85%] min-w-0 sm:min-w-[45%] lg:min-w-0 snap-center shadow-xl shadow-green-900/5 h-full flex flex-col"
-      style={{ boxShadow: hovered ? '0 20px 40px rgba(21₹28,61,0.12)' : '0 2px 8px rgba(0,0,0,0.04)' }}
+      className="relative group overflow-hidden rounded-2xl md:rounded-3xl border border-green-100 bg-white p-4 sm:p-6 cursor-default shadow-sm hover:shadow-xl hover:shadow-green-900/5 transition-all h-full flex flex-col"
     >
       {/* Animated BG glow */}
       <motion.div
@@ -35,7 +48,7 @@ const FeatureCard = ({ feature, idx }) => {
         style={{ transformOrigin: 'top' }}
       />
 
-      <div className="relative z-10 flex items-start space-x-4">
+      <div className="relative z-10 flex items-start space-x-3 sm:space-x-4">
         {/* Icon */}
         <motion.div
           animate={{
@@ -43,14 +56,14 @@ const FeatureCard = ({ feature, idx }) => {
             color: hovered ? '#fff' : '#15803d',
           }}
           transition={{ duration: 0.3 }}
-          className="flex-shrink-0 w-11 h-11 rounded-xl flex items-center justify-center shadow-sm"
+          className="flex-shrink-0 w-9 h-9 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center shadow-sm"
         >
-          {React.cloneElement(feature.icon, { className: 'w-5 h-5' })}
+          {React.cloneElement(feature.icon, { className: 'w-4 h-4 sm:w-5 sm:h-5' })}
         </motion.div>
 
-        <div>
-          <h3 className="text-sm font-black text-gray-900 mb-1 tracking-tight group-hover:text-green-700 transition-colors">{feature.title}</h3>
-          <p className="text-xs text-gray-500 leading-relaxed font-medium">{feature.desc}</p>
+        <div className="min-w-0">
+          <h3 className="text-xs sm:text-sm font-black text-gray-900 mb-1 tracking-tight group-hover:text-green-700 transition-colors">{feature.title}</h3>
+          <p className="text-[11px] sm:text-xs text-gray-500 leading-relaxed font-medium">{feature.desc}</p>
         </div>
       </div>
     </motion.div>
@@ -81,33 +94,42 @@ const FeatureSection = () => {
   ];
 
   return (
-    <section id="features" className="py-10 md:py-16 bg-white overflow-hidden">
+    <section id="features" className="py-8 sm:py-12 md:py-16 bg-white overflow-hidden">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col lg:flex-row items-center gap-8 lg:gap-14">
+        <div className="flex flex-col lg:flex-row items-center gap-6 lg:gap-14">
+
+          {/* Heading - shown first on mobile & desktop */}
+          <div className="w-full lg:hidden text-center">
+            <span className="text-[10px] text-green-700 font-black uppercase tracking-[0.3em]">{getTranslatedText("Modern Farming Features")}</span>
+            <h2 className="text-2xl sm:text-3xl font-black text-gray-900 mt-1.5 mb-2 tracking-tight leading-tight">
+              {getTranslatedText("Built for Modern Farmers")}
+            </h2>
+            <p className="text-xs sm:text-sm text-gray-500 font-medium max-w-sm mx-auto leading-relaxed">
+              {getTranslatedText("Packed with features that simplify every step of the agriculture process.")}
+            </p>
+          </div>
 
           {/* LEFT: Image with floating badge */}
-          <div className="lg:w-1/2 relative">
+          <div className="w-full lg:w-1/2 relative">
             {/* Blur blobs */}
-            <div className="absolute -top-14 -left-14 w-56 h-56 bg-green-100 rounded-full blur-3xl opacity-60 animate-pulse" />
-            <div className="absolute -bottom-14 -right-14 w-40 h-40 bg-yellow-100 rounded-full blur-3xl opacity-40 animate-pulse" style={{ animationDelay: '1s' }} />
+            <div className="absolute -top-14 -left-14 w-56 h-56 bg-green-100 rounded-full blur-3xl opacity-60 animate-pulse pointer-events-none" />
+            <div className="absolute -bottom-14 -right-14 w-40 h-40 bg-yellow-100 rounded-full blur-3xl opacity-40 animate-pulse pointer-events-none" style={{ animationDelay: '1s' }} />
 
             <motion.div
               initial={{ opacity: 0, scale: 0.95, rotate: -1 }}
               whileInView={{ opacity: 1, scale: 1, rotate: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.7, ease: 'easeOut' }}
-              className="relative rounded-[2.5rem] overflow-hidden shadow-2xl"
+              className="relative rounded-2xl sm:rounded-[2.5rem] overflow-hidden shadow-xl sm:shadow-2xl"
             >
               <img
                 src={featureImg}
                 alt={getTranslatedText("Modern Farming Features")}
-                className="w-full h-64 md:h-[430px] object-cover"
+                className="w-full h-44 sm:h-64 md:h-[430px] object-cover"
               />
               {/* Overlay gradient */}
               <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />
             </motion.div>
-
-
 
             {/* Live indicator */}
             <motion.div
@@ -115,20 +137,20 @@ const FeatureSection = () => {
               whileInView={{ opacity: 1, x: 0 }}
               viewport={{ once: true }}
               transition={{ delay: 0.5, duration: 0.5 }}
-              className="absolute top-6 left-6 bg-black/60 backdrop-blur-md text-white px-3 py-1.5 rounded-full flex items-center space-x-2 border border-white/10"
+              className="absolute top-3 left-3 sm:top-6 sm:left-6 bg-black/60 backdrop-blur-md text-white px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full flex items-center space-x-1.5 sm:space-x-2 border border-white/10"
             >
-              <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-              <span className="text-[10px] font-bold uppercase tracking-widest">Live Tracking</span>
+              <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-400 rounded-full animate-pulse" />
+              <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest">Live Tracking</span>
             </motion.div>
           </div>
 
-          {/* RIGHT: Feature Cards */}
-          <div className="lg:w-1/2 w-full min-w-0">
+          {/* RIGHT: Desktop Header + Features */}
+          <div className="hidden lg:block lg:w-1/2 w-full min-w-0">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              className="mb-6 md:mb-8 text-center lg:text-left"
+              className="mb-6 md:mb-8 text-left"
             >
               <span className="text-xs text-green-700 font-black uppercase tracking-[0.3em]">{getTranslatedText("Modern Farming Features")}</span>
               <h2 className="text-3xl md:text-4xl font-black text-gray-900 mt-2 mb-3 tracking-tight leading-tight">
@@ -138,27 +160,28 @@ const FeatureSection = () => {
                 {getTranslatedText("Packed with features that simplify every step of the agriculture process.")}
               </p>
             </motion.div>
+          </div>
 
         </div>
-      </div>
-    </div>
-      
-      {/* Mobile/Tablet Horizontal Scroll - Full Width on Mobile */}
-      <div className="lg:hidden mt-8">
-        <div className="flex flex-nowrap items-stretch overflow-x-auto w-full gap-4 pb-8 no-scrollbar snap-x snap-mandatory px-4 touch-pan-x relative">
-          {features.map((feature, idx) => (
-            <FeatureCard key={idx} feature={feature} idx={idx} />
-          ))}
-        </div>
-      </div>
 
-      {/* Desktop Grid - Hidden on mobile */}
-      <div className="hidden lg:block container mx-auto px-4 sm:px-6 lg:px-8 mt-14">
-        <div className="grid lg:grid-cols-3 gap-8">
-           {features.map((feature, idx) => (
-             <FeatureCard key={idx} feature={feature} idx={idx} />
-           ))}
+        {/* Mobile: Compact 2-column grid showing all 6 features without sideways scrolling */}
+        <div className="lg:hidden mt-5 sm:mt-8">
+          <div className="grid grid-cols-2 gap-2 sm:gap-3">
+            {features.map((feature, idx) => (
+              <FeatureCard key={idx} feature={feature} idx={idx} isCompactMobile={true} />
+            ))}
+          </div>
         </div>
+
+        {/* Desktop Grid */}
+        <div className="hidden lg:block mt-12">
+          <div className="grid lg:grid-cols-3 gap-6">
+            {features.map((feature, idx) => (
+              <FeatureCard key={idx} feature={feature} idx={idx} />
+            ))}
+          </div>
+        </div>
+
       </div>
     </section>
   );

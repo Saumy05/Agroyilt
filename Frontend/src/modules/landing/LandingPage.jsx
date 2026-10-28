@@ -5,6 +5,7 @@ import Hero from './components/Hero';
 import ProblemSolution from './components/ProblemSolution';
 import ServicesSection from './components/ServicesSection';
 import WorkflowSection from './components/WorkflowSection';
+import VideoTutorialSection from './components/VideoTutorialSection';
 import FeatureSection from './components/FeatureSection';
 import EcosystemFlow from './components/EcosystemFlow';
 
@@ -22,7 +23,7 @@ const LandingPage = () => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white overflow-x-hidden w-full max-w-full">
       <Helmet>
         <title>Agroyilt | Professional Agriculture Equipment & Farm Solutions</title>
         <meta name="description" content="Empowering Indian farmers with easy access to high-quality agriculture machinery. Rent tractors, harvesters, and tools from verified local vendors." />
@@ -34,6 +35,7 @@ const LandingPage = () => {
       <ProblemSolution />
       <ServicesSection />
       <WorkflowSection />
+      <VideoTutorialSection />
       <EcosystemFlow />
       <LiveContentSection />
       <FeatureSection />

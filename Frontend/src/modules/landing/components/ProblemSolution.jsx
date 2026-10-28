@@ -28,29 +28,29 @@ const ProblemRow = ({ item, index, getTranslatedText }) => {
   return (
     <motion.div
       ref={ref}
-      initial={{ opacity: 0, x: -30 }}
+      initial={{ opacity: 0, x: -20 }}
       animate={isInView ? { opacity: 1, x: 0 } : {}}
-      transition={{ delay: index * 0.09, duration: 0.45, ease: 'easeOut' }}
+      transition={{ delay: index * 0.07, duration: 0.4, ease: 'easeOut' }}
       onHoverStart={() => setHovered(true)}
       onHoverEnd={() => setHovered(false)}
-      className="flex items-start space-x-3 group cursor-default"
+      className="flex items-start space-x-2.5 sm:space-x-3 group cursor-default"
     >
       {/* Animated bullet */}
       <motion.div
-        animate={{ scale: hovered ? 1.25 : 1, backgroundColor: hovered ? '#dc2626' : '#fee2e2' }}
-        transition={{ duration: 0.25 }}
-        className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center mt-0.5"
+        animate={{ scale: hovered ? 1.2 : 1, backgroundColor: hovered ? '#dc2626' : '#fee2e2' }}
+        transition={{ duration: 0.2 }}
+        className="flex-shrink-0 w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center mt-0.5"
       >
         <motion.div
           animate={{ scale: hovered ? 1 : 0.6, backgroundColor: hovered ? '#fff' : '#dc2626' }}
-          className="w-2 h-2 rounded-full"
-          transition={{ duration: 0.25 }}
+          className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full"
+          transition={{ duration: 0.2 }}
         />
       </motion.div>
       <motion.p
-        animate={{ color: hovered ? '#dc2626' : '#374151', x: hovered ? 4 : 0 }}
-        transition={{ duration: 0.25 }}
-        className="text-sm font-semibold leading-tight"
+        animate={{ color: hovered ? '#dc2626' : '#374151', x: hovered ? 3 : 0 }}
+        transition={{ duration: 0.2 }}
+        className="text-xs sm:text-sm font-semibold leading-snug"
       >
         {getTranslatedText(item)}
       </motion.p>
@@ -79,41 +79,41 @@ const SolutionRow = ({ item, index, getTranslatedText }) => {
   return (
     <motion.div
       ref={ref}
-      initial={{ opacity: 0, x: 30 }}
+      initial={{ opacity: 0, x: 20 }}
       animate={isInView ? { opacity: 1, x: 0 } : {}}
-      transition={{ delay: index * 0.1, duration: 0.45, ease: 'easeOut' }}
+      transition={{ delay: index * 0.08, duration: 0.4, ease: 'easeOut' }}
       style={{ rotateX, rotateY, transformStyle: 'preserve-3d' }}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       onHoverStart={() => setHovered(true)}
       onHoverEnd={() => setHovered(false)}
-      className="flex items-center space-x-4 p-3 rounded-2xl transition-colors cursor-default"
+      className="flex items-center space-x-3 sm:space-x-4 p-2 sm:p-2.5 rounded-xl sm:rounded-2xl transition-colors cursor-default"
     >
       <motion.div
         animate={{
           backgroundColor: hovered ? '#16a34a' : 'rgba(255,255,255,0.08)',
-          scale: hovered ? 1.1 : 1,
-          boxShadow: hovered ? '0 0 20px rgba(74,222₹28,0.4)' : 'none',
+          scale: hovered ? 1.08 : 1,
+          boxShadow: hovered ? '0 0 20px rgba(74,222,128,0.4)' : 'none',
         }}
-        transition={{ duration: 0.3 }}
-        className="w-11 h-11 rounded-2xl flex items-center justify-center text-green-400 text-xl flex-shrink-0"
+        transition={{ duration: 0.25 }}
+        className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl flex items-center justify-center text-green-400 text-lg sm:text-xl flex-shrink-0"
       >
         {item.icon}
       </motion.div>
-      <div>
+      <div className="min-w-0">
         <motion.h4
           animate={{ x: hovered ? 3 : 0 }}
           transition={{ duration: 0.2 }}
-          className="text-white font-black text-sm tracking-tight"
+          className="text-white font-black text-xs sm:text-sm tracking-tight truncate"
         >
           {getTranslatedText(item.title)}
         </motion.h4>
-        <p className="text-green-300/60 text-xs font-medium">{getTranslatedText(item.desc)}</p>
+        <p className="text-green-300/70 text-[11px] sm:text-xs font-medium truncate">{getTranslatedText(item.desc)}</p>
       </div>
       <motion.div
         animate={{ opacity: hovered ? 1 : 0, x: hovered ? 0 : -6 }}
         transition={{ duration: 0.2 }}
-        className="ml-auto text-green-400"
+        className="ml-auto text-green-400 flex-shrink-0 hidden sm:block"
       >
         <HiArrowRight size={14} />
       </motion.div>
@@ -140,7 +140,7 @@ const ProblemSolution = () => {
   const tags = ["Drones", "Farm Workforce", "Marketplace"];
 
   return (
-    <section ref={sectionRef} id="problem" className="py-8 md:py-14 bg-gray-50 overflow-hidden">
+    <section ref={sectionRef} id="problem" className="py-8 sm:py-12 md:py-14 bg-gray-50 overflow-hidden">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
 
         {/* Header */}
@@ -153,7 +153,7 @@ const ProblemSolution = () => {
           <span className="text-[10px] text-green-700 font-black tracking-[0.3em] uppercase">
             {getTranslatedText("The Challenge & The Change")}
           </span>
-          <p className="text-2xl md:text-3xl font-black tracking-tight text-gray-900 leading-tight mt-2">
+          <p className="text-xl sm:text-2xl md:text-3xl font-black tracking-tight text-gray-900 leading-tight mt-1.5 sm:mt-2">
             {getTranslatedText("Modernizing Agriculture Rental")}
           </p>
           <motion.div
@@ -161,19 +161,19 @@ const ProblemSolution = () => {
             whileInView={{ width: '3rem' }}
             viewport={{ once: true }}
             transition={{ duration: 0.6, delay: 0.2 }}
-            className="h-1 bg-green-500 rounded-full mx-auto mt-3"
+            className="h-1 bg-green-500 rounded-full mx-auto mt-2.5 sm:mt-3"
           />
         </motion.div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 items-stretch">
 
           {/* LEFT: Problem Column */}
           <motion.div
-            initial={{ opacity: 0, x: -40 }}
+            initial={{ opacity: 0, x: -30 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.55 }}
-            className="bg-white p-7 md:p-8 rounded-[2rem] shadow-lg border border-red-50 relative overflow-hidden"
+            className="bg-white p-4 sm:p-6 md:p-8 rounded-2xl md:rounded-[2rem] shadow-lg border border-red-50 relative overflow-hidden"
           >
             {/* Animated background blob */}
             <motion.div
@@ -183,19 +183,19 @@ const ProblemSolution = () => {
             />
 
             {/* Header */}
-            <div className="flex items-center space-x-2 mb-6">
+            <div className="flex items-center space-x-2 mb-4 sm:mb-6">
               <motion.div
                 animate={{ rotate: [0, -10, 10, 0] }}
                 transition={{ duration: 2, repeat: Infinity, delay: 1 }}
                 className="w-2 h-2 rounded-full bg-red-500"
               />
-              <h3 className="text-lg font-black text-red-600 tracking-tight">
+              <h3 className="text-base sm:text-lg font-black text-red-600 tracking-tight">
                 {getTranslatedText("Traditional Challenges")}
               </h3>
             </div>
 
             {/* Problem list */}
-            <div className="space-y-3.5 mb-7">
+            <div className="space-y-2.5 sm:space-y-3.5 mb-5 sm:mb-7">
               {problems.map((item, i) => (
                 <ProblemRow key={i} item={item} index={i} getTranslatedText={getTranslatedText} />
               ))}
@@ -206,8 +206,8 @@ const ProblemSolution = () => {
               initial={{ opacity: 0, y: 15 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              transition={{ delay: 0.6 }}
-              className="relative overflow-hidden p-5 bg-red-600 rounded-2xl text-white shadow-lg group"
+              transition={{ delay: 0.5 }}
+              className="relative overflow-hidden p-3.5 sm:p-5 bg-red-600 rounded-xl sm:rounded-2xl text-white shadow-lg group"
             >
               {/* Shimmer sweep */}
               <motion.div
@@ -215,7 +215,7 @@ const ProblemSolution = () => {
                 transition={{ duration: 2.5, repeat: Infinity, repeatDelay: 3, ease: 'easeInOut' }}
                 className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent skew-x-12"
               />
-              <p className="text-sm font-bold leading-snug relative z-10">
+              <p className="text-xs sm:text-sm font-bold leading-snug relative z-10">
                 "{getTranslatedText("Problem is not lack of machinery, Problem is lack of access.")}"
               </p>
             </motion.div>
@@ -223,11 +223,11 @@ const ProblemSolution = () => {
 
           {/* RIGHT: Solution Column */}
           <motion.div
-            initial={{ opacity: 0, x: 40 }}
+            initial={{ opacity: 0, x: 30 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.55 }}
-            className="bg-green-900 p-7 md:p-8 rounded-[2rem] shadow-xl relative overflow-hidden border border-green-800"
+            className="bg-green-900 p-4 sm:p-6 md:p-8 rounded-2xl md:rounded-[2rem] shadow-xl relative overflow-hidden border border-green-800"
           >
             {/* Animated background orbs */}
             <motion.div
@@ -247,25 +247,25 @@ const ProblemSolution = () => {
               whileInView={{ opacity: 1, scale: 1 }}
               viewport={{ once: true }}
               transition={{ delay: 0.2 }}
-              className="inline-flex items-center space-x-2 bg-green-800 text-green-400 px-4 py-1.5 rounded-full text-[10px] font-black mb-5 tracking-widest uppercase shadow-sm border border-green-700"
+              className="inline-flex items-center space-x-1.5 sm:space-x-2 bg-green-800 text-green-400 px-3 sm:px-4 py-1 sm:py-1.5 rounded-full text-[9px] sm:text-[10px] font-black mb-3 sm:mb-5 tracking-widest uppercase shadow-sm border border-green-700"
             >
               <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
               <span>{getTranslatedText("Our Solution: AgroYilt")}</span>
             </motion.div>
 
-            {/* Title with character stagger */}
+            {/* Title */}
             <motion.h3
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: 0.25, duration: 0.5 }}
-              className="text-2xl font-black text-white mb-6 leading-tight tracking-tight"
+              className="text-xl sm:text-2xl font-black text-white mb-4 sm:mb-6 leading-tight tracking-tight"
             >
               {getTranslatedText("Digital Ecosystem for Farm Access")}
             </motion.h3>
 
             {/* Solution rows */}
-            <div className="space-y-1 mb-7 relative z-10">
+            <div className="space-y-1 mb-5 sm:mb-7 relative z-10">
               {solutions.map((item, i) => (
                 <SolutionRow key={i} item={item} index={i} getTranslatedText={getTranslatedText} />
               ))}
@@ -277,7 +277,7 @@ const ProblemSolution = () => {
               whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
               transition={{ delay: 0.5 }}
-              className="flex flex-wrap gap-2 relative z-10"
+              className="flex flex-wrap gap-1.5 sm:gap-2 relative z-10"
             >
               {tags.map((tag, i) => (
                 <motion.span
@@ -286,8 +286,8 @@ const ProblemSolution = () => {
                   whileInView={{ opacity: 1, scale: 1 }}
                   viewport={{ once: true }}
                   transition={{ delay: 0.5 + i * 0.08 }}
-                  whileHover={{ scale: 1.08, backgroundColor: 'rgba(74,222₹28,0.15)', borderColor: '#4ade80' }}
-                  className="bg-green-800/50 text-green-300 text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full border border-green-700/50 cursor-default transition-colors"
+                  whileHover={{ scale: 1.05 }}
+                  className="bg-green-800/50 text-green-300 text-[8px] sm:text-[9px] font-black uppercase tracking-widest px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full border border-green-700/50 cursor-default transition-colors"
                 >
                   {getTranslatedText(tag)}
                 </motion.span>

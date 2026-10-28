@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { HiMenu, HiX, HiTranslate } from 'react-icons/hi';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -75,14 +75,30 @@ const Navbar = () => {
 
   return (
     <nav
-      className={`fixed w-full z-50 transition-all duration-300 ${(isScrolled || isLightPage) ? 'bg-white shadow-md py-2' : 'bg-transparent py-4'
-        }`}
+      className={`fixed w-full z-50 transition-all duration-300 ${
+        (isScrolled || isLightPage)
+          ? 'bg-white/95 backdrop-blur-md shadow-sm border-b border-gray-100 py-1.5 sm:py-2'
+          : 'bg-transparent py-2.5 sm:py-4'
+      }`}
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16">
+      <div className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8">
+        <div className="flex justify-between items-center h-14 sm:h-16">
+          {/* Logo & Brand Wordmark */}
           <div className="flex-shrink-0 flex items-center">
-            <Link to="/">
-              <Logo className="h-10 md:h-12 w-auto" />
+            <Link to="/" className="flex items-center space-x-2 sm:space-x-2.5 group">
+              <Logo className="h-9 w-9 sm:h-10 sm:w-10 md:h-11 md:w-11 transition-transform group-hover:scale-105" />
+              <div className="flex flex-col">
+                <span className={`font-black text-base sm:text-lg md:text-xl tracking-tight leading-none transition-colors ${
+                  (isScrolled || isLightPage) ? 'text-gray-900' : 'text-white'
+                }`}>
+                  AGROYILT
+                </span>
+                <span className={`text-[8px] sm:text-[9px] font-bold tracking-widest uppercase leading-tight mt-0.5 transition-colors ${
+                  (isScrolled || isLightPage) ? 'text-green-700 font-extrabold' : 'text-yellow-400'
+                }`}>
+                  Smart Agriculture
+                </span>
+              </div>
             </Link>
           </div>
 
@@ -170,15 +186,28 @@ const Navbar = () => {
             </div>
           </div>
 
-          {/* Mobile menu button */}
-          <div className="md:hidden flex items-center space-x-4">
+          {/* Mobile Right Actions: Quick Action + Language + Hamburger */}
+          <div className="md:hidden flex items-center space-x-2 sm:space-x-3">
+            {/* Quick CTA to eliminate the vacant space */}
+            <Link
+              to="/user/login"
+              className="bg-green-600 hover:bg-green-700 active:scale-95 text-white px-3 py-1.5 rounded-full text-xs font-bold shadow-sm transition-all flex items-center space-x-1 shrink-0"
+            >
+              <span><TranslatedText>Book Now</TranslatedText></span>
+            </Link>
+
             {/* Mobile Language Icon */}
             <div className="relative" ref={dropdownRef}>
               <button
                 onClick={() => setShowLanguageDropdown(!showLanguageDropdown)}
-                className={`p-2 rounded-full border ${(isScrolled || isLightPage) ? 'border-gray-200 text-gray-700' : 'border-white/30 text-white'} ${showLanguageDropdown ? 'bg-white/20' : ''}`}
+                className={`p-1.5 sm:p-2 rounded-full border transition-all ${
+                  (isScrolled || isLightPage)
+                    ? 'border-gray-200 text-gray-700 hover:bg-gray-50 active:bg-gray-100'
+                    : 'border-white/30 text-white hover:bg-white/10 active:bg-white/20'
+                } ${showLanguageDropdown ? 'bg-green-50/20' : ''}`}
+                aria-label="Select Language"
               >
-                <HiTranslate size={20} className={isChangingLanguage ? 'animate-spin' : ''} />
+                <HiTranslate size={18} className={isChangingLanguage ? 'animate-spin' : ''} />
               </button>
               
               <AnimatePresence>
@@ -187,8 +216,11 @@ const Navbar = () => {
                     initial={{ opacity: 0, y: 10, scale: 0.9 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 10, scale: 0.9 }}
-                    className="absolute right-0 mt-2 w-40 bg-white rounded-xl shadow-2xl border border-gray-100 py-1 z-[100]"
+                    className="absolute right-0 mt-2 w-44 bg-white rounded-xl shadow-2xl border border-gray-100 py-1 z-[100]"
                   >
+                    <div className="px-3 py-1.5 text-[9px] uppercase tracking-wider text-gray-400 font-bold border-b border-gray-50">
+                      Select Language
+                    </div>
                     {Object.keys(languages).map((lang) => (
                       <button
                         key={lang}
@@ -196,7 +228,9 @@ const Navbar = () => {
                           changeLanguage(lang);
                           setShowLanguageDropdown(false);
                         }}
-                        className={`w-full text-left px-4 py-3 text-xs flex items-center space-x-3 transition-colors ${language === lang ? 'text-green-700 font-bold bg-green-50' : 'text-gray-700 active:bg-gray-50'}`}
+                        className={`w-full text-left px-3.5 py-2 text-xs flex items-center space-x-2.5 transition-colors ${
+                          language === lang ? 'text-green-700 font-bold bg-green-50' : 'text-gray-700 active:bg-gray-50'
+                        }`}
                       >
                         <span className="text-base">{languages[lang].flag}</span>
                         <span>{lang}</span>
@@ -207,11 +241,17 @@ const Navbar = () => {
               </AnimatePresence>
             </div>
 
+            {/* Hamburger button */}
             <button
               onClick={() => setIsOpen(!isOpen)}
-              className={`p-2 rounded-md ${(isScrolled || isLightPage) ? 'text-gray-700' : 'text-white'}`}
+              className={`p-1.5 sm:p-2 rounded-lg transition-colors ${
+                (isScrolled || isLightPage)
+                  ? 'text-gray-700 hover:bg-gray-100'
+                  : 'text-white hover:bg-white/10'
+              }`}
+              aria-label="Toggle Navigation"
             >
-              {isOpen ? <HiX size={28} /> : <HiMenu size={28} />}
+              {isOpen ? <HiX size={24} /> : <HiMenu size={24} />}
             </button>
           </div>
         </div>
@@ -238,41 +278,48 @@ const Navbar = () => {
                 </Link>
               ))}
 
-              <div className="flex flex-wrap gap-2 px-3 py-4 border-y border-gray-100">
+              <div className="flex flex-wrap gap-1.5 px-3 py-3 border-y border-gray-100">
                 {Object.keys(languages).slice(0, 5).map((lang) => (
                   <button
                     key={lang}
                     onClick={() => changeLanguage(lang)}
-                    className={`px-3 py-1.5 rounded-full text-xs border ${language === lang ? 'bg-green-700 text-white border-green-700' : 'border-gray-200 text-gray-600'}`}
+                    className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${language === lang ? 'bg-green-700 text-white border-green-700 font-bold' : 'border-gray-200 text-gray-600 active:bg-gray-100'}`}
                   >
                     {languages[lang].flag} {lang}
                   </button>
                 ))}
-                <button className="px-3 py-1.5 rounded-full text-xs border border-gray-200 text-gray-600">More...</button>
+                <button 
+                  onClick={() => setShowLanguageDropdown(!showLanguageDropdown)}
+                  className="px-2.5 py-1 rounded-full text-xs border border-gray-200 text-gray-600 hover:text-green-700"
+                >
+                  More...
+                </button>
               </div>
 
-              <div className="pt-4 px-3 space-y-3">
+              <div className="pt-3 px-3 space-y-2">
                 <Link
                   to="/user/login"
-                  className="block w-full text-center bg-green-700 text-white px-6 py-2.5 rounded-lg text-base font-semibold"
+                  className="block w-full text-center bg-green-700 text-white px-4 py-2.5 rounded-xl text-sm font-bold shadow-md hover:bg-green-800 transition-colors"
                   onClick={() => setIsOpen(false)}
                 >
                   <TranslatedText>Join as User</TranslatedText>
                 </Link>
-                <Link
-                  to="/vendor/login"
-                  className="block w-full text-center border-2 border-green-700 text-green-700 px-6 py-2.5 rounded-lg text-base font-semibold"
-                  onClick={() => setIsOpen(false)}
-                >
-                  <TranslatedText>Join as Vendor</TranslatedText>
-                </Link>
-                <Link
-                  to="/worker/login"
-                  className="block w-full text-center bg-amber-600 text-white px-6 py-2.5 rounded-lg text-base font-semibold"
-                  onClick={() => setIsOpen(false)}
-                >
-                  <TranslatedText>Join as Worker</TranslatedText>
-                </Link>
+                <div className="grid grid-cols-2 gap-2">
+                  <Link
+                    to="/vendor/login"
+                    className="block w-full text-center border-2 border-green-700 text-green-700 px-3 py-2 rounded-xl text-xs font-bold hover:bg-green-50 transition-colors"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    <TranslatedText>Join as Vendor</TranslatedText>
+                  </Link>
+                  <Link
+                    to="/worker/login"
+                    className="block w-full text-center bg-amber-600 text-white px-3 py-2 rounded-xl text-xs font-bold hover:bg-amber-700 transition-colors shadow-sm"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    <TranslatedText>Join as Worker</TranslatedText>
+                  </Link>
+                </div>
               </div>
             </div>
           </motion.div>

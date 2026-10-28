@@ -79,7 +79,7 @@ const ServicesSection = () => {
   };
 
   return (
-    <section id="services" className="py-12 bg-gray-50 overflow-hidden">
+    <section id="services" className="py-8 sm:py-12 md:py-16 bg-gray-50 overflow-hidden">
       <div className="max-w-[1440px] mx-auto px-4 md:px-8">
 
         {/* Header */}
@@ -87,18 +87,18 @@ const ServicesSection = () => {
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="text-center mb-8"
+          className="text-center mb-6 sm:mb-8"
         >
-          <h2 className="text-2xl md:text-3xl font-black text-gray-900 mb-2 tracking-tight">
+          <h2 className="text-xl sm:text-2xl md:text-3xl font-black text-gray-900 mb-1 sm:mb-2 tracking-tight">
             {getTranslatedText("Agriculture Services")}
           </h2>
-          <p className="text-sm text-gray-500 max-w-2xl mx-auto font-medium">
+          <p className="text-xs sm:text-sm text-gray-500 max-w-2xl mx-auto font-medium">
             {getTranslatedText("Smart farming solutions designed for modern agriculture.")}
           </p>
         </motion.div>
 
         {/* Main Slider */}
-        <div className="relative w-full rounded-[2rem] overflow-hidden shadow-2xl border border-gray-100 bg-white">
+        <div className="relative w-full rounded-2xl sm:rounded-[2rem] overflow-hidden shadow-xl sm:shadow-2xl border border-gray-100 bg-white">
           {/* Desktop height spacer — invisible, keeps container tall on md+ */}
           <div className="hidden md:block" style={{ paddingTop: '42%' }} />
 
@@ -117,7 +117,7 @@ const ServicesSection = () => {
               className="flex flex-col md:flex-row md:absolute md:inset-0"
             >
               {/* LEFT: Ken Burns Image */}
-              <div className="w-full md:w-7/12 h-52 sm:h-64 md:h-full relative overflow-hidden flex-shrink-0">
+              <div className="w-full md:w-7/12 h-44 sm:h-56 md:h-full relative overflow-hidden flex-shrink-0">
                 <motion.img
                   key={currentIndex}
                   custom={direction}
@@ -139,14 +139,14 @@ const ServicesSection = () => {
                   initial={{ opacity: 0, scale: 0.8 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ delay: 0.3 }}
-                  className="absolute top-4 left-4 bg-black/50 backdrop-blur-md text-white text-[10px] font-black px-3 py-1.5 rounded-full border border-white/10 uppercase tracking-widest"
+                  className="absolute top-3 left-3 sm:top-4 sm:left-4 bg-black/60 backdrop-blur-md text-white text-[9px] sm:text-[10px] font-black px-2.5 py-1 rounded-full border border-white/10 uppercase tracking-widest"
                 >
                   {String(currentIndex + 1).padStart(2, '0')} / {String(services.length).padStart(2, '0')}
                 </motion.div>
               </div>
 
               {/* RIGHT: Animated Content */}
-              <div className="w-full md:w-5/12 p-7 md:p-10 flex flex-col justify-center bg-white relative overflow-hidden">
+              <div className="w-full md:w-5/12 p-4 sm:p-6 md:p-10 flex flex-col justify-center bg-white relative overflow-hidden">
                 {/* BG circle decoration */}
                 <motion.div
                   key={`bg-${currentIndex}`}
@@ -164,9 +164,9 @@ const ServicesSection = () => {
                   animate="center"
                   exit="exit"
                   transition={{ duration: 0.45, delay: 0.05 }}
-                  className={`inline-flex items-center space-x-2 self-start px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border mb-3 ${service.color.badge}`}
+                  className={`inline-flex items-center space-x-1.5 self-start px-2.5 py-1 rounded-full text-[8px] sm:text-[9px] font-black uppercase tracking-widest border mb-2 sm:mb-3 ${service.color.badge}`}
                 >
-                  <span className="text-sm">{React.cloneElement(service.icon, { size: 12 })}</span>
+                  <span className="text-xs">{React.cloneElement(service.icon, { size: 12 })}</span>
                   <span>{getTranslatedText("Premium Solution")}</span>
                 </motion.div>
 
@@ -178,7 +178,7 @@ const ServicesSection = () => {
                   animate="center"
                   exit="exit"
                   transition={{ duration: 0.45, delay: 0.12 }}
-                  className="text-2xl md:text-3xl font-black text-gray-900 tracking-tighter leading-tight mb-2"
+                  className="text-xl sm:text-2xl md:text-3xl font-black text-gray-900 tracking-tighter leading-tight mb-1 sm:mb-2"
                 >
                   {getTranslatedText(service.title)}
                 </motion.h3>
@@ -191,7 +191,7 @@ const ServicesSection = () => {
                   animate="center"
                   exit="exit"
                   transition={{ duration: 0.45, delay: 0.2 }}
-                  className="text-gray-500 text-xs leading-relaxed max-w-xs mb-4"
+                  className="text-gray-500 text-xs leading-relaxed max-w-sm mb-3 sm:mb-4 line-clamp-2 sm:line-clamp-none"
                 >
                   {getTranslatedText(service.desc)}
                 </motion.p>
@@ -204,10 +204,10 @@ const ServicesSection = () => {
                   animate="center"
                   exit="exit"
                   transition={{ duration: 0.45, delay: 0.28 }}
-                  className="flex flex-wrap gap-1.5 mb-5"
+                  className="flex flex-wrap gap-1 sm:gap-1.5 mb-4 sm:mb-5"
                 >
                   {service.specs.map((spec, i) => (
-                    <span key={i} className={`text-[9px] font-bold px-2.5 py-1 rounded-full border ${service.color.badge}`}>
+                    <span key={i} className={`text-[8px] sm:text-[9px] font-bold px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full border ${service.color.badge}`}>
                       {getTranslatedText(spec)}
                     </span>
                   ))}
@@ -226,7 +226,7 @@ const ServicesSection = () => {
                     whileHover={{ scale: 1.04, x: 3 }}
                     whileTap={{ scale: 0.96 }}
                     onClick={() => setSelectedService(service)}
-                    className={`inline-flex items-center space-x-2 ${service.color.btn} text-white px-5 py-2.5 rounded-full font-black text-[10px] uppercase tracking-widest transition-colors shadow-lg`}
+                    className={`inline-flex items-center space-x-1.5 ${service.color.btn} text-white px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-black text-[9px] sm:text-[10px] uppercase tracking-widest transition-colors shadow-md`}
                   >
                     <span>{getTranslatedText("View Details")}</span>
                     <HiArrowRight size={12} />
@@ -236,12 +236,12 @@ const ServicesSection = () => {
             </motion.div>
           </AnimatePresence>
 
-          {/* Nav Arrows */}
+          {/* Nav Arrows - positioned on the image area on mobile, centered vertically on desktop */}
           <motion.button
             whileHover={{ scale: 1.1, x: -2 }}
             whileTap={{ scale: 0.9 }}
             onClick={prevSlide}
-            className="absolute left-3 top-1/2 -translate-y-1/2 z-20 w-9 h-9 bg-white/80 backdrop-blur-md rounded-full flex items-center justify-center shadow-lg border border-gray-100 text-gray-600 hover:text-green-700 transition-colors"
+            className="absolute left-2.5 top-20 md:top-1/2 -translate-y-1/2 z-20 w-8 h-8 sm:w-9 sm:h-9 bg-white/90 backdrop-blur-md rounded-full flex items-center justify-center shadow-md border border-gray-100 text-gray-700 hover:text-green-700 transition-colors"
           >
             <HiArrowLeft size={14} />
           </motion.button>
@@ -249,30 +249,30 @@ const ServicesSection = () => {
             whileHover={{ scale: 1.1, x: 2 }}
             whileTap={{ scale: 0.9 }}
             onClick={nextSlide}
-            className="absolute right-3 top-1/2 -translate-y-1/2 z-20 w-9 h-9 bg-white/80 backdrop-blur-md rounded-full flex items-center justify-center shadow-lg border border-gray-100 text-gray-600 hover:text-green-700 transition-colors"
+            className="absolute right-2.5 top-20 md:top-1/2 -translate-y-1/2 z-20 w-8 h-8 sm:w-9 sm:h-9 bg-white/90 backdrop-blur-md rounded-full flex items-center justify-center shadow-md border border-gray-100 text-gray-700 hover:text-green-700 transition-colors"
           >
             <HiArrowRight size={14} />
           </motion.button>
         </div>
 
         {/* Thumbnail Strip */}
-        <div className="flex gap-2 mt-4 overflow-x-auto pb-1 no-scrollbar justify-center">
+        <div className="flex gap-1.5 sm:gap-2 mt-3 sm:mt-4 overflow-x-auto pb-1 no-scrollbar justify-start sm:justify-center px-1">
           {services.map((svc, idx) => (
             <motion.button
               key={idx}
               onClick={() => goTo(idx, idx > currentIndex ? 1 : -1)}
-              whileHover={{ scale: 1.06, y: -2 }}
+              whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              className={`relative flex-shrink-0 flex items-center space-x-2 px-3 py-2 rounded-xl border transition-all text-[10px] font-black uppercase tracking-wide ${currentIndex === idx ? 'bg-gray-900 text-white border-gray-900 shadow-lg' : 'bg-white text-gray-500 border-gray-100 hover:border-gray-300 hover:text-gray-700'}`}
+              className={`relative flex-shrink-0 flex items-center space-x-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-lg sm:rounded-xl border transition-all text-[9px] sm:text-[10px] font-black uppercase tracking-wide ${currentIndex === idx ? 'bg-gray-900 text-white border-gray-900 shadow-md' : 'bg-white text-gray-500 border-gray-100 hover:border-gray-300 hover:text-gray-700'}`}
             >
               {currentIndex === idx && (
                 <motion.div
                   layoutId="activePill"
-                  className="absolute inset-0 bg-gray-900 rounded-xl"
+                  className="absolute inset-0 bg-gray-900 rounded-lg sm:rounded-xl"
                   transition={{ type: 'spring', stiffness: 350, damping: 30 }}
                 />
               )}
-              <span className="relative z-10">{React.cloneElement(svc.icon, { size: 13 })}</span>
+              <span className="relative z-10">{React.cloneElement(svc.icon, { size: 12 })}</span>
               <span className="relative z-10 hidden sm:block">{svc.title}</span>
             </motion.button>
           ))}
@@ -286,16 +286,16 @@ const ServicesSection = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+            className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm"
             onClick={() => setSelectedService(null)}
           >
             <motion.div
-              initial={{ opacity: 0, scale: 0.88, y: 30 }}
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.92, y: 20 }}
               transition={{ type: 'spring', stiffness: 280, damping: 24 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white rounded-[2.5rem] p-8 md:p-12 max-w-2xl w-full relative shadow-2xl overflow-hidden"
+              className="bg-white rounded-2xl sm:rounded-[2.5rem] p-5 sm:p-8 md:p-12 max-w-2xl w-full relative shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto"
             >
               {/* Decoration blob */}
               <div className={`absolute -top-10 -right-10 w-40 h-40 rounded-full opacity-10 ${selectedService.color.dot}`} />

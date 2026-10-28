@@ -9,6 +9,7 @@ import WorkerRoutes from '../modules/worker/routes';
 import AdminRoutes from '../modules/admin/routes';
 import MobileAppRoutes from '../modules/app/routes'; // Mobile-only app module
 import ReferralInvite from '../modules/app/pages/ReferralInvite';
+import AppGuide from '../modules/app/pages/AppGuide';
 import BlogListing from '../modules/landing/pages/BlogListing';
 import ArticleListing from '../modules/landing/pages/ArticleListing';
 import BlogDetail from '../modules/landing/pages/BlogDetail';
@@ -51,6 +52,7 @@ const AppRoutes = () => {
     isVendorRoute ||
     isWorkerRoute ||
     isAppRoute ||
+    location.pathname.startsWith('/guide') ||
     location.pathname.startsWith('/r/') ||
     location.pathname.startsWith('/terms') ||
     location.pathname.startsWith('/privacy') ||
@@ -97,6 +99,8 @@ const AppRoutes = () => {
         <Route path="/blogs/:id" element={<BlogDetail />} />
         <Route path="/articles" element={<ArticleListing />} />
         <Route path="/articles/:id" element={<ArticleDetail />} />
+        <Route path="/guide" element={<AppGuide />} />
+        <Route path="/guide/:role" element={<AppGuide />} />
 
         {/* Public utility URLs (Great for iOS/App Store) */}
         <Route path="/support" element={<Navigate to="/user/help-support" replace />} />

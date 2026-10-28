@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import api from '../../../services/api';
@@ -7,6 +7,7 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import harvesterHero from '../landing_images/hero_premium.png';
 import TranslatedText from '../../../components/TranslatedText';
 import PlayStoreButton from './PlayStoreButton';
+import { FiPlay } from 'react-icons/fi';
 
 // Register ScrollTrigger once with safe config.
 // ignoreMobileResize: true prevents GSAP from attaching a media-query listener
@@ -123,7 +124,7 @@ const Hero = () => {
       />
 
       {/* Main Content */}
-      <div ref={contentRef} className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-20 pt-36 pb-24">
+      <div ref={contentRef} className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-20 pt-24 sm:pt-32 md:pt-40 pb-12 sm:pb-20 md:pb-24">
         <div className="max-w-3xl">
 
           {/* Badge */}
@@ -131,9 +132,9 @@ const Hero = () => {
             initial={{ opacity: 0, x: -30 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.6, ease: 'easeOut' }}
-            className="inline-flex items-center space-x-2 bg-yellow-500/15 backdrop-blur-md text-yellow-400 px-5 py-1.5 rounded-full text-xs font-bold mb-6 tracking-widest uppercase border border-yellow-500/30 shadow-lg"
+            className="inline-flex items-center space-x-2 bg-yellow-500/15 backdrop-blur-md text-yellow-400 px-3.5 sm:px-5 py-1 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-bold mb-4 sm:mb-6 tracking-widest uppercase border border-yellow-500/30 shadow-lg"
           >
-            <span className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
+            <span className="w-1.5 sm:w-2 h-1.5 sm:h-2 bg-yellow-400 rounded-full animate-pulse" />
             <span><TranslatedText>Founded in India</TranslatedText></span>
           </motion.div>
 
@@ -142,23 +143,23 @@ const Hero = () => {
             initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.1, ease: [0.25, 0.46, 0.45, 0.94] }}
-            className="text-5xl md:text-7xl font-black text-white leading-none mb-2 tracking-tighter"
+            className="text-4xl sm:text-5xl md:text-7xl font-black text-white leading-tight md:leading-none mb-2 tracking-tighter"
           >
             AGROYILT
           </motion.h1>
 
           <motion.div
             initial={{ width: 0 }}
-            animate={{ width: '5rem' }}
+            animate={{ width: '4rem' }}
             transition={{ duration: 0.8, delay: 0.5 }}
-            className="h-1 bg-yellow-400 rounded-full mb-6"
+            className="h-1 bg-yellow-400 rounded-full mb-4 sm:mb-6"
           />
 
           <motion.p
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.3 }}
-            className="text-xl md:text-2xl font-bold text-yellow-400 mb-5 font-serif italic"
+            className="text-lg sm:text-xl md:text-2xl font-bold text-yellow-400 mb-3 sm:mb-5 font-serif italic"
           >
             <TranslatedText>Grow more with AGROYILT</TranslatedText>
           </motion.p>
@@ -167,52 +168,74 @@ const Hero = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.45 }}
-            className="text-sm md:text-base text-gray-300 mb-8 max-w-2xl leading-relaxed font-medium"
+            className="text-xs sm:text-sm md:text-base text-gray-300 mb-6 sm:mb-8 max-w-2xl leading-relaxed font-medium"
           >
             <TranslatedText>
               AgroYilt is made for farmers. Farmers can book tractors, harvesters, rotavators, drones, JCB, borewell machines, labour, and other equipment on rent. With AgroYilt, they can also easily order seeds, fertilizers, and other farming items from nearby shops. Our goal is to make farming work easy, fast, and on time. Farmers can get modern technology, useful services, weather updates, and support in one place. AgroYilt helps save time, reduce trouble, and improve farming work. We want every farmer to get the right machine, right service, and right support at the right time.
             </TranslatedText>
           </motion.p>
 
-          {/* CTA Buttons */}
+          {/* CTA Buttons - Compact & responsive */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.6 }}
-            className="flex flex-col sm:flex-row flex-wrap gap-4 mb-16"
+            className="space-y-2.5 sm:space-y-0 sm:flex sm:flex-row sm:flex-wrap sm:gap-3 mb-8 sm:mb-12 md:mb-16"
           >
-            <Link to="/user/login">
+            <Link to="/user/login" className="block sm:inline-block">
               <motion.div
-                whileHover={{ scale: 1.05, boxShadow: '0 20px 40px rgba(21, 128, 61, 0.4)' }}
+                whileHover={{ scale: 1.04, boxShadow: '0 20px 40px rgba(21, 128, 61, 0.4)' }}
                 whileTap={{ scale: 0.97 }}
-                className="bg-green-600 text-white px-7 py-3 rounded-full text-sm font-bold cursor-pointer shadow-xl text-center transition-colors hover:bg-green-700"
+                className="w-full sm:w-auto bg-green-600 text-white px-6 py-3 rounded-full text-xs sm:text-sm font-bold cursor-pointer shadow-xl text-center transition-colors hover:bg-green-700"
               >
                 <TranslatedText>Book Now</TranslatedText>
               </motion.div>
             </Link>
-            <Link to="/vendor/login">
-              <motion.div
-                whileHover={{ scale: 1.05, backgroundColor: 'rgba(255,255,255,0.15)' }}
-                whileTap={{ scale: 0.97 }}
-                className="bg-white/8 backdrop-blur-md text-white border border-white/30 px-7 py-3 rounded-full text-sm font-bold cursor-pointer text-center"
+
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-row sm:gap-3">
+              <Link to="/vendor/login">
+                <motion.div
+                  whileHover={{ scale: 1.04, backgroundColor: 'rgba(255,255,255,0.15)' }}
+                  whileTap={{ scale: 0.97 }}
+                  className="bg-white/10 backdrop-blur-md text-white border border-white/30 px-3.5 sm:px-6 py-2.5 sm:py-3 rounded-full text-xs sm:text-sm font-bold cursor-pointer text-center truncate"
+                >
+                  <TranslatedText>Owner Registration</TranslatedText>
+                </motion.div>
+              </Link>
+              <Link to="/worker/login">
+                <motion.div
+                  whileHover={{ scale: 1.04, boxShadow: '0 20px 40px rgba(217, 119, 6, 0.4)' }}
+                  whileTap={{ scale: 0.97 }}
+                  className="bg-amber-600 text-white px-3.5 sm:px-6 py-2.5 sm:py-3 rounded-full text-xs sm:text-sm font-bold cursor-pointer shadow-xl text-center transition-colors hover:bg-amber-700 truncate"
+                >
+                  <TranslatedText>Worker Join</TranslatedText>
+                </motion.div>
+              </Link>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-row sm:gap-3">
+              <a
+                href="#video-guides"
+                onClick={(e) => {
+                  e.preventDefault();
+                  document.getElementById('video-guides')?.scrollIntoView({ behavior: 'smooth' });
+                }}
               >
-                <TranslatedText>Owner Registration</TranslatedText>
-              </motion.div>
-            </Link>
-            <Link to="/worker/login">
-              <motion.div
-                whileHover={{ scale: 1.05, boxShadow: '0 20px 40px rgba(217, 119, 6, 0.4)' }}
-                whileTap={{ scale: 0.97 }}
-                className="bg-amber-600 text-white px-7 py-3 rounded-full text-sm font-bold cursor-pointer shadow-xl text-center transition-colors hover:bg-amber-700"
-              >
-                <TranslatedText>Worker Join</TranslatedText>
-              </motion.div>
-            </Link>
-            <PlayStoreButton className="bg-white text-green-800 hover:bg-yellow-400" />
+                <motion.div
+                  whileHover={{ scale: 1.04, backgroundColor: 'rgba(255,255,255,0.2)' }}
+                  whileTap={{ scale: 0.97 }}
+                  className="bg-white/10 backdrop-blur-md text-white border border-yellow-400/50 px-3 sm:px-5 py-2.5 sm:py-3 rounded-full text-xs sm:text-sm font-bold cursor-pointer text-center flex items-center justify-center gap-1.5 truncate"
+                >
+                  <FiPlay size={12} className="text-yellow-400 shrink-0" />
+                  <span className="truncate"><TranslatedText>Watch Guides</TranslatedText></span>
+                </motion.div>
+              </a>
+              <PlayStoreButton className="bg-white text-green-800 hover:bg-yellow-400 px-3 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm truncate" />
+            </div>
           </motion.div>
 
           {/* Stats */}
-          <div ref={statsRef} className="flex items-center space-x-8 md:space-x-14">
+          <div ref={statsRef} className="flex items-center space-x-6 sm:space-x-8 md:space-x-14">
             {[
               { value: formatNumber(stats.farmers), label: 'Happy Farmers' },
               { value: formatNumber(stats.owners), label: 'Verified Owners' },
@@ -225,10 +248,10 @@ const Hero = () => {
                 animate="show"
                 className="text-white group"
               >
-                <p className="text-3xl md:text-4xl font-black tracking-tighter group-hover:text-yellow-400 transition-colors">
+                <p className="text-2xl sm:text-3xl md:text-4xl font-black tracking-tighter group-hover:text-yellow-400 transition-colors">
                   {stat.value}
                 </p>
-                <p className="text-xs text-gray-400 uppercase tracking-widest font-bold mt-1">
+                <p className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-widest font-bold mt-0.5 sm:mt-1">
                   <TranslatedText>{stat.label}</TranslatedText>
                 </p>
               </motion.div>
@@ -239,16 +262,16 @@ const Hero = () => {
 
       {/* Scroll Indicator - fixed to bottom center */}
       <motion.div
-        animate={{ y: [0, 8, 0] }}
+        animate={{ y: [0, 6, 0] }}
         transition={{ repeat: Infinity, duration: 2 }}
-        className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center space-y-1.5 cursor-pointer"
-        onClick={() => document.getElementById('problem') ?.scrollIntoView({ behavior: 'smooth' })}
+        className="hidden sm:flex absolute bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-20 flex-col items-center space-y-1 cursor-pointer"
+        onClick={() => document.getElementById('about')?.scrollIntoView({ behavior: 'smooth' })}
       >
-        <div className="w-5 h-9 border-2 border-white/25 rounded-full flex justify-center pt-1.5">
+        <div className="w-4 sm:w-5 h-7 sm:h-9 border-2 border-white/25 rounded-full flex justify-center pt-1 sm:pt-1.5">
           <motion.div
-            animate={{ y: [0, 6, 0], opacity: [1, 0, 1] }}
+            animate={{ y: [0, 5, 0], opacity: [1, 0, 1] }}
             transition={{ repeat: Infinity, duration: 1.5 }}
-            className="w-1 h-1.5 bg-yellow-400 rounded-full"
+            className="w-1 h-1 sm:h-1.5 bg-yellow-400 rounded-full"
           />
         </div>
       </motion.div>

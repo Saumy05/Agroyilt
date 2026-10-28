@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { motion, useInView, useMotionValue, useTransform, useSpring } from 'framer-motion';
 import { FiTrendingUp, FiTarget, FiBox, FiUsers, FiGlobe, FiShield } from 'react-icons/fi';
 import { usePageTranslation } from '../../../hooks/usePageTranslation';
@@ -39,31 +39,31 @@ const ImpactCard = ({ impact, idx, getTranslatedText }) => {
     return (
         <motion.div
             ref={ref}
-            initial={{ opacity: 0, y: 40, scale: 0.9 }}
+            initial={{ opacity: 0, y: 30, scale: 0.95 }}
             animate={isInView ? { opacity: 1, y: 0, scale: 1 } : {}}
-            transition={{ delay: idx * 0.1, duration: 0.5, ease: [0.34, 1.56, 0.64, 1] }}
+            transition={{ delay: idx * 0.08, duration: 0.45 }}
             style={{ rotateX, rotateY, transformStyle: 'preserve-3d', perspective: 800 }}
             onMouseMove={handleMouseMove}
             onMouseLeave={handleMouseLeave}
             onHoverStart={() => setHovered(true)}
             onHoverEnd={() => setHovered(false)}
-            className="relative flex flex-col items-center text-center p-5 bg-white rounded-2xl border border-gray-100 cursor-default overflow-hidden"
+            className="relative flex flex-col items-center text-center p-2.5 sm:p-4 bg-white rounded-xl sm:rounded-2xl border border-gray-100 cursor-default overflow-hidden shadow-sm"
         >
             {/* Shimmer border on hover */}
             <motion.div
-                className={`absolute inset-0 rounded-2xl bg-gradient-to-br ${color.bg} opacity-0`}
+                className={`absolute inset-0 rounded-xl sm:rounded-2xl bg-gradient-to-br ${color.bg} opacity-0`}
                 animate={{ opacity: hovered ? 0.08 : 0 }}
                 transition={{ duration: 0.3 }}
             />
             {/* Glow shadow */}
             <motion.div
-                className="absolute inset-0 rounded-2xl"
-                animate={{ boxShadow: hovered ? `0 12px 40px ${color.glow}` : '0 2px 8px rgba(0,0,0,0.04)' }}
+                className="absolute inset-0 rounded-xl sm:rounded-2xl"
+                animate={{ boxShadow: hovered ? `0 12px 30px ${color.glow}` : '0 1px 4px rgba(0,0,0,0.03)' }}
                 transition={{ duration: 0.35 }}
             />
             {/* Top shimmer line */}
             <motion.div
-                className={`absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r ${color.bg} rounded-t-2xl`}
+                className={`absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r ${color.bg} rounded-t-xl sm:rounded-t-2xl`}
                 initial={{ scaleX: 0 }}
                 animate={{ scaleX: hovered ? 1 : 0 }}
                 transition={{ duration: 0.4 }}
@@ -71,37 +71,20 @@ const ImpactCard = ({ impact, idx, getTranslatedText }) => {
             />
 
             {/* Icon */}
-            <motion.div
-                animate={{
-                    backgroundColor: hovered ? undefined : undefined,
-                    scale: hovered ? 1.15 : 1,
-                    y: hovered ? -4 : 0,
-                }}
-                transition={{ duration: 0.3, ease: 'easeOut' }}
-                className="relative z-10 mb-3"
-            >
-                <motion.div
-                    animate={{ background: hovered ? `linear-gradient(135deg, ${cardColors[idx % 6].bg.split(' ')[1]}, ${cardColors[idx % 6].bg.split(' ')[3]})` : undefined }}
-                    className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm ${hovered ? '' : color.light}`}
-                    style={hovered ? { background: `linear-gradient(135deg, var(--tw-gradient-stops))` } : {}}
+            <div className="relative z-10 mb-1.5 sm:mb-2.5">
+                <div
+                    className={`w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-sm ${color.light}`}
                 >
-                    <motion.span
-                        animate={{ color: hovered ? '#ffffff' : undefined }}
-                        className={`${color.text}`}
-                    >
-                        {React.cloneElement(impact.icon, { size: 20 })}
-                    </motion.span>
-                </motion.div>
-            </motion.div>
+                    <span className={`${color.text}`}>
+                        {React.cloneElement(impact.icon, { size: 16, className: 'sm:text-[20px]' })}
+                    </span>
+                </div>
+            </div>
 
             {/* Title */}
-            <motion.p
-                animate={{ color: hovered ? '#111827' : '#374151' }}
-                transition={{ duration: 0.3 }}
-                className="relative z-10 text-[10px] font-black uppercase tracking-tight leading-tight"
-            >
+            <p className="relative z-10 text-[9px] sm:text-[10px] font-black uppercase tracking-tight leading-tight text-gray-800">
                 {getTranslatedText(impact.title)}
-            </motion.p>
+            </p>
         </motion.div>
     );
 };
@@ -150,7 +133,7 @@ const CompanyDeepDive = () => {
     ];
 
     return (
-        <section id="company" className="py-12 bg-white overflow-hidden">
+        <section id="company" className="py-8 sm:py-12 md:py-16 bg-white overflow-hidden">
             <div className="container mx-auto px-4 sm:px-6 lg:px-8">
 
                 {/* Vision Section */}
@@ -158,40 +141,40 @@ const CompanyDeepDive = () => {
                     initial={{ opacity: 0, y: 30 }}
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true }}
-                    className="mb-12 text-center max-w-4xl mx-auto"
+                    className="mb-8 sm:mb-12 text-center max-w-4xl mx-auto"
                 >
-                    <h2 className="text-xs text-green-700 font-bold tracking-[0.3em] uppercase mb-4">{getTranslatedText("Our Vision & Mission")}</h2>
-                    <p className="text-2xl md:text-4xl font-black text-gray-900 leading-tight mb-6 tracking-tighter">
+                    <h2 className="text-[10px] sm:text-xs text-green-700 font-bold tracking-[0.3em] uppercase mb-2 sm:mb-4">{getTranslatedText("Our Vision & Mission")}</h2>
+                    <p className="text-xl sm:text-2xl md:text-4xl font-black text-gray-900 leading-tight mb-4 sm:mb-6 tracking-tighter">
                         {getTranslatedText("Organizing the Unstructured")} <br />
-                        <span className="text-green-600 font-serif italic text-xl md:text-3xl">{getTranslatedText("Agricultural Service Sector")}</span>
+                        <span className="text-green-600 font-serif italic text-lg sm:text-xl md:text-3xl">{getTranslatedText("Agricultural Service Sector")}</span>
                     </p>
-                    <p className="text-base text-gray-600 leading-relaxed font-medium bg-gray-50 p-6 rounded-3xl border border-gray-100 italic shadow-inner">
+                    <p className="text-xs sm:text-sm md:text-base text-gray-600 leading-relaxed font-medium bg-gray-50 p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-gray-100 italic shadow-inner">
                         "{getTranslatedText("To build India's—and eventually the world's—largest digital ecosystem for farm mechanization and smart agriculture, enabling farmers to access modern equipment, AI-driven advisory, and agricultural inputs efficiently.")}"
                     </p>
-                    <p className="mt-6 text-lg font-black text-red-600 animate-pulse">
+                    <p className="mt-4 sm:mt-6 text-sm sm:text-base md:text-lg font-black text-red-600">
                         ➡️ {getTranslatedText("No farmers should lose income because a tractor or harvester arrived late.")}
                     </p>
                 </motion.div>
 
                 {/* Market Opportunity */}
-                <div className="mb-16">
+                <div className="mb-10 sm:mb-16">
                     <motion.div
                         initial={{ opacity: 0, y: 30 }}
                         whileInView={{ opacity: 1, y: 0 }}
                         viewport={{ once: true }}
                         className="max-w-4xl mx-auto"
                     >
-                        <h3 className="text-3xl font-black text-gray-900 mb-4 tracking-tight text-center">{getTranslatedText("Market Opportunity")}</h3>
-                        <p className="text-gray-600 mb-8 leading-relaxed text-base text-center max-w-2xl mx-auto">
+                        <h3 className="text-2xl sm:text-3xl font-black text-gray-900 mb-2 sm:mb-4 tracking-tight text-center">{getTranslatedText("Market Opportunity")}</h3>
+                        <p className="text-gray-600 mb-6 sm:mb-8 leading-relaxed text-xs sm:text-sm md:text-base text-center max-w-2xl mx-auto">
                             {getTranslatedText("India has tractors, India has farmers, but India doesn't have a system.")}
                             <strong className="text-green-700"> {getTranslatedText("We are building the system.")}</strong> {getTranslatedText("With over 140 million households depending on agriculture, the shift toward Agritech is not just a trend—it's a necessity.")}
                         </p>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-4">
                             {marketStats.map((stat, i) => (
-                                <div key={i} className="p-5 bg-white rounded-2xl border border-gray-100 shadow-sm hover:border-green-200 transition-all text-center">
-                                    <p className="text-2xl font-black text-green-700 mb-1 tracking-tighter">{stat.value}</p>
-                                    <p className="text-[10px] font-black text-gray-800 mb-1 uppercase tracking-wider">{getTranslatedText(stat.label)}</p>
-                                    <p className="text-[9px] text-gray-400 font-bold uppercase">{getTranslatedText(stat.desc)}</p>
+                                <div key={i} className="p-3 sm:p-5 bg-white rounded-xl sm:rounded-2xl border border-gray-100 shadow-sm hover:border-green-200 transition-all text-center">
+                                    <p className="text-xl sm:text-2xl font-black text-green-700 mb-0.5 sm:mb-1 tracking-tighter">{stat.value}</p>
+                                    <p className="text-[9px] sm:text-[10px] font-black text-gray-800 mb-0.5 uppercase tracking-wider">{getTranslatedText(stat.label)}</p>
+                                    <p className="text-[8px] sm:text-[9px] text-gray-400 font-bold uppercase truncate">{getTranslatedText(stat.desc)}</p>
                                 </div>
                             ))}
                         </div>
@@ -199,23 +182,23 @@ const CompanyDeepDive = () => {
                 </div>
 
                 {/* Impact Section */}
-                <div className="mb-16">
+                <div className="mb-10 sm:mb-16">
                     <motion.h3
                         initial={{ opacity: 0, y: 20 }}
                         whileInView={{ opacity: 1, y: 0 }}
                         viewport={{ once: true }}
-                        className="text-2xl font-black text-gray-900 text-center mb-3 uppercase tracking-tighter"
+                        className="text-xl sm:text-2xl font-black text-gray-900 text-center mb-2 uppercase tracking-tight"
                     >
                         {getTranslatedText("Impact on Rural Ecosystem")}
                     </motion.h3>
                     <motion.div
                         initial={{ width: 0 }}
-                        whileInView={{ width: '4rem' }}
+                        whileInView={{ width: '3rem' }}
                         viewport={{ once: true }}
                         transition={{ duration: 0.6, delay: 0.2 }}
-                        className="h-1 bg-green-500 rounded-full mx-auto mb-10"
+                        className="h-1 bg-green-500 rounded-full mx-auto mb-6 sm:mb-10"
                     />
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-4">
                         {impacts.map((impact, i) => (
                             <ImpactCard
                                 key={i}
@@ -228,39 +211,39 @@ const CompanyDeepDive = () => {
                 </div>
 
                 {/* Scalability & Team */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div className="lg:col-span-2 bg-gradient-to-br from-green-600 to-green-800 p-8 rounded-[2.5rem] text-white shadow-xl relative overflow-hidden">
-                        <div className="absolute top-0 right-0 p-8 opacity-10">
-                            <FiTrendingUp size={100} />
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+                    <div className="lg:col-span-2 bg-gradient-to-br from-green-600 to-green-800 p-5 sm:p-8 rounded-2xl sm:rounded-[2.5rem] text-white shadow-xl relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-6 opacity-10 pointer-events-none">
+                            <FiTrendingUp size={80} />
                         </div>
-                        <h3 className="text-2xl font-black mb-4">{getTranslatedText("Scalability")}</h3>
-                        <p className="text-green-100 mb-6 leading-relaxed font-medium text-sm">
+                        <h3 className="text-xl sm:text-2xl font-black mb-2 sm:mb-4">{getTranslatedText("Scalability")}</h3>
+                        <p className="text-green-100 mb-4 sm:mb-6 leading-relaxed font-medium text-xs sm:text-sm">
                             {getTranslatedText("Designed for rapid expansion through districts and villages, integrating AI and data-driven farming. Our framework scales across multi-state regions and global economies.")}
                         </p>
-                        <div className="flex flex-wrap gap-2">
-                            <span className="bg-white/10 backdrop-blur-md px-4 py-1.5 rounded-full text-[10px] font-bold border border-white/20 uppercase tracking-wider">{getTranslatedText("AI Integration")}</span>
-                            <span className="bg-white/10 backdrop-blur-md px-4 py-1.5 rounded-full text-[10px] font-bold border border-white/20 uppercase tracking-wider">{getTranslatedText("District Expansion")}</span>
+                        <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                            <span className="bg-white/10 backdrop-blur-md px-3 sm:px-4 py-1 sm:py-1.5 rounded-full text-[9px] sm:text-[10px] font-bold border border-white/20 uppercase tracking-wider">{getTranslatedText("AI Integration")}</span>
+                            <span className="bg-white/10 backdrop-blur-md px-3 sm:px-4 py-1 sm:py-1.5 rounded-full text-[9px] sm:text-[10px] font-bold border border-white/20 uppercase tracking-wider">{getTranslatedText("District Expansion")}</span>
                         </div>
                     </div>
 
-                    <div className="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-md flex flex-col justify-center">
-                        <div className="flex flex-col gap-4 mb-4">
+                    <div className="bg-white p-5 sm:p-8 rounded-2xl sm:rounded-[2.5rem] border border-gray-100 shadow-md flex flex-col justify-center">
+                        <div className="flex flex-col gap-3 sm:gap-4 mb-3 sm:mb-4">
                             <div>
-                                <p className="text-[9px] font-black uppercase tracking-widest text-green-700 mb-2">{getTranslatedText("Founder & CEO")}</p>
-                                <h3 className="text-2xl font-black text-gray-900 mb-1">Chinmay Anand</h3>
-                                <p className="text-xs text-gray-500 font-bold">Designated Partner</p>
+                                <p className="text-[9px] font-black uppercase tracking-widest text-green-700 mb-1">{getTranslatedText("Founder & CEO")}</p>
+                                <h3 className="text-lg sm:text-2xl font-black text-gray-900 leading-tight">Chinmay Anand</h3>
+                                <p className="text-[11px] sm:text-xs text-gray-500 font-bold">Designated Partner</p>
                             </div>
                             <div>
-                                <p className="text-[9px] font-black uppercase tracking-widest text-green-700 mb-2">{getTranslatedText("Co Founder")}</p>
-                                <h3 className="text-2xl font-black text-gray-900 mb-1">Ifat Khanam</h3>
+                                <p className="text-[9px] font-black uppercase tracking-widest text-green-700 mb-1">{getTranslatedText("Co Founder")}</p>
+                                <h3 className="text-lg sm:text-2xl font-black text-gray-900 leading-tight">Ifat Khanam</h3>
                             </div>
                         </div>
-                        <p className="text-[11px] text-gray-600 font-medium leading-relaxed italic border-l-4 border-green-600 pl-4 mt-2">
+                        <p className="text-[10px] sm:text-[11px] text-gray-600 font-medium leading-relaxed italic border-l-4 border-green-600 pl-3 sm:pl-4 mt-1 sm:mt-2">
                             "{getTranslatedText("Transforming agriculture through technology.")}"
                         </p>
-                        <div className="mt-6">
-                            <p className="text-[9px] font-black uppercase text-gray-400 tracking-wider mb-0.5">{getTranslatedText("Company")}</p>
-                            <p className="text-[11px] font-black text-gray-800 leading-tight">GLOBAL RURAL OUTREACH ORGANISATION LLP</p>
+                        <div className="mt-4 sm:mt-6">
+                            <p className="text-[8px] sm:text-[9px] font-black uppercase text-gray-400 tracking-wider mb-0.5">{getTranslatedText("Company")}</p>
+                            <p className="text-[10px] sm:text-[11px] font-black text-gray-800 leading-tight">GLOBAL RURAL OUTREACH ORGANISATION LLP</p>
                         </div>
                     </div>
                 </div>
