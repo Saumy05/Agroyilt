@@ -951,28 +951,91 @@ const validateDailyRequestPayload = (body) => {
   return errors;
 };
 
-// â”€â”€â”€ Controller: createFarmerRequest â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── THEKA (Contract/Task) Request Payload Validator ──────────────────────────
+/**
+ * Validate THEKA booking payload.
+ * THEKA: fixed task contract (e.g. fill trolley, harvest patch) with scheduled date,
+ * arrival/start time, and lump-sum/contract rate.
+ */
+const validateThekaRequestPayload = (body) => {
+  const {
+    workTitle, workDescription, requiredWorkers,
+    scheduledDate, startTime, location, minRate, maxRate
+  } = body;
+
+  const errors = [];
+
+  if (!workTitle || workTitle.trim().length < 3)
+    errors.push('Work title must be at least 3 characters.');
+  if (!workDescription || workDescription.trim().length < 10)
+    errors.push('Work description must be at least 10 characters.');
+
+  const workerQty = parseInt(requiredWorkers, 10);
+  if (!requiredWorkers || isNaN(workerQty) || workerQty < 1 || !Number.isInteger(workerQty))
+    errors.push('Required workers must be a positive integer.');
+
+  if (!scheduledDate)
+    errors.push('Scheduled date is required for THEKA contract booking.');
+  else {
+    const d = new Date(scheduledDate);
+    if (isNaN(d.getTime())) errors.push('Invalid scheduled date.');
+    else {
+      const todayIst = getIstDateString(new Date());
+      const scheduledIst = getIstDateString(d);
+      if (scheduledIst < todayIst) {
+        errors.push('Scheduled date cannot be in the past.');
+      }
+    }
+  }
+
+  if (startTime && !/^\d{2}:\d{2}$/.test(startTime)) {
+    errors.push('Start time must be in HH:mm format.');
+  }
+
+  if (!location || (!location.city && !location.addressLine1))
+    errors.push('Work location (city or address) is required.');
+
+  const min = Number(minRate);
+  const max = Number(maxRate);
+  if (!minRate && !maxRate) {
+    errors.push('Theka contract rate/budget is required.');
+  } else {
+    if (isNaN(min) || !isFinite(min) || min <= 0)
+      errors.push('Minimum contract rate must be a positive number.');
+    if (maxRate !== undefined && maxRate !== null && maxRate !== '') {
+      if (isNaN(max) || !isFinite(max) || max <= 0)
+        errors.push('Maximum contract rate must be a positive number.');
+      if (min > max)
+        errors.push('Minimum contract rate cannot exceed maximum contract rate.');
+    }
+  }
+
+  return errors;
+};
+
+// ─── Controller: createFarmerRequest ──────────────────────────────────────────
 
 /**
  * POST /api/user/farmer-worker-request
  * Farmer submits a job requirement. Backend auto-routes to Independent or Team Leader flow.
- * Supports HOURLY (scheduledDate + startTime + endTime) and DAILY (startDate + numberOfDays).
+ * Supports HOURLY, DAILY, and THEKA (fixed task contract).
  */
 exports.createFarmerRequest = async (req, res) => {
   try {
     const farmerId = req.user._id; // always from auth token
 
-    // Detect booking type: DAILY if body contains startDate + numberOfDays, else HOURLY
+    // Detect booking type: THEKA, DAILY, or HOURLY
     // Frontend hint is accepted but backend validates the type's required fields.
     const rawBookingType = (req.body.bookingType || '').toUpperCase();
-    const isDaily = rawBookingType === 'DAILY' || (req.body.startDate && req.body.numberOfDays && !req.body.scheduledDate);
-    const bookingType = isDaily ? 'DAILY' : 'HOURLY';
+    const isTheka = rawBookingType === 'THEKA';
+    const isDaily = !isTheka && (rawBookingType === 'DAILY' || (req.body.startDate && req.body.numberOfDays && !req.body.scheduledDate));
+    const bookingType = isTheka ? 'THEKA' : (isDaily ? 'DAILY' : 'HOURLY');
 
     const {
       workCategory, workTitle, workDescription,
       requiredSkills, additionalInstructions,
       requiredWorkers,
-      // HOURLY fields
+      // HOURLY & THEKA fields
       scheduledDate, startTime, endTime, rateUnit,
       minRate, maxRate,
       // DAILY fields
@@ -983,9 +1046,9 @@ exports.createFarmerRequest = async (req, res) => {
     } = req.body;
 
     // ── Validate per bookingType ─────────────────────────────────────────────
-    const errors = isDaily
-      ? validateDailyRequestPayload(req.body)
-      : validateRequestPayload(req.body);
+    const errors = isTheka
+      ? validateThekaRequestPayload(req.body)
+      : (isDaily ? validateDailyRequestPayload(req.body) : validateRequestPayload(req.body));
     if (errors.length) {
       return res.status(400).json({ success: false, message: errors[0], errors });
     }
@@ -1025,7 +1088,7 @@ exports.createFarmerRequest = async (req, res) => {
       : 'team_leader';
 
     // ── HOURLY duplicate guard ────────────────────────────────────────────
-    if (!isDaily) {
+    if (bookingType === 'HOURLY') {
       const scheduledDateObj = new Date(scheduledDate);
       const dateStart = new Date(scheduledDateObj); dateStart.setHours(0, 0, 0, 0);
       const dateEnd   = new Date(dateStart);         dateEnd.setHours(23, 59, 59, 999);
@@ -1081,12 +1144,13 @@ exports.createFarmerRequest = async (req, res) => {
     const acceptWindowMs = await getAcceptWindowMs();
     const ttlExpiry = new Date(Date.now() + acceptWindowMs);
 
-    // Compute the scheduled job start time as a Date (HOURLY: scheduledDate + startTime, DAILY: startDate 00:00 IST)
+    // Compute the scheduled job start time as a Date (HOURLY: scheduledDate + startTime, DAILY: startDate 00:00 IST, THEKA: scheduledDate + startTime)
     let scheduledJobStart = null;
-    if (!isDaily && scheduledDate && startTime) {
+    if (!isDaily && scheduledDate) {
       try {
         const istDate = getIstDateString(new Date(scheduledDate));
-        if (istDate) scheduledJobStart = new Date(`${istDate}T${startTime}:00+05:30`);
+        const sTime = startTime || '08:00';
+        if (istDate) scheduledJobStart = new Date(`${istDate}T${sTime}:00+05:30`);
       } catch (_) {}
     } else if (isDaily && startDate) {
       try {
@@ -1149,7 +1213,24 @@ exports.createFarmerRequest = async (req, res) => {
       requestDoc.status = 'pending';
     }
 
-    if (isDaily) {
+    if (isTheka) {
+      const scheduledDateObj = new Date(scheduledDate);
+      const effMinRate = Number(minRate) || 0;
+      const effMaxRate = maxRate ? Number(maxRate) : effMinRate;
+      const sTime = startTime || '08:00';
+      const eTime = endTime || '18:00';
+
+      Object.assign(requestDoc, {
+        rateUnit:          'theka',
+        durationMinutes:   480,
+        scheduledDate:     scheduledDateObj,
+        startTime:         sTime,
+        endTime:           eTime,
+        minRate:           effMinRate,
+        maxRate:           effMaxRate,
+        farmerOfferedRate: effMinRate
+      });
+    } else if (isDaily) {
       const sDate  = new Date(startDate);
       const numD   = parseInt(numberOfDays, 10);
       const eDate  = new Date(sDate);
@@ -1499,8 +1580,19 @@ async function dispatchWave(request, workers, farmerName, isSubsequentWave = fal
       minRate:      request.minDailyRate,
       maxRate:      request.maxDailyRate
     });
+  } else if (request.bookingType === 'THEKA') {
+    Object.assign(notifData, {
+      bookingType:       'THEKA',
+      scheduledDate:     request.scheduledDate,
+      startTime:         request.startTime,
+      endTime:           request.endTime,
+      minRate:           request.minRate,
+      maxRate:           request.maxRate,
+      farmerOfferedRate: request.farmerOfferedRate || request.minRate
+    });
   } else {
     Object.assign(notifData, {
+      bookingType:       'HOURLY',
       scheduledDate:     request.scheduledDate,
       startTime:         request.startTime,
       endTime:           request.endTime,
@@ -3041,7 +3133,7 @@ exports.workerRespondToFarmerRequest = async (req, res) => {
     let acceptedLine = '';
     if (action === 'accept') {
       const workerName = acceptingWorker?.name || 'A worker';
-      const rateLabel = `₹${offeredRate}/${updated.bookingType === 'DAILY' ? 'day' : 'hr'}`;
+      const rateLabel = `₹${offeredRate}/${updated.bookingType === 'DAILY' ? 'day' : (updated.bookingType === 'THEKA' ? 'theka' : 'hr')}`;
       let distLabel = '';
       const coord = (v) => (v === null || v === undefined || v === '' ? NaN : Number(v)); // Number(null) would be 0
       const wLat = coord(acceptingWorker?.location?.lat), wLng = coord(acceptingWorker?.location?.lng);
@@ -3461,6 +3553,7 @@ exports.farmerSelectWorkers = async (req, res) => {
 
     const settings = await getWorkerFinancialSettings();
     const isDaily = request.bookingType === 'DAILY';
+    const isTheka = request.bookingType === 'THEKA';
     // The farmer pays exactly what the selected workers quoted: each worker's own offered rate × the booked time.
     // (The farmer's maximum is kept on the snapshot for reference only; it is no longer reserved.)
     const baseRate = Number(
@@ -3474,7 +3567,9 @@ exports.farmerSelectWorkers = async (req, res) => {
       const offeredRate = workerBookingMath.rateFor(request, wId, { ignoreFrozen: true });
       const grossPaise = isDaily
         ? rupeesToPaise(offeredRate) * bookedDays
-        : Math.round(rupeesToPaise(offeredRate) * bookedHours);
+        : (isTheka
+          ? rupeesToPaise(offeredRate)
+          : Math.round(rupeesToPaise(offeredRate) * bookedHours));
       return { workerId: wId, offeredRate, grossAmount: paiseToRupees(grossPaise), _paise: grossPaise };
     });
     const maxWorkerPaise = workerRates.reduce((sum, r) => sum + r._paise, 0);
@@ -3523,7 +3618,7 @@ exports.farmerSelectWorkers = async (req, res) => {
       currency: 'INR',
       bookingType: request.bookingType || 'HOURLY',
       numberOfDays: isDaily ? (Number(request.numberOfDays) || 1) : null,
-      durationMinutes: !isDaily ? (Number(request.durationMinutes) || 60) : null,
+      durationMinutes: (!isDaily && !isTheka) ? (Number(request.durationMinutes) || 60) : null,
       createdAt: new Date()
     };
 

@@ -15,8 +15,12 @@ export const workLength = ({ minutes, days } = {}) => {
   return `${rest} min`;
 };
 
-/** "Booked work (1 hr)" / "Extra time (+30 min)" */
+/** "Booked work (1 hr)" / "Extra time (+30 min)" / "Theka Contract Work" */
 export const paymentLineLabel = (line) =>
   line.kind === 'travel'
     ? `Travel charge${line.distanceKm ? ` (${line.distanceKm} km)` : ''}`
-    : line.kind === 'extension' ? `Extra time (+${workLength(line)})` : `Booked work (${workLength(line)})`;
+    : line.kind === 'extension'
+      ? `Extra time (+${workLength(line)})`
+      : line.rateUnit === 'theka' || line.bookingType === 'THEKA'
+        ? 'Theka Contract Work'
+        : `Booked work (${workLength(line)})`;

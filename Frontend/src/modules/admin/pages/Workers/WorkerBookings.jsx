@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   FiBriefcase,
@@ -298,8 +298,11 @@ const WorkerBookings = () => {
             {requests.map((r) => {
               const st = OPEN_REQUEST_STATUS[r.status] || OPEN_REQUEST_STATUS.pending;
               const isDaily = r.bookingType === 'DAILY';
+              const isTheka = r.bookingType === 'THEKA';
               const dateText = isDaily
                 ? [formatDate(r.startDate), r.numberOfDays ? `${r.numberOfDays} day${r.numberOfDays > 1 ? 's' : ''}` : null].filter(Boolean).join(' · ')
+                : isTheka
+                ? [formatDate(r.scheduledDate), r.startTime ? `Starts ${r.startTime}` : null, 'Theka Contract'].filter(Boolean).join(' · ')
                 : [formatDate(r.scheduledDate), r.startTime && r.endTime ? `${r.startTime}–${r.endTime}` : r.startTime].filter(Boolean).join(' · ');
               const minRate = isDaily ? r.minDailyRate : r.minRate;
               const maxRate = isDaily ? r.maxDailyRate : r.maxRate;
@@ -367,7 +370,7 @@ const WorkerBookings = () => {
                       ['Notified', r.dispatchedWorkersCount],
                       ['Accepted', r.acceptedWorkersCount],
                       ['Rejected', r.rejectedWorkersCount],
-                      ['Budget', minRate || maxRate ? `₹${minRate ?? maxRate}${maxRate && maxRate !== minRate ? `–${maxRate}` : ''}` : '—']
+                      ['Budget', minRate || maxRate ? `₹${minRate ?? maxRate}${maxRate && maxRate !== minRate ? `–${maxRate}` : ''}${isTheka ? ' (theka)' : isDaily ? '/day' : '/hr'}` : '—']
                     ].map(([label, value]) => (
                       <div key={label}>
                         <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p>

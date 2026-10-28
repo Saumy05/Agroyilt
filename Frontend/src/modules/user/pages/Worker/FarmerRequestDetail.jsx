@@ -241,7 +241,7 @@ const FarmerRequestDetail = () => {
           <div className="flex justify-between items-start gap-4">
             <div>
               <span className="text-[10px] uppercase tracking-wider font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full mb-2 inline-block">
-                {request.bookingType === 'DAILY' ? 'Daily Contract' : (request.workCategory || 'General Service')}
+                {request.bookingType === 'DAILY' ? 'Daily Contract' : (request.bookingType === 'THEKA' ? 'Theka Contract' : (request.workCategory || 'General Service'))}
               </span>
               <h2 className="text-xl font-extrabold text-slate-900">{request.workTitle}</h2>
               <p className="text-slate-500 text-xs mt-1 leading-relaxed">{request.workDescription}</p>
@@ -251,7 +251,8 @@ const FarmerRequestDetail = () => {
               <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Budget</p>
               {(() => {
                 const isDaily = request.bookingType === 'DAILY' || request.rateUnit === 'daily';
-                const unitSuffix = isDaily ? '/day' : '/hr';
+                const isTheka = request.bookingType === 'THEKA' || request.rateUnit === 'theka';
+                const unitSuffix = isDaily ? '/day' : (isTheka ? '/theka' : '/hr');
                 const minRate = isDaily ? (request.minDailyRate || request.minRate) : (request.minRate || request.farmerOfferedRate);
                 const maxRate = isDaily ? (request.maxDailyRate || request.maxRate) : request.maxRate;
 
@@ -282,7 +283,7 @@ const FarmerRequestDetail = () => {
               </div>
               <div>
                 <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400">
-                  {request.bookingType === 'DAILY' ? 'Daily Schedule' : 'Date'}
+                  {request.bookingType === 'DAILY' ? 'Daily Schedule' : (request.bookingType === 'THEKA' ? 'Contract Date' : 'Date')}
                 </p>
                 <p className="text-sm font-bold text-slate-700">
                   {request.bookingType === 'DAILY'
@@ -298,11 +299,13 @@ const FarmerRequestDetail = () => {
               </div>
               <div>
                 <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400">
-                  {request.bookingType === 'DAILY' ? 'Working Hours' : 'Time Slot'}
+                  {request.bookingType === 'DAILY' ? 'Working Hours' : (request.bookingType === 'THEKA' ? 'Arrival Time' : 'Time Slot')}
                 </p>
                 <p className="text-sm font-bold text-slate-700">
                   {request.bookingType === 'DAILY'
                     ? '9-Hr Shift (8h work + 1h lunch break)'
+                    : request.bookingType === 'THEKA'
+                    ? `Report by ${request.startTime || '08:00 AM'} (Task-based contract)`
                     : `${request.startTime || '00:00'} - ${request.endTime || '00:00'} (${Math.round((request.durationMinutes || 60) / 60)}h active work)`}
                 </p>
                 {request.bookingType === 'DAILY' && (
@@ -513,7 +516,7 @@ const FarmerRequestDetail = () => {
                               </span>
                               {offer.offeredRate > 0 && (
                                 <span className="text-[11px] font-black text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-md">
-                                  ₹{offer.offeredRate}/{request.bookingType === 'DAILY' ? 'day' : 'hr'}
+                                  ₹{offer.offeredRate}/{request.bookingType === 'DAILY' ? 'day' : (request.bookingType === 'THEKA' ? 'theka' : 'hr')}
                                 </span>
                               )}
                               {offer.travelEstimate?.amount > 0 && (

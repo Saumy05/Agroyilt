@@ -37,7 +37,7 @@ const indWorkerExtensionSchema = new mongoose.Schema({
   // Booking mode
   bookingType: {
     type:     String,
-    enum:     ['HOURLY', 'DAILY'],
+    enum:     ['HOURLY', 'DAILY', 'THEKA'],
     required: true,
     index:    true
   },

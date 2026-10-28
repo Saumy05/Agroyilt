@@ -45,16 +45,17 @@ const workerGroupRequestSchema = new mongoose.Schema({
   scheduledDate: { type: Date, required: true, index: true },
   startTime:     { type: String, required: true },
   endTime:       { type: String, required: true },
-  rateUnit:      { type: String, enum: ['hourly', 'daily'], default: 'daily' },
+  rateUnit:      { type: String, enum: ['hourly', 'daily', 'theka'], default: 'daily' },
 
   // ════════════════════════════════════════════════════════════════════════
   // BOOKING TYPE — mirrors WorkerBookingRequest.bookingType
   //   HOURLY: uses scheduledDate + startTime + endTime + durationMinutes
   //   DAILY:  uses startDate + numberOfDays
+  //   THEKA:  uses scheduledDate + startTime + endTime (contract/task-based)
   // ════════════════════════════════════════════════════════════════════════
   bookingType: {
     type: String,
-    enum: ['HOURLY', 'DAILY'],
+    enum: ['HOURLY', 'DAILY', 'THEKA'],
     default: 'HOURLY'
   },
 

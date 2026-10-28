@@ -895,7 +895,7 @@ const BookingTrack = () => {
                   ? 'bg-amber-50 text-amber-800 border-amber-200'
                   : 'bg-emerald-50 text-emerald-800 border-emerald-200'
               }`}>
-                {trackingData?.bookingType === 'DAILY' ? 'Daily Schedule' : 'Hourly Booking'}
+                {trackingData?.bookingType === 'DAILY' ? 'Daily Schedule' : (trackingData?.bookingType === 'THEKA' ? 'Theka Contract' : 'Hourly Booking')}
               </span>
 
               {/* Hourly bookings are extended from the live work card (last 10 minutes only); this button is for adding days */}

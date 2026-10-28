@@ -68,7 +68,7 @@ const indWorkerAssignmentSchema = new mongoose.Schema(
     },
     rateUnit: {
       type: String,
-      enum: ['hourly', 'daily'],
+      enum: ['hourly', 'daily', 'theka'],
       default: 'daily'
     },
 
@@ -76,11 +76,12 @@ const indWorkerAssignmentSchema = new mongoose.Schema(
     // BOOKING TYPE — mirrors the parent WorkerBookingRequest.bookingType.
     //   HOURLY: uses scheduledDate + startTime + endTime + single OTP flow
     //   DAILY:  uses startDate + numberOfDays + per-day dailyLogs
+    //   THEKA:  fixed task/contract work + scheduledDate + single OTP completion flow
     // Existing documents with bookingType=null are treated as legacy HOURLY.
     // ════════════════════════════════════════════════════════════════════════
     bookingType: {
       type: String,
-      enum: ['HOURLY', 'DAILY'],
+      enum: ['HOURLY', 'DAILY', 'THEKA'],
       default: 'HOURLY',
       index: true
     },

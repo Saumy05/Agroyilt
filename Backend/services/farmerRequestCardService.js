@@ -70,8 +70,9 @@ const buildCard = (r, assignments, extensions) => {
     amount = { label: 'To confirm', value: Number(snap.totalPayable) };
   } else if (['pending', 'matching', 'awaiting_farmer_confirmation'].includes(r.status)) {
     const isDaily = r.bookingType === 'DAILY';
+    const isTheka = r.bookingType === 'THEKA';
     const rate = Number(isDaily ? (r.maxDailyRate || r.maxRate) : r.maxRate) || 0;
-    const units = isDaily ? (Number(r.numberOfDays) || 1) : (Number(r.durationMinutes) || 60) / 60;
+    const units = isDaily ? (Number(r.numberOfDays) || 1) : (isTheka ? 1 : ((Number(r.durationMinutes) || 60) / 60));
     if (rate > 0) amount = { label: 'Budget up to', value: Math.round(rate * required * units) };
   } else if (Number(r.refundAmount) > 0) {
     amount = { label: 'Refunded', value: Number(r.refundAmount) };
@@ -81,8 +82,9 @@ const buildCard = (r, assignments, extensions) => {
       amount = { label: r.status === 'expired' ? 'Expired' : 'Cancelled', value: estVal };
     } else {
       const isDaily = r.bookingType === 'DAILY';
+      const isTheka = r.bookingType === 'THEKA';
       const rate = Number(isDaily ? (r.maxDailyRate || r.maxRate) : r.maxRate) || 0;
-      const units = isDaily ? (Number(r.numberOfDays) || 1) : (Number(r.durationMinutes) || 60) / 60;
+      const units = isDaily ? (Number(r.numberOfDays) || 1) : (isTheka ? 1 : ((Number(r.durationMinutes) || 60) / 60));
       if (rate > 0) {
         amount = { label: r.status === 'expired' ? 'Expired' : 'Cancelled', value: Math.round(rate * required * units) };
       }

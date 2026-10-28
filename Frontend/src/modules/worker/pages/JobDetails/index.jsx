@@ -1373,7 +1373,7 @@ const JobDetails = () => {
                             <div>
                               <span className="font-semibold text-gray-800 block">Base Shift Earnings</span>
                               <span className="text-[11px] text-gray-400">
-                                Scheduled {job.bookingType === 'DAILY' ? `${job.bookedDays || 1} day(s)` : 'shift'} @ ₹{(job.agreedRate || baseGross).toLocaleString('en-IN')}/{job.rateUnit || 'hr'}
+                                Scheduled {job.bookingType === 'DAILY' ? `${job.bookedDays || 1} day(s)` : (job.bookingType === 'THEKA' ? 'task' : 'shift')} @ ₹{(job.agreedRate || baseGross).toLocaleString('en-IN')}/{job.rateUnit || (job.bookingType === 'THEKA' ? 'theka' : 'hr')}
                               </span>
                             </div>
                             <span className="font-bold text-gray-900">₹{baseGross.toFixed(2)}</span>

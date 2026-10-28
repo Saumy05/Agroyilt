@@ -45,7 +45,7 @@ const workerBookingRequestSchema = new mongoose.Schema({
   reportingTime:   { type: String, default: null }, // HH:mm — DAILY: when workers must report each day (null on older bookings)
   endTime:         { type: String, default: null }, // HH:mm — HOURLY only
   durationMinutes: { type: Number, default: 60 },
-  rateUnit:        { type: String, enum: ['hourly', 'daily'], default: 'daily' },
+  rateUnit:        { type: String, enum: ['hourly', 'daily', 'theka'], default: 'daily' },
 
   // Standard Shift & Break Definitions (Daily: 9h total = 8h work + 1h break)
   shiftDurationHours: { type: Number, default: 9 },
@@ -61,7 +61,7 @@ const workerBookingRequestSchema = new mongoose.Schema({
   // ════════════════════════════════════════════════════════════════════════
   bookingType: {
     type: String,
-    enum: ['HOURLY', 'DAILY'],
+    enum: ['HOURLY', 'DAILY', 'THEKA'],
     default: 'HOURLY',
     index: true
   },
@@ -189,7 +189,7 @@ const workerBookingRequestSchema = new mongoose.Schema({
     workerId:    { type: mongoose.Schema.Types.ObjectId, ref: 'Worker', required: true, index: true },
     leaderId:    { type: mongoose.Schema.Types.ObjectId, ref: 'Worker', required: true },
     offeredRate: { type: Number, required: true },
-    rateUnit:    { type: String, enum: ['hourly', 'daily'], default: 'daily' },
+    rateUnit:    { type: String, enum: ['hourly', 'daily', 'theka'], default: 'daily' },
     status:      { 
       type: String, 
       enum: ['member_pending', 'member_accepted', 'member_rejected', 'member_expired'], 

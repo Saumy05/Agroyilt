@@ -771,7 +771,7 @@ const WorkerBookingRequestAlertModal = ({ isOpen, requestData, onClose, onReques
                       <div className="flex items-center gap-1.5">
                         <span className="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md bg-emerald-600/10 text-emerald-800 border border-emerald-600/20">
                           <FiZap className="w-3 h-3 text-emerald-600 fill-emerald-600" />
-                          {requestData.bookingType === 'DAILY' ? 'Daily Pay Rate' : 'Hourly Pay Rate'}
+                          {requestData.bookingType === 'DAILY' ? 'Daily Pay Rate' : (requestData.bookingType === 'THEKA' ? 'Theka Contract Pay' : 'Hourly Pay Rate')}
                         </span>
                       </div>
                       <div className="flex items-baseline gap-1.5 mt-1.5">
@@ -784,7 +784,7 @@ const WorkerBookingRequestAlertModal = ({ isOpen, requestData, onClose, onReques
                           </span>
                         )}
                         <span className="text-xs font-extrabold text-emerald-700 uppercase">
-                          / {requestData.bookingType === 'DAILY' ? 'day' : 'hr'}
+                          / {requestData.bookingType === 'DAILY' ? 'day' : (requestData.bookingType === 'THEKA' ? 'theka' : 'hr')}
                         </span>
                       </div>
                       {requestData.maxRate && requestData.maxRate > requestData.minRate && (
@@ -848,7 +848,7 @@ const WorkerBookingRequestAlertModal = ({ isOpen, requestData, onClose, onReques
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
-                        {requestData.bookingType === 'DAILY' ? 'Daily Schedule' : 'Date & Time'}
+                        {requestData.bookingType === 'DAILY' ? 'Daily Schedule' : (requestData.bookingType === 'THEKA' ? 'Contract Date' : 'Date & Time')}
                       </p>
                       <p className="text-xs font-bold text-slate-800 leading-snug mt-0.5">
                         {requestData.bookingType === 'DAILY' ? (
@@ -856,6 +856,13 @@ const WorkerBookingRequestAlertModal = ({ isOpen, requestData, onClose, onReques
                             <span>{requestData.numberOfDays || 1} Day(s) • Starts {requestData.startDate ? new Date(requestData.startDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) : (requestData.scheduledDate ? new Date(requestData.scheduledDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) : 'Soon')}</span>
                             <span className="block text-[10px] text-amber-800 font-black mt-0.5">
                               ⏱️ 9-Hr Shift (8 hrs work + 1 hr lunch break) • Report by {requestData.reportingTime || '09:00 AM'}
+                            </span>
+                          </>
+                        ) : requestData.bookingType === 'THEKA' ? (
+                          <>
+                            <span>{requestData.scheduledDate ? new Date(requestData.scheduledDate).toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Today'} • Report by {to12HourText(requestData.startTime) || 'Flexible'}</span>
+                            <span className="block text-[10px] text-emerald-800 font-black mt-0.5">
+                              🌾 Fixed Task Contract • Paid upon completion verification
                             </span>
                           </>
                         ) : (
@@ -912,7 +919,7 @@ const WorkerBookingRequestAlertModal = ({ isOpen, requestData, onClose, onReques
                     <div className="bg-emerald-50/90 rounded-2xl p-4 border border-emerald-200 shadow-2xs">
                       <div className="flex items-center justify-between mb-1">
                         <label className="text-xs font-black text-emerald-950 uppercase tracking-wider">
-                          Your Required Rate (₹ / {requestData.bookingType === 'DAILY' ? 'day' : 'hr'})
+                          Your Required Rate (₹ / {requestData.bookingType === 'DAILY' ? 'day' : (requestData.bookingType === 'THEKA' ? 'theka' : 'hr')})
                         </label>
                         <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full">
                           Max: ₹{requestData?.maxRate || requestData?.minRate || 0}

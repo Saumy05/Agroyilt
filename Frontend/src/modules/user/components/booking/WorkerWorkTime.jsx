@@ -11,12 +11,13 @@ const time = (d) => (d ? new Date(d).toLocaleTimeString('en-IN', { hour: '2-digi
 const WorkerWorkTime = ({ workTime }) => {
   if (!workTime) return null;
   const isDaily = workTime.bookingType === 'DAILY';
+  const isTheka = workTime.bookingType === 'THEKA';
   const started = Boolean(workTime.startedAt);
   const stopped = Boolean(workTime.stoppedAt);
 
   let headline = 'Work not started yet';
   if (started && !stopped) headline = `Working since ${time(workTime.startedAt)}`;
-  if (started && stopped) headline = isDaily ? `Worked ${workTime.workedDays || 0} day(s)` : `Worked ${workLength({ minutes: workTime.minutes })}`;
+  if (started && stopped) headline = isDaily ? `Worked ${workTime.workedDays || 0} day(s)` : (isTheka ? 'Theka task completed' : `Worked ${workLength({ minutes: workTime.minutes })}`);
 
   return (
     <div className="bg-white rounded-3xl border border-emerald-100 shadow-sm p-4 flex items-start gap-3">

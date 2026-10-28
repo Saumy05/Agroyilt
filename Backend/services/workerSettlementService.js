@@ -72,7 +72,7 @@ const deductCashCommissionOnce = async ({ workerId, amount, key, referenceId }) 
  */
 const repriceHourlyByTime = async (assignmentId) => {
   const a = await IndWorkerAssignment.findById(assignmentId);
-  if (!a || a.bookingType === 'DAILY' || a.settlementStatus !== 'PENDING' || a.completionStatus !== 'PENDING') return { repriced: false };
+  if (!a || a.bookingType === 'DAILY' || a.bookingType === 'THEKA' || a.settlementStatus !== 'PENDING' || a.completionStatus !== 'PENDING') return { repriced: false };
   if (!a.workStartedAt || !(Number(a.agreedRate) > 0)) return { repriced: false };
 
   const parent = await WorkerBookingRequest.findById(a.parentRequestId).select('durationMinutes startTime endTime');

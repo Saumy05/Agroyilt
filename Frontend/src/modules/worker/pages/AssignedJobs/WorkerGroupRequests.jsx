@@ -569,7 +569,7 @@ const WorkerGroupRequests = () => {
     const rawStatus = myEntry?.status || req.status || 'pending';
     const myStatus = rawStatus.replace('member_', '');
     const ratePerWorker = req.offeredRate || myEntry?.offeredRate || req.agreedRatePerWorker || req.farmerOfferedRatePerWorker || 0;
-    const rateUnit = req.rateUnit || (req.bookingType === 'DAILY' ? 'day' : 'hr');
+    const rateUnit = req.rateUnit || (req.bookingType === 'DAILY' ? 'day' : (req.bookingType === 'THEKA' ? 'theka' : 'hr'));
     const targetId = req.requestId || req._id;
     const leaderName = req.teamLeader?.name || req.teamLeaderId?.name || 'Your Team Leader';
 
@@ -594,7 +594,11 @@ const WorkerGroupRequests = () => {
             <div>
               <p className="text-[10px] text-slate-400 font-bold uppercase">Schedule</p>
               <p className="font-bold text-slate-800">
-                {req.bookingType === 'DAILY' ? `${req.numberOfDays || 1} Day(s)` : `${to12HourText(req.startTime || '00:00')} - ${to12HourText(req.endTime) || 'Flexible'}`}
+                {req.bookingType === 'DAILY'
+                  ? `${req.numberOfDays || 1} Day(s)`
+                  : (req.bookingType === 'THEKA'
+                    ? `Report by ${to12HourText(req.startTime || '08:00')}`
+                    : `${to12HourText(req.startTime || '00:00')} - ${to12HourText(req.endTime) || 'Flexible'}`)}
               </p>
             </div>
             <div>

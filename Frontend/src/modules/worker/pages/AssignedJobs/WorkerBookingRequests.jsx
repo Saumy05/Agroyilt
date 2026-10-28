@@ -191,7 +191,11 @@ const WorkerBookingRequests = () => {
             </div>
             <div>
               <p className="text-[10px] text-slate-400 font-bold uppercase mb-1 flex items-center gap-1"><FiClock /> Time</p>
-              <p className="font-black text-slate-700">{to12HourText(req.startTime)} - {to12HourText(req.endTime)}</p>
+              <p className="font-black text-slate-700">
+                {req.bookingType === 'THEKA'
+                  ? `Report by ${to12HourText(req.startTime) || '08:00 AM'}`
+                  : `${to12HourText(req.startTime)} - ${to12HourText(req.endTime)}`}
+              </p>
             </div>
             <div className="col-span-2">
               <p className="text-[10px] text-slate-400 font-bold uppercase mb-1 flex items-center gap-1"><FiMapPin /> Location</p>

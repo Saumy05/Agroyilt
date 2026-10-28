@@ -746,6 +746,21 @@ const WorkerRequestForm = () => {
           e.reportingTime = `Reporting time has already passed for today. Earliest available reporting time is ${formatTime12H(minTimeToday)}, or please select tomorrow.`;
         }
       }
+    } else if (formData.bookingType === 'THEKA') {
+      if (!formData.scheduledDate) {
+        e.scheduledDate = 'Please select a date for the contract work.';
+      } else if (formData.scheduledDate < today) {
+        e.scheduledDate = 'Scheduled date cannot be in the past.';
+      }
+
+      if (!formData.startTime) {
+        e.startTime = 'Expected start/arrival time is required.';
+      } else if (formData.scheduledDate === today) {
+        const minTimeToday = getMinTimeForToday(30);
+        if (formData.startTime < minTimeToday) {
+          e.startTime = `Start time cannot be in the past. Earliest available time today is ${formatTime12H(minTimeToday)}.`;
+        }
+      }
     } else {
       // HOURLY
       if (!formData.scheduledDate) {
@@ -779,7 +794,7 @@ const WorkerRequestForm = () => {
     if (!formData.city.trim() && !formData.addressLine1.trim())
       e.city = 'Please enter at least a city name.';
     if (!formData.minRate || isNaN(Number(formData.minRate)) || Number(formData.minRate) <= 0)
-      e.minRate = `Enter a valid minimum ${formData.bookingType === 'DAILY' ? 'daily' : 'hourly'} rate (> 0).`;
+      e.minRate = `Enter a valid minimum ${formData.bookingType === 'DAILY' ? 'daily' : (formData.bookingType === 'THEKA' ? 'contract' : 'hourly')} rate (> 0).`;
     if (formData.maxRate && !isNaN(Number(formData.maxRate)) && Number(formData.minRate) > Number(formData.maxRate))
       e.maxRate = 'Max rate cannot be less than min rate.';
     return e;
@@ -797,6 +812,7 @@ const WorkerRequestForm = () => {
     try {
       setLoading(true);
       const isDaily = formData.bookingType === 'DAILY';
+      const isTheka = formData.bookingType === 'THEKA';
       const minR = Number(formData.minRate);
       const maxR = formData.maxRate ? Number(formData.maxRate) : minR;
 
@@ -807,7 +823,7 @@ const WorkerRequestForm = () => {
         workDescription: formData.workDescription.trim(),
         requiredSkills:  formData.requiredSkills,
         requiredWorkers: parseInt(formData.requiredWorkers, 10),
-        rateUnit:        isDaily ? 'daily' : 'hourly',
+        rateUnit:        isDaily ? 'daily' : (isTheka ? 'theka' : 'hourly'),
         location: {
           addressLine1: formData.addressLine1,
           city:         formData.city,
@@ -824,6 +840,14 @@ const WorkerRequestForm = () => {
         payload.reportingTime = formData.reportingTime;
         payload.minDailyRate = minR;
         payload.maxDailyRate = maxR;
+      } else if (isTheka) {
+        payload.scheduledDate = formData.scheduledDate;
+        payload.startTime     = formData.startTime || '08:00';
+        payload.endTime       = formData.endTime || calculateEndTime(formData.startTime || '08:00', 8);
+        payload.durationMinutes = 480;
+        payload.durationHours = 8;
+        payload.minRate       = minR;
+        payload.maxRate       = maxR;
       } else {
         payload.scheduledDate = formData.scheduledDate;
         payload.startTime     = formData.startTime;
@@ -943,7 +967,7 @@ const WorkerRequestForm = () => {
             <h3 className="text-xs sm:text-sm font-bold text-slate-800 mb-2 flex items-center gap-1.5">
               <FiTag size={14} className="text-emerald-600" /> Booking Mode *
             </h3>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <button
                 type="button"
                 id="booking-mode-hourly"
@@ -979,6 +1003,25 @@ const WorkerRequestForm = () => {
                 </div>
                 <p className="text-[10px] sm:text-[11px] text-slate-500 leading-tight">
                   Multi-day farm work. Fresh Reach OTP every working day.
+                </p>
+              </button>
+
+              <button
+                type="button"
+                id="booking-mode-theka"
+                onClick={() => setFormData(prev => ({ ...prev, bookingType: 'THEKA', rateUnit: 'theka' }))}
+                className={`p-2.5 sm:p-3 rounded-xl border text-left transition-all ${
+                  formData.bookingType === 'THEKA'
+                    ? 'border-emerald-500 bg-emerald-50/40 shadow-xs'
+                    : 'border-slate-200 bg-white hover:border-slate-300'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-0.5">
+                  <span className="font-bold text-xs sm:text-sm text-slate-800">Theka (Contract)</span>
+                  {formData.bookingType === 'THEKA' && <FiCheckCircle className="text-emerald-600" size={14} />}
+                </div>
+                <p className="text-[10px] sm:text-[11px] text-slate-500 leading-tight">
+                  Fixed task work (e.g. fill trolley, harvest patch). Pay per job.
                 </p>
               </button>
             </div>
@@ -1151,7 +1194,7 @@ const WorkerRequestForm = () => {
           {/* ── Schedule ──────────────────────────────────────────────────────── */}
           <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-100 shadow-xs">
             <h3 className="text-xs sm:text-sm font-bold text-slate-800 mb-2.5 flex items-center gap-1.5">
-              <FiCalendar size={14} className="text-emerald-600" /> Schedule ({formData.bookingType === 'DAILY' ? 'Daily Farm Work' : 'Hourly Shift'})
+              <FiCalendar size={14} className="text-emerald-600" /> Schedule ({formData.bookingType === 'DAILY' ? 'Daily Farm Work' : formData.bookingType === 'THEKA' ? 'Theka Contract Work' : 'Hourly Shift'})
             </h3>
             <div className="space-y-3">
               {formData.bookingType === 'DAILY' ? (
@@ -1246,6 +1289,82 @@ const WorkerRequestForm = () => {
                       <p className="text-[10px] text-slate-400 mt-0.5">Workers should arrive by this time every day.</p>
                     )}
                     <FieldError name="reportingTime" />
+                  </div>
+                </div>
+              ) : formData.bookingType === 'THEKA' ? (
+                /* THEKA SCHEDULE */
+                <div className="space-y-3">
+                  <div className="bg-emerald-50/70 border border-emerald-200/70 rounded-xl p-3 text-xs text-emerald-900">
+                    <p className="font-bold flex items-center gap-1.5 mb-0.5">
+                      <span>🌾</span> Theka / Contract Booking
+                    </p>
+                    <p className="text-[11px] text-emerald-800 leading-relaxed">
+                      Worker is hired for a fixed task (e.g. filling trolley, loading bags, weeding). Payment is a fixed contract amount upon farmer completion OTP approval, not billed by hours.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-600 mb-1 block">Work Date *</label>
+                      <div
+                        className="relative cursor-pointer group"
+                        onClick={(e) => {
+                          const input = e.currentTarget.querySelector('input[type="date"]');
+                          try { input?.showPicker(); } catch { input?.focus(); }
+                        }}
+                      >
+                        <div
+                          className={`w-full bg-slate-50/80 border rounded-xl pl-9 pr-3 py-2 text-xs sm:text-sm flex items-center justify-between transition-all group-hover:border-emerald-300 group-focus-within:ring-2 group-focus-within:ring-emerald-500 group-focus-within:border-emerald-500 ${
+                            errors.scheduledDate ? 'border-red-300' : 'border-slate-200'
+                          }`}
+                        >
+                          <FiCalendar className="absolute left-3 top-2.5 text-slate-400 group-hover:text-emerald-600 transition-colors" size={14} />
+                          <span className={formData.scheduledDate ? 'text-slate-800 font-bold tracking-wide' : 'text-slate-400 font-normal'}>
+                            {formatToDDMMYYYY(formData.scheduledDate) || 'DD/MM/YYYY'}
+                          </span>
+                          <span className="text-xs opacity-60 group-hover:opacity-100 transition-opacity">📅</span>
+                        </div>
+                        <input
+                          type="date"
+                          name="scheduledDate"
+                          id="theka-scheduled-date"
+                          min={today}
+                          value={formData.scheduledDate}
+                          onChange={handleDateChange}
+                          onClick={(e) => {
+                            try { e.target.showPicker(); } catch { /* ignore */ }
+                          }}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                        />
+                      </div>
+                      {formData.scheduledDate && (
+                        <p className="text-[10px] sm:text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200/60 rounded-md px-2 py-0.5 flex items-center gap-1 mt-1 w-fit">
+                          <span>🗓️</span>
+                          <span>{formatFriendlyDay(formData.scheduledDate)}</span>
+                        </p>
+                      )}
+                      <FieldError name="scheduledDate" />
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-600 mb-1 block">Expected Arrival Time *</label>
+                      <div className="relative">
+                        <FiClock className="absolute left-3 top-2.5 text-slate-400" size={14} />
+                        <input
+                          type="time"
+                          name="startTime"
+                          id="theka-start-time"
+                          min={formData.scheduledDate === today ? getMinTimeForToday(30) : undefined}
+                          value={formData.startTime}
+                          onChange={handleChange}
+                          className={`w-full bg-slate-50/80 border rounded-xl pl-9 pr-2.5 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white ${
+                            errors.startTime ? 'border-red-300' : 'border-slate-200'
+                          }`}
+                        />
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1">Expected reporting time for the workers to start the task.</p>
+                      <FieldError name="startTime" />
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -1604,12 +1723,14 @@ const WorkerRequestForm = () => {
                 <FiDollarSign size={14} className="text-emerald-600" /> Budget / Rate per Worker
               </h3>
               <span className="text-[10px] sm:text-xs px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full font-bold">
-                {formData.bookingType === 'DAILY' ? '₹ / Day' : '₹ / Hour'}
+                {formData.bookingType === 'DAILY' ? '₹ / Day' : formData.bookingType === 'THEKA' ? '₹ / Theka' : '₹ / Hour'}
               </span>
             </div>
             <p className="text-[11px] text-slate-500 mb-2.5">
               {formData.bookingType === 'DAILY' 
                 ? 'Specify expected daily wage per worker for each working day' 
+                : formData.bookingType === 'THEKA'
+                ? 'Specify expected contract pay (theka) per worker for completing the task'
                 : 'Specify expected hourly wage per worker'}
             </p>
 
@@ -1617,7 +1738,7 @@ const WorkerRequestForm = () => {
               <div className="grid grid-cols-2 gap-2.5">
                 <div>
                   <label className="text-[11px] font-bold text-slate-600 mb-1 block">
-                    Min {formData.bookingType === 'DAILY' ? 'Daily' : 'Hourly'} Rate (₹) *
+                    Min {formData.bookingType === 'DAILY' ? 'Daily' : formData.bookingType === 'THEKA' ? 'Contract' : 'Hourly'} Rate (₹) *
                   </label>
                   <div className="relative">
                     <span className="absolute left-3 top-2 text-slate-400 text-xs sm:text-sm font-bold">₹</span>
@@ -1628,7 +1749,7 @@ const WorkerRequestForm = () => {
                       value={formData.minRate}
                       onChange={handleChange}
                       min="1"
-                      placeholder={formData.bookingType === 'DAILY' ? '500' : '150'}
+                      placeholder={formData.bookingType === 'DAILY' ? '500' : formData.bookingType === 'THEKA' ? '500' : '150'}
                       className={`w-full bg-slate-50/80 border rounded-xl pl-7 pr-3 py-2 text-xs sm:text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white ${errors.minRate ? 'border-red-300' : 'border-slate-200'}`}
                     />
                   </div>
@@ -1636,7 +1757,7 @@ const WorkerRequestForm = () => {
                 </div>
                 <div>
                   <label className="text-[11px] font-bold text-slate-600 mb-1 block">
-                    Max {formData.bookingType === 'DAILY' ? 'Daily' : 'Hourly'} Rate (₹)
+                    Max {formData.bookingType === 'DAILY' ? 'Daily' : formData.bookingType === 'THEKA' ? 'Contract' : 'Hourly'} Rate (₹)
                   </label>
                   <div className="relative">
                     <span className="absolute left-3 top-2 text-slate-400 text-xs sm:text-sm font-bold">₹</span>
@@ -1647,7 +1768,7 @@ const WorkerRequestForm = () => {
                       value={formData.maxRate}
                       onChange={handleChange}
                       min="1"
-                      placeholder={formData.bookingType === 'DAILY' ? '600' : '200'}
+                      placeholder={formData.bookingType === 'DAILY' ? '600' : formData.bookingType === 'THEKA' ? '700' : '200'}
                       className={`w-full bg-slate-50/80 border rounded-xl pl-7 pr-3 py-2 text-xs sm:text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white ${errors.maxRate ? 'border-red-300' : 'border-slate-200'}`}
                     />
                   </div>

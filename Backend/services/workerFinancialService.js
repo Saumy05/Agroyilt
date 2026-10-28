@@ -68,6 +68,7 @@ exports.calculateBookingCommission = async (grossAmount) => {
 exports.buildFarmerPaymentSummary = (request, assignments = [], booking = null, extensions = []) => {
   const snap = request?.financialSnapshot || {};
   const isDaily = request?.bookingType === 'DAILY';
+  const isTheka = request?.bookingType === 'THEKA';
   const selectedWorkerCount = Number(snap.selectedWorkerCount || request?.selectedWorkerIds?.length || request?.requiredWorkers || 1);
   const maxRatePerWorker = Number(
     snap.maximumBudget ||
@@ -80,15 +81,17 @@ exports.buildFarmerPaymentSummary = (request, assignments = [], booking = null, 
   // Exact booked time (the same minutes the quote and the assignment use), not rounded to whole hours
   let durationHours = 1;
   let diffMinutes = 60;
-  if (!isDaily) {
+  if (!isDaily && !isTheka) {
     diffMinutes = require('../utils/workerBookingMath').bookedMinutes(request);
     durationHours = diffMinutes / 60;
   }
   const days = isDaily ? (Number(request?.numberOfDays) || 1) : 1;
 
-  const defaultReserve = isDaily
-    ? Math.round(maxRatePerWorker * selectedWorkerCount * days)
-    : Math.round(maxRatePerWorker * selectedWorkerCount * durationHours);
+  const defaultReserve = isTheka
+    ? Math.round(maxRatePerWorker * selectedWorkerCount)
+    : (isDaily
+      ? Math.round(maxRatePerWorker * selectedWorkerCount * days)
+      : Math.round(maxRatePerWorker * selectedWorkerCount * durationHours));
 
   const workerReserveAmount = Math.round(Number(snap.maximumWorkerAmount || defaultReserve));
   const platformChargeRate = Number(snap.platformChargeRate ?? 10);
@@ -194,9 +197,9 @@ exports.buildFarmerPaymentSummary = (request, assignments = [], booking = null, 
     selectedWorkerCount,
     maxRatePerWorker,
     workerRates: (snap.workerRates || []).map(r => ({ workerId: r.workerId, offeredRate: r.offeredRate, grossAmount: r.grossAmount })),
-    bookingType: isDaily ? 'DAILY' : 'HOURLY',
-    durationHours: !isDaily ? Number(durationHours.toFixed(2)) : null,
-    durationMinutes: !isDaily ? diffMinutes : null,
+    bookingType: isDaily ? 'DAILY' : (isTheka ? 'THEKA' : 'HOURLY'),
+    durationHours: (!isDaily && !isTheka) ? Number(durationHours.toFixed(2)) : null,
+    durationMinutes: (!isDaily && !isTheka) ? diffMinutes : null,
     numberOfDays: isDaily ? days : null,
     workerReserveAmount,
     platformFeeAmount,
@@ -565,12 +568,13 @@ exports.buildFarmerBill = (request, assignments = [], extensions = [], { isPaid 
   if (!request) return null;
   const snap = request.financialSnapshot || {};
   const isDaily = request.bookingType === 'DAILY';
+  const isTheka = request.bookingType === 'THEKA';
   const isCash = request.paymentMethod === 'cash';
-  const rateUnit = isDaily ? 'daily' : 'hourly';
+  const rateUnit = isDaily ? 'daily' : (isTheka ? 'theka' : 'hourly');
   const confirmed = (extensions || []).filter(e => e && e.status === 'CONFIRMED');
   const base = baseSchedule(request, confirmed);
   const active = (assignments || []).filter(a => a && a.parentRequestId && ['CONFIRMED', 'COMPLETED'].includes(a.assignmentStatus));
-  const common = { paymentMethod: isCash ? 'cash' : 'online', bookingType: isDaily ? 'DAILY' : 'HOURLY', platformFeeRate: Number(snap.platformChargeRate) || 0 };
+  const common = { paymentMethod: isCash ? 'cash' : 'online', bookingType: isTheka ? 'THEKA' : (isDaily ? 'DAILY' : 'HOURLY'), platformFeeRate: Number(snap.platformChargeRate) || 0 };
 
   if (isCash && active.length) {
     const workers = active.map(a => ({

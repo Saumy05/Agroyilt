@@ -225,9 +225,12 @@ const WorkerSelectionPayment = () => {
   const workerRates = Array.isArray(financials.workerRates) ? financials.workerRates : [];
   const hasAgreedRates = workerRates.length > 0;
   const isDailyQuote = financials.bookingType === 'DAILY';
+  const isThekaQuote = financials.bookingType === 'THEKA';
   const timeLabel = isDailyQuote
     ? `${financials.numberOfDays || 1} day${(financials.numberOfDays || 1) > 1 ? 's' : ''}`
-    : `${Number(((financials.durationMinutes || 60) / 60).toFixed(2))} hr${Number(((financials.durationMinutes || 60) / 60).toFixed(2)) !== 1 ? 's' : ''}`;
+    : isThekaQuote
+      ? 'Contract'
+      : `${Number(((financials.durationMinutes || 60) / 60).toFixed(2))} hr${Number(((financials.durationMinutes || 60) / 60).toFixed(2)) !== 1 ? 's' : ''}`;
   const workerNameOf = (wId) => {
     const o = (request.workerOffers || []).find(x => String(x.workerId?._id || x.workerId) === String(wId));
     return o?.workerId?.name || 'Worker';
@@ -276,7 +279,7 @@ const WorkerSelectionPayment = () => {
                 <span className="text-sm font-black text-slate-800">
                   ₹{financials.maximumBudget}
                   <span className="text-xs text-slate-400 font-normal ml-1">
-                    {financials.bookingType === 'DAILY' ? '/day' : '/hr'}
+                    {financials.bookingType === 'DAILY' ? '/day' : (financials.bookingType === 'THEKA' ? '/theka' : '/hr')}
                   </span>
                 </span>
               </div>
@@ -309,7 +312,7 @@ const WorkerSelectionPayment = () => {
                 {workerRates.map((r) => (
                   <div key={String(r.workerId)} className="flex justify-between items-center">
                     <span className="text-[11px] text-slate-500 font-mono">
-                      {workerNameOf(r.workerId)}: ₹{r.offeredRate}/{isDailyQuote ? 'day' : 'hr'} × {timeLabel}
+                      {workerNameOf(r.workerId)}: ₹{r.offeredRate}/{isDailyQuote ? 'day' : (isThekaQuote ? 'theka' : 'hr')} {isThekaQuote ? '' : `× ${timeLabel}`}
                     </span>
                     <span className="text-sm font-black text-slate-800">₹{r.grossAmount}</span>
                   </div>
@@ -328,6 +331,8 @@ const WorkerSelectionPayment = () => {
                   <span className="text-[11px] text-slate-400 font-mono">
                     {financials.bookingType === 'DAILY'
                       ? `₹${financials.maximumBudget} × ${financials.selectedWorkerCount} × ${financials.numberOfDays || 1} day(s)`
+                      : financials.bookingType === 'THEKA'
+                      ? `₹${financials.maximumBudget} × ${financials.selectedWorkerCount} (Theka Contract)`
                       : `₹${financials.maximumBudget} × ${financials.selectedWorkerCount} × ${Number(((financials.durationMinutes || 60) / 60).toFixed(2))} hr(s)`}
                   </span>
                 </div>

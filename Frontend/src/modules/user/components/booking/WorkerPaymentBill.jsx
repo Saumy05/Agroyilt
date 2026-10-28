@@ -10,7 +10,7 @@ import { rupees, paymentLineLabel } from '../../../../utils/workerPayment';
 const WorkerPaymentBill = ({ bill }) => {
   if (!bill || !Array.isArray(bill.lines) || bill.lines.length === 0) return null;
   const isCash = bill.paymentMethod === 'cash';
-  const unit = bill.bookingType === 'DAILY' ? 'day' : 'hr';
+  const unit = bill.bookingType === 'DAILY' ? 'day' : (bill.bookingType === 'THEKA' ? 'theka' : 'hr');
   const allPaid = isCash ? bill.cashDue === 0 && bill.cashPaid > 0 : bill.lines.every(l => l.status === 'paid');
   const refund = bill.refund;
 

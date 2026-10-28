@@ -91,10 +91,11 @@ const travelFields = (request, workerId) => {
 // ── Document builders ────────────────────────────────────────────────────────────────────────────
 const buildDocs = (request, { method, orderId, paymentId }) => {
   const isDaily = request.bookingType === 'DAILY';
+  const isTheka = request.bookingType === 'THEKA';
   const isCash = method === 'cash';
   const snap = request.financialSnapshot || {};
   const commissionRate = snap.commissionRate ?? 10; // `?? 10` (not `|| 10`): an admin-configured 0% is honoured
-  const rateUnit = isDaily ? 'daily' : (request.rateUnit || 'hourly');
+  const rateUnit = isDaily ? 'daily' : (isTheka ? 'theka' : (request.rateUnit || 'hourly'));
   const assignmentDocs = [];
   const bookingDocs = [];
 
@@ -110,6 +111,8 @@ const buildDocs = (request, { method, orderId, paymentId }) => {
     if (isDaily) {
       bookedDays = Number(request.numberOfDays) || 1;
       grossPaise = toP(offeredRate) * bookedDays;
+    } else if (isTheka) {
+      grossPaise = toP(offeredRate);
     } else {
       grossPaise = Math.round(toP(offeredRate) * (workerBookingMath.bookedMinutes(request) / 60));
     }
