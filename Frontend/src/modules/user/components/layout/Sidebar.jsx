@@ -67,7 +67,7 @@ const Sidebar = ({ isOpen, onClose }) => {
       setShowLogoutModal(false);
       setUser(null);
       onClose();
-      navigate('/user/login');
+      navigate('/app/login', { replace: true });
     }
   };
 

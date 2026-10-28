@@ -129,14 +129,11 @@ const Settings = () => {
     try {
       await vendorAuthService.logout();
       toastManager.success('Logged out successfully');
-      navigate('/vendor/login');
+      navigate('/app/login', { replace: true });
     } catch (error) {
-      // Even if API call fails, clear local storage
-      localStorage.removeItem('vendorAccessToken');
-      localStorage.removeItem('vendorRefreshToken');
-      localStorage.removeItem('vendorData');
+      authStorage.clearAllAuthData();
       toastManager.success('Logged out successfully');
-      navigate('/vendor/login');
+      navigate('/app/login', { replace: true });
     } finally {
       setIsLoggingOut(false);
       setShowLogoutModal(false);

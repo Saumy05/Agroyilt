@@ -29,13 +29,13 @@ const AdminHeader = ({ onMenuClick }) => {
     try {
       await adminAuthService.logout();
       toast.success('Logged out successfully');
-      navigate('/admin/login');
+      navigate('/admin/login', { replace: true });
     } catch (error) {
       console.error('Logout error:', error);
       // Even if API call fails, clear session and redirect
-      authStorage.clearAuthSession('admin');
+      authStorage.clearAllAuthData();
       toast.success('Logged out successfully');
-      navigate('/admin/login');
+      navigate('/admin/login', { replace: true });
     } finally {
       setIsLoggingOut(false);
       setShowLogoutModal(false);

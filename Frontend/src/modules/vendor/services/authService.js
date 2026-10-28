@@ -100,11 +100,11 @@ export const login = async (credentials) => {
 export const logout = async () => {
   try {
     const response = await api.post('/vendors/auth/logout');
-    authStorage.clearAuthSession('vendor');
+    authStorage.clearAllAuthData();
     return response.data;
   } catch (error) {
     console.error('Error logging out:', error);
-    authStorage.clearAuthSession('vendor');
+    authStorage.clearAllAuthData();
     throw error;
   }
 };

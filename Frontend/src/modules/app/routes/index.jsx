@@ -1,5 +1,6 @@
-import React, { lazy, Suspense } from 'react';
+import React, { lazy, Suspense, useState, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { isFlutterWebView } from '../../../utils/platformUtils';
 
 const AppEntry = lazy(() => import('../pages/AppEntry'));
 const AppRegister = lazy(() => import('../pages/AppRegister'));
@@ -23,16 +24,37 @@ const LoadingFallback = () => (
   </div>
 );
 
+/**
+ * AppEntry is ONLY intended for the native Flutter mobile app container.
+ * When a visitor in any regular browser (phone browser, desktop, or crawler from Google Search)
+ * hits /app or /app/, they are redirected to the website landing page (/).
+ */
+const AppEntryRoute = () => {
+  const [inApp, setInApp] = useState(isFlutterWebView());
+
+  useEffect(() => {
+    const onReady = () => setInApp(true);
+    window.addEventListener('flutterInAppWebViewPlatformReady', onReady);
+    return () => window.removeEventListener('flutterInAppWebViewPlatformReady', onReady);
+  }, []);
+
+  if (!inApp) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <AppEntry />;
+};
+
 const AppRoutes = () => (
   <Suspense fallback={<LoadingFallback />}>
     <Routes>
-      <Route path="/" element={<AppEntry />} />
+      <Route path="/" element={<AppEntryRoute />} />
       <Route path="/register" element={<AppRegister />} />
       <Route path="/login" element={<AppLogin />} />
       <Route path="/registration-fee" element={<AppRegistrationFee />} />
       <Route path="/guide" element={<AppGuide />} />
-      {/* Catch-all → entry screen */}
-      <Route path="*" element={<Navigate to="/app" replace />} />
+      {/* Catch-all → if someone enters an unknown subpath in browser, redirect to landing page */}
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   </Suspense>
 );

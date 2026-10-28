@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 import { FiChevronLeft, FiPhone, FiCheckCircle, FiLock, FiEye, FiEyeOff, FiAlertCircle } from 'react-icons/fi';
 import { toastManager } from '../../../utils/toastManager';
 import { z } from 'zod';
@@ -8,6 +9,7 @@ import { userAuthService, vendorAuthService, workerAuthService } from '../../../
 import { useBrand } from '../../../context/BrandContext';
 import authStorage from '../../../utils/authStorage';
 import { findVerifiedRole } from '../../../utils/verifySession';
+import { isFlutterWebView } from '../../../utils/platformUtils';
 import SupportContact from '../../../components/common/SupportContact';
 
 // Phone validation
@@ -480,14 +482,40 @@ const AppLogin = () => {
     else if (step === 'forgot_phone') { setStep('login'); setForgotRoles([]); setPreferredForgotRole(null); }
     else if (step === 'forgot_otp') { setOtp(['','','','','','']); if (setupFlow) { setStep('login'); setLoginStage('setup'); } else setStep('forgot_phone'); }
     else if (step === 'set_mpin') { setStep('forgot_otp'); setNewMpin(''); setConfirmMpin(''); }
-    else navigate('/app');
+    else if (isFlutterWebView()) navigate('/app', { replace: true });
+    else navigate('/', { replace: true });
   };
+
+  // Support device back button for login multi-stage wizard
+  useEffect(() => {
+    const isInitialStage = step === 'login' && loginStage === 'phone';
+    if (isInitialStage) return undefined;
+
+    // Push dummy state so device back triggers popstate instead of popping history
+    window.history.pushState({ stage: `${step}_${loginStage}` }, '');
+
+    const onPopState = (e) => {
+      e.preventDefault();
+      handleBack();
+    };
+
+    window.addEventListener('popstate', onPopState);
+    return () => {
+      window.removeEventListener('popstate', onPopState);
+    };
+  }, [step, loginStage, accountRoles.length, setupFlow]);
 
   return (
     <div style={{
       minHeight: '100dvh', display: 'flex', flexDirection: 'column',
       background: '#F8FAF8', fontFamily: "'Inter', 'Segoe UI', sans-serif",
     }}>
+      <Helmet>
+        <title>Login | AgroYilt</title>
+        <link rel="canonical" href="https://agroyilt.com/" />
+        <meta name="robots" content="noindex, follow" />
+      </Helmet>
+
       {/* Header */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: '12px',

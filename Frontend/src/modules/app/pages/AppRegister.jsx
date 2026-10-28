@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 import { FiChevronRight, FiChevronLeft, FiUser, FiTruck, FiTool, FiUsers, FiX, FiGift } from 'react-icons/fi';
 import { useBrand } from '../../../context/BrandContext';
 import useReferralEnabled from '../../../hooks/useReferralEnabled';
 import { extractReferralCode } from '../../../utils/referralStorage';
+import { isFlutterWebView } from '../../../utils/platformUtils';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const roles = [
@@ -48,6 +50,14 @@ const AppRegister = () => {
   const rawRef = searchParams.get('ref') || searchParams.get('referralCode') || '';
   const refCode = extractReferralCode(rawRef);
 
+  const handleBack = () => {
+    if (isFlutterWebView()) {
+      navigate('/app');
+    } else {
+      navigate('/');
+    }
+  };
+
   const handleProceed = () => {
     if (!selected) return;
     if (selected === 'worker') {
@@ -71,6 +81,12 @@ const AppRegister = () => {
         fontFamily: "'Inter', 'Segoe UI', sans-serif",
       }}
     >
+      <Helmet>
+        <title>Create Account | {appName || 'AgroYilt'}</title>
+        <link rel="canonical" href="https://agroyilt.com/" />
+        <meta name="robots" content="noindex, follow" />
+      </Helmet>
+
       {/* Header */}
       <div style={{
         display: 'flex', alignItems: 'center',
@@ -82,7 +98,7 @@ const AppRegister = () => {
       }}>
         <button
           id="app-register-back-btn"
-          onClick={() => navigate('/app')}
+          onClick={handleBack}
           style={{
             background: 'none', border: 'none', cursor: 'pointer',
             padding: '6px', borderRadius: '10px',

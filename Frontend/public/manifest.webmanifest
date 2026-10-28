@@ -2,12 +2,12 @@
   "name": "AgroYilt",
   "short_name": "AgroYilt",
   "description": "Farm machinery, labour and drone spraying for farmers.",
-  "start_url": "/app",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "theme_color": "#1B5E20",
-  "background_color": "#1B5E20",
+  "theme_color": "#2E7D32",
+  "background_color": "#ffffff",
   "icons": [
     { "src": "/AgroyiltLogo.png", "sizes": "1254x1254", "type": "image/png", "purpose": "any" }
   ]

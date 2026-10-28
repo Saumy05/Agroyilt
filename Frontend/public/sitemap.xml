@@ -3,45 +3,67 @@
   <!-- Main Landing Page -->
   <url>
     <loc>https://agroyilt.com/</loc>
-    <lastmod>2026-09-21</lastmod>
+    <lastmod>2026-10-28</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
 
-  <!-- Blogs Section -->
+  <!-- Information & Features -->
   <url>
-    <loc>https://agroyilt.com/blogs</loc>
-    <lastmod>2026-09-21</lastmod>
-    <changefreq>daily</changefreq>
+    <loc>https://agroyilt.com/about</loc>
+    <lastmod>2026-10-28</lastmod>
+    <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
-
-  <!-- Articles Section -->
   <url>
-    <loc>https://agroyilt.com/articles</loc>
-    <lastmod>2026-09-21</lastmod>
-    <changefreq>daily</changefreq>
+    <loc>https://agroyilt.com/services</loc>
+    <lastmod>2026-10-28</lastmod>
+    <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
-
-  <!-- Machinery Explorer -->
   <url>
-    <loc>https://agroyilt.com/user/machinery-explorer</loc>
-    <lastmod>2026-09-21</lastmod>
+    <loc>https://agroyilt.com/workflow</loc>
+    <lastmod>2026-10-28</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://agroyilt.com/faq</loc>
+    <lastmod>2026-10-28</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://agroyilt.com/guide</loc>
+    <lastmod>2026-10-28</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
 
-  <!-- Auth Pages -->
+  <!-- Content & Resources -->
   <url>
-    <loc>https://agroyilt.com/user/login</loc>
-    <lastmod>2026-09-21</lastmod>
+    <loc>https://agroyilt.com/blogs</loc>
+    <lastmod>2026-10-28</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://agroyilt.com/articles</loc>
+    <lastmod>2026-10-28</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- Legal & Policies -->
+  <url>
+    <loc>https://agroyilt.com/terms</loc>
+    <lastmod>2026-10-28</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://agroyilt.com/user/signup</loc>
-    <lastmod>2026-09-21</lastmod>
+    <loc>https://agroyilt.com/privacy</loc>
+    <lastmod>2026-10-28</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>

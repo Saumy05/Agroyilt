@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 import { FiUser, FiMail, FiPhone, FiFileText, FiUpload, FiCamera, FiX, FiArrowRight, FiChevronLeft, FiCheckCircle } from 'react-icons/fi';
 import { toastManager } from '../../../utils/toastManager';
 import { themeColors } from '../../../theme';
@@ -424,8 +425,12 @@ const WorkerSignup = () => {
   const brandColor = themeColors.brand?.teal || '#347989';
 
   return (
-
     <div className="min-h-[100dvh] bg-gray-50 flex flex-col justify-start sm:justify-center py-12 sm:px-6 lg:px-8 relative">
+      <Helmet>
+        <title>Worker Registration | AgroYilt</title>
+        <link rel="canonical" href="https://agroyilt.com/" />
+        <meta name="robots" content="noindex, follow" />
+      </Helmet>
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center mb-8 relative z-10 animate-fade-in">
         <Logo className="h-16 w-auto mx-auto transform hover:scale-110 transition-transform duration-500" />
         <h2 className="mt-4 text-3xl font-extrabold text-gray-900 tracking-tight">

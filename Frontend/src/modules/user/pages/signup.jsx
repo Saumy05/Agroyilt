@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 import { FiUser, FiMail, FiPhone, FiArrowRight, FiChevronLeft, FiCheckCircle } from 'react-icons/fi';
 import { toastManager } from '../../../utils/toastManager';
 import { themeColors } from '../../../theme';
@@ -279,6 +280,11 @@ const Signup = () => {
     <div
       className="min-h-[100dvh] flex flex-col relative overflow-x-hidden bg-white justify-center items-center"
     >
+      <Helmet>
+        <title>Farmer Registration | AgroYilt</title>
+        <link rel="canonical" href="https://agroyilt.com/" />
+        <meta name="robots" content="noindex, follow" />
+      </Helmet>
       {/* Top Background with Wave */}
       <div
         className="absolute top-0 left-0 w-full h-[25vh] bg-cover bg-center z-0 sm:hidden"

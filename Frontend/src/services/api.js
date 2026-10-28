@@ -229,24 +229,20 @@ api.interceptors.response.use(
 export const handleLogout = (role = null) => {
   const targetRole = role ? normalizeRole(role) : getCurrentPortalRole();
 
-  // Clear this specific role session from the tab
-  authStorage.clearAuthSession(targetRole);
+  // Clear all role sessions and tokens
+  authStorage.clearAllAuthData();
 
-  // If already on a login/auth page, DO NOT reload or redirect via window.location.href!
+  // If already on a login/auth page, DO NOT reload or redirect via window.location!
   const currentPath = typeof window !== 'undefined' ? window.location.pathname.toLowerCase() : '';
   if (currentPath.includes('/login') || currentPath.includes('/app') || currentPath.includes('/signup')) {
     return;
   }
 
-  // Navigate to portal login without affecting other tabs
-  if (targetRole === 'vendor') {
-    window.location.href = '/vendor/login';
-  } else if (targetRole === 'worker') {
-    window.location.href = '/worker/login';
-  } else if (targetRole === 'admin') {
-    window.location.href = '/admin/login';
+  // Replace history entry to prevent back-loop traps into protected pages
+  if (targetRole === 'admin') {
+    window.location.replace('/admin/login');
   } else {
-    window.location.href = '/user/login';
+    window.location.replace('/app/login');
   }
 };
 

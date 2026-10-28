@@ -83,7 +83,7 @@ export const userAuthService = {
     } catch (error) {
       console.error('Logout error:', error);
     }
-    authStorage.clearAuthSession('user');
+    authStorage.clearAllAuthData();
   },
 
   // Get profile
@@ -208,7 +208,7 @@ export const vendorAuthService = {
     } catch (error) {
       console.error('Logout error:', error);
     }
-    authStorage.clearAuthSession('vendor');
+    authStorage.clearAllAuthData();
   },
 
   // Get profile
@@ -345,7 +345,7 @@ export const workerAuthService = {
     } catch (error) {
       console.error('Logout error:', error);
     }
-    authStorage.clearAuthSession('worker');
+    authStorage.clearAllAuthData();
   },
 
   // Get profile
@@ -421,7 +421,7 @@ export const adminAuthService = {
     } catch (error) {
       console.error('Logout error:', error);
     }
-    authStorage.clearAuthSession('admin');
+    authStorage.clearAllAuthData();
   }
 };
 

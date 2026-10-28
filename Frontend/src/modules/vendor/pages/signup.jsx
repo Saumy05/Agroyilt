@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 import { FiUser, FiMail, FiPhone, FiFileText, FiUpload, FiX, FiArrowRight, FiChevronLeft, FiCheckCircle, FiCamera, FiBriefcase, FiChevronDown } from 'react-icons/fi';
 import { toastManager } from '../../../utils/toastManager';
 import { themeColors } from '../../../theme';
@@ -481,6 +482,11 @@ const VendorSignup = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-start items-center py-10 px-4 sm:px-6 lg:px-8 relative">
+      <Helmet>
+        <title>Vendor Registration | AgroYilt</title>
+        <link rel="canonical" href="https://agroyilt.com/" />
+        <meta name="robots" content="noindex, follow" />
+      </Helmet>
       {/* Decorative Background Elements - Fixed Container to prevent scroll issues */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-[#347989] opacity-[0.03] rounded-full blur-3xl animate-floating" />

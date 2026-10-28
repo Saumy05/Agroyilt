@@ -128,14 +128,11 @@ const Settings = () => {
     try {
       await workerAuthService.logout();
       toastManager.success('Logged out successfully');
-      navigate('/worker/login');
+      navigate('/app/login', { replace: true });
     } catch (error) {
-      // Even if API call fails, clear local storage
-      localStorage.removeItem('workerAccessToken');
-      localStorage.removeItem('workerRefreshToken');
-      localStorage.removeItem('workerData');
+      authStorage.clearAllAuthData();
       toastManager.success('Logged out successfully');
-      navigate('/worker/login');
+      navigate('/app/login', { replace: true });
     } finally {
       setIsLoggingOut(false);
       setShowLogoutModal(false);

@@ -263,6 +263,9 @@ export const getAuthSession = (role) => {
 
     // 5. Fallback: Check persistent cookie (managed by WebView CookieManager)
     try {
+      if (localStorage.getItem('agroyilt_explicit_logout')) {
+        return null;
+      }
       const cookieMatch = document.cookie.match(/(?:^|;\s*)accessToken=([^;]+)/);
       const cookieRoleMatch = document.cookie.match(/(?:^|;\s*)agroyilt_role=([^;]+)/);
       if (cookieMatch) {
@@ -321,6 +324,11 @@ export const setAuthSession = (role, sessionData) => {
   };
 
   try {
+    try {
+      localStorage.removeItem('agroyilt_explicit_logout');
+      sessionStorage.removeItem('agroyilt_explicit_logout');
+    } catch (e) {}
+
     const sessionStr = JSON.stringify(structuredSession);
     const profileStr = JSON.stringify(profile);
 
@@ -361,53 +369,156 @@ export const setAuthSession = (role, sessionData) => {
 };
 
 /**
- * Clear authentication session for a specific role across all storage mechanisms:
- * sessionStorage, localStorage, and persistent cookies.
- * Also notifies Flutter WebView container if running inside WebView.
- * 
- * @param {'user' | 'worker' | 'vendor' | 'admin'} role 
+ * Completely wipe all authentication data, tokens, user data, cached roles,
+ * cookies, and temporary auth state across all roles and storage mediums.
+ * Prevents any zombie session restoration and ensures clean logout.
  */
-export const clearAuthSession = (role) => {
+export const clearAllAuthData = () => {
   if (typeof window === 'undefined') return;
-  const canonicalRole = normalizeRole(role);
-  const sessionKey = AUTH_KEYS[canonicalRole];
-  const compat = COMPAT_KEYS[canonicalRole];
+
+  const roles = ['user', 'worker', 'vendor', 'admin'];
 
   try {
-    // 1. Remove from sessionStorage
+    // 1. Mark explicit logout to prevent zombie cookie resurrection
     try {
-      sessionStorage.removeItem(sessionKey);
-      sessionStorage.removeItem(compat.access);
-      sessionStorage.removeItem(compat.refresh);
-      sessionStorage.removeItem(compat.data);
+      localStorage.setItem('agroyilt_explicit_logout', Date.now().toString());
     } catch (e) {}
 
-    // 2. Remove from localStorage
+    // 2. Clear structured & compat keys for all roles
+    roles.forEach((r) => {
+      const sessionKey = AUTH_KEYS[r];
+      const compat = COMPAT_KEYS[r];
+
+      try {
+        if (sessionKey) {
+          sessionStorage.removeItem(sessionKey);
+          localStorage.removeItem(sessionKey);
+        }
+        if (compat) {
+          sessionStorage.removeItem(compat.access);
+          sessionStorage.removeItem(compat.refresh);
+          sessionStorage.removeItem(compat.data);
+          localStorage.removeItem(compat.access);
+          localStorage.removeItem(compat.refresh);
+          localStorage.removeItem(compat.data);
+        }
+      } catch (e) {}
+    });
+
+    // 3. Clear known auth, role, and FCM keys
+    const extraKeys = [
+      LAST_ROLE_KEY,
+      'pendingRole',
+      'preAuthToken',
+      'vendorProfile',
+      'vendorBankAccount',
+      'vendorOnlineStatus',
+      'vendorPendingJobs',
+      'vendorStats',
+      'vendorDashboardStats',
+      'vendorDashboardRecentJobs',
+      'workerSettings',
+      'vendorSettings',
+      'fcm_token_user_web',
+      'fcm_token_user_mobile',
+      'fcm_token_vendor_web',
+      'fcm_token_vendor_mobile',
+      'fcm_token_worker_web',
+      'fcm_token_worker_mobile'
+    ];
+
+    extraKeys.forEach((key) => {
+      try {
+        sessionStorage.removeItem(key);
+        localStorage.removeItem(key);
+      } catch (e) {}
+    });
+
+    // 4. Scan & remove any dynamic auth or role keys
     try {
-      localStorage.removeItem(sessionKey);
-      localStorage.removeItem(compat.access);
-      localStorage.removeItem(compat.refresh);
-      localStorage.removeItem(compat.data);
+      const lsKeysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k !== 'agroyilt_explicit_logout' && (
+          k.startsWith('agroyilt_auth_') ||
+          k.startsWith('agroyilt_last_') ||
+          k.startsWith('fcm_token_')
+        )) {
+          lsKeysToRemove.push(k);
+        }
+      }
+      lsKeysToRemove.forEach((k) => localStorage.removeItem(k));
     } catch (e) {}
 
-    try { if (localStorage.getItem(LAST_ROLE_KEY) === canonicalRole) localStorage.removeItem(LAST_ROLE_KEY); } catch (e) {}
-
-    // 3. Expire persistent cookies
     try {
-      document.cookie = 'accessToken=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
-      document.cookie = 'agroyilt_role=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+      const ssKeysToRemove = [];
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const k = sessionStorage.key(i);
+        if (k && (
+          k.startsWith('agroyilt_auth_') ||
+          k.startsWith('agroyilt_last_') ||
+          k.startsWith('fcm_token_')
+        )) {
+          ssKeysToRemove.push(k);
+        }
+      }
+      ssKeysToRemove.forEach((k) => sessionStorage.removeItem(k));
     } catch (e) {}
 
-    // 4. Notify Flutter WebView container of explicit logout
+    // 5. Wipe all auth cookies across multiple path/domain combinations
+    try {
+      const cookieNames = ['accessToken', 'agroyilt_role', 'refreshToken'];
+      if (document.cookie) {
+        document.cookie.split(';').forEach((c) => {
+          const eq = c.indexOf('=');
+          const name = eq > -1 ? c.substring(0, eq).trim() : c.trim();
+          if (name) cookieNames.push(name);
+        });
+      }
+
+      const uniqueNames = Array.from(new Set(cookieNames));
+      const host = window.location.hostname;
+      const hostParts = host ? host.split('.') : [];
+      const domains = ['', `domain=${host};`, `domain=.${host};`];
+      if (hostParts.length > 2) {
+        const parent = hostParts.slice(1).join('.');
+        domains.push(`domain=${parent};`, `domain=.${parent};`);
+      }
+      const paths = ['path=/;', 'path=/app;', 'path=/user;', 'path=/vendor;', 'path=/worker;', 'path=/admin;'];
+
+      uniqueNames.forEach((name) => {
+        paths.forEach((p) => {
+          domains.forEach((d) => {
+            document.cookie = `${name}=; ${p} ${d} max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
+            document.cookie = `${name}=; ${p} ${d} expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+          });
+        });
+      });
+    } catch (e) {}
+
+    // 6. Notify Flutter WebView container
     try {
       if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-        window.flutter_inappwebview.callHandler('onWebLogout', JSON.stringify({ role: canonicalRole }));
+        window.flutter_inappwebview.callHandler('onWebLogout', JSON.stringify({ role: 'all' }));
+        window.flutter_inappwebview.callHandler('clearAuth');
+        window.flutter_inappwebview.callHandler('clearCookies');
       }
     } catch (e) {}
 
   } catch (err) {
-    console.error(`[authStorage] Error clearing session for ${canonicalRole}:`, err);
+    console.error('[authStorage] Error in clearAllAuthData:', err);
   }
+};
+
+/**
+ * Clear authentication session across all storage mechanisms:
+ * sessionStorage, localStorage, and persistent cookies.
+ * Also notifies Flutter WebView container if running inside WebView.
+ * 
+ * @param {'user' | 'worker' | 'vendor' | 'admin'} [role] 
+ */
+export const clearAuthSession = (role) => {
+  clearAllAuthData();
 };
 
 
@@ -534,6 +645,7 @@ export default {
   getAuthSession,
   setAuthSession,
   clearAuthSession,
+  clearAllAuthData,
   getAccessToken,
   getRefreshToken,
   getUserData,

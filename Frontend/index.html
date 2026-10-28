@@ -21,6 +21,7 @@
   <meta name="description" content="Agroyilt is India's leading platform for professional agriculture equipment booking. Rent tractors, harvesters, and more from verified vendors." />
   <meta name="keywords" content="agriculture equipment, tractor rental, harvester booking, Agroyilt, farm machinery India, smart farming" />
   <meta name="author" content="Agroyilt" />
+  <link rel="canonical" href="https://agroyilt.com/" />
   
   <!-- Open Graph / Social Media -->
   <meta property="og:type" content="website" />
@@ -73,8 +74,8 @@
     (function () {
       var p = location.pathname;
       var isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent) || window.innerWidth <= 820;
-      // The green entry screen is /app, and / only inside the app's WebView (a phone browser shows the website at /)
-      var isEntry = p === '/app' || p === '/app/' || (p === '/' && !!window.flutter_inappwebview);
+      // The green entry screen is only active inside the app's WebView (a phone browser shows the website)
+      var isEntry = (p === '/app' || p === '/app/' || p === '/') && !!window.flutter_inappwebview;
       if (isEntry && isMobile) {
         document.documentElement.classList.add('app-splash');
         document.querySelector('meta[name="theme-color"]').setAttribute('content', '#1B5E20');

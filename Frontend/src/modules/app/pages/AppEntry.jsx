@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 import { FiArrowRight, FiPlay } from 'react-icons/fi';
 import { useBrand } from '../../../context/BrandContext';
 import authStorage from '../../../utils/authStorage';
 import { findVerifiedRole } from '../../../utils/verifySession';
+import { isFlutterWebView } from '../../../utils/platformUtils';
 import SupportContact from '../../../components/common/SupportContact';
 
 const AppEntry = () => {
@@ -17,6 +19,13 @@ const AppEntry = () => {
   );
   const [checking, setChecking] = useState(hasStoredSession);
   const [authenticatedRole, setAuthenticatedRole] = useState(null);
+
+  // In any regular browser (phone or desktop), /app should immediately redirect to the landing page
+  useEffect(() => {
+    if (!isFlutterWebView()) {
+      navigate('/', { replace: true });
+    }
+  }, [navigate]);
 
   // index.html paints the page green for the mobile entry screen; drop it once this screen is gone
   // ...and hand the status bar back to the white app screens
@@ -75,6 +84,11 @@ const AppEntry = () => {
         overflow: 'hidden',
       }}
     >
+      <Helmet>
+        <title>{appName || 'AgroYilt'} | Modern Farming Solutions</title>
+        <link rel="canonical" href="https://agroyilt.com/" />
+        <meta name="robots" content="noindex, follow" />
+      </Helmet>
       {/* Background decorative circles */}
       <div style={{
         position: 'absolute', top: '-80px', right: '-80px',

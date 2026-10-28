@@ -353,13 +353,11 @@ const Settings = () => {
           try {
             await userAuthService.logout();
             toastManager.success('Logged out successfully');
-            navigate('/user/login');
+            navigate('/app/login', { replace: true });
           } catch (error) {
-            localStorage.removeItem('accessToken');
-            localStorage.removeItem('refreshToken');
-            localStorage.removeItem('userData');
+            authStorage.clearAllAuthData();
             toastManager.success('Logged out successfully');
-            navigate('/user/login');
+            navigate('/app/login', { replace: true });
           } finally {
             setIsLoggingOut(false);
             setShowLogoutModal(false);

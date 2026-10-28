@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
+import { isFlutterWebView } from '../../../utils/platformUtils';
 import {
   FiArrowLeft,
   FiPlay,
@@ -109,7 +111,11 @@ const AppGuide = () => {
   }, [activeRole]);
 
   const handleBack = () => {
-    navigate('/app');
+    if (isFlutterWebView()) {
+      navigate('/app');
+    } else {
+      navigate('/');
+    }
   };
 
   const togglePlay = () => {
@@ -138,6 +144,10 @@ const AppGuide = () => {
         fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
       }}
     >
+      <Helmet>
+        <title>App Guide & Tutorials | AgroYilt</title>
+        <link rel="canonical" href="https://agroyilt.com/guide" />
+      </Helmet>
       {/* Top App Bar */}
       <div
         style={{

@@ -43,13 +43,13 @@ const ProtectedRoute = ({ children, userType = 'user', redirectTo = null }) => {
   if (!isAuth) {
     // Determine redirect path
     const defaultRedirects = {
-      user: '/user/login',
-      vendor: '/vendor/login',
-      worker: '/worker/login',
+      user: '/app/login',
+      vendor: '/app/login',
+      worker: '/app/login',
       admin: '/admin/login'
     };
 
-    const redirectPath = redirectTo || defaultRedirects[canonicalRole] || '/user/login';
+    const redirectPath = redirectTo || defaultRedirects[canonicalRole] || '/app/login';
 
     return <Navigate to={redirectPath} state={{ from: location, role: canonicalRole }} replace />;
   }
