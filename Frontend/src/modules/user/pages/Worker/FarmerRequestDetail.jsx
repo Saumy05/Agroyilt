@@ -694,7 +694,8 @@ const FarmerRequestDetail = () => {
               const isCash = request.paymentMethod === 'cash';
               const isConfirmed = ['confirmed', 'in_progress', 'partially_completed', 'completed'].includes(request.status);
               const isPaid = request.paymentStatus === 'success' || (isCash && isConfirmed);
-              const isDaily = request.bookingType === 'DAILY' || request.rateUnit === 'daily';
+              const isTheka = request.bookingType === 'THEKA' || request.rateUnit === 'theka';
+              const isDaily = !isTheka && (request.bookingType === 'DAILY' || request.rateUnit === 'daily');
               const effectiveWorkerCount = (isPaid || isConfirmed)
                 ? (request.paymentSummary?.selectedWorkerCount || request.selectedWorkerIds?.length || 1)
                 : (selectedWorkerIds.length > 0 ? selectedWorkerIds.length : (request.selectedWorkerIds?.length || request.requiredWorkers || 1));
@@ -711,7 +712,7 @@ const FarmerRequestDetail = () => {
               // Duration in hours (for hourly booking)
               let durationHours = 1;
               let diffMinutes = 60;
-              if (!isDaily) {
+              if (!isDaily && !isTheka) {
                 if (request.durationMinutes && Number(request.durationMinutes) > 0) {
                   diffMinutes = Number(request.durationMinutes);
                   durationHours = diffMinutes / 60;
@@ -744,7 +745,12 @@ const FarmerRequestDetail = () => {
               if (!isPaid && !isConfirmed && selectedWorkerIds.length > 0) {
                 agreedRows = selectedWorkerIds.map((wId) => {
                   const rate = Number(offerOf(wId)?.offeredRate) || ratePerWorker;
-                  return { id: wId, name: workerNameOf(wId), rate, gross: isDaily ? Math.round(rate * numberOfDays) : Math.round(rate * durationHours) };
+                  return {
+                    id: wId,
+                    name: workerNameOf(wId),
+                    rate,
+                    gross: isTheka ? Math.round(rate) : (isDaily ? Math.round(rate * numberOfDays) : Math.round(rate * durationHours))
+                  };
                 });
               } else if (snapRates.length > 0) {
                 agreedRows = snapRates.map(r => ({ id: r.workerId, name: workerNameOf(r.workerId), rate: Number(r.offeredRate), gross: Number(r.grossAmount) }));
@@ -753,9 +759,11 @@ const FarmerRequestDetail = () => {
               // Worker payment: what the selected workers quoted (or, for older bookings, the farmer's maximum × workers × time)
               const calculatedReserve = agreedRows
                 ? agreedRows.reduce((sum, r) => sum + r.gross, 0)
-                : (isDaily
-                  ? Math.round(ratePerWorker * effectiveWorkerCount * numberOfDays)
-                  : Math.round(ratePerWorker * effectiveWorkerCount * durationHours));
+                : (isTheka
+                  ? Math.round(ratePerWorker * effectiveWorkerCount)
+                  : (isDaily
+                    ? Math.round(ratePerWorker * effectiveWorkerCount * numberOfDays)
+                    : Math.round(ratePerWorker * effectiveWorkerCount * durationHours)));
 
               const reserveAmount = isPaid
                 ? Number(request.paymentSummary?.workerReserveAmount || calculatedReserve)
@@ -773,7 +781,7 @@ const FarmerRequestDetail = () => {
                 ? Number(request.paymentSummary?.totalPaidAmount || request.financialSnapshot?.totalPayable || (reserveAmount + platformFee + travelAmount))
                 : (reserveAmount + platformFee + travelAmount);
 
-              const rateUnitDisplay = isDaily ? '/day' : '/hourly';
+              const rateUnitDisplay = isTheka ? '/theka' : (isDaily ? '/day' : '/hr');
 
               const formatDurationText = (mins, hrs) => {
                 if (mins && mins > 0) {
@@ -790,9 +798,11 @@ const FarmerRequestDetail = () => {
               const formattedDuration = formatDurationText(diffMinutes, durationHours);
               const cleanDurationHours = Number(durationHours.toFixed(2));
 
-              const calculationFormulaText = isDaily
-                ? `₹${ratePerWorker.toLocaleString('en-IN')} × ${effectiveWorkerCount} worker${effectiveWorkerCount !== 1 ? 's' : ''} × ${numberOfDays} day${numberOfDays !== 1 ? 's' : ''}`
-                : `₹${ratePerWorker.toLocaleString('en-IN')} × ${effectiveWorkerCount} worker${effectiveWorkerCount !== 1 ? 's' : ''} × ${cleanDurationHours} hr${cleanDurationHours !== 1 ? 's' : ''}`;
+              const calculationFormulaText = isTheka
+                ? `₹${ratePerWorker.toLocaleString('en-IN')} × ${effectiveWorkerCount} worker${effectiveWorkerCount !== 1 ? 's' : ''} (Theka Contract)`
+                : (isDaily
+                  ? `₹${ratePerWorker.toLocaleString('en-IN')} × ${effectiveWorkerCount} worker${effectiveWorkerCount !== 1 ? 's' : ''} × ${numberOfDays} day${numberOfDays !== 1 ? 's' : ''}`
+                  : `₹${ratePerWorker.toLocaleString('en-IN')} × ${effectiveWorkerCount} worker${effectiveWorkerCount !== 1 ? 's' : ''} × ${cleanDurationHours} hr${cleanDurationHours !== 1 ? 's' : ''}`);
 
               return (
                 <div className="space-y-3 text-sm">
@@ -813,21 +823,27 @@ const FarmerRequestDetail = () => {
                     </div>
                   )}
 
-                  {!isDaily && (
+                  {isTheka ? (
+                    <div className="flex justify-between items-center text-slate-600">
+                      <span className="font-medium">Work Schedule</span>
+                      <span className="font-bold text-slate-900">
+                        Contract Task
+                        {request.startTime && <span className="text-xs text-slate-400 font-normal ml-1">(Report by {request.startTime})</span>}
+                      </span>
+                    </div>
+                  ) : isDaily ? (
+                    <div className="flex justify-between items-center text-slate-600">
+                      <span className="font-medium">Working Days</span>
+                      <span className="font-bold text-slate-900">
+                        {numberOfDays} day{numberOfDays !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                  ) : (
                     <div className="flex justify-between items-center text-slate-600">
                       <span className="font-medium">Booking Duration</span>
                       <span className="font-bold text-slate-900">
                         {formattedDuration}
                         <span className="text-xs text-slate-400 font-normal ml-1">({request.startTime} - {request.endTime})</span>
-                      </span>
-                    </div>
-                  )}
-
-                  {isDaily && (
-                    <div className="flex justify-between items-center text-slate-600">
-                      <span className="font-medium">Working Days</span>
-                      <span className="font-bold text-slate-900">
-                        {numberOfDays} day{numberOfDays !== 1 ? 's' : ''}
                       </span>
                     </div>
                   )}
@@ -838,7 +854,7 @@ const FarmerRequestDetail = () => {
                       {agreedRows.map((r) => (
                         <div key={String(r.id)} className="flex justify-between items-center">
                           <span className="text-[11px] text-slate-400 font-mono">
-                            {r.name}: ₹{r.rate.toLocaleString('en-IN')}{isDaily ? '/day' : '/hr'} × {isDaily ? `${numberOfDays} day${numberOfDays !== 1 ? 's' : ''}` : `${cleanDurationHours} hr${cleanDurationHours !== 1 ? 's' : ''}`}
+                            {r.name}: ₹{r.rate.toLocaleString('en-IN')}{isTheka ? '/theka (Contract)' : isDaily ? `/day × ${numberOfDays} day${numberOfDays !== 1 ? 's' : ''}` : `/hr × ${cleanDurationHours} hr${cleanDurationHours !== 1 ? 's' : ''}`}
                           </span>
                           <span className="font-bold text-slate-900">₹{r.gross.toLocaleString('en-IN')}</span>
                         </div>

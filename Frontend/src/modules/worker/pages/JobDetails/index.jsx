@@ -1408,7 +1408,11 @@ const JobDetails = () => {
                         <div className="flex justify-between text-gray-600">
                           <div>
                             <span className="font-medium block">Agreed Rate (Gross)</span>
-                            {job.bookingType !== 'DAILY' && (job.workedMinutes ? (
+                            {job.bookingType === 'THEKA' ? (
+                              <span className="text-[11px] text-gray-400">
+                                ₹{Number(job.agreedRate || 0).toLocaleString('en-IN')}/theka (Fixed Task Contract)
+                              </span>
+                            ) : job.bookingType !== 'DAILY' && (job.workedMinutes ? (
                               <span className="text-[11px] text-gray-400">
                                 ₹{Number(job.agreedRate || 0).toLocaleString('en-IN')}/hr × {fmtBooked(job.workedMinutes)} worked
                                 {fmtBooked(job.bookedMinutes) ? ` (${fmtBooked(job.bookedMinutes)} booked)` : ''}

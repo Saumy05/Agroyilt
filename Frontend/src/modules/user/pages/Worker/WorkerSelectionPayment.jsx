@@ -285,7 +285,15 @@ const WorkerSelectionPayment = () => {
               </div>
             )}
 
-            {financials.durationMinutes ? (
+            {isThekaQuote ? (
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium text-slate-600">Task Schedule</span>
+                <span className="text-sm font-black text-slate-800">
+                  Theka Contract
+                  {request?.startTime && <span className="text-xs text-slate-400 font-normal ml-1">(Report by {request.startTime})</span>}
+                </span>
+              </div>
+            ) : financials.durationMinutes ? (
               <div className="flex justify-between items-center">
                 <span className="text-sm font-medium text-slate-600">Booking Duration</span>
                 <span className="text-sm font-black text-slate-800">

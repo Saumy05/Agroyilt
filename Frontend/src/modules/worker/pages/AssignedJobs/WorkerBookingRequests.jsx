@@ -116,7 +116,8 @@ const WorkerBookingRequests = () => {
 
   const handleAction = async (id, action, minRate, maxRate) => {
     if (action === 'accept') {
-      const rate = Number(offeredRates[id]);
+      const rawRate = offeredRates[id];
+      const rate = rawRate !== undefined && rawRate !== '' ? Number(rawRate) : Number(maxRate || minRate);
       if (!rate || (minRate && rate < minRate) || (maxRate && rate > maxRate)) {
         toast.error(`Please enter a valid rate between ₹${minRate || 0} and ₹${maxRate}`);
         return;
@@ -204,7 +205,9 @@ const WorkerBookingRequests = () => {
             <div className="col-span-2 mt-2 pt-2 border-t border-slate-200">
               <p className="text-[10px] text-slate-400 font-bold uppercase mb-1 flex items-center gap-1"><FiDollarSign /> Farmer Budget</p>
               <p className="font-black text-lg text-emerald-600">
-                ₹{req.minRate} - ₹{req.maxRate} <span className="text-xs text-slate-400 font-medium">/{req.rateUnit || 'daily'}</span>
+                {req.minRate && req.maxRate && req.minRate !== req.maxRate
+                  ? `₹${req.minRate} - ₹${req.maxRate}`
+                  : `₹${req.minRate || req.maxRate}`} <span className="text-xs text-slate-400 font-medium">/{req.rateUnit || (req.bookingType === 'THEKA' ? 'theka' : (req.bookingType === 'DAILY' ? 'day' : 'hr'))}</span>
               </p>
             </div>
           </div>

@@ -27,7 +27,12 @@ const WorkerWorkTime = ({ workTime }) => {
       <div className="min-w-0">
         <p className="text-[11px] font-black uppercase tracking-wider text-slate-500">Work Time</p>
         <p className="text-base font-black text-slate-900">{headline}</p>
-        {started && !isDaily && (
+        {started && isTheka && (
+          <p className="text-xs text-slate-500 mt-0.5">
+            {time(workTime.startedAt)} – {stopped ? time(workTime.stoppedAt) : 'now'} · Contract Task
+          </p>
+        )}
+        {started && !isDaily && !isTheka && (
           <p className="text-xs text-slate-500 mt-0.5">
             {time(workTime.startedAt)} – {stopped ? time(workTime.stoppedAt) : 'now'}
             {workTime.bookedMinutes ? ` · booked ${workLength({ minutes: workTime.bookedMinutes })}` : ''}

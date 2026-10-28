@@ -126,14 +126,24 @@ const WorkerBookingRequestAlertModal = ({ isOpen, requestData, onClose, onReques
     requestData?.minRate ||
     0
   );
-  const teamInviteUnit = requestData?.rateUnit || (requestData?.bookingType === 'DAILY' ? 'day' : 'hr');
+  const teamInviteUnit = requestData?.rateUnit || (requestData?.bookingType === 'DAILY' ? 'day' : (requestData?.bookingType === 'THEKA' ? 'theka' : 'hr'));
 
   // Estimate total earnings based on rate and shift duration
   const estimatedEarnings = useMemo(() => {
     if (!requestData) return null;
-    const isDaily = Boolean(requestData.startDate || requestData.bookingType === 'DAILY' || requestData.rateUnit === 'daily');
+    const isTheka = Boolean(requestData.bookingType === 'THEKA' || requestData.rateUnit === 'theka');
+    const isDaily = !isTheka && Boolean(requestData.startDate || requestData.bookingType === 'DAILY' || requestData.rateUnit === 'daily');
     const rate = Number(requestData.minRate || requestData.farmerOfferedRate || requestData.offeredRate || 0);
     if (!rate) return null;
+
+    if (isTheka) {
+      return {
+        amount: Math.round(rate),
+        duration: 'Contract Task',
+        isDaily: false,
+        isTheka: true
+      };
+    }
 
     if (isDaily) {
       const days = Number(requestData.numberOfDays) || 1;
@@ -734,7 +744,9 @@ const WorkerBookingRequestAlertModal = ({ isOpen, requestData, onClose, onReques
                       <p className="text-xs font-bold text-slate-800">
                         {requestData.bookingType === 'DAILY'
                           ? `${requestData.numberOfDays || 1} Day(s) • Starts ${requestData.startDate ? new Date(requestData.startDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) : (requestData.scheduledDate ? new Date(requestData.scheduledDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) : 'Soon')}`
-                          : `${requestData.scheduledDate ? new Date(requestData.scheduledDate).toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Today'} • ${to12HourText(requestData.startTime) || 'Flexible'}${requestData.endTime ? ` - ${to12HourText(requestData.endTime)}` : ''}`}
+                          : (requestData.bookingType === 'THEKA'
+                            ? `${requestData.scheduledDate ? new Date(requestData.scheduledDate).toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Today'} • Report by ${to12HourText(requestData.startTime) || '08:00 AM'}`
+                            : `${requestData.scheduledDate ? new Date(requestData.scheduledDate).toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Today'} • ${to12HourText(requestData.startTime) || 'Flexible'}${requestData.endTime ? ` - ${to12HourText(requestData.endTime)}` : ''}`)}
                       </p>
                     </div>
                   </div>
