@@ -789,12 +789,20 @@ const WorkerBookings = () => {
                     {/* Worker bookings are priced by the hour or the day: no land size or crop (those belong to machinery jobs) */}
                     <div>
                       <span className="text-slate-400 block font-medium">Booking Type</span>
-                      <span className="font-bold text-slate-800">{String(selectedBooking.rateUnit || selectedBooking.rental_type || '').toLowerCase().startsWith('hour') ? 'Hourly' : 'Daily'}</span>
+                      <span className="font-bold text-slate-800">
+                        {selectedBooking.bookingType === 'THEKA' || String(selectedBooking.rateUnit || '').toLowerCase() === 'theka'
+                          ? 'Theka (Contract)'
+                          : String(selectedBooking.rateUnit || selectedBooking.rental_type || '').toLowerCase().startsWith('hour')
+                          ? 'Hourly'
+                          : 'Daily'}
+                      </span>
                     </div>
                     {selectedBooking.agreedRate > 0 && (
                       <div>
                         <span className="text-slate-400 block font-medium">Agreed Rate</span>
-                        <span className="font-bold text-slate-800">₹{Number(selectedBooking.agreedRate).toLocaleString('en-IN')} / {String(selectedBooking.rateUnit || '').toLowerCase().startsWith('hour') ? 'hr' : 'day'}</span>
+                        <span className="font-bold text-slate-800">
+                          ₹{Number(selectedBooking.agreedRate).toLocaleString('en-IN')} / {selectedBooking.bookingType === 'THEKA' || String(selectedBooking.rateUnit || '').toLowerCase() === 'theka' ? 'theka' : String(selectedBooking.rateUnit || '').toLowerCase().startsWith('hour') ? 'hr' : 'day'}
+                        </span>
                       </div>
                     )}
                     <div>

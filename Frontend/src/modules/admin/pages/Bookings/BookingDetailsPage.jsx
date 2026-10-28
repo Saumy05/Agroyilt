@@ -268,7 +268,7 @@ const BookingDetailsPage = () => {
                                     const t = (v) => (v ? new Date(v).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : '—');
                                     return (
                                         <div key={d.day} className="flex flex-wrap items-center justify-between gap-2 border border-gray-100 rounded-xl p-3 text-xs">
-                                            <span className="font-bold text-gray-800">{booking.workerTiming.bookingType === 'DAILY' ? `Day ${d.day}` : 'Work'}</span>
+                                            <span className="font-bold text-gray-800">{booking.workerTiming.bookingType === 'DAILY' ? `Day ${d.day}` : (booking.workerTiming.bookingType === 'THEKA' ? 'Contract Task' : 'Work')}</span>
                                             <span className="text-gray-500">Started {t(d.workStartedAt)}{d.workEndedAt ? ` · Ended ${t(d.workEndedAt)}` : (d.workStartedAt ? ' · running' : '')}</span>
                                             <span className="text-amber-700 font-semibold">Break {fmtMinutesExact(d.breakMinutes)}{d.onBreak ? ' (on break now)' : ''}</span>
                                             <span className="font-bold text-gray-900">Work {d.workMinutes == null ? '—' : fmtMinutesExact(d.workMinutes)}</span>
@@ -291,7 +291,7 @@ const BookingDetailsPage = () => {
                         // Nothing was billed (a refunded booking): show what was quoted and taxed instead of a column of zeros
                         const showQuote = !bill || (billTotal === 0 && n(booking.advancePaidAmount) > 0);
                         const rows = wp ? [
-                            { label: `Agreed rate (per ${String(wp.rateUnit || '').toLowerCase().startsWith('hour') ? 'hour' : 'day'})`, value: n(wp.agreedRate) },
+                            { label: `Agreed rate (per ${String(wp.rateUnit || '').toLowerCase() === 'theka' ? 'theka' : String(wp.rateUnit || '').toLowerCase().startsWith('hour') ? 'hour' : 'day'})`, value: n(wp.agreedRate) },
                             { label: 'Worker wage (gross)', value: n(wp.grossAmount) },
                             { label: `Platform commission${wp.commissionRate ? ` (${wp.commissionRate}%)` : ''}`, value: n(wp.commissionAmount) },
                             { label: 'Worker earns (net)', value: n(wp.netEarning) }
