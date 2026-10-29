@@ -27,6 +27,7 @@ const getAllWorkers = async (req, res) => {
       approvalStatus,
       isActive,
       workerType,
+      availability,
       page = 1,
       limit = 20
     } = req.query;
@@ -39,6 +40,16 @@ const getAllWorkers = async (req, res) => {
     }
     if (isActive !== undefined) {
       query.isActive = isActive === 'true';
+    }
+
+    // Availability filter: ONLINE / OFFLINE
+    if (availability && availability !== 'all') {
+      const availUpper = availability.toUpperCase();
+      if (availUpper === 'ONLINE') {
+        query.status = { $in: ['ONLINE', 'online', 'ACTIVE', 'active'] };
+      } else if (availUpper === 'OFFLINE') {
+        query.status = { $nin: ['ONLINE', 'online', 'ACTIVE', 'active'] };
+      }
     }
 
     // Registration fee: PAID / FREE (paid ₹0) / UNPAID
@@ -177,12 +188,14 @@ const getAllWorkers = async (req, res) => {
     const noTeamCond = { $or: [{ teamId: null }, { teamId: { $exists: false } }] };
     const hasTeamCond = { teamId: { $ne: null } };
 
-    const [totalWorkersCount, independentCount, teamMemberCount, teamLeaderCount, myWorkersCount] = await Promise.all([
+    const [totalWorkersCount, independentCount, teamMemberCount, teamLeaderCount, myWorkersCount, onlineWorkersCount, offlineWorkersCount] = await Promise.all([
       Worker.countDocuments(finalBaseCount),
       Worker.countDocuments({ ...finalBaseCount, workerType: { $ne: 'TEAM_LEADER' }, ...noTeamCond }),
       Worker.countDocuments({ ...finalBaseCount, workerType: { $ne: 'TEAM_LEADER' }, ...hasTeamCond }),
       Worker.countDocuments({ ...finalBaseCount, workerType: 'TEAM_LEADER' }),
-      req.user?._id ? Worker.countDocuments({ createdByAdmin: req.user._id }) : 0
+      req.user?._id ? Worker.countDocuments({ createdByAdmin: req.user._id }) : 0,
+      Worker.countDocuments({ ...finalBaseCount, status: { $in: ['ONLINE', 'online', 'ACTIVE', 'active'] } }),
+      Worker.countDocuments({ ...finalBaseCount, status: { $nin: ['ONLINE', 'online', 'ACTIVE', 'active'] } })
     ]);
 
     res.status(200).json({
@@ -193,7 +206,9 @@ const getAllWorkers = async (req, res) => {
         independent: independentCount,
         teamMember: teamMemberCount,
         teamLeader: teamLeaderCount,
-        myRegistrations: myWorkersCount
+        myRegistrations: myWorkersCount,
+        online: onlineWorkersCount,
+        offline: offlineWorkersCount
       },
       pagination: {
         page: parseInt(page),
@@ -984,6 +999,96 @@ const toggleWorkerStatus = async (req, res) => {
 };
 
 /**
+ * Toggle worker availability (Online / Offline) by Admin
+ */
+const toggleWorkerAvailability = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body; // Optional: 'ONLINE' or 'OFFLINE'
+
+    const worker = await Worker.findById(id);
+
+    if (!worker) {
+      return res.status(404).json({
+        success: false,
+        message: 'Worker not found'
+      });
+    }
+
+    if (!verifyResourceScope(req.user, worker.toObject ? worker.toObject() : worker, 'worker')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. This worker is outside your assigned geographic scope.'
+      });
+    }
+
+    const currentStatus = String(worker.status || '').toUpperCase();
+    const isCurrentlyOnline = currentStatus === 'ONLINE' || currentStatus === 'AVAILABLE' || currentStatus === 'ACTIVE';
+    const newStatus = status ? status.toUpperCase() : (isCurrentlyOnline ? 'OFFLINE' : 'ONLINE');
+
+    if (newStatus !== 'ONLINE' && newStatus !== 'OFFLINE') {
+      return res.status(400).json({
+        success: false,
+        message: "Availability status must be either 'ONLINE' or 'OFFLINE'."
+      });
+    }
+
+    if (newStatus === 'ONLINE') {
+      if (['suspended', 'rejected'].includes(worker.approvalStatus) || worker.isActive === false) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot set a suspended, rejected, or inactive worker to ONLINE. Please approve or activate the worker account first.'
+        });
+      }
+    }
+
+    worker.status = newStatus;
+    await worker.save();
+
+    // Broadcast over Socket.IO to worker rooms and admin_global
+    try {
+      const { getIO } = require('../../sockets');
+      const io = getIO();
+      if (io) {
+        const payload = {
+          workerId: worker._id.toString(),
+          status: worker.status
+        };
+        io.to(`worker_${worker._id.toString()}`).emit('worker_status_updated', payload);
+        io.to(`worker:${worker._id.toString()}`).emit('worker_status_updated', payload);
+        io.to(`worker_${worker._id.toString()}`).emit('worker_availability_changed', payload);
+        io.to('admin_global').emit('worker_status_updated', payload);
+      }
+    } catch (sockErr) {
+      console.warn('[Socket] Failed to broadcast worker availability update:', sockErr.message);
+    }
+
+    await auditAdminAction(
+      req,
+      'UPDATE_WORKER_AVAILABILITY',
+      'WORKER_MANAGEMENT',
+      `Admin set worker "${worker.name}" (${worker.phone}) availability to ${worker.status}`,
+      worker._id,
+      'Worker',
+      worker.name
+    );
+
+    res.status(200).json({
+      success: true,
+      message: `Worker is now ${worker.status === 'ONLINE' ? 'Online' : 'Offline'}`,
+      status: worker.status,
+      data: worker
+    });
+  } catch (error) {
+    console.error('Toggle worker availability error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update worker availability'
+    });
+  }
+};
+
+/**
  * Delete worker details
  */
 const deleteWorker = async (req, res) => {
@@ -1207,6 +1312,7 @@ module.exports = {
   getWorkerAnalytics,
   getWorkerPaymentsSummary,
   toggleWorkerStatus,
+  toggleWorkerAvailability,
   deleteWorker,
   addWorker
 };

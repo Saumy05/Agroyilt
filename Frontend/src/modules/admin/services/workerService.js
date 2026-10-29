@@ -24,6 +24,7 @@ export const workerService = {
     if (params.isActive !== undefined) qp.append('isActive', params.isActive);
     if (params.workerType) qp.append('workerType', params.workerType);
     if (params.registrationFeeStatus) qp.append('registrationFeeStatus', params.registrationFeeStatus);
+    if (params.availability) qp.append('availability', params.availability);
     
     const response = await api.get(`/admin/workers${qp.toString() ? `?${qp.toString()}` : ''}`);
     return response.data;
@@ -66,6 +67,14 @@ export const workerService = {
    */
   deleteWorker: async (id) => {
     const response = await api.delete(`/admin/workers/${id}`);
+    return response.data;
+  },
+
+  /**
+   * Toggle worker availability (Online / Offline) by admin
+   */
+  toggleWorkerAvailability: async (id, status) => {
+    const response = await api.patch(`/admin/workers/${id}/availability`, { status });
     return response.data;
   },
 

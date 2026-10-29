@@ -17,6 +17,7 @@ const {
   getWorkerAnalytics,
   getWorkerPaymentsSummary,
   toggleWorkerStatus,
+  toggleWorkerAvailability,
   deleteWorker,
   addWorker
 } = require('../../controllers/adminControllers/adminWorkerController');
@@ -46,6 +47,7 @@ router.post('/workers/:id/reject', authenticate, isAdmin, requireAnyPermission('
 router.post('/workers/:id/suspend', authenticate, isAdmin, requireAnyPermission('workers.block'), suspendWorker);
 router.post('/workers/:id/pay', authenticate, isAdmin, requireAnyPermission('workers.edit', 'settlements.process', 'payouts.approve', 'payments.view'), payWorkerValidation, payWorker);
 router.patch('/workers/:id/status', authenticate, isAdmin, requireAnyPermission('workers.block'), toggleWorkerStatus); // New
+router.patch('/workers/:id/availability', authenticate, isAdmin, requireAnyPermission('workers.edit'), toggleWorkerAvailability);
 router.delete('/workers/:id', authenticate, isAdmin, requireAnyPermission('workers.delete'), deleteWorker); // New
 router.get('/workers/:id/jobs', authenticate, isAdmin, requireAnyPermission('workers.view'), getWorkerJobs);
 router.get('/workers/:id/earnings', authenticate, isAdmin, requireAnyPermission('workers.view'), getWorkerEarnings);

@@ -501,6 +501,10 @@ const forceWorkerOffline = async (workerId) => {
       io.to(`worker:${id}`).emit('account_deactivated', {
         message: 'Your account has been deactivated. Please contact support.'
       });
+      io.to('admin_global').emit('worker_status_updated', {
+        workerId: id,
+        status: 'OFFLINE'
+      });
       io.in(`worker:${id}`).disconnectSockets(true);
     }
   } catch (error) {

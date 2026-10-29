@@ -293,6 +293,8 @@ const updateAvailability = async (req, res) => {
         };
         io.to(`worker_${worker._id.toString()}`).emit('worker_status_updated', minimalPayload);
         io.to(`worker:${worker._id.toString()}`).emit('worker_status_updated', minimalPayload);
+        io.to(`worker_${worker._id.toString()}`).emit('worker_availability_changed', minimalPayload);
+        io.to('admin_global').emit('worker_status_updated', minimalPayload);
       }
     } catch (socketErr) {
       // Non-blocking socket broadcast

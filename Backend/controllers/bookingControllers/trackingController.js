@@ -1051,6 +1051,7 @@ exports.workerCompleteJob = async (req, res) => {
     await Worker.findByIdAndUpdate(workerId, { status: 'ONLINE' });
     emitSafe(`worker_${workerId}`, 'worker_availability_changed', { status: 'ONLINE', workerId: workerId.toString() });
     emitSafe(`worker_${workerId}`, 'worker_status_updated', { status: 'ONLINE', workerId: workerId.toString() });
+    emitSafe('admin_global', 'worker_status_updated', { status: 'ONLINE', workerId: workerId.toString() });
 
     emitSafe(`booking_${booking._id}`, 'worker_work_completed', eventPayload);
     if (booking.workerRequestId) {

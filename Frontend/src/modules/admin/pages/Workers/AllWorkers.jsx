@@ -36,6 +36,73 @@ import { calculateAge, getDobError } from '../../../../utils/age';
 import { refreshAdminCounts } from '../../utils/adminCounts';
 import { FeeStatusBadge, LocationCell, FeeFilter } from '../../components/common/FeeAndLocation';
 import { getLocationInfo } from '../../utils/locationInfo';
+import { useSocket } from '../../../../context/SocketContext';
+
+const isWorkerOnline = (worker) => {
+  const s = String(worker?.status || '').toUpperCase();
+  return s === 'ONLINE' || s === 'AVAILABLE' || s === 'ACTIVE';
+};
+
+const AvailabilityToggleBadge = ({ worker, onToggle, loading }) => {
+  const isOnline = isWorkerOnline(worker);
+  const isActionable = worker && worker.approvalStatus !== 'suspended' && worker.approvalStatus !== 'rejected' && worker.isActive !== false;
+
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        if (isActionable && !loading) {
+          onToggle(worker);
+        }
+      }}
+      disabled={!isActionable || loading}
+      title={
+        !isActionable
+          ? 'Cannot toggle: Worker is not approved or is inactive'
+          : isOnline
+          ? 'Click to turn Offline'
+          : 'Click to turn Online'
+      }
+      className={`group inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-black transition-all border shadow-2xs select-none ${
+        !isActionable
+          ? 'opacity-50 cursor-not-allowed bg-slate-100 text-slate-400 border-slate-200'
+          : isOnline
+          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 cursor-pointer'
+          : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200/80 hover:border-slate-300 cursor-pointer'
+      }`}
+    >
+      {/* Live Pulsing Dot */}
+      <span className="relative flex h-2 w-2 shrink-0">
+        {isOnline && (
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+        )}
+        <span
+          className={`relative inline-flex rounded-full h-2 w-2 ${
+            isOnline ? 'bg-emerald-500' : 'bg-slate-400'
+          }`}
+        ></span>
+      </span>
+
+      <span>{isOnline ? 'Online' : 'Offline'}</span>
+
+      {/* Mini Toggle Switch Track */}
+      {isActionable && (
+        <span
+          className={`ml-1 w-6 h-3.5 rounded-full inline-flex items-center px-0.5 transition-colors duration-200 shrink-0 ${
+            isOnline ? 'bg-emerald-500 justify-end' : 'bg-slate-300 justify-start'
+          }`}
+        >
+          {loading ? (
+            <span className="w-2.5 h-2.5 rounded-full border border-white border-t-transparent animate-spin"></span>
+          ) : (
+            <span className="w-2.5 h-2.5 bg-white rounded-full shadow-xs transition-transform"></span>
+          )}
+        </span>
+      )}
+    </button>
+  );
+};
 
 const StatusBadge = ({ status }) => {
   const styles = {
@@ -63,9 +130,12 @@ const AllWorkers = () => {
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || ''); // e.g. opened from an Analytics card
   const [workerTypeFilter, setWorkerTypeFilter] = useState(''); // '' | 'INDEPENDENT' | 'TEAM_MEMBER' | 'TEAM_LEADER'
   const [feeFilter, setFeeFilter] = useState(''); // '', PAID, FREE, UNPAID
+  const [availabilityFilter, setAvailabilityFilter] = useState(''); // '', 'ONLINE', 'OFFLINE'
   const [createdByMe, setCreatedByMe] = useState(false);
-  const [typeCounts, setTypeCounts] = useState({ total: 0, independent: 0, teamMember: 0, teamLeader: 0, myRegistrations: 0 });
+  const [typeCounts, setTypeCounts] = useState({ total: 0, independent: 0, teamMember: 0, teamLeader: 0, myRegistrations: 0, online: 0, offline: 0 });
   const [actionLoading, setActionLoading] = useState(null);
+  const [togglingAvailabilityId, setTogglingAvailabilityId] = useState(null);
+  const { socket } = useSocket();
 
   // Add Worker (admin creates the account directly)
   // The work types are the admin's own list (Workers > Work Categories), the same one workers and farmers use
@@ -129,6 +199,7 @@ const AllWorkers = () => {
         approvalStatus: statusFilter || undefined,
         workerType: workerTypeFilter || undefined,
         registrationFeeStatus: feeFilter || undefined,
+        availability: availabilityFilter || undefined,
         createdByMe: createdByMe ? 'true' : undefined,
         limit: 100
       });
@@ -151,7 +222,79 @@ const AllWorkers = () => {
       fetchWorkers();
     }, 400);
     return () => clearTimeout(delayDebounceFn);
-  }, [search, statusFilter, workerTypeFilter, feeFilter, createdByMe]);
+  }, [search, statusFilter, workerTypeFilter, feeFilter, availabilityFilter, createdByMe]);
+
+  // Real-time Socket Listener for worker status & availability updates
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleWorkerStatusUpdated = (data) => {
+      if (!data?.workerId) return;
+      const rawStatus = String(data?.status || '').toUpperCase();
+      const norm = (rawStatus === 'ONLINE' || rawStatus === 'AVAILABLE' || rawStatus === 'ACTIVE') ? 'ONLINE' : 'OFFLINE';
+
+      setWorkers(prev => prev.map(w => {
+        if (w._id?.toString() === data.workerId.toString()) {
+          return { ...w, status: norm };
+        }
+        return w;
+      }));
+
+      setSelectedWorker(prev => {
+        if (prev && prev._id?.toString() === data.workerId.toString()) {
+          return { ...prev, status: norm };
+        }
+        return prev;
+      });
+    };
+
+    socket.on('worker_status_updated', handleWorkerStatusUpdated);
+    socket.on('worker_availability_changed', handleWorkerStatusUpdated);
+
+    return () => {
+      socket.off('worker_status_updated', handleWorkerStatusUpdated);
+      socket.off('worker_availability_changed', handleWorkerStatusUpdated);
+    };
+  }, [socket]);
+
+  // Handle admin toggling worker availability (Online ⇄ Offline)
+  const handleToggleAvailability = async (worker) => {
+    if (!worker || togglingAvailabilityId === worker._id) return;
+
+    const currentOnline = isWorkerOnline(worker);
+    const newStatus = currentOnline ? 'OFFLINE' : 'ONLINE';
+
+    // Optimistic UI update
+    setWorkers(prev => prev.map(w => w._id === worker._id ? { ...w, status: newStatus } : w));
+    if (selectedWorker && selectedWorker._id === worker._id) {
+      setSelectedWorker(prev => ({ ...prev, status: newStatus }));
+    }
+
+    setTogglingAvailabilityId(worker._id);
+    try {
+      const res = await workerService.toggleWorkerAvailability(worker._id, newStatus);
+      if (res && res.success) {
+        toast.success(`Worker ${worker.name} is now ${newStatus === 'ONLINE' ? 'Online' : 'Offline'}`);
+        setTypeCounts(prev => ({
+          ...prev,
+          online: Math.max(0, (prev.online || 0) + (newStatus === 'ONLINE' ? 1 : -1)),
+          offline: Math.max(0, (prev.offline || 0) + (newStatus === 'ONLINE' ? -1 : 1))
+        }));
+      } else {
+        throw new Error(res?.message || 'Failed to update availability');
+      }
+    } catch (err) {
+      // Rollback on error
+      const prevStatus = currentOnline ? 'ONLINE' : 'OFFLINE';
+      setWorkers(prev => prev.map(w => w._id === worker._id ? { ...w, status: prevStatus } : w));
+      if (selectedWorker && selectedWorker._id === worker._id) {
+        setSelectedWorker(prev => ({ ...prev, status: prevStatus }));
+      }
+      toast.error(err?.response?.data?.message || err?.message || 'Failed to update availability status');
+    } finally {
+      setTogglingAvailabilityId(null);
+    }
+  };
 
   // Open worker details modal and fetch full details
   const handleOpenDetails = async (worker, fromLeader = null) => {
@@ -456,6 +599,44 @@ const AllWorkers = () => {
             {tab.label}
           </button>
         ))}
+
+        {/* Availability Filter Buttons */}
+        <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-xl border border-slate-200/80 shrink-0">
+          <button
+            type="button"
+            onClick={() => setAvailabilityFilter('')}
+            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              availabilityFilter === '' ? 'bg-white text-slate-800 shadow-2xs' : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            All Duty
+          </button>
+          <button
+            type="button"
+            onClick={() => setAvailabilityFilter('ONLINE')}
+            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+              availabilityFilter === 'ONLINE'
+                ? 'bg-emerald-600 text-white shadow-2xs'
+                : 'text-emerald-700 hover:bg-emerald-50'
+            }`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+            Online {typeCounts.online !== undefined && `(${typeCounts.online})`}
+          </button>
+          <button
+            type="button"
+            onClick={() => setAvailabilityFilter('OFFLINE')}
+            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+              availabilityFilter === 'OFFLINE'
+                ? 'bg-slate-700 text-white shadow-2xs'
+                : 'text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+            Offline {typeCounts.offline !== undefined && `(${typeCounts.offline})`}
+          </button>
+        </div>
+
         <div className="ml-auto shrink-0">
           <FeeFilter value={feeFilter} onChange={setFeeFilter} />
         </div>
@@ -498,12 +679,23 @@ const AllWorkers = () => {
                   >
                     <td className="py-4 px-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center font-bold text-slate-500 shrink-0">
-                          {worker.profilePhoto ? (
-                            <img src={worker.profilePhoto} alt={worker.name} className="w-full h-full object-cover" />
-                          ) : (
-                            worker.name?.charAt(0) ?.toUpperCase()
-                          )}
+                        <div className="relative shrink-0">
+                          <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center font-bold text-slate-500">
+                            {worker.profilePhoto ? (
+                              <img src={worker.profilePhoto} alt={worker.name} className="w-full h-full object-cover" />
+                            ) : (
+                              worker.name?.charAt(0) ?.toUpperCase()
+                            )}
+                          </div>
+                          {/* Live Online/Offline Dot on Avatar */}
+                          <span
+                            className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${
+                              isWorkerOnline(worker)
+                                ? 'bg-emerald-500 shadow-2xs'
+                                : 'bg-slate-300'
+                            }`}
+                            title={isWorkerOnline(worker) ? 'Worker is Online' : 'Worker is Offline'}
+                          />
                         </div>
                         <div>
                           <p className="font-bold text-slate-800 text-sm">{worker.name}</p>
@@ -578,9 +770,16 @@ const AllWorkers = () => {
                       <p className="text-[10px] text-slate-400 mt-0.5 font-bold">{worker.totalJobs || 0} jobs</p>
                     </td>
                     <td className="py-4 px-4">
-                      <div className="flex flex-col gap-1">
-                        <StatusBadge status={worker.approvalStatus} />
-                        <FeeStatusBadge status={worker.registrationFeeStatus} amount={worker.registrationFeeAmount} role="WORKER" />
+                      <div className="flex flex-col gap-1.5 items-start">
+                        <div className="flex items-center gap-1 flex-wrap">
+                          <StatusBadge status={worker.approvalStatus} />
+                          <FeeStatusBadge status={worker.registrationFeeStatus} amount={worker.registrationFeeAmount} role="WORKER" />
+                        </div>
+                        <AvailabilityToggleBadge
+                          worker={worker}
+                          onToggle={handleToggleAvailability}
+                          loading={togglingAvailabilityId === worker._id}
+                        />
                         {worker.approvalStatus === 'rejected' && worker.rejectionReason && (
                           <span className="text-[10px] text-red-500 max-w-[150px] truncate" title={worker.rejectionReason}>
                             {worker.rejectionReason}
@@ -671,17 +870,33 @@ const AllWorkers = () => {
               {/* Modal Header */}
               <div className="p-4 sm:p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/80 shrink-0">
                 <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 text-white font-black text-lg sm:text-xl flex items-center justify-center overflow-hidden shadow-md shrink-0">
-                    {selectedWorker.profilePhoto ? (
-                      <img src={selectedWorker.profilePhoto} alt={selectedWorker.name} className="w-full h-full object-cover" />
-                    ) : (
-                      selectedWorker.name?.charAt(0) ?.toUpperCase()
-                    )}
+                  <div className="relative shrink-0">
+                    <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 text-white font-black text-lg sm:text-xl flex items-center justify-center overflow-hidden shadow-md">
+                      {selectedWorker.profilePhoto ? (
+                        <img src={selectedWorker.profilePhoto} alt={selectedWorker.name} className="w-full h-full object-cover" />
+                      ) : (
+                        selectedWorker.name?.charAt(0) ?.toUpperCase()
+                      )}
+                    </div>
+                    {/* Live Online/Offline Dot on Modal Avatar */}
+                    <span
+                      className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${
+                        isWorkerOnline(selectedWorker)
+                          ? 'bg-emerald-500 shadow-2xs'
+                          : 'bg-slate-300'
+                      }`}
+                      title={isWorkerOnline(selectedWorker) ? 'Worker is Online' : 'Worker is Offline'}
+                    />
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="text-base sm:text-xl font-black text-slate-900 truncate">{selectedWorker.name}</h3>
                       <StatusBadge status={selectedWorker.approvalStatus} />
+                      <AvailabilityToggleBadge
+                        worker={selectedWorker}
+                        onToggle={handleToggleAvailability}
+                        loading={togglingAvailabilityId === selectedWorker._id}
+                      />
                     </div>
                     <div className="flex items-center gap-2 sm:gap-3 text-xs text-slate-500 mt-1 flex-wrap font-medium">
                       <span className="flex items-center gap-1"><FiPhone className="text-blue-500 shrink-0" /> {selectedWorker.phone}</span>
@@ -1032,7 +1247,7 @@ const AllWorkers = () => {
                     </div>
 
                     {/* Quick Stats Grid */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 sm:gap-3">
                       <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
                         <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Rating</span>
                         <div className="flex items-center gap-1 font-black text-amber-500 text-sm sm:text-base mt-0.5">
@@ -1055,6 +1270,16 @@ const AllWorkers = () => {
                         <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Reg. Fee</span>
                         <div className="mt-1">
                           <FeeStatusBadge status={selectedWorker.registrationFeeStatus} amount={selectedWorker.registrationFeeAmount} role="WORKER" />
+                        </div>
+                      </div>
+                      <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 col-span-2 sm:col-span-1 flex flex-col justify-between">
+                        <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Duty Status</span>
+                        <div className="mt-1">
+                          <AvailabilityToggleBadge
+                            worker={selectedWorker}
+                            onToggle={handleToggleAvailability}
+                            loading={togglingAvailabilityId === selectedWorker._id}
+                          />
                         </div>
                       </div>
                     </div>
