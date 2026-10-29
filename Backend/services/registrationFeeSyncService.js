@@ -35,4 +35,29 @@ const activateFreeRegistrations = async (role, { dryRun = false } = {}) => {
   return { role, matched: result.matchedCount, modified: result.modifiedCount };
 };
 
-module.exports = { activateFreeRegistrations };
+/**
+ * Checks whether an account satisfies the registration fee requirement.
+ * If already 'PAID', returns { isPaid: true }.
+ * If the registration fee is 0 (or no active fee config), auto-approves the account to 'PAID' (₹0) and returns { isPaid: true, autoApprovedFree: true }.
+ * Otherwise, returns { isPaid: false, amount, version }.
+ */
+const ensureRegistrationFeeStatus = async (account, role) => {
+  if (account.registrationFeeStatus === 'PAID') {
+    return { isPaid: true };
+  }
+
+  const cfg = await RegistrationFeeConfig.findOne({ role, isActive: true }).sort({ createdAt: -1 });
+  const amount = Number(cfg?.amount) || 0;
+
+  if (!cfg || amount <= 0) {
+    account.registrationFeeStatus = 'PAID';
+    account.registrationFeeAmount = 0;
+    account.registrationFeeVersion = cfg?.version || 1;
+    await account.save();
+    return { isPaid: true, autoApprovedFree: true };
+  }
+
+  return { isPaid: false, amount, version: cfg.version };
+};
+
+module.exports = { activateFreeRegistrations, ensureRegistrationFeeStatus };

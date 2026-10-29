@@ -3,7 +3,7 @@
 const KEY = 'agroyilt_chunk_reload_at';
 
 export const isChunkLoadError = (err) =>
-  /Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module|Unable to preload CSS|ChunkLoadError|Loading chunk .* failed/i
+  /Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module|Unable to preload CSS|ChunkLoadError|Loading chunk .* failed|reading ['"]default['"]|evaluating ['"].*default['"]|Unexpected token '<'|is not valid JavaScript|is not a valid JavaScript/i
     .test(String(err?.message || err || ''));
 
 /** Reloads the page unless it already did so in the last 15 seconds (so a real outage cannot cause a reload loop). */

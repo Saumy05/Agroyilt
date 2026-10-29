@@ -19,6 +19,7 @@ class ErrorBoundary extends React.Component {
 
   render() {
     if (this.state.hasError) {
+      const isChunk = isChunkLoadError(this.state.error);
       return (
         <div style={{
           minHeight: '100vh',
@@ -48,12 +49,14 @@ class ErrorBoundary extends React.Component {
               </svg>
             </div>
             <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#0f172a', marginBottom: '8px' }}>
-              Something Went Wrong
+              {isChunk ? 'New Update Available' : 'Something Went Wrong'}
             </h2>
             <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '24px', lineHeight: 1.5 }}>
-              This page encountered an error. Please go back and try again.
+              {isChunk
+                ? 'A new app update was deployed. Please tap reload to get the latest version.'
+                : 'This page encountered an error. Please go back and try again.'}
             </p>
-            {this.state.error && (
+            {this.state.error && !isChunk && (
               <p style={{
                 fontSize: '11px', color: '#ef4444', background: '#fef2f2',
                 padding: '8px 12px', borderRadius: '8px', marginBottom: '16px',
@@ -63,16 +66,27 @@ class ErrorBoundary extends React.Component {
               </p>
             )}
             <button
-              onClick={() => { this.setState({ hasError: false, error: null, errorInfo: null }); window.history.back(); }}
+              onClick={() => {
+                if (isChunk) {
+                  try { sessionStorage.removeItem('agroyilt_chunk_reload_at'); } catch (e) {}
+                  window.location.reload();
+                } else {
+                  this.setState({ hasError: false, error: null, errorInfo: null });
+                  window.history.back();
+                }
+              }}
               style={{
                 background: '#00a6a6', color: 'white', border: 'none', borderRadius: '12px',
                 padding: '12px 24px', fontWeight: '700', fontSize: '14px', cursor: 'pointer', width: '100%'
               }}
             >
-              ← Go Back
+              {isChunk ? 'Reload Latest Version' : '← Go Back'}
             </button>
             <button
-              onClick={() => window.location.reload()}
+              onClick={() => {
+                try { sessionStorage.removeItem('agroyilt_chunk_reload_at'); } catch (e) {}
+                window.location.reload();
+              }}
               style={{
                 background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: '12px',
                 padding: '10px 24px', fontWeight: '600', fontSize: '13px', cursor: 'pointer',

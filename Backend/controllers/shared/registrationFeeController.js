@@ -80,15 +80,12 @@ const initiatePayment = async (req, res) => {
 
     // Get active config for this role
     const feeConfig = await RegistrationFeeConfig.findOne({ role, isActive: true });
-    if (!feeConfig) {
-      return res.status(500).json({ success: false, message: `Fee configuration not found for role ${role}.` });
-    }
 
-    // If fee is 0, auto-approve
-    if (feeConfig.amount === 0) {
+    // If fee is 0 or no active config, auto-approve
+    if (!feeConfig || Number(feeConfig.amount) <= 0) {
       account.registrationFeeStatus = 'PAID';
       account.registrationFeeAmount = 0;
-      account.registrationFeeVersion = feeConfig.version;
+      account.registrationFeeVersion = feeConfig?.version || 1;
       await account.save();
 
       // Issue full tokens
@@ -277,7 +274,15 @@ const getFeeConfig = async (req, res) => {
     const feeConfig = await RegistrationFeeConfig.findOne({ role: role.toUpperCase(), isActive: true });
     
     if (!feeConfig) {
-      return res.status(404).json({ success: false, message: 'No active fee configuration found.' });
+      return res.status(200).json({
+        success: true,
+        config: {
+          role: role.toUpperCase(),
+          amount: 0,
+          currency: 'INR',
+          version: 1
+        }
+      });
     }
 
     res.status(200).json({

@@ -43,13 +43,42 @@ const AppRegistrationFee = () => {
     try {
       const res = await api.get(`/fees/config/${pendingRole}`);
       if (res.data?.success) {
-        setFeeData(res.data.config);
+        const config = res.data.config;
+        setFeeData(config);
+        // If fee is 0 or not configured, auto-activate immediately without displaying fee screen/popup
+        if (!config || Number(config.amount) <= 0) {
+          await autoApproveZeroFee();
+          return;
+        }
       }
     } catch (error) {
       console.error('Error fetching fee config:', error);
       toastManager.error('Failed to load fee configuration. Please try again later.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const autoApproveZeroFee = async () => {
+    setIsProcessing(true);
+    try {
+      const initRes = await api.post(
+        '/fees/initiate-payment',
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${preAuthToken}`
+          },
+          role: pendingRole
+        }
+      );
+      if (initRes.data?.autoApproved || initRes.data?.success) {
+        handlePaymentSuccess(initRes.data);
+      }
+    } catch (error) {
+      console.error('Auto zero fee approval error:', error);
+      setIsLoading(false);
+      setIsProcessing(false);
     }
   };
 
@@ -216,7 +245,7 @@ const AppRegistrationFee = () => {
     }
   };
 
-  if (isLoading) {
+  if (isLoading || isProcessing || (feeData && Number(feeData.amount) <= 0)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>

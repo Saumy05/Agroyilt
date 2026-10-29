@@ -299,7 +299,12 @@ const WorkerSignup = () => {
 
         const response = await workerAuthService.register(registerData);
         if (response.success) {
-          toastManager.success('Registration details saved! Please set your MPIN to complete your profile.');
+          const isApproved = response.worker?.approvalStatus === 'approved';
+          toastManager.success(
+            isApproved
+              ? 'Registration successful! Set your MPIN to complete your profile.'
+              : 'Registration details saved! Please set your MPIN to complete your profile.'
+          );
           try { sessionStorage.removeItem('worker_signup_form_data'); sessionStorage.removeItem('worker_signup_uploaded_urls'); } catch (e) { /* ignore */ }
           clearSavedReferral('worker');
           navigate('/worker/settings/mpin-setup', {
@@ -400,7 +405,12 @@ const WorkerSignup = () => {
 
       const response = await workerAuthService.register(registerData);
       if (response.success) {
-        toastManager.success('Registration details saved! Please set your MPIN to complete your profile.');
+        const isApproved = response.worker?.approvalStatus === 'approved';
+        toastManager.success(
+          isApproved
+            ? 'Registration successful! Set your MPIN to complete your profile.'
+            : 'Registration details saved! Please set your MPIN to complete your profile.'
+        );
         try { sessionStorage.removeItem('worker_signup_form_data'); sessionStorage.removeItem('worker_signup_uploaded_urls'); } catch (e) { /* ignore */ }
           clearSavedReferral('worker');
         navigate('/worker/settings/mpin-setup', {

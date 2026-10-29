@@ -17,7 +17,7 @@
   ],
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/((?!assets/|videos/|landing_images/|favicon\\.ico|manifest\\.webmanifest|.*\\.[a-zA-Z0-9]+$).*)",
       "destination": "/index.html"
     }
   ],

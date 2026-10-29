@@ -61,6 +61,8 @@ exports.updateSettings = async (req, res, next) => {
       landLeaseFixedRentEnabled,
       landLeaseCropShareEnabled,
       farmerAutoApproval,
+      vendorAutoApproval,
+      workerAutoApproval,
       workerPlatformChargePercentage,
       machineryPlatformFeePercentage,
       maxIndependentWorkerRequest,
@@ -189,6 +191,8 @@ exports.updateSettings = async (req, res, next) => {
         }
       }
       if (farmerAutoApproval !== undefined) settings.farmerAutoApproval = Boolean(farmerAutoApproval);
+      if (vendorAutoApproval !== undefined) settings.vendorAutoApproval = Boolean(vendorAutoApproval);
+      if (workerAutoApproval !== undefined) settings.workerAutoApproval = Boolean(workerAutoApproval);
       if (landLeaseFixedRentEnabled !== undefined) settings.landLeaseFixedRentEnabled = Boolean(Number(landLeaseFixedRentEnabled));
       if (landLeaseCropShareEnabled !== undefined) settings.landLeaseCropShareEnabled = Boolean(Number(landLeaseCropShareEnabled));
       if (landLeaseRequireAgreement !== undefined) {

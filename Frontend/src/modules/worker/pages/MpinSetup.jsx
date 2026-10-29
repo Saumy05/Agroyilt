@@ -183,7 +183,8 @@ const WorkerMpinSetup = () => {
                 type="button"
                 onClick={() => {
                   const workerData = authStorage.getUserData('worker') || {};
-                  if (workerData.approvalStatus !== 'approved') {
+                  const approval = location.state?.approvalStatus || workerData.approvalStatus || 'pending';
+                  if (approval !== 'approved') {
                     toastManager.info('Your registration is complete and pending admin approval.');
                     authStorage.clearAuthSession('worker');
                     goToLoginAfterRegistration(navigate);

@@ -1,12 +1,13 @@
 import React, { lazy, Suspense, useState, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { isFlutterWebView } from '../../../utils/platformUtils';
+import { importOrReload } from '../../../utils/importOrReload';
 
-const AppEntry = lazy(() => import('../pages/AppEntry'));
-const AppRegister = lazy(() => import('../pages/AppRegister'));
-const AppLogin = lazy(() => import('../pages/AppLogin'));
-const AppRegistrationFee = lazy(() => import('../pages/AppRegistrationFee'));
-const AppGuide = lazy(() => import('../pages/AppGuide'));
+const AppEntry = lazy(() => importOrReload(() => import('../pages/AppEntry')));
+const AppRegister = lazy(() => importOrReload(() => import('../pages/AppRegister')));
+const AppLogin = lazy(() => importOrReload(() => import('../pages/AppLogin')));
+const AppRegistrationFee = lazy(() => importOrReload(() => import('../pages/AppRegistrationFee')));
+const AppGuide = lazy(() => importOrReload(() => import('../pages/AppGuide')));
 
 const LoadingFallback = () => (
   <div style={{

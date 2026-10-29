@@ -237,12 +237,47 @@ const AppLogin = () => {
       }
 
       if (errorData?.code === 'REGISTRATION_FEE_REQUIRED') {
-        // leaves this page, so an inline message would vanish: toast only
-        toastManager.error('Registration fee payment is required before you can access your account.');
         sessionStorage.setItem('preAuthToken', errorData.preAuthToken);
         sessionStorage.setItem('pendingRole', errorData.role);
         localStorage.setItem('preAuthToken', errorData.preAuthToken);
         localStorage.setItem('pendingRole', errorData.role);
+
+        // If the registration fee is 0, auto-activate immediately without showing popup/fee screen
+        try {
+          const feeRes = await api.get(`/fees/config/${errorData.role}`);
+          const cfg = feeRes.data?.config;
+          if (!cfg || Number(cfg.amount) <= 0) {
+            const initRes = await api.post(
+              '/fees/initiate-payment',
+              {},
+              {
+                headers: { Authorization: `Bearer ${errorData.preAuthToken}` },
+                role: errorData.role
+              }
+            );
+            if (initRes.data?.autoApproved || initRes.data?.success) {
+              const canonicalRole = errorData.role.toLowerCase();
+              authStorage.setAuthSession(canonicalRole, {
+                accessToken: initRes.data.accessToken,
+                refreshToken: initRes.data.refreshToken,
+                user: initRes.data.user || initRes.data.vendor || initRes.data.worker || { role: canonicalRole }
+              });
+              sessionStorage.removeItem('preAuthToken');
+              sessionStorage.removeItem('pendingRole');
+              localStorage.removeItem('preAuthToken');
+              localStorage.removeItem('pendingRole');
+              toastManager.success('Welcome aboard! 👋');
+              if (canonicalRole === 'user') navigate('/user', { replace: true });
+              else if (canonicalRole === 'vendor') navigate('/vendor', { replace: true });
+              else if (canonicalRole === 'worker') navigate('/worker', { replace: true });
+              return;
+            }
+          }
+        } catch (silentErr) {
+          console.warn('Auto fee check error:', silentErr);
+        }
+
+        toastManager.error('Registration fee payment is required before you can access your account.');
         navigate('/app/registration-fee', { replace: true });
         return;
       }
@@ -407,18 +442,19 @@ const AppLogin = () => {
       else if (detectedRole === 'worker') response = await workerAuthService.resetMpin(payload);
 
       if (response?.success) {
-        toastManager.success(setupFlow ? 'MPIN created. Enter it to log in.' : 'MPIN updated. Enter it to log in.');
-        // Land on the MPIN screen of the same account, so nobody has to pick it again
+        toastManager.success(setupFlow ? 'MPIN created successfully!' : 'MPIN updated successfully!');
         setSelectedRole(detectedRole);
         setMpinNotSetRoles((prev) => prev.filter((r) => r !== detectedRole));
         setSetupFlow(false);
-        setLoginStage('mpin');
         setStep('login');
         setMpin('');
+        const mpinToLogin = newMpin;
         setNewMpin('');
         setConfirmMpin('');
         setOtp(['', '', '', '', '', '']);
-        setIsLoading(false);
+
+        // Automatically log in and navigate directly to dashboard
+        await executeMpinLogin(cleanPhone, mpinToLogin, detectedRole);
       } else {
         throw new Error('Failed to update MPIN');
       }

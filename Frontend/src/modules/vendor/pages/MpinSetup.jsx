@@ -128,11 +128,16 @@ const VendorMpinSetup = () => {
         const vendorData = authStorage.getUserData('vendor') || {};
         authStorage.updateUserData('vendor', { isMpinSet: true });
         
-        if (isFirstTime && vendorData.approvalStatus !== 'approved') {
+        const approvalStatus = location.state?.approvalStatus || vendorData.approvalStatus;
+
+        if (isFirstTime && approvalStatus !== 'approved') {
           toastManager.info('Your account is registered and pending admin approval. You can login with your MPIN once approved.', { duration: 6000 });
           authStorage.clearAuthSession('vendor');
           navigate('/vendor/login', { replace: true });
         } else {
+          if (isFirstTime) {
+            toastManager.success('Welcome! Your Vendor account is ready.');
+          }
           navigate('/vendor', { replace: true });
         }
       }
@@ -205,7 +210,8 @@ const VendorMpinSetup = () => {
                 type="button"
                 onClick={() => {
                   const vendorData = authStorage.getUserData('vendor') || {};
-                  if (vendorData.approvalStatus !== 'approved') {
+                  const approvalStatus = location.state?.approvalStatus || vendorData.approvalStatus;
+                  if (approvalStatus !== 'approved') {
                     toastManager.info('Your registration is complete and pending admin approval.');
                     authStorage.clearAuthSession('vendor');
                     navigate('/vendor/login', { replace: true });

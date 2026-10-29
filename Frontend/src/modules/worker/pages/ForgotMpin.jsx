@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { FiChevronLeft, FiCheckCircle } from 'react-icons/fi';
 import { toastManager } from '../../../utils/toastManager';
@@ -178,6 +178,16 @@ const ForgotMpin = () => {
 
       if (response.success) {
         toastManager.success('MPIN reset successfully!');
+        try {
+          const cleanPhone = phoneNumber.replace(/\D/g, '');
+          const loginRes = await workerAuthService.loginWithMpin({ phone: cleanPhone, mpin: mpinVal });
+          if (loginRes.success && loginRes.accessToken) {
+            navigate('/worker', { replace: true });
+            return;
+          }
+        } catch (e) {
+          console.warn('Auto login after reset failed:', e);
+        }
         navigate('/worker/login');
       }
     } catch (error) {

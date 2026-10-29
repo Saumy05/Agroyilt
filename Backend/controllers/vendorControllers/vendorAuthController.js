@@ -253,6 +253,16 @@ const register = async (req, res) => {
       parsedLabDetails.certificationDocument = finalLabCert;
     }
 
+    // Admin setting: approve new vendors on registration instead of waiting for an admin (on by default)
+    const Settings = require('../../models/Settings');
+    const RegistrationFeeConfig = require('../../models/RegistrationFeeConfig');
+    const globalSettings = await Settings.findOne({ type: 'global' }).select('vendorAutoApproval').lean();
+    const autoApproved = globalSettings ? globalSettings.vendorAutoApproval !== false : true;
+
+    // Check if registration fee is 0/free
+    const vendorFeeConfig = await RegistrationFeeConfig.findOne({ role: 'VENDOR', isActive: true }).sort({ createdAt: -1 });
+    const isFeeFree = !vendorFeeConfig || !(Number(vendorFeeConfig.amount) > 0);
+
     const vendorData = {
       name, phone,
       gender: (gender && ['male', 'female', 'other'].includes(String(gender).toLowerCase())) ? String(gender).toLowerCase() : null,
@@ -267,9 +277,14 @@ const register = async (req, res) => {
         backDocument: aadharBackUrl
       },
       otherDocuments: otherUrls,
-      approvalStatus: VENDOR_STATUS.PENDING,
+      approvalStatus: autoApproved ? VENDOR_STATUS.APPROVED : VENDOR_STATUS.PENDING,
+      ...(autoApproved ? { approvalDate: new Date() } : {}),
+      isActive: true,
       isPhoneVerified: true,
-      isMpinSet: false
+      isMpinSet: false,
+      registrationFeeStatus: isFeeFree ? 'PAID' : 'UNPAID',
+      registrationFeeAmount: 0,
+      registrationFeeVersion: vendorFeeConfig?.version || 1
     };
 
     if (parsedLabDetails) vendorData.labDetails = parsedLabDetails;
@@ -303,6 +318,16 @@ const register = async (req, res) => {
       }
     }
 
+    // Same follow-up as an admin approval: the referrer's reward qualifies on approval
+    if (autoApproved) {
+      try {
+        const referralService = require('../../services/referralService');
+        await referralService.qualifyAndRewardReferral({ referredUserId: vendor._id, event: 'approval' });
+      } catch (refErr) {
+        console.error('Referral qualification error for auto-approved vendor:', refErr);
+      }
+    }
+
     // Auto-create unique referral code for this new vendor
     try {
       const referralService = require('../../services/referralService');
@@ -311,24 +336,26 @@ const register = async (req, res) => {
       console.error('Auto-generate referral code error for vendor:', e);
     }
 
-    // Notify Admins
-    try {
-      const { createNotification } = require('../notificationControllers/notificationController');
-      const Admin = require('../../models/Admin');
-      const admins = await Admin.find({ isActive: true }).select('_id');
-      for (const admin of admins) {
-        await createNotification({
-          adminId: admin._id,
-          type: 'vendor_approval_request',
-          title: '👤 New Vendor Registration',
-          message: `${vendor.name} (${vendor.phone}) has registered`,
-          relatedId: vendor._id,
-          relatedType: 'vendor',
-          data: { vendorId: vendor._id, vendorName: vendor.name, phone: vendor.phone },
-          pushData: { type: 'admin_alert', link: '/admin/vendors/all' }
-        });
-      }
-    } catch (e) { console.error('Notify error', e); }
+    // Notify Admins about new Vendor registration (only when manual approval is needed)
+    if (!autoApproved) {
+      try {
+        const { createNotification } = require('../notificationControllers/notificationController');
+        const Admin = require('../../models/Admin');
+        const admins = await Admin.find({ isActive: true }).select('_id');
+        for (const admin of admins) {
+          await createNotification({
+            adminId: admin._id,
+            type: 'vendor_approval_request',
+            title: '👤 New Vendor Registration',
+            message: `${vendor.name} (${vendor.phone}) has registered`,
+            relatedId: vendor._id,
+            relatedType: 'vendor',
+            data: { vendorId: vendor._id, vendorName: vendor.name, phone: vendor.phone },
+            pushData: { type: 'admin_alert', link: '/admin/vendors/all' }
+          });
+        }
+      } catch (e) { console.error('Notify error', e); }
+    }
 
     const tokens = generateTokenPair({
       userId: vendor._id,
@@ -337,7 +364,7 @@ const register = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: 'Registration successful! Pending approval.',
+      message: autoApproved ? 'Registration successful!' : 'Registration successful! Pending approval.',
       vendor: {
         id: vendor._id,
         name: vendor.name,
@@ -574,7 +601,9 @@ const loginWithMpin = async (req, res) => {
     }
 
     // GATEKEEPER 2: Check Registration Fee
-    if (vendor.registrationFeeStatus !== 'PAID') {
+    const { ensureRegistrationFeeStatus } = require('../../services/registrationFeeSyncService');
+    const feeCheck = await ensureRegistrationFeeStatus(vendor, 'VENDOR');
+    if (!feeCheck.isPaid) {
       const jwt = require('jsonwebtoken');
       const preAuthToken = jwt.sign(
         { userId: vendor._id, role: 'VENDOR', isPreAuth: true },

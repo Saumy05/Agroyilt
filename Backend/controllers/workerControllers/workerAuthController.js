@@ -209,6 +209,16 @@ const register = async (req, res) => {
       ? email.trim().toLowerCase()
       : undefined;
 
+    // Admin setting: approve new workers on registration instead of waiting for an admin (on by default)
+    const Settings = require('../../models/Settings');
+    const RegistrationFeeConfig = require('../../models/RegistrationFeeConfig');
+    const globalSettings = await Settings.findOne({ type: 'global' }).select('workerAutoApproval').lean();
+    const autoApproved = globalSettings ? globalSettings.workerAutoApproval !== false : true;
+
+    // Check if registration fee is 0/free
+    const workerFeeConfig = await RegistrationFeeConfig.findOne({ role: 'WORKER', isActive: true }).sort({ createdAt: -1 });
+    const isFeeFree = !workerFeeConfig || !(Number(workerFeeConfig.amount) > 0);
+
     // Create worker
     const worker = await Worker.create({
       name,
@@ -231,7 +241,12 @@ const register = async (req, res) => {
       workerType: validWorkerType,
       termsAcceptedAt: new Date(),
       isMpinSet: false,
-      approvalStatus: 'pending'
+      approvalStatus: autoApproved ? 'approved' : 'pending',
+      registrationFeeStatus: isFeeFree ? 'PAID' : 'UNPAID',
+      registrationFeeAmount: 0,
+      registrationFeeVersion: workerFeeConfig?.version || 1,
+      ...(autoApproved ? { approvalDate: new Date() } : {}),
+      isActive: true
     });
 
     // Process Referral Attribution if referral code provided
@@ -251,6 +266,16 @@ const register = async (req, res) => {
       }
     }
 
+    // Same follow-up as an admin approval: the referrer's reward qualifies on approval
+    if (autoApproved) {
+      try {
+        const referralService = require('../../services/referralService');
+        await referralService.qualifyAndRewardReferral({ referredUserId: worker._id, event: 'approval' });
+      } catch (refErr) {
+        console.error('Referral qualification error for auto-approved worker:', refErr);
+      }
+    }
+
     // Auto-create unique referral code for this new worker
     try {
       const referralService = require('../../services/referralService');
@@ -259,25 +284,27 @@ const register = async (req, res) => {
       console.error('Auto-generate referral code error for worker:', e);
     }
 
-    // Notify Admins about new Worker registration
-    try {
-      const { createNotification } = require('../notificationControllers/notificationController');
-      const Admin = require('../../models/Admin');
-      const admins = await Admin.find({ isActive: true }).select('_id');
-      for (const admin of admins) {
-        await createNotification({
-          adminId: admin._id,
-          type: 'worker_approval_request',
-          title: '🛠️ New Worker Registration',
-          message: `${worker.name} (${worker.phone}) has registered as a Worker (${worker.workerType})`,
-          relatedId: worker._id,
-          relatedType: 'worker',
-          data: { workerId: worker._id, workerName: worker.name, phone: worker.phone, workerType: worker.workerType },
-          pushData: { type: 'admin_alert', link: '/admin/workers/all' }
-        });
+    // Notify Admins about new Worker registration (only when manual approval is needed)
+    if (!autoApproved) {
+      try {
+        const { createNotification } = require('../notificationControllers/notificationController');
+        const Admin = require('../../models/Admin');
+        const admins = await Admin.find({ isActive: true }).select('_id');
+        for (const admin of admins) {
+          await createNotification({
+            adminId: admin._id,
+            type: 'worker_approval_request',
+            title: '🛠️ New Worker Registration',
+            message: `${worker.name} (${worker.phone}) has registered as a Worker (${worker.workerType})`,
+            relatedId: worker._id,
+            relatedType: 'worker',
+            data: { workerId: worker._id, workerName: worker.name, phone: worker.phone, workerType: worker.workerType },
+            pushData: { type: 'admin_alert', link: '/admin/workers/all' }
+          });
+        }
+      } catch (e) { 
+        console.error('Notify admin error for worker:', e); 
       }
-    } catch (e) { 
-      console.error('Notify admin error for worker:', e); 
     }
 
     // Send Welcome Email if email is present
@@ -294,7 +321,7 @@ const register = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: 'Registration successful! Pending admin approval.',
+      message: autoApproved ? 'Registration successful!' : 'Registration successful! Pending admin approval.',
       worker: {
         id: worker._id,
         name: worker.name,
@@ -304,7 +331,7 @@ const register = async (req, res) => {
         teamId: worker.teamId || null,
         hasBike: Boolean(worker.hasBike),
         status: worker.status,
-        approvalStatus: worker.approvalStatus || 'pending',
+        approvalStatus: worker.approvalStatus || (autoApproved ? 'approved' : 'pending'),
         isMpinSet: false,
         serviceCategories: worker.serviceCategories || []
       },
@@ -380,7 +407,9 @@ const login = async (req, res) => {
     }
 
     // Check Registration Fee
-    if (worker.registrationFeeStatus !== 'PAID') {
+    const { ensureRegistrationFeeStatus } = require('../../services/registrationFeeSyncService');
+    const feeCheck = await ensureRegistrationFeeStatus(worker, 'WORKER');
+    if (!feeCheck.isPaid) {
       const jwt = require('jsonwebtoken');
       const preAuthToken = jwt.sign(
         { userId: worker._id, role: 'WORKER', isPreAuth: true },
@@ -601,7 +630,9 @@ const loginWithMpin = async (req, res) => {
     }
 
     // GATEKEEPER 2: Check Registration Fee
-    if (worker.registrationFeeStatus !== 'PAID') {
+    const { ensureRegistrationFeeStatus } = require('../../services/registrationFeeSyncService');
+    const feeCheck = await ensureRegistrationFeeStatus(worker, 'WORKER');
+    if (!feeCheck.isPaid) {
       const jwt = require('jsonwebtoken');
       const preAuthToken = jwt.sign(
         { userId: worker._id, role: 'WORKER', isPreAuth: true },

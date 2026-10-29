@@ -6,9 +6,11 @@ import { workerTheme as themeColors } from '../../../../theme';
 import Header from '../../components/layout/Header';
 import { SkeletonCard } from '../../../../components/common/SkeletonLoaders';
 
-const CashCollectionModal = lazy(() => import('../../components/common/CashCollectionModal'));
-const VisitVerificationModal = lazy(() => import('../../components/common/VisitVerificationModal'));
-const WorkCompletionModal = lazy(() => import('../../components/common/WorkCompletionModal'));
+import { importOrReload } from '../../../../utils/importOrReload';
+
+const CashCollectionModal = lazy(() => importOrReload(() => import('../../components/common/CashCollectionModal')));
+const VisitVerificationModal = lazy(() => importOrReload(() => import('../../components/common/VisitVerificationModal')));
+const WorkCompletionModal = lazy(() => importOrReload(() => import('../../components/common/WorkCompletionModal')));
 import ExtensionResponseCard from '../../components/ExtensionResponseCard';
 import workerService from '../../../../services/workerService';
 import api from '../../../../services/api';

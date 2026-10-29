@@ -100,6 +100,16 @@ const settingsSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  // Vendor sign-up approval: on = new vendors are approved on registration; off = wait for admin approval
+  vendorAutoApproval: {
+    type: Boolean,
+    default: true
+  },
+  // Worker sign-up approval: on = new workers are approved on registration; off = wait for admin approval
+  workerAutoApproval: {
+    type: Boolean,
+    default: true
+  },
   // The admin can switch a lease type off: it is no longer offered for new listings, offers or leases (existing leases carry on)
   landLeaseFixedRentEnabled: {
     type: Boolean,

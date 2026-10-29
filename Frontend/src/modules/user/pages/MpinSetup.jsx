@@ -107,15 +107,14 @@ const MpinSetup = () => {
         const approvalStatus = location.state?.approvalStatus || userData.approvalStatus;
 
         if (isFirstTime) {
-          // sign in again with the MPIN: that is where approval and the registration fee are checked
-          toastManager.info(
-            approvalStatus === 'approved'
-              ? 'Your Farmer account is ready. Login with your MPIN to continue.'
-              : 'Your Farmer account is registered and pending admin approval. You can login with your MPIN once approved.',
-            { duration: 6000 }
-          );
-          authStorage.clearAuthSession('user');
-          navigate('/app/login', { replace: true });
+          if (approvalStatus === 'approved') {
+            toastManager.success('Account ready! Welcome to Agroyilt.');
+            navigate('/user', { replace: true });
+          } else {
+            toastManager.info('Your Farmer account is registered and pending admin approval. You can login with your MPIN once approved.', { duration: 6000 });
+            authStorage.clearAuthSession('user');
+            navigate('/app/login', { replace: true });
+          }
         } else {
           navigate('/user', { replace: true });
         }

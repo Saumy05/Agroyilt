@@ -14,15 +14,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 import { userAuthService } from '../../../../services/authService';
 import authStorage from '../../../../utils/authStorage';
+import { importOrReload } from '../../../../utils/importOrReload';
 // Lazy load heavy components for better initial load performance
 import PromoCarousel from './components/PromoCarousel';
-// Lazy load OTHER heavy components
-const NewAndNoteworthy = lazy(() => import('./components/NewAndNoteworthy'));
-const MostBookedServices = lazy(() => import('./components/MostBookedServices'));
-const CuratedServices = lazy(() => import('./components/CuratedServices'));
-const ServiceSectionWithRating = lazy(() => import('./components/ServiceSectionWithRating'));
-const Banner = lazy(() => import('./components/Banner'));
-const ReferEarnSection = lazy(() => import('./components/ReferEarnSection'));
+// Lazy load OTHER heavy components with chunk reload protection
+const NewAndNoteworthy = lazy(() => importOrReload(() => import('./components/NewAndNoteworthy')));
+const MostBookedServices = lazy(() => importOrReload(() => import('./components/MostBookedServices')));
+const CuratedServices = lazy(() => importOrReload(() => import('./components/CuratedServices')));
+const ServiceSectionWithRating = lazy(() => importOrReload(() => import('./components/ServiceSectionWithRating')));
+const Banner = lazy(() => importOrReload(() => import('./components/Banner')));
+const ReferEarnSection = lazy(() => importOrReload(() => import('./components/ReferEarnSection')));
 import CategoryModal from './components/CategoryModal';
 import SearchOverlay from './components/SearchOverlay';
 import CoreServicesHub from './components/CoreServicesHub';

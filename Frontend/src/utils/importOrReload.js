@@ -1,5 +1,4 @@
-const RELOAD_KEY = 'chunk_reload_at';
-const RELOAD_COOLDOWN_MS = 15000;
+import { reloadForNewVersion } from './chunkReload';
 
 /**
  * Loads a lazy page chunk. When it fails (a dropped connection, or an old tab asking for a
@@ -9,15 +8,20 @@ const RELOAD_COOLDOWN_MS = 15000;
  */
 export const importOrReload = async (importFunc) => {
   try {
-    return await importFunc();
+    const module = await importFunc();
+    // Safety check: ensure dynamic import resolved properly with a module object
+    if (!module || (typeof module === 'object' && module.default === undefined && Object.keys(module).length === 0)) {
+      throw new Error("Module export invalid: reading 'default'");
+    }
+    return module;
   } catch (error) {
     try {
-      const last = Number(sessionStorage.getItem(RELOAD_KEY)) || 0;
-      if (navigator.onLine !== false && Date.now() - last > RELOAD_COOLDOWN_MS) {
-        sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
-        window.location.reload();
-        // Stay on the loader while the reload happens instead of flashing the error
-        return new Promise(() => {});
+      if (navigator.onLine !== false) {
+        const reloaded = reloadForNewVersion();
+        if (reloaded) {
+          // Stay on the loader while the reload happens instead of flashing the error
+          return new Promise(() => {});
+        }
       }
     } catch (e) { /* storage unavailable: fall through to the error screen */ }
     throw error;

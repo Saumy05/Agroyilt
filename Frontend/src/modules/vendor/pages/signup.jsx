@@ -344,15 +344,22 @@ const VendorSignup = () => {
 
         if (response.success) {
           localStorage.removeItem('vendor_signup_form_data');
-        clearSavedReferral('vendor');
+          clearSavedReferral('vendor');
+          const isApproved = response.vendor?.approvalStatus === 'approved';
           toastManager.success(
             <div className="flex flex-col">
               <span className="font-bold">Successfully Registered!</span>
-              <span className="text-xs">Your vendor account is pending admin approval.</span>
+              <span className="text-xs">{isApproved ? 'Set your MPIN to continue.' : 'Your vendor account is pending admin approval.'}</span>
             </div>,
             { icon: <FiCheckCircle className="text-[#D68F35]" />, duration: 5000 }
           );
-          navigate('/vendor/settings/mpin-setup', { state: { isFirstTime: true } });
+          navigate('/vendor/settings/mpin-setup', {
+            state: {
+              isFirstTime: true,
+              phone: formData.phoneNumber,
+              approvalStatus: response.vendor?.approvalStatus || 'pending'
+            }
+          });
         } else {
           toastManager.error(response.message || 'Registration failed');
         }
@@ -464,8 +471,15 @@ const VendorSignup = () => {
       if (response.success) {
         localStorage.removeItem('vendor_signup_form_data');
         clearSavedReferral('vendor');
-        toastManager.success('Successfully Registered! Pending admin approval.');
-        navigate('/vendor/settings/mpin-setup', { state: { isFirstTime: true } });
+        const isApproved = response.vendor?.approvalStatus === 'approved';
+        toastManager.success(isApproved ? 'Successfully registered! Set your MPIN to continue.' : 'Successfully Registered! Pending admin approval.');
+        navigate('/vendor/settings/mpin-setup', {
+          state: {
+            isFirstTime: true,
+            phone: formData.phoneNumber,
+            approvalStatus: response.vendor?.approvalStatus || 'pending'
+          }
+        });
       } else {
         toastManager.error(response.message || 'Registration failed');
       }

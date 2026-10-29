@@ -178,8 +178,13 @@ const register = async (req, res) => {
 
     // Admin setting: approve new farmers on registration instead of waiting for an admin (off by default)
     const Settings = require('../../models/Settings');
+    const RegistrationFeeConfig = require('../../models/RegistrationFeeConfig');
     const globalSettings = await Settings.findOne({ type: 'global' }).select('farmerAutoApproval').lean();
     const autoApproved = globalSettings?.farmerAutoApproval === true;
+
+    // Check if registration fee is 0/free
+    const userFeeConfig = await RegistrationFeeConfig.findOne({ role: 'USER', isActive: true }).sort({ createdAt: -1 });
+    const isFeeFree = !userFeeConfig || !(Number(userFeeConfig.amount) > 0);
 
     // Create user
     const user = await User.create({
@@ -191,6 +196,9 @@ const register = async (req, res) => {
       isEmailVerified: !!normalizedEmail ? false : true,
       isMpinSet: false,
       approvalStatus: autoApproved ? 'approved' : 'pending',
+      registrationFeeStatus: isFeeFree ? 'PAID' : 'UNPAID',
+      registrationFeeAmount: 0,
+      registrationFeeVersion: userFeeConfig?.version || 1,
       ...(autoApproved ? { approvalDate: new Date() } : {})
     });
 
@@ -508,7 +516,9 @@ const loginWithMpin = async (req, res) => {
     }
 
     // GATEKEEPER 2: Check Registration Fee
-    if (user.registrationFeeStatus !== 'PAID') {
+    const { ensureRegistrationFeeStatus } = require('../../services/registrationFeeSyncService');
+    const feeCheck = await ensureRegistrationFeeStatus(user, 'USER');
+    if (!feeCheck.isPaid) {
       const jwt = require('jsonwebtoken');
       const preAuthToken = jwt.sign(
         { userId: user._id, role: 'USER', isPreAuth: true },

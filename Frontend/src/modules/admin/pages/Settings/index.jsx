@@ -79,7 +79,9 @@ const AdminSettings = () => {
     supportMaxOpenClaims: 5,
     workerJourneyWindowMinutes: 120,
     workerEarlyStartMinutes: 30,
-    farmerAutoApproval: false
+    farmerAutoApproval: false,
+    vendorAutoApproval: true,
+    workerAutoApproval: true
   });
   const [systemLoading, setSystemLoading] = useState(false);
 
@@ -407,7 +409,9 @@ const AdminSettings = () => {
             supportMaxOpenClaims: res.settings.supportMaxOpenClaims ?? 5,
             workerJourneyWindowMinutes: res.settings.workerJourneyWindowMinutes ?? 120,
             workerEarlyStartMinutes: res.settings.workerEarlyStartMinutes ?? 30,
-            farmerAutoApproval: res.settings.farmerAutoApproval === true
+            farmerAutoApproval: res.settings.farmerAutoApproval === true,
+            vendorAutoApproval: res.settings.vendorAutoApproval !== false,
+            workerAutoApproval: res.settings.workerAutoApproval !== false
           });
           // Load support settings
           setSupportSettings({
@@ -633,7 +637,9 @@ const AdminSettings = () => {
         supportMaxOpenClaims: Math.min(50, Math.max(1, Math.floor(Number(systemSettings.supportMaxOpenClaims)) || 5)),
         workerJourneyWindowMinutes: Math.max(0, Number(systemSettings.workerJourneyWindowMinutes) || 0),
         workerEarlyStartMinutes: Math.max(0, Number(systemSettings.workerEarlyStartMinutes) || 0),
-        farmerAutoApproval: Boolean(systemSettings.farmerAutoApproval)
+        farmerAutoApproval: Boolean(systemSettings.farmerAutoApproval),
+        vendorAutoApproval: Boolean(systemSettings.vendorAutoApproval),
+        workerAutoApproval: Boolean(systemSettings.workerAutoApproval)
       };
       await updateSettings(payload);
       toastManager.success('System preferences & worker rules updated');
@@ -1750,19 +1756,84 @@ const AdminSettings = () => {
                 </div>
 
                 <form onSubmit={handleSystemSave} className="space-y-6">
-                  {/* Farmer sign-up approval */}
-                  <div className="border border-gray-200 rounded-xl p-4">
-                    <h3 className="text-sm font-bold text-gray-800 mb-2">Farmer Sign-up Approval</h3>
-                    <label className="flex items-center gap-3 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg cursor-pointer">
-                      <input
-                        type="checkbox" name="farmerAutoApproval"
-                        checked={Boolean(systemSettings.farmerAutoApproval)}
-                        onChange={handleSystemChange}
-                        className="w-4 h-4 accent-green-600"
-                      />
-                      <span className="text-sm font-bold text-gray-800">Approve new farmers automatically</span>
-                    </label>
-                    <p className="text-[10px] text-gray-400 mt-1">Off (default): every new farmer waits for an admin to approve them. On: new farmers are approved as soon as they register and go straight to the registration fee, if one is set. Farmers already waiting are not changed, and vendors and workers always need approval.</p>
+                  {/* User Sign-up Auto Approval */}
+                  <div className="border border-gray-200 rounded-xl p-4 space-y-4">
+                    <div>
+                      <h3 className="text-sm font-bold text-gray-800">User Sign-up Auto-Approval</h3>
+                      <p className="text-xs text-gray-500 mt-0.5">Control whether new registrations are approved immediately or require manual admin review.</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3">
+                      {/* Farmer */}
+                      <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                        <label className="flex items-center justify-between cursor-pointer">
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="checkbox" name="farmerAutoApproval"
+                              checked={Boolean(systemSettings.farmerAutoApproval)}
+                              onChange={handleSystemChange}
+                              className="w-4 h-4 accent-green-600 cursor-pointer"
+                            />
+                            <div>
+                              <span className="text-sm font-bold text-gray-800">Approve new farmers automatically</span>
+                              <p className="text-[11px] text-gray-500 mt-0.5">Off (default): Every new farmer waits for an admin to approve. On: New farmers are approved instantly on registration.</p>
+                            </div>
+                          </div>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${systemSettings.farmerAutoApproval ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}`}>
+                            {systemSettings.farmerAutoApproval ? 'Auto' : 'Manual'}
+                          </span>
+                        </label>
+                      </div>
+
+                      {/* Vendor */}
+                      <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                        <label className="flex items-center justify-between cursor-pointer">
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="checkbox" name="vendorAutoApproval"
+                              checked={Boolean(systemSettings.vendorAutoApproval)}
+                              onChange={handleSystemChange}
+                              className="w-4 h-4 accent-green-600 cursor-pointer"
+                            />
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-bold text-gray-800">Approve new vendors automatically</span>
+                                <span className="text-[10px] font-semibold text-green-700 bg-green-100 px-1.5 py-0.5 rounded">Default: On</span>
+                              </div>
+                              <p className="text-[11px] text-gray-500 mt-0.5">On (default): New equipment owners / vendors are approved instantly on registration. Off: Vendors wait for admin approval.</p>
+                            </div>
+                          </div>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${systemSettings.vendorAutoApproval ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}`}>
+                            {systemSettings.vendorAutoApproval ? 'Auto' : 'Manual'}
+                          </span>
+                        </label>
+                      </div>
+
+                      {/* Worker */}
+                      <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                        <label className="flex items-center justify-between cursor-pointer">
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="checkbox" name="workerAutoApproval"
+                              checked={Boolean(systemSettings.workerAutoApproval)}
+                              onChange={handleSystemChange}
+                              className="w-4 h-4 accent-green-600 cursor-pointer"
+                            />
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-bold text-gray-800">Approve new workers automatically</span>
+                                <span className="text-[10px] font-semibold text-green-700 bg-green-100 px-1.5 py-0.5 rounded">Default: On</span>
+                              </div>
+                              <p className="text-[11px] text-gray-500 mt-0.5">On (default): New workers and team leaders are approved instantly on registration. Off: Workers wait for admin approval.</p>
+                            </div>
+                          </div>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${systemSettings.workerAutoApproval ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}`}>
+                            {systemSettings.workerAutoApproval ? 'Auto' : 'Manual'}
+                          </span>
+                        </label>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-gray-400">Note: Changing these settings only affects new registrations. Existing pending accounts still require manual review.</p>
                   </div>
 
                   {/* Worker Routing Rules */}
