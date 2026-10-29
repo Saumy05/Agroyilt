@@ -10,6 +10,7 @@ import Logo from '../../../components/common/Logo';
 import { compressImage } from '../../../utils/imageCompression';
 import { uploadSignupDocument, isRemoteUrl } from '../../../services/signupUploadService';
 import ReferralInput from '../../../components/common/ReferralInput';
+import RegistrationLocationPicker from '../../../components/common/RegistrationLocationPicker';
 import { clearSavedReferral } from '../../../utils/referralStorage';
 import DobInput from '../../../components/common/DobInput';
 import { getDobError } from '../../../utils/age';
@@ -79,6 +80,19 @@ const VendorSignup = () => {
   }, []);
 
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [locationArea, setLocationArea] = useState(() => {
+    try {
+      const saved = localStorage.getItem('vendor_signup_location');
+      if (saved) return JSON.parse(saved);
+    } catch (e) { /* ignore */ }
+    return { stateId: '', districtId: '', subDistrictId: '' };
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('vendor_signup_location', JSON.stringify(locationArea));
+    } catch (e) { /* ignore */ }
+  }, [locationArea]);
 
   // Timer countdown effect
   useEffect(() => {
@@ -337,13 +351,17 @@ const VendorSignup = () => {
           panDocument: panDoc,
           otherDocuments: otherDocs,
           verificationToken,
-          referralCode: referralCode || undefined
+          referralCode: referralCode || undefined,
+          stateId: locationArea.stateId || undefined,
+          districtId: locationArea.districtId || undefined,
+          subDistrictId: locationArea.subDistrictId || undefined
         };
 
         const response = await register(registerData);
 
         if (response.success) {
           localStorage.removeItem('vendor_signup_form_data');
+          localStorage.removeItem('vendor_signup_location');
           clearSavedReferral('vendor');
           const isApproved = response.vendor?.approvalStatus === 'approved';
           toastManager.success(
@@ -463,13 +481,17 @@ const VendorSignup = () => {
         otherDocuments: otherDocs,
         otp: otpValue,
         token: otpToken,
-        referralCode: referralCode || undefined
+        referralCode: referralCode || undefined,
+        stateId: locationArea.stateId || undefined,
+        districtId: locationArea.districtId || undefined,
+        subDistrictId: locationArea.subDistrictId || undefined
       };
 
       const response = await register(registerData);
 
       if (response.success) {
         localStorage.removeItem('vendor_signup_form_data');
+        localStorage.removeItem('vendor_signup_location');
         clearSavedReferral('vendor');
         const isApproved = response.vendor?.approvalStatus === 'approved';
         toastManager.success(isApproved ? 'Successfully registered! Set your MPIN to continue.' : 'Successfully Registered! Pending admin approval.');
@@ -825,6 +847,15 @@ const VendorSignup = () => {
               </div>
 
               <div className="animate-stagger-3 animate-fade-in space-y-4">
+                <RegistrationLocationPicker
+                  value={locationArea}
+                  onChange={setLocationArea}
+                  brandColor={themeColors.brand?.teal || '#347989'}
+                  title="Business / Service Area"
+                  subtitle="Where your equipment and machinery will be available"
+                  optional={true}
+                />
+
                 <ReferralInput
                   role="vendor"
                   referralCode={referralCode}

@@ -259,6 +259,21 @@ const register = async (req, res) => {
     const globalSettings = await Settings.findOne({ type: 'global' }).select('vendorAutoApproval').lean();
     const autoApproved = globalSettings ? globalSettings.vendorAutoApproval !== false : true;
 
+    // Resolve optional geographic area (state -> district -> sub-district)
+    const { resolvePickedArea } = require('../../services/vendorAreaService');
+    let locationFields = { stateId: null, stateName: null, districtId: null, districtName: null, subDistrictId: null, subDistrictName: null };
+    if (req.body.stateId || req.body.districtId || req.body.subDistrictId) {
+      const areaResult = await resolvePickedArea({
+        stateId: req.body.stateId,
+        districtId: req.body.districtId,
+        subDistrictId: req.body.subDistrictId
+      });
+      if (!areaResult.ok) {
+        return res.status(400).json({ success: false, message: areaResult.message });
+      }
+      locationFields = areaResult.fields || locationFields;
+    }
+
     // Check if registration fee is 0/free
     const vendorFeeConfig = await RegistrationFeeConfig.findOne({ role: 'VENDOR', isActive: true }).sort({ createdAt: -1 });
     const isFeeFree = !vendorFeeConfig || !(Number(vendorFeeConfig.amount) > 0);
@@ -284,8 +299,20 @@ const register = async (req, res) => {
       isMpinSet: false,
       registrationFeeStatus: isFeeFree ? 'PAID' : 'UNPAID',
       registrationFeeAmount: 0,
-      registrationFeeVersion: vendorFeeConfig?.version || 1
+      registrationFeeVersion: vendorFeeConfig?.version || 1,
+      ...locationFields
     };
+
+    if (locationFields.stateId || locationFields.districtId) {
+      vendorData.address = {
+        ...(vendorData.address || {}),
+        stateId: locationFields.stateId,
+        districtId: locationFields.districtId,
+        subDistrictId: locationFields.subDistrictId,
+        state: locationFields.stateName,
+        city: locationFields.districtName
+      };
+    }
 
     if (parsedLabDetails) vendorData.labDetails = parsedLabDetails;
 
@@ -370,7 +397,13 @@ const register = async (req, res) => {
         name: vendor.name,
         email: vendor.email,
         phone: vendor.phone,
-        approvalStatus: vendor.approvalStatus
+        approvalStatus: vendor.approvalStatus,
+        stateId: vendor.stateId,
+        stateName: vendor.stateName,
+        districtId: vendor.districtId,
+        districtName: vendor.districtName,
+        subDistrictId: vendor.subDistrictId,
+        subDistrictName: vendor.subDistrictName
       },
       ...tokens
     });

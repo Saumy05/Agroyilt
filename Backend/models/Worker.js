@@ -310,7 +310,17 @@ const workerSchema = new mongoose.Schema({
     updatedAt: { type: Date, default: Date.now }
   }],
 
-  // ── Geographic Scope (for Admin filtering by districtId/subDistrictId) ─────
+  // ── Geographic Scope (for Admin filtering by stateId/districtId/subDistrictId) ─────
+  stateId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'State',
+    default: null,
+    index: true
+  },
+  stateName: {
+    type: String,
+    default: null
+  },
   districtId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'District',
@@ -388,6 +398,7 @@ workerSchema.index({ creationSource: 1, createdAt: -1 });
 workerSchema.index({ createdByType: 1, createdAt: -1 });
 workerSchema.index({ status: 1 });
 workerSchema.index({ isOnline: 1 });
+workerSchema.index({ stateId: 1, createdAt: -1 });
 workerSchema.index({ districtId: 1, createdAt: -1 });
 workerSchema.index({ subDistrictId: 1, createdAt: -1 });
 

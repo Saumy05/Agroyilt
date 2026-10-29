@@ -478,6 +478,7 @@ vendorSchema.index({ createdByType: 1, createdAt: -1 });
 vendorSchema.index({ 'wallet.earnings': -1 });
 vendorSchema.index({ geoLocation: '2dsphere' }); // Fast geo queries
 vendorSchema.index({ isOnline: 1, availability: 1, approvalStatus: 1 }); // Compound index for vendor search
+vendorSchema.index({ stateId: 1, createdAt: -1 });
 vendorSchema.index({ districtId: 1, createdAt: -1 });
 vendorSchema.index({ subDistrictId: 1, createdAt: -1 });
 

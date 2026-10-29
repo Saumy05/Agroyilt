@@ -215,6 +215,21 @@ const register = async (req, res) => {
     const globalSettings = await Settings.findOne({ type: 'global' }).select('workerAutoApproval').lean();
     const autoApproved = globalSettings ? globalSettings.workerAutoApproval !== false : true;
 
+    // Resolve optional geographic area (state -> district -> sub-district)
+    const { resolvePickedArea } = require('../../services/vendorAreaService');
+    let locationFields = { stateId: null, stateName: null, districtId: null, districtName: null, subDistrictId: null, subDistrictName: null };
+    if (req.body.stateId || req.body.districtId || req.body.subDistrictId) {
+      const areaResult = await resolvePickedArea({
+        stateId: req.body.stateId,
+        districtId: req.body.districtId,
+        subDistrictId: req.body.subDistrictId
+      });
+      if (!areaResult.ok) {
+        return res.status(400).json({ success: false, message: areaResult.message });
+      }
+      locationFields = areaResult.fields || locationFields;
+    }
+
     // Check if registration fee is 0/free
     const workerFeeConfig = await RegistrationFeeConfig.findOne({ role: 'WORKER', isActive: true }).sort({ createdAt: -1 });
     const isFeeFree = !workerFeeConfig || !(Number(workerFeeConfig.amount) > 0);
@@ -246,7 +261,12 @@ const register = async (req, res) => {
       registrationFeeAmount: 0,
       registrationFeeVersion: workerFeeConfig?.version || 1,
       ...(autoApproved ? { approvalDate: new Date() } : {}),
-      isActive: true
+      isActive: true,
+      ...locationFields,
+      address: {
+        state: locationFields.stateName || undefined,
+        city: locationFields.districtName || undefined
+      }
     });
 
     // Process Referral Attribution if referral code provided
@@ -333,6 +353,12 @@ const register = async (req, res) => {
         status: worker.status,
         approvalStatus: worker.approvalStatus || (autoApproved ? 'approved' : 'pending'),
         isMpinSet: false,
+        stateId: worker.stateId,
+        stateName: worker.stateName,
+        districtId: worker.districtId,
+        districtName: worker.districtName,
+        subDistrictId: worker.subDistrictId,
+        subDistrictName: worker.subDistrictName,
         serviceCategories: worker.serviceCategories || []
       },
       ...tokens

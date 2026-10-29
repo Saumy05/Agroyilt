@@ -256,7 +256,17 @@ const userSchema = new mongoose.Schema({
     updatedAt: { type: Date, default: Date.now }
   }],
 
-  // ── Geographic Scope (for Admin filtering by districtId/subDistrictId) ─────
+  // ── Geographic Scope (for Admin filtering by stateId/districtId/subDistrictId) ─────
+  stateId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'State',
+    default: null,
+    index: true
+  },
+  stateName: {
+    type: String,
+    default: null
+  },
   districtId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'District',
@@ -342,6 +352,7 @@ userSchema.index({ creationSource: 1, createdAt: -1 });
 userSchema.index({ createdByType: 1, createdAt: -1 });
 userSchema.index({ 'addresses.city': 1 });
 userSchema.index({ 'addresses.district': 1 });
+userSchema.index({ stateId: 1, createdAt: -1 });
 userSchema.index({ districtId: 1, createdAt: -1 });
 userSchema.index({ subDistrictId: 1, createdAt: -1 });
 // No 2dsphere index on farms.location: that field is a plain address object (lat/lng/city/...), not GeoJSON, so the index

@@ -8,6 +8,7 @@ import { userAuthService } from '../../../services/authService';
 import Logo from '../../../components/common/Logo';
 import LogoLoader from '../../../components/common/LogoLoader';
 import ReferralInput from '../../../components/common/ReferralInput';
+import RegistrationLocationPicker from '../../../components/common/RegistrationLocationPicker';
 import { clearSavedReferral } from '../../../utils/referralStorage';
 
 import { z } from "zod";
@@ -43,6 +44,19 @@ const Signup = () => {
   const [isReferralVerified, setIsReferralVerified] = useState(false);
 
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [locationArea, setLocationArea] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('user_signup_location');
+      if (saved) return JSON.parse(saved);
+    } catch (e) { /* ignore */ }
+    return { stateId: '', districtId: '', subDistrictId: '' };
+  });
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('user_signup_location', JSON.stringify(locationArea));
+    } catch (e) { /* ignore */ }
+  }, [locationArea]);
 
 
   // Timer countdown effect
@@ -128,8 +142,12 @@ const Signup = () => {
         const response = await userAuthService.register({
           name: formData.name,
           email: formData.email || null,
+          gender: formData.gender || undefined,
           verificationToken,
-          referralCode: referralCode || undefined
+          referralCode: referralCode || undefined,
+          stateId: locationArea.stateId || undefined,
+          districtId: locationArea.districtId || undefined,
+          subDistrictId: locationArea.subDistrictId || undefined
         });
         if (response.success) {
           try {
@@ -144,9 +162,17 @@ const Signup = () => {
             </div>,
             { icon: <FiCheckCircle className="text-green-500" /> }
           );
-          try { sessionStorage.removeItem('user_signup_form_data'); } catch (e) { /* ignore */ }
+          try {
+            sessionStorage.removeItem('user_signup_form_data');
+            sessionStorage.removeItem('user_signup_location');
+          } catch (e) { /* ignore */ }
           clearSavedReferral('farmer');
-          navigate('/user/settings/mpin-setup', { state: { isFirstTime: true } });
+          navigate('/user/settings/mpin-setup', {
+            state: {
+              isFirstTime: true,
+              approvalStatus: response.user?.approvalStatus || 'pending'
+            }
+          });
         } else {
           toastManager.error(response.message || 'Registration failed');
         }
@@ -235,7 +261,10 @@ const Signup = () => {
         gender: formData.gender || undefined,
         otp: otpValue,
         token: otpToken,
-        referralCode: referralCode || undefined
+        referralCode: referralCode || undefined,
+        stateId: locationArea.stateId || undefined,
+        districtId: locationArea.districtId || undefined,
+        subDistrictId: locationArea.subDistrictId || undefined
       });
       if (response.success) {
         try {
@@ -252,7 +281,10 @@ const Signup = () => {
           </div>,
           { icon: <FiCheckCircle className="text-green-500" /> }
         );
-        try { sessionStorage.removeItem('user_signup_form_data'); } catch (e) { /* ignore */ }
+        try {
+          sessionStorage.removeItem('user_signup_form_data');
+          sessionStorage.removeItem('user_signup_location');
+        } catch (e) { /* ignore */ }
           clearSavedReferral('farmer');
         navigate('/user/settings/mpin-setup', { 
           state: { 
@@ -427,6 +459,15 @@ const Signup = () => {
                 </div>
               </div>
             )}
+
+            <RegistrationLocationPicker
+              value={locationArea}
+              onChange={setLocationArea}
+              brandColor={brandColor}
+              title="Farm Location"
+              subtitle="Connects you with local machinery, vendors, and services"
+              optional={true}
+            />
 
             <ReferralInput
               role="farmer"

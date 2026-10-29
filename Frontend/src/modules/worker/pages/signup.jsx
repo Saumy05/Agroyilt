@@ -8,6 +8,7 @@ import { workerAuthService } from '../../../services/authService';
 import { uploadSignupDocument, isRemoteUrl } from '../../../services/signupUploadService';
 import Logo from '../../../components/common/Logo';
 import ReferralInput from '../../../components/common/ReferralInput';
+import RegistrationLocationPicker from '../../../components/common/RegistrationLocationPicker';
 import { clearSavedReferral } from '../../../utils/referralStorage';
 import DobInput from '../../../components/common/DobInput';
 import { getDobError } from '../../../utils/age';
@@ -84,6 +85,19 @@ const WorkerSignup = () => {
   const [referralCode, setReferralCode] = useState('');
   const [isReferralVerified, setIsReferralVerified] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [locationArea, setLocationArea] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('worker_signup_location');
+      if (saved) return JSON.parse(saved);
+    } catch (e) { /* ignore */ }
+    return { stateId: '', districtId: '', subDistrictId: '' };
+  });
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('worker_signup_location', JSON.stringify(locationArea));
+    } catch (e) { /* ignore */ }
+  }, [locationArea]);
 
   // Keep typed text while the person reads the Terms; File objects can't be serialised but remote URLs can
   useEffect(() => {
@@ -294,7 +308,10 @@ const WorkerSignup = () => {
           verificationToken,
           workerType: new URLSearchParams(location.search).get('type') || 'WORKER',
           referralCode: referralCode || undefined,
-          termsAccepted: acceptedTerms
+          termsAccepted: acceptedTerms,
+          stateId: locationArea.stateId || undefined,
+          districtId: locationArea.districtId || undefined,
+          subDistrictId: locationArea.subDistrictId || undefined
         };
 
         const response = await workerAuthService.register(registerData);
@@ -305,7 +322,11 @@ const WorkerSignup = () => {
               ? 'Registration successful! Set your MPIN to complete your profile.'
               : 'Registration details saved! Please set your MPIN to complete your profile.'
           );
-          try { sessionStorage.removeItem('worker_signup_form_data'); sessionStorage.removeItem('worker_signup_uploaded_urls'); } catch (e) { /* ignore */ }
+          try {
+            sessionStorage.removeItem('worker_signup_form_data');
+            sessionStorage.removeItem('worker_signup_uploaded_urls');
+            sessionStorage.removeItem('worker_signup_location');
+          } catch (e) { /* ignore */ }
           clearSavedReferral('worker');
           navigate('/worker/settings/mpin-setup', {
             state: {
@@ -400,7 +421,10 @@ const WorkerSignup = () => {
         token: otpToken,
         workerType: new URLSearchParams(location.search).get('type') || 'WORKER',
         referralCode: referralCode || undefined,
-        termsAccepted: acceptedTerms
+        termsAccepted: acceptedTerms,
+        stateId: locationArea.stateId || undefined,
+        districtId: locationArea.districtId || undefined,
+        subDistrictId: locationArea.subDistrictId || undefined
       };
 
       const response = await workerAuthService.register(registerData);
@@ -411,7 +435,11 @@ const WorkerSignup = () => {
             ? 'Registration successful! Set your MPIN to complete your profile.'
             : 'Registration details saved! Please set your MPIN to complete your profile.'
         );
-        try { sessionStorage.removeItem('worker_signup_form_data'); sessionStorage.removeItem('worker_signup_uploaded_urls'); } catch (e) { /* ignore */ }
+        try {
+          sessionStorage.removeItem('worker_signup_form_data');
+          sessionStorage.removeItem('worker_signup_uploaded_urls');
+          sessionStorage.removeItem('worker_signup_location');
+        } catch (e) { /* ignore */ }
           clearSavedReferral('worker');
         navigate('/worker/settings/mpin-setup', {
           state: {
@@ -728,6 +756,15 @@ const WorkerSignup = () => {
                   </div>
                 )}
               </div>
+
+              <RegistrationLocationPicker
+                value={locationArea}
+                onChange={setLocationArea}
+                brandColor={brandColor}
+                title="Work Location"
+                subtitle="Matches you with farm jobs and tasks in your area"
+                optional={true}
+              />
 
               <ReferralInput
                 role="worker"

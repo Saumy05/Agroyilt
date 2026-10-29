@@ -182,6 +182,21 @@ const register = async (req, res) => {
     const globalSettings = await Settings.findOne({ type: 'global' }).select('farmerAutoApproval').lean();
     const autoApproved = globalSettings?.farmerAutoApproval === true;
 
+    // Resolve optional geographic area (state -> district -> sub-district)
+    const { resolvePickedArea } = require('../../services/vendorAreaService');
+    let locationFields = { stateId: null, stateName: null, districtId: null, districtName: null, subDistrictId: null, subDistrictName: null };
+    if (req.body.stateId || req.body.districtId || req.body.subDistrictId) {
+      const areaResult = await resolvePickedArea({
+        stateId: req.body.stateId,
+        districtId: req.body.districtId,
+        subDistrictId: req.body.subDistrictId
+      });
+      if (!areaResult.ok) {
+        return res.status(400).json({ success: false, message: areaResult.message });
+      }
+      locationFields = areaResult.fields || locationFields;
+    }
+
     // Check if registration fee is 0/free
     const userFeeConfig = await RegistrationFeeConfig.findOne({ role: 'USER', isActive: true }).sort({ createdAt: -1 });
     const isFeeFree = !userFeeConfig || !(Number(userFeeConfig.amount) > 0);
@@ -199,7 +214,8 @@ const register = async (req, res) => {
       registrationFeeStatus: isFeeFree ? 'PAID' : 'UNPAID',
       registrationFeeAmount: 0,
       registrationFeeVersion: userFeeConfig?.version || 1,
-      ...(autoApproved ? { approvalDate: new Date() } : {})
+      ...(autoApproved ? { approvalDate: new Date() } : {}),
+      ...locationFields
     });
 
     // Process Referral Attribution if referral code provided
@@ -277,7 +293,13 @@ const register = async (req, res) => {
         phone: user.phone,
         approvalStatus: user.approvalStatus,
         isPhoneVerified: user.isPhoneVerified,
-        isEmailVerified: user.isEmailVerified
+        isEmailVerified: user.isEmailVerified,
+        stateId: user.stateId,
+        stateName: user.stateName,
+        districtId: user.districtId,
+        districtName: user.districtName,
+        subDistrictId: user.subDistrictId,
+        subDistrictName: user.subDistrictName
       },
       ...tokens
     });
