@@ -20,6 +20,7 @@ const getAllVendors = async (req, res) => {
       search,
       approvalStatus,
       isActive,
+      availability,
       page = 1,
       limit = 50
     } = req.query;
@@ -32,6 +33,16 @@ const getAllVendors = async (req, res) => {
     }
     if (isActive !== undefined) {
       query.isActive = isActive === 'true';
+    }
+
+    // Availability filter: ONLINE / OFFLINE
+    if (availability && availability !== 'all') {
+      const availUpper = availability.toUpperCase();
+      if (availUpper === 'ONLINE') {
+        query.isOnline = true;
+      } else if (availUpper === 'OFFLINE') {
+        query.isOnline = false;
+      }
     }
 
     // Search by name, email, phone, or business name
@@ -58,8 +69,11 @@ const getAllVendors = async (req, res) => {
     // Pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    // Fetch vendors, total count, and myRegistrations in parallel with .lean()
-    const [vendors, total, myCount] = await Promise.all([
+    // Base count query for geographic scope
+    const baseCount = Object.keys(scopeFilter).length > 0 ? { ...scopeFilter } : {};
+
+    // Fetch vendors, total count, myRegistrations, online, and offline counts in parallel with .lean()
+    const [vendors, total, myCount, onlineCount, offlineCount] = await Promise.all([
       Vendor.find(finalQuery)
         .select('-password -fcmTokens')
         .populate('createdByAdmin', 'name email role')
@@ -69,7 +83,9 @@ const getAllVendors = async (req, res) => {
         .limit(parseInt(limit))
         .lean(),
       Vendor.countDocuments(finalQuery),
-      req.user?._id ? Vendor.countDocuments({ createdByAdmin: req.user._id }) : 0
+      req.user?._id ? Vendor.countDocuments({ createdByAdmin: req.user._id }) : 0,
+      Vendor.countDocuments({ ...baseCount, isOnline: true }),
+      Vendor.countDocuments({ ...baseCount, isOnline: { $ne: true } })
     ]);
 
     res.status(200).json({
@@ -77,7 +93,9 @@ const getAllVendors = async (req, res) => {
       data: vendors,
       counts: {
         total,
-        myRegistrations: myCount
+        myRegistrations: myCount,
+        online: onlineCount,
+        offline: offlineCount
       },
       pagination: {
         page: parseInt(page),
@@ -576,6 +594,101 @@ const toggleVendorStatus = async (req, res) => {
 };
 
 /**
+ * Toggle vendor availability (Online / Offline) by Admin
+ */
+const toggleVendorAvailability = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isOnline } = req.body; // boolean or undefined
+
+    const vendor = await Vendor.findById(id);
+
+    if (!vendor) {
+      return res.status(404).json({
+        success: false,
+        message: 'Vendor not found'
+      });
+    }
+
+    if (!verifyResourceScope(req.user, vendor.toObject ? vendor.toObject() : vendor, 'vendor')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. This equipment owner is outside your assigned geographic scope.'
+      });
+    }
+
+    const nextOnline = typeof isOnline === 'boolean' ? isOnline : !vendor.isOnline;
+
+    if (nextOnline) {
+      if (['suspended', 'rejected'].includes(vendor.approvalStatus) || vendor.isActive === false) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot set a suspended, rejected, or inactive vendor to ONLINE. Please approve or activate the vendor account first.'
+        });
+      }
+    }
+
+    vendor.isOnline = nextOnline;
+    vendor.availability = nextOnline ? 'AVAILABLE' : 'OFFLINE';
+    if (!nextOnline) {
+      vendor.lastSeenAt = new Date();
+    }
+    await vendor.save();
+
+    // Redis sync
+    try {
+      const { setVendorOnline } = require('../../services/redisService');
+      await setVendorOnline(vendor._id, nextOnline);
+    } catch (rErr) {
+      console.warn('[Redis] Failed to update vendor online status in Redis:', rErr.message);
+    }
+
+    // Socket.IO broadcast to vendor rooms and admin_global
+    try {
+      const { getIO } = require('../../sockets');
+      const io = getIO();
+      if (io) {
+        const payload = {
+          vendorId: vendor._id.toString(),
+          isOnline: vendor.isOnline,
+          availability: vendor.availability
+        };
+        io.to(`vendor_${vendor._id.toString()}`).emit('vendor_status_updated', payload);
+        io.to(`vendor:${vendor._id.toString()}`).emit('vendor_status_updated', payload);
+        io.to(`vendor_${vendor._id.toString()}`).emit('vendor_availability_changed', payload);
+        io.to('admin_global').emit('vendor_status_updated', payload);
+      }
+    } catch (sockErr) {
+      console.warn('[Socket] Failed to broadcast vendor status update:', sockErr.message);
+    }
+
+    await auditAdminAction(
+      req,
+      'UPDATE_VENDOR_AVAILABILITY',
+      'VENDOR_MANAGEMENT',
+      `Admin set vendor "${vendor.name}" (${vendor.phone}) availability to ${nextOnline ? 'ONLINE' : 'OFFLINE'}`,
+      vendor._id,
+      'Vendor',
+      vendor.name
+    );
+
+    res.status(200).json({
+      success: true,
+      message: `Vendor is now ${nextOnline ? 'Online' : 'Offline'}`,
+      isOnline: vendor.isOnline,
+      availability: vendor.availability,
+      data: vendor
+    });
+  } catch (error) {
+    console.error('Toggle vendor availability error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update vendor availability'
+    });
+  }
+};
+
+/**
  * Delete vendor
  */
 const deleteVendor = async (req, res) => {
@@ -658,6 +771,7 @@ module.exports = {
   getAllVendorBookings,
   getVendorPaymentsSummary,
   toggleVendorStatus,
+  toggleVendorAvailability,
   updateVendorServices,
   deleteVendor,
   addVendor: async (req, res) => {

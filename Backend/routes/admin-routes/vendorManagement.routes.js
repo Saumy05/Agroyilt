@@ -14,6 +14,7 @@ const {
   getAllVendorBookings,
   getVendorPaymentsSummary,
   toggleVendorStatus,
+  toggleVendorAvailability,
   deleteVendor,
   updateVendorServices,
   addVendor
@@ -34,6 +35,7 @@ router.post('/vendors/:id/approve', authenticate, isAdmin, requireAnyPermission(
 router.post('/vendors/:id/reject', authenticate, isAdmin, requireAnyPermission('vendors.approve'), rejectVendorValidation, rejectVendor);
 router.post('/vendors/:id/suspend', authenticate, isAdmin, requireAnyPermission('vendors.block'), suspendVendor);
 router.patch('/vendors/:id/status', authenticate, isAdmin, requireAnyPermission('vendors.block'), toggleVendorStatus); // New
+router.patch('/vendors/:id/availability', authenticate, isAdmin, requireAnyPermission('vendors.edit'), toggleVendorAvailability);
 router.patch('/vendors/:id/services', authenticate, isAdmin, requireAnyPermission('vendors.edit'), updateVendorServices);
 router.delete('/vendors/:id', authenticate, isAdmin, requireAnyPermission('vendors.delete'), deleteVendor); // New
 router.get('/vendors/:id/bookings', authenticate, isAdmin, requireAnyPermission('vendors.view'), getVendorBookings);

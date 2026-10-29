@@ -395,6 +395,14 @@ const updateVendorOnlineStatus = async (vendorId, isOnline, socketId) => {
     // Update Redis cache (fast lookup)
     await setVendorOnline(vendorId, isOnline);
 
+    if (io) {
+      io.to('admin_global').emit('vendor_status_updated', {
+        vendorId: vendorId.toString(),
+        isOnline,
+        availability: updateData.availability
+      });
+    }
+
     console.log(`[Socket] Vendor ${vendorId} is now ${isOnline ? 'ONLINE' : 'OFFLINE'}`);
   } catch (error) {
     console.error('[Socket] Error updating vendor online status:', error);
@@ -475,6 +483,11 @@ const forceVendorOffline = async (vendorId) => {
     if (io) {
       io.to(`vendor:${id}`).emit('account_deactivated', {
         message: 'Your account has been deactivated. Please contact support.'
+      });
+      io.to('admin_global').emit('vendor_status_updated', {
+        vendorId: id,
+        isOnline: false,
+        availability: 'OFFLINE'
       });
       io.in(`vendor:${id}`).disconnectSockets(true);
     }

@@ -461,11 +461,88 @@ const updateBusinessProfile = async (req, res) => {
   }
 };
 
+/**
+ * Update vendor availability (Online / Offline) by vendor
+ */
+const updateAvailability = async (req, res) => {
+  try {
+    const vendorId = req.user.id || req.user._id;
+    const { isOnline, availability } = req.body;
+
+    const vendor = await Vendor.findById(vendorId);
+    if (!vendor) {
+      return res.status(404).json({
+        success: false,
+        message: 'Vendor not found'
+      });
+    }
+
+    const nextOnline = typeof isOnline === 'boolean'
+      ? isOnline
+      : (availability ? availability.toUpperCase() === 'AVAILABLE' : !vendor.isOnline);
+
+    if (nextOnline) {
+      if (['suspended', 'rejected'].includes(vendor.approvalStatus) || vendor.isActive === false) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot set a suspended or inactive account to Online. Please contact support.'
+        });
+      }
+    }
+
+    vendor.isOnline = nextOnline;
+    vendor.availability = nextOnline ? 'AVAILABLE' : 'OFFLINE';
+    if (!nextOnline) {
+      vendor.lastSeenAt = new Date();
+    }
+    await vendor.save();
+
+    // Redis sync
+    try {
+      const { setVendorOnline } = require('../../services/redisService');
+      await setVendorOnline(vendor._id, nextOnline);
+    } catch (rErr) {
+      console.warn('[Redis] Failed to sync vendor online status in Redis:', rErr.message);
+    }
+
+    // Socket broadcast
+    try {
+      const { getIO } = require('../../sockets');
+      const io = getIO();
+      if (io) {
+        const payload = {
+          vendorId: vendor._id.toString(),
+          isOnline: vendor.isOnline,
+          availability: vendor.availability
+        };
+        io.to(`vendor_${vendor._id.toString()}`).emit('vendor_status_updated', payload);
+        io.to(`vendor:${vendor._id.toString()}`).emit('vendor_status_updated', payload);
+        io.to(`vendor_${vendor._id.toString()}`).emit('vendor_availability_changed', payload);
+        io.to('admin_global').emit('vendor_status_updated', payload);
+      }
+    } catch (sErr) {}
+
+    return res.status(200).json({
+      success: true,
+      message: `You are now ${nextOnline ? 'Online' : 'Offline'}`,
+      isOnline: vendor.isOnline,
+      availability: vendor.availability
+    });
+  } catch (error) {
+    console.error('Update vendor availability error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to update availability status'
+    });
+  }
+};
+
 module.exports = {
   getProfile,
   updateProfile,
   updateAddress,
   updateLocation,
-  updateBusinessProfile
+  updateBusinessProfile,
+  updateAvailability
 };
 

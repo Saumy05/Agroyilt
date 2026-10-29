@@ -11,17 +11,88 @@ import GoogleMapPicker from '../../../vendor/pages/AddressManagement/components/
 import { calculateAge } from '../../../../utils/age';
 import { refreshAdminCounts } from '../../utils/adminCounts';
 import { FeeStatusBadge, LocationCell, FeeFilter } from '../../components/common/FeeAndLocation';
+import { useSocket } from '../../../../context/SocketContext';
+
+const isVendorOnline = (vendor) => {
+  if (vendor?.isOnline === true) return true;
+  const avail = String(vendor?.availability || '').toUpperCase();
+  return avail === 'AVAILABLE' || avail === 'BUSY' || avail === 'ON_JOB';
+};
+
+const VendorAvailabilityToggleBadge = ({ vendor, onToggle, loading }) => {
+  const isOnline = isVendorOnline(vendor);
+  const isActionable = vendor && vendor.approvalStatus !== 'suspended' && vendor.approvalStatus !== 'rejected' && vendor.isActive !== false;
+
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        if (isActionable && !loading) {
+          onToggle(vendor);
+        }
+      }}
+      disabled={!isActionable || loading}
+      title={
+        !isActionable
+          ? 'Cannot toggle: Vendor is not approved or is inactive'
+          : isOnline
+          ? 'Click to turn Offline'
+          : 'Click to turn Online'
+      }
+      className={`group inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-black transition-all border shadow-2xs select-none ${
+        !isActionable
+          ? 'opacity-50 cursor-not-allowed bg-slate-100 text-slate-400 border-slate-200'
+          : isOnline
+          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 cursor-pointer'
+          : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200/80 hover:border-slate-300 cursor-pointer'
+      }`}
+    >
+      {/* Live Pulsing Dot */}
+      <span className="relative flex h-2 w-2 shrink-0">
+        {isOnline && (
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+        )}
+        <span
+          className={`relative inline-flex rounded-full h-2 w-2 ${
+            isOnline ? 'bg-emerald-500' : 'bg-slate-400'
+          }`}
+        ></span>
+      </span>
+
+      <span>{isOnline ? 'Online' : 'Offline'}</span>
+
+      {/* Mini Toggle Switch Track */}
+      {isActionable && (
+        <span
+          className={`ml-1 w-6 h-3.5 rounded-full inline-flex items-center px-0.5 transition-colors duration-200 shrink-0 ${
+            isOnline ? 'bg-emerald-500 justify-end' : 'bg-slate-300 justify-start'
+          }`}
+        >
+          {loading ? (
+            <span className="w-2.5 h-2.5 rounded-full border border-white border-t-transparent animate-spin"></span>
+          ) : (
+            <span className="w-2.5 h-2.5 bg-white rounded-full shadow-xs transition-transform"></span>
+          )}
+        </span>
+      )}
+    </button>
+  );
+};
 
 const AllOwners = () => {
   const [owners, setOwners] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('all'); // 'all', 'pending', 'approved', 'rejected'
   const [feeFilter, setFeeFilter] = useState(''); // '', PAID, UNPAID
+  const [availabilityFilter, setAvailabilityFilter] = useState(''); // '', 'ONLINE', 'OFFLINE'
   const [createdByMe, setCreatedByMe] = useState(false);
   const [myRegistrationsCount, setMyRegistrationsCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedOwner, setSelectedOwner] = useState(null);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [togglingAvailabilityId, setTogglingAvailabilityId] = useState(null);
+  const { socket } = useSocket();
   const [analytics, setAnalytics] = useState({ totalVendors: 0, totalBookings: 0 });
 
   // Add Owner modal states
@@ -102,11 +173,15 @@ const AllOwners = () => {
           name: owner.name,
           email: owner.email,
           phone: owner.phone,
+          profilePhoto: owner.profilePhoto,
           gender: owner.gender,
           dateOfBirth: owner.dateOfBirth,
           businessName: owner.businessName,
           service: owner.service,
           approvalStatus: owner.approvalStatus,
+          isOnline: Boolean(owner.isOnline),
+          availability: owner.availability,
+          lastSeenAt: owner.lastSeenAt,
           aadhar: owner.aadhar?.number,
           pan: owner.pan?.number,
           address: owner.address,       // ← address field add kiya
@@ -142,6 +217,64 @@ const AllOwners = () => {
     loadOwners();
   }, [createdByMe]);
 
+  // Real-time Socket Listener for vendor online status & availability
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleVendorStatusUpdated = (data) => {
+      if (!data?.vendorId) return;
+      const nextOnline = Boolean(data.isOnline ?? (data.availability === 'AVAILABLE'));
+      setOwners(prev => prev.map(o => (o.id === data.vendorId || o._id === data.vendorId)
+        ? { ...o, isOnline: nextOnline, availability: nextOnline ? 'AVAILABLE' : 'OFFLINE' }
+        : o
+      ));
+      if (selectedOwner && (selectedOwner.id === data.vendorId || selectedOwner._id === data.vendorId)) {
+        setSelectedOwner(prev => ({ ...prev, isOnline: nextOnline, availability: nextOnline ? 'AVAILABLE' : 'OFFLINE' }));
+      }
+    };
+
+    socket.on('vendor_status_updated', handleVendorStatusUpdated);
+    socket.on('vendor_availability_changed', handleVendorStatusUpdated);
+
+    return () => {
+      socket.off('vendor_status_updated', handleVendorStatusUpdated);
+      socket.off('vendor_availability_changed', handleVendorStatusUpdated);
+    };
+  }, [socket, selectedOwner]);
+
+  // Handle admin toggling vendor availability (Online ⇄ Offline)
+  const handleToggleAvailability = async (vendor) => {
+    if (!vendor || togglingAvailabilityId === vendor.id) return;
+
+    const currentOnline = isVendorOnline(vendor);
+    const nextOnline = !currentOnline;
+
+    // Optimistic UI update
+    setOwners(prev => prev.map(o => (o.id === vendor.id ? { ...o, isOnline: nextOnline, availability: nextOnline ? 'AVAILABLE' : 'OFFLINE' } : o)));
+    if (selectedOwner && selectedOwner.id === vendor.id) {
+      setSelectedOwner(prev => ({ ...prev, isOnline: nextOnline, availability: nextOnline ? 'AVAILABLE' : 'OFFLINE' }));
+    }
+
+    setTogglingAvailabilityId(vendor.id);
+    try {
+      const res = await adminVendorService.toggleVendorAvailability(vendor.id, nextOnline);
+      if (res && res.success) {
+        toastManager.success(`Vendor ${vendor.name} is now ${nextOnline ? 'Online' : 'Offline'}`);
+      } else {
+        throw new Error(res?.message || 'Failed to update vendor availability');
+      }
+    } catch (err) {
+      // Rollback on error
+      setOwners(prev => prev.map(o => (o.id === vendor.id ? { ...o, isOnline: currentOnline, availability: currentOnline ? 'AVAILABLE' : 'OFFLINE' } : o)));
+      if (selectedOwner && selectedOwner.id === vendor.id) {
+        setSelectedOwner(prev => ({ ...prev, isOnline: currentOnline, availability: currentOnline ? 'AVAILABLE' : 'OFFLINE' }));
+      }
+      toastManager.error(err?.response?.data?.message || err?.message || 'Failed to update vendor availability');
+    } finally {
+      setTogglingAvailabilityId(null);
+    }
+  };
+
   const filteredOwners = useMemo(() => {
     return owners.filter(owner => {
       const serviceString = Array.isArray(owner.service)
@@ -158,9 +291,10 @@ const AllOwners = () => {
         (owner.businessName && owner.businessName.toLowerCase().includes(searchQuery.trim().toLowerCase()));
       const feeState = owner.registrationFeeStatus !== 'PAID' ? 'UNPAID' : owner.registrationFeeAmount > 0 ? 'PAID' : 'FREE';
       const matchesFee = !feeFilter || feeFilter === feeState;
-      return matchesStatus && matchesSearch && matchesFee;
+      const matchesAvailability = !availabilityFilter || (availabilityFilter === 'ONLINE' ? isVendorOnline(owner) : !isVendorOnline(owner));
+      return matchesStatus && matchesSearch && matchesFee && matchesAvailability;
     });
-  }, [owners, filterStatus, feeFilter, searchQuery]);
+  }, [owners, filterStatus, feeFilter, availabilityFilter, searchQuery]);
 
   const handleApprove = async (ownerId) => {
     try {
@@ -390,6 +524,8 @@ const AllOwners = () => {
   const pendingCount = owners.filter(v => v.approvalStatus === 'pending').length;
   const approvedCount = owners.filter(v => v.approvalStatus === 'approved').length;
   const rejectedCount = owners.filter(v => v.approvalStatus === 'rejected').length;
+  const onlineDutyCount = owners.filter(v => isVendorOnline(v)).length;
+  const offlineDutyCount = owners.filter(v => !isVendorOnline(v)).length;
 
   return (
     <div className="space-y-4">
@@ -462,6 +598,43 @@ const AllOwners = () => {
 
               <FeeFilter value={feeFilter} onChange={setFeeFilter} />
 
+              {/* Duty Availability Filter Buttons */}
+              <div className="flex items-center gap-1 bg-gray-100 p-0.5 rounded-lg border border-gray-200/80 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setAvailabilityFilter('')}
+                  className={`px-2.5 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                    availabilityFilter === '' ? 'bg-white text-gray-800 shadow-2xs' : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  All Duty
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAvailabilityFilter('ONLINE')}
+                  className={`px-2.5 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    availabilityFilter === 'ONLINE'
+                      ? 'bg-emerald-600 text-white shadow-2xs'
+                      : 'text-emerald-700 hover:bg-emerald-50'
+                  }`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  Online ({onlineDutyCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAvailabilityFilter('OFFLINE')}
+                  className={`px-2.5 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    availabilityFilter === 'OFFLINE'
+                      ? 'bg-gray-700 text-white shadow-2xs'
+                      : 'text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
+                  Offline ({offlineDutyCount})
+                </button>
+              </div>
+
               <button
                 type="button"
                 onClick={() => setCreatedByMe(prev => !prev)}
@@ -505,15 +678,35 @@ const AllOwners = () => {
                   filteredOwners.map((owner) => (
                     <tr key={owner.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3">
-                        <div>
-                          <p className="font-bold text-gray-900 text-xs">{owner.name}</p>
-                          <p className="text-[10px] text-gray-500">{owner.phone}</p>
-                          <p className="text-[10px] text-gray-400">{owner.email}</p>
-                          {owner.createdByAdmin && (
-                            <span className="inline-flex items-center gap-1 text-[10px] text-amber-800 font-semibold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/60 mt-0.5" title={`Created by Admin: ${owner.createdByAdmin.name} (${owner.createdByAdmin.email})`}>
-                              🛡️ By {owner.createdByAdmin.name}
-                            </span>
-                          )}
+                        <div className="flex items-center gap-2.5">
+                          {/* Vendor Avatar with Live Online/Offline Dot */}
+                          <div className="relative shrink-0">
+                            <div className="w-9 h-9 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center font-bold text-slate-500 text-xs">
+                              {owner.profilePhoto ? (
+                                <img src={owner.profilePhoto} alt={owner.name} className="w-full h-full object-cover" />
+                              ) : (
+                                owner.name?.charAt(0)?.toUpperCase()
+                              )}
+                            </div>
+                            <span
+                              className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${
+                                isVendorOnline(owner)
+                                  ? 'bg-emerald-500 shadow-2xs'
+                                  : 'bg-slate-300'
+                              }`}
+                              title={isVendorOnline(owner) ? 'Vendor is Online' : 'Vendor is Offline'}
+                            />
+                          </div>
+                          <div>
+                            <p className="font-bold text-gray-900 text-xs">{owner.name}</p>
+                            <p className="text-[10px] text-gray-500">{owner.phone}</p>
+                            <p className="text-[10px] text-gray-400">{owner.email}</p>
+                            {owner.createdByAdmin && (
+                              <span className="inline-flex items-center gap-1 text-[10px] text-amber-800 font-semibold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/60 mt-0.5" title={`Created by Admin: ${owner.createdByAdmin.name} (${owner.createdByAdmin.email})`}>
+                                🛡️ By {owner.createdByAdmin.name}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className="px-4 py-3">
@@ -535,7 +728,12 @@ const AllOwners = () => {
                             }`}>
                             {owner.approvalStatus}
                           </span>
-                        <FeeStatusBadge status={owner.registrationFeeStatus} amount={owner.registrationFeeAmount} role="VENDOR" />
+                          <FeeStatusBadge status={owner.registrationFeeStatus} amount={owner.registrationFeeAmount} role="VENDOR" />
+                          <VendorAvailabilityToggleBadge
+                            vendor={owner}
+                            onToggle={handleToggleAvailability}
+                            loading={togglingAvailabilityId === owner.id}
+                          />
                         </div>
                       </td>
                       <td className="px-4 py-3">
@@ -657,6 +855,21 @@ const AllOwners = () => {
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Status</label>
                 <div>{getStatusBadge(selectedOwner.approvalStatus)}</div>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Duty Status</label>
+                <div className="mt-1 flex items-center gap-2 flex-wrap">
+                  <VendorAvailabilityToggleBadge
+                    vendor={selectedOwner}
+                    onToggle={handleToggleAvailability}
+                    loading={togglingAvailabilityId === selectedOwner.id}
+                  />
+                  {selectedOwner.lastSeenAt && !isVendorOnline(selectedOwner) && (
+                    <span className="text-xs text-gray-400">
+                      Last seen: {new Date(selectedOwner.lastSeenAt).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
+                    </span>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Registration Fee</label>

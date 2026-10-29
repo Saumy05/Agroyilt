@@ -14,6 +14,8 @@ import { registerFCMToken } from '../../../../services/pushNotificationService';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import StatsCards from './components/StatsCards';
 import { useVendorDashboard } from '../../../../context/VendorDashboardContext';
+import { useSocket } from '../../../../context/SocketContext';
+import api from '../../../../services/api';
 // PendingBookings import removed
 
 
@@ -151,9 +153,27 @@ const Dashboard = memo(() => {
     return labels[s] || status;
   };
 
+  const { socket } = useSocket();
   const [isOnline, setIsOnline] = useState(() => localStorage.getItem('vendorOnlineStatus') !== 'false');
 
-  const handleToggleOnline = (e) => {
+  // Real-time socket listener for vendor status updates (e.g. from Admin or other sessions)
+  useEffect(() => {
+    if (!socket) return;
+    const handleStatus = (data) => {
+      if (data?.isOnline !== undefined) {
+        setIsOnline(Boolean(data.isOnline));
+        localStorage.setItem('vendorOnlineStatus', String(Boolean(data.isOnline)));
+      }
+    };
+    socket.on('vendor_status_updated', handleStatus);
+    socket.on('vendor_availability_changed', handleStatus);
+    return () => {
+      socket.off('vendor_status_updated', handleStatus);
+      socket.off('vendor_availability_changed', handleStatus);
+    };
+  }, [socket]);
+
+  const handleToggleOnline = async (e) => {
     e?.stopPropagation();
     const nextStatus = !isOnline;
     setIsOnline(nextStatus);
@@ -162,6 +182,12 @@ const Dashboard = memo(() => {
       toastManager.success('You are Online • Ready to receive new booking alerts');
     } else {
       toastManager.info('You are Offline • New booking alerts paused');
+    }
+
+    try {
+      await api.put('/vendors/profile/availability', { isOnline: nextStatus });
+    } catch (err) {
+      console.error('Failed to sync vendor availability to backend:', err);
     }
   };
 

@@ -50,6 +50,14 @@ const adminVendorService = {
   },
 
   /**
+   * Toggle vendor availability (Online / Offline) by admin
+   */
+  toggleVendorAvailability: async (id, isOnline) => {
+    const response = await api.patch(`/admin/vendors/${id}/availability`, { isOnline });
+    return response.data;
+  },
+
+  /**
    * Update vendor services (e.g. to mark as Soil Lab)
    */
   updateServices: async (id, services) => {
