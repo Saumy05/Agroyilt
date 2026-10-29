@@ -281,3 +281,4 @@ const RegistrationLocationPicker = ({
 };
 
 export default RegistrationLocationPicker;
+
