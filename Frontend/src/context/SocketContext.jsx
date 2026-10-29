@@ -638,7 +638,27 @@ export const SocketProvider = ({ children }) => {
       });
     }
 
+    // Immediate reconnect and job refresh when returning from another app or unlocking phone
+    const handleVisibilityOrFocus = () => {
+      if (!document.hidden) {
+        if (!newSocket.connected) {
+          console.log('[Socket] Reconnecting socket on tab focus / visibilitychange...');
+          newSocket.connect();
+        }
+        if (userType === 'worker') {
+          window.dispatchEvent(new Event('workerJobsUpdated'));
+        } else if (userType === 'vendor') {
+          window.dispatchEvent(new Event('vendorJobsUpdated'));
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+    window.addEventListener('focus', handleVisibilityOrFocus);
+
     return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
       newSocket.disconnect();
     };
   }, [userType, token]); // Re-run if userType or token changes. Navigate is stable.

@@ -79,13 +79,22 @@ async function sendPushNotification(tokens, payload) {
     // Ensure data values are strings (FCM requirement)
     const channelId = payload.channelId || payload.data?.channelId || 'booking_alerts';
 
+    const notifType = (payload.data?.type || payload.data?.notificationType || payload.type || '').toLowerCase();
+    const isUrgent = payload.highPriority === true ||
+      ['worker_booking_request', 'new_booking_request', 'new_booking', 'group_booking_request', 'booking_request', 'job_assigned', 'team_member_invitation', 'group_member_request'].includes(notifType) ||
+      channelId === 'booking_alerts' ||
+      payload.data?.isUrgentBooking === 'true' ||
+      payload.isUrgentBooking === true;
+
     const stringData = {
       // Always include title and body in data for data-only notifications and Service Worker access
       title: payload.title || (payload.body ? 'New Update' : 'App Notification'),
       body: payload.body || '',
       channelId: channelId,
       channel_id: channelId,
-      click_action: 'FLUTTER_NOTIFICATION_CLICK'
+      click_action: 'FLUTTER_NOTIFICATION_CLICK',
+      isUrgentBooking: isUrgent ? 'true' : 'false',
+      sound: isUrgent ? 'booking_alert' : (payload.sound || 'default')
     };
     if (payload.data) {
       Object.keys(payload.data).forEach(key => {
@@ -113,7 +122,7 @@ async function sendPushNotification(tokens, payload) {
               title: payload.title || 'App Notification',
               body: payload.body || 'New Update'
             },
-            sound: 'default',
+            sound: isUrgent ? 'booking_alert.caf' : 'default',
             badge: 1,
             'content-available': 1, // Wake up app in background
             'mutable-content': 1
@@ -130,7 +139,7 @@ async function sendPushNotification(tokens, payload) {
           link: payload.data?.link || '/'
         }
       },
-      priority: payload.highPriority !== false ? 'high' : 'normal'
+      priority: 'high'
     };
 
     if (!payload.dataOnly) {
@@ -147,9 +156,10 @@ async function sendPushNotification(tokens, payload) {
         channelId: channelId,
         priority: 'max',
         visibility: 'public',
-        sound: 'default',
-        defaultSound: true,
-        defaultVibrateTimings: true,
+        sound: payload.sound || (isUrgent ? 'booking_alert' : 'default'),
+        defaultSound: !payload.sound && !isUrgent,
+        defaultVibrateTimings: !isUrgent,
+        ...(isUrgent ? { vibrateTimingsMillis: [0, 800, 300, 800, 300, 800, 300, 800] } : {}),
         clickAction: 'FLUTTER_NOTIFICATION_CLICK',
       };
       
@@ -162,6 +172,18 @@ async function sendPushNotification(tokens, payload) {
         title: payload.title || 'App Notification',
         body: payload.body || 'New Update',
         icon: payload.icon || '/AgroyiltLogo.png',
+        badge: '/AgroyiltLogo.png',
+        tag: stringData.tag || stringData.bookingId || stringData.requestId || (isUrgent ? `booking-${Date.now()}` : undefined),
+        renotify: isUrgent,
+        requireInteraction: isUrgent,
+        silent: false,
+        ...(isUrgent ? {
+          vibrate: [800, 300, 800, 300, 800, 300, 800, 300, 800],
+          actions: [
+            { action: 'accept', title: '✓ Accept', icon: '/accept_icon_1767937404754.png' },
+            { action: 'reject', title: '✗ Decline', icon: '/reject_icon_1767937423083.png' }
+          ]
+        } : {})
       };
     }
 
@@ -328,6 +350,16 @@ async function sendNotificationToVendor(vendorId, payload, includeMobile = true)
  */
 async function sendNotificationToWorker(workerId, payload, includeMobile = true) {
   try {
+    // Support both object payload and legacy (workerId, title, body, data) signature
+    if (typeof payload === 'string') {
+      payload = {
+        title: payload,
+        body: arguments[2] || '',
+        data: arguments[3] || {}
+      };
+    }
+    payload = payload || {};
+
     const Worker = require('../models/Worker');
     const worker = await Worker.findById(workerId);
 
@@ -348,11 +380,32 @@ async function sendNotificationToWorker(workerId, payload, includeMobile = true)
 
     console.log(`[FCM] 📤 Sending notification to worker ${worker.name} (${workerId}) on ${tokens.length} devices`);
 
+    const notifType = (payload.data?.type || payload.data?.notificationType || payload.type || '').toLowerCase();
+    const isUrgent = [
+      'worker_booking_request',
+      'new_booking_request',
+      'new_booking',
+      'group_booking_request',
+      'booking_request',
+      'job_assigned',
+      'team_member_invitation',
+      'group_member_request'
+    ].includes(notifType);
+
     const finalPayload = {
       ...payload,
-      title: `👷 [Pro] ${payload.title}`, // Add identification
+      title: `👷 [Pro] ${payload.title || 'New Work Alert'}`,
+      channelId: isUrgent ? 'booking_alerts' : (payload.channelId || 'booking_alerts'),
+      sound: isUrgent ? 'booking_alert' : (payload.sound || 'default'),
       highPriority: true,
-      dataOnly: payload.dataOnly === true ? true : false
+      dataOnly: payload.dataOnly === true ? true : false,
+      data: {
+        ...(payload.data || {}),
+        notificationType: notifType || 'worker_booking_request',
+        isUrgentBooking: isUrgent ? 'true' : 'false',
+        sound: isUrgent ? 'booking_alert' : (payload.sound || 'default'),
+        channelId: isUrgent ? 'booking_alerts' : 'booking_alerts'
+      }
     };
 
     await sendPushNotification(tokens, finalPayload);

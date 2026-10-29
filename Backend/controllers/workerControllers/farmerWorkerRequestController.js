@@ -343,14 +343,25 @@ const notify = async ({
           return;
         }
         sendNotificationToWorker(recipientId, {
-          title: title || '🌾 Work Alert',
-          body: message || 'You have a new work request',
+          title: title || '🌾 New Work Request',
+          body: message || `New request from ${broadcastPayload.farmerName || 'Farmer'} for ${broadcastPayload.workTitle || 'Farm Work'}`,
+          channelId: 'booking_alerts',
+          sound: 'booking_alert',
+          priority: 'high',
           data: {
             type: type || 'worker_booking_request',
+            notificationType: type || 'worker_booking_request',
             requestId: String(relatedId || ''),
+            bookingId: String(relatedId || ''),
             workTitle: String(broadcastPayload.workTitle || ''),
-            farmerName: String(broadcastPayload.farmerName || ''),
-            link: deepLink
+            farmerName: String(broadcastPayload.farmerName || 'Farmer'),
+            requiredWorkers: String(broadcastPayload.requiredWorkers || 1),
+            bookingType: String(broadcastPayload.bookingType || 'HOURLY'),
+            price: String(broadcastPayload.farmerOfferedRate || broadcastPayload.minRate || broadcastPayload.minDailyRate || ''),
+            link: deepLink,
+            channelId: 'booking_alerts',
+            sound: 'booking_alert',
+            isUrgentBooking: 'true'
           }
         }).catch(fcmErr => {
           if (process.env.NODE_ENV !== 'test') {
@@ -3037,15 +3048,25 @@ exports.workerRespondToFarmerRequest = async (req, res) => {
         emitSafe(`worker_${tm._id}`, 'workerJobsUpdated', {});
 
         // 2. Send push notification fallback (FCM)
-        sendNotificationToWorker(
-          tm._id,
-          'New Team Job Invitation',
-          `You have been invited by ${acceptingWorker.name || 'your Team Leader'}. Tap to view the job.`,
-          {
-            type: 'TEAM_MEMBER_INVITATION',
-            requestId: request._id.toString()
+        sendNotificationToWorker(tm._id, {
+          title: '👥 New Team Job Invitation',
+          body: `You have been invited by ${acceptingWorker.name || 'your Team Leader'} for ${request.workTitle || 'Farm Work'}. Tap to view.`,
+          channelId: 'booking_alerts',
+          sound: 'booking_alert',
+          priority: 'high',
+          data: {
+            type: 'team_member_invitation',
+            notificationType: 'team_member_invitation',
+            requestId: request._id.toString(),
+            bookingId: request._id.toString(),
+            workTitle: String(request.workTitle || 'Farm Work'),
+            leaderName: String(acceptingWorker.name || 'Team Leader'),
+            link: '/worker/group-requests',
+            channelId: 'booking_alerts',
+            sound: 'booking_alert',
+            isUrgentBooking: 'true'
           }
-        ).catch(fcmErr => console.warn('[FCM] Invite notification failed:', fcmErr.message));
+        }).catch(fcmErr => console.warn('[FCM] Invite notification failed:', fcmErr.message));
 
         // 3. In-app Notification doc
         Notification.create({

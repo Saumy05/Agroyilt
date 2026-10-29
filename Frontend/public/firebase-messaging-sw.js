@@ -25,9 +25,48 @@ firebase.initializeApp(firebaseConfig);
 // Get messaging instance
 const messaging = firebase.messaging();
 
+// Broadcast incoming booking alert to all active tabs/windows
+function broadcastIncomingAlert(data, notificationType) {
+  const alertData = {
+    type: 'AGROYILT_INCOMING_ALERT',
+    notificationType: notificationType,
+    data: data,
+    requestId: data.requestId || data.bookingId,
+    bookingId: data.bookingId || data.requestId,
+    workTitle: data.workTitle,
+    farmerName: data.farmerName,
+    link: data.link,
+    timestamp: Date.now()
+  };
+
+  // 1. Post message to all window clients
+  if (self.clients && self.clients.matchAll) {
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      clients.forEach((client) => {
+        try {
+          client.postMessage(alertData);
+        } catch (e) {}
+      });
+    }).catch(() => {});
+  }
+
+  // 2. BroadcastChannel (works cross-tab and into Web Workers / SPAs)
+  try {
+    if (typeof BroadcastChannel !== 'undefined') {
+      const bc = new BroadcastChannel('agroyilt_booking_alert_channel');
+      bc.postMessage(alertData);
+      setTimeout(() => { try { bc.close(); } catch (_) {} }, 1000);
+    }
+  } catch (e) {}
+}
+
 // Notification sounds based on type
 const NOTIFICATION_SOUNDS = {
   new_booking: '/booking-alert.mp3',
+  new_booking_request: '/booking-alert.mp3',
+  worker_booking_request: '/booking-alert.mp3',
+  group_booking_request: '/booking-alert.mp3',
+  team_member_invitation: '/booking-alert.mp3',
   booking_accepted: '/success.mp3',
   worker_assigned: '/notification.mp3',
   job_assigned: '/booking-alert.mp3',
@@ -60,10 +99,26 @@ messaging.onBackgroundMessage((payload) => {
 
   let icon = data.icon || notification.icon || '/AgroyiltLogo.png';
   let badge = '/AgroyiltLogo.png';
-  let tag = data.bookingId || `notification-${Date.now()}`;
+  let tag = data.bookingId || data.requestId || `notification-${Date.now()}`;
   let requireInteraction = false;
   let vibrate = [200, 100, 200];
   let actions = [];
+
+  const isUrgentBookingAlert = [
+    'worker_booking_request',
+    'group_booking_request',
+    'team_member_invitation',
+    'group_member_request',
+    'new_booking',
+    'new_booking_request',
+    'job_assigned',
+    'booking_requested'
+  ].includes(notificationType) || data.isUrgentBooking === 'true' || data.channelId === 'booking_alerts';
+
+  // Broadcast to any background open tab to start ringing immediately
+  if (isUrgentBookingAlert) {
+    broadcastIncomingAlert(data, notificationType);
+  }
 
   // Enhanced styling for different notification types
   switch (notificationType) {
@@ -76,16 +131,31 @@ messaging.onBackgroundMessage((payload) => {
       ];
       break;
 
+    case 'worker_booking_request':
+    case 'group_booking_request':
+    case 'team_member_invitation':
+    case 'group_member_request':
+      // High priority worker booking request alert - ring & loud vibration like Ola/Uber/Rapido
+      notificationTitle = data.title || notification.title || '🌾 New Work Request!';
+      notificationBody = data.body || notification.body || (data.workTitle ? `New job request: ${data.workTitle}` : 'Farmer is requesting your service.');
+      requireInteraction = true; // Keep visible on screen
+      vibrate = [1000, 400, 1000, 400, 1000, 400, 1000, 400, 1000]; // Urgent phone ring vibration pattern
+      actions = [
+        { action: 'accept', title: '📞 ACCEPT & VIEW' },
+        { action: 'reject', title: '✕ DECLINE' }
+      ];
+      break;
+
     case 'new_booking':
     case 'new_booking_request':
-      // High priority booking alert - like Ola/Uber
+      // High priority vendor booking alert
       notificationTitle = data.title || notification.title || '🔔 New Booking Request!';
       notificationBody = data.body || notification.body || 'You have a new service request.';
       requireInteraction = true; // Keep notification visible until user interacts
-      vibrate = [500, 200, 500, 200, 500]; // Strong vibration pattern
+      vibrate = [1000, 400, 1000, 400, 1000, 400, 1000, 400, 1000];
       actions = [
-        { action: 'accept', title: '✓ Accept', icon: '/icons/accept.png' },
-        { action: 'reject', title: '✗ Decline', icon: '/icons/reject.png' }
+        { action: 'accept', title: '✓ Accept', icon: '/accept_icon_1767937404754.png' },
+        { action: 'reject', title: '✗ Decline', icon: '/reject_icon_1767937423083.png' }
       ];
       break;
 
@@ -94,9 +164,9 @@ messaging.onBackgroundMessage((payload) => {
       notificationTitle = data.title || notification.title || '🔔 New Job Assigned!';
       notificationBody = data.body || notification.body || 'You have been assigned a new job.';
       requireInteraction = true;
-      vibrate = [500, 200, 500, 200, 500];
+      vibrate = [1000, 400, 1000, 400, 1000, 400, 1000, 400, 1000];
       actions = [
-        { action: 'accept', title: '✓ Accept Job', icon: '/icons/accept.png' },
+        { action: 'accept', title: '✓ Accept Job', icon: '/accept_icon_1767937404754.png' },
         { action: 'view', title: '👁️ View Details' }
       ];
       break;
@@ -197,14 +267,20 @@ self.addEventListener('notificationclick', (event) => {
   let urlToOpen = data.url || data.link || '/';
 
   // Handle different actions
+  const targetId = data.bookingId || data.requestId;
+  const notifType = (data.notificationType || data.type || '').toLowerCase();
+
   switch (action) {
     case 'accept':
-      // Accept booking/job - navigate to details page
-      if (data.bookingId) {
-        if (data.notificationType === 'job_assigned') {
-          urlToOpen = `/worker/job/${data.bookingId}`;
+      if (targetId) {
+        if (notifType === 'job_assigned') {
+          urlToOpen = `/worker/job/${targetId}`;
+        } else if (notifType.includes('team_member') || notifType.includes('group_member')) {
+          urlToOpen = `/worker/group-requests`;
+        } else if (notifType.includes('worker') || notifType.includes('group_booking')) {
+          urlToOpen = `/worker/booking-requests`;
         } else {
-          urlToOpen = `/vendor/booking-alert/${data.bookingId}`; // Opens the Accept/Reject alert modal
+          urlToOpen = `/vendor/booking-alert/${targetId}`;
         }
       }
       break;
@@ -216,24 +292,28 @@ self.addEventListener('notificationclick', (event) => {
 
     case 'view':
     case 'track':
-      // View details
-      if (data.bookingId) {
-        urlToOpen = data.link || `/user/booking/${data.bookingId}`;
+      if (targetId) {
+        if (notifType.includes('worker') || notifType.includes('job')) {
+          urlToOpen = data.link || `/worker/booking-requests`;
+        } else {
+          urlToOpen = data.link || `/user/booking/${targetId}`;
+        }
       }
       break;
 
     case 'rate':
-      // Navigate to rating page
-      if (data.bookingId) {
-        urlToOpen = `/user/booking/${data.bookingId}?rate=true`;
+      if (targetId) {
+        urlToOpen = `/user/booking/${targetId}?rate=true`;
       }
       break;
 
     default:
-      // Default click - for vendor booking alerts, open the alert page
-      const clickNotifType = (data.notificationType || data.type || '').toLowerCase();
-      if (data.bookingId && (clickNotifType === 'new_booking' || clickNotifType === 'new_booking_request')) {
-        urlToOpen = `/vendor/booking-alert/${data.bookingId}`;
+      if (targetId && (notifType === 'worker_booking_request' || notifType === 'group_booking_request')) {
+        urlToOpen = `/worker/booking-requests`;
+      } else if (targetId && (notifType === 'team_member_invitation' || notifType === 'group_member_request')) {
+        urlToOpen = `/worker/group-requests`;
+      } else if (targetId && (notifType === 'new_booking' || notifType === 'new_booking_request')) {
+        urlToOpen = `/vendor/booking-alert/${targetId}`;
       } else {
         urlToOpen = data.link || data.url || '/';
       }
@@ -245,14 +325,19 @@ self.addEventListener('notificationclick', (event) => {
     urlToOpen = new URL(urlToOpen, origin).href;
   }
 
-  // Open or focus the app
+  // Open or focus the app and trigger foreground ringing/alert
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       // Check if app is already open
       for (const client of clientList) {
         if ('focus' in client) {
           client.focus();
-          // Navigate to the specific URL
+          client.postMessage({
+            type: 'AGROYILT_INCOMING_ALERT',
+            notificationType: notifType,
+            data: data,
+            action: action
+          });
           if (urlToOpen) {
             return client.navigate(urlToOpen);
           }
@@ -272,13 +357,26 @@ self.addEventListener('notificationclose', (event) => {
   console.log('[SW] ❌ Notification closed:', event.notification.data);
 });
 
-// Handle push events for additional processing
+// Handle push events for additional processing and instant client ringing
 self.addEventListener('push', (event) => {
   console.log('[SW] 📨 Push event received:', event);
   if (event.data) {
     try {
       const data = event.data.json();
       console.log('[SW] 📨 Push event data (JSON):', JSON.stringify(data, null, 2));
+      const payloadData = data.data || data;
+      const type = (payloadData.type || payloadData.notificationType || '').toLowerCase();
+      if (
+        type === 'worker_booking_request' ||
+        type === 'group_booking_request' ||
+        type === 'team_member_invitation' ||
+        type === 'group_member_request' ||
+        type === 'new_booking' ||
+        type === 'new_booking_request' ||
+        type === 'job_assigned'
+      ) {
+        broadcastIncomingAlert(payloadData, type);
+      }
     } catch (e) {
       console.log('[SW] 📨 Push event data (Text):', event.data.text());
     }

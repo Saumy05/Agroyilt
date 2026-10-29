@@ -141,6 +141,23 @@ class FlutterBridge {
   }
 
   /* ================================
+        NATIVE ALERT RING (FLUTTER)
+  ================================== */
+  async startAlertRing(data = {}) {
+    if (this.isFlutter) {
+      return this.callHandler("startAlertRing", data);
+    }
+    return { success: false };
+  }
+
+  async stopAlertRing() {
+    if (this.isFlutter) {
+      return this.callHandler("stopAlertRing", {});
+    }
+    return { success: false };
+  }
+
+  /* ================================
         DOWNLOADS (NATIVE BRIDGE)
   ================================== */
   async downloadFile(url, fileName) {

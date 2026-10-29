@@ -18,6 +18,7 @@ import LogoLoader from '../../../../components/common/LogoLoader';
 import authStorage from '../../../../utils/authStorage';
 import { toastManager } from '../../../../utils/toastManager';
 import { to12HourText } from '../../../../utils/bookingDisplay';
+import { prewarmAudio } from '../../../../utils/notificationSound';
 
 
 const Dashboard = () => {
@@ -231,6 +232,8 @@ const Dashboard = () => {
 
     // Guard: Going ONLINE requires a complete profile for independent workers
     if (newStatus === 'ONLINE') {
+      prewarmAudio();
+      registerFCMToken('worker', true).catch(() => {});
       const completion = checkWorkerProfileCompleteness(workerProfile);
       if (!completion.isComplete) {
         setShowIncompleteModal(true);

@@ -1,7 +1,10 @@
 // Notification Sound Utility
 // Plays notification sound and alert rings across User, Vendor, Worker, and Admin panels
+import flutterBridge from './flutterBridge';
 
 let audioContext = null;
+let prewarmedAudio = null;
+let isAudioPrewarmed = false;
 
 // Initialize Web Audio API context
 const initAudio = () => {
@@ -15,15 +18,33 @@ const initAudio = () => {
 
 // Global unlock on first user interaction (browser autoplay policy requirement)
 const unlockAudioContext = () => {
+  initAudio();
   if (audioContext && audioContext.state === 'suspended') {
     audioContext.resume().catch(() => {});
   }
-  // Remove one-time listeners
-  if (typeof document !== 'undefined') {
-    document.removeEventListener('click', unlockAudioContext);
-    document.removeEventListener('touchstart', unlockAudioContext);
-    document.removeEventListener('keydown', unlockAudioContext);
-    document.removeEventListener('pointerdown', unlockAudioContext);
+  prewarmAudio();
+};
+
+export const prewarmAudio = () => {
+  if (typeof window === 'undefined') return;
+  initAudio();
+  if (audioContext && audioContext.state === 'suspended') {
+    audioContext.resume().catch(() => {});
+  }
+  if (!isAudioPrewarmed) {
+    try {
+      prewarmedAudio = new Audio('/booking-alert.mp3');
+      prewarmedAudio.volume = 0.001;
+      const p = prewarmedAudio.play();
+      if (p !== undefined) {
+        p.then(() => {
+          prewarmedAudio.pause();
+          prewarmedAudio.currentTime = 0;
+          prewarmedAudio.volume = 1.0;
+          isAudioPrewarmed = true;
+        }).catch(() => {});
+      }
+    } catch (e) {}
   }
 };
 
@@ -168,6 +189,85 @@ export const playCancellationAlert = () => {
 
 // Play urgent ring for booking alerts / incoming calls
 let currentAudio = null;
+let isAlertActive = false;
+let synthRingInterval = null;
+let vibrationInterval = null;
+
+// Synthesizer Siren Fallback (continuous alarm siren if audio file is blocked)
+const startSynthesizedRing = () => {
+  if (synthRingInterval) return;
+  initAudio();
+  if (!audioContext) return;
+  if (audioContext.state === 'suspended') {
+    audioContext.resume().catch(() => {});
+  }
+
+  const pulse = () => {
+    try {
+      if (!audioContext || audioContext.state === 'closed' || !isAlertActive) return;
+      const now = audioContext.currentTime;
+      const osc = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+
+      osc.type = 'sawtooth';
+      // Dual-tone siren sweep (like European/US emergency tone)
+      osc.frequency.setValueAtTime(800, now);
+      osc.frequency.linearRampToValueAtTime(1200, now + 0.35);
+      osc.frequency.linearRampToValueAtTime(800, now + 0.7);
+
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.linearRampToValueAtTime(0.5, now + 0.05);
+      gain.gain.setValueAtTime(0.4, now + 0.65);
+      gain.gain.linearRampToValueAtTime(0.01, now + 0.7);
+
+      osc.connect(gain);
+      gain.connect(audioContext.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.7);
+    } catch (e) {}
+  };
+
+  pulse();
+  synthRingInterval = setInterval(pulse, 850);
+};
+
+const stopSynthesizedRing = () => {
+  if (synthRingInterval) {
+    clearInterval(synthRingInterval);
+    synthRingInterval = null;
+  }
+};
+
+const startVibration = () => {
+  if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+    try {
+      navigator.vibrate([800, 400, 800, 400, 800, 400, 800, 400]);
+      if (!vibrationInterval) {
+        vibrationInterval = setInterval(() => {
+          if (!isAlertActive) {
+            clearInterval(vibrationInterval);
+            vibrationInterval = null;
+            return;
+          }
+          navigator.vibrate([800, 400, 800, 400, 800, 400, 800, 400]);
+        }, 4800);
+      }
+    } catch (e) {}
+  }
+};
+
+const stopVibration = () => {
+  if (vibrationInterval) {
+    clearInterval(vibrationInterval);
+    vibrationInterval = null;
+  }
+  if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+    try {
+      navigator.vibrate(0);
+    } catch (e) {}
+  }
+};
 
 // Browsers block audio until the user has touched the page. If the ring was blocked,
 // start it on the first tap/click/key press, as long as it is still the current ring.
@@ -176,8 +276,10 @@ const retryRingOnNextGesture = (audio) => {
   const events = ['pointerdown', 'touchstart', 'click', 'keydown'];
   const retry = () => {
     events.forEach((ev) => document.removeEventListener(ev, retry, true));
-    if (currentAudio === audio) {
-      audio.play().catch(() => {});
+    if (currentAudio === audio && isAlertActive) {
+      audio.play().then(() => {
+        stopSynthesizedRing();
+      }).catch(() => {});
     }
   };
   events.forEach((ev) => document.addEventListener(ev, retry, true));
@@ -185,42 +287,73 @@ const retryRingOnNextGesture = (audio) => {
 
 export const playAlertRing = (loop = false) => {
   try {
+    isAlertActive = true;
+    startVibration();
+
+    // Signal native Flutter shell if running inside Android APK wrapper
+    if (flutterBridge && flutterBridge.isFlutter) {
+      flutterBridge.startAlertRing({ loop, sound: 'booking_alert' }).catch(() => {});
+    }
+
     if (currentAudio) {
       currentAudio.pause();
       currentAudio.currentTime = 0;
     }
 
-    const audio = new Audio('/booking-alert.mp3');
+    // Try prewarmed audio first, or fallback to new Audio
+    let audio = null;
+    if (prewarmedAudio && isAudioPrewarmed) {
+      audio = prewarmedAudio;
+      audio.currentTime = 0;
+    } else {
+      audio = new Audio('/booking-alert.mp3');
+    }
+
     audio.volume = 1.0;
     if (loop) audio.loop = true;
     currentAudio = audio;
 
-    audio.play().catch((e) => {
-      if (e.name === 'NotAllowedError') {
-        console.warn('[NotificationSound] Audio blocked: User interaction required on this tab first.');
-        retryRingOnNextGesture(audio);
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('audio-play-blocked'));
-        }
-      } else if (e.name !== 'AbortError') {
-        console.error('Error playing alert ring:', e);
-      }
-    });
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise
+        .then(() => {
+          // Playing successfully via MP3 audio
+          stopSynthesizedRing();
+        })
+        .catch((e) => {
+          console.warn('[NotificationSound] Audio play blocked/failed, activating synth siren:', e?.message || e);
+          startSynthesizedRing();
+          retryRingOnNextGesture(audio);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('audio-play-blocked'));
+          }
+        });
+    }
 
     audio.onended = () => {
-      if (currentAudio === audio) {
-        currentAudio = null;
+      if (!loop && currentAudio === audio) {
+        stopAlertRing();
       }
     };
 
     return true;
   } catch (error) {
     console.error('Error in playAlertRing:', error);
+    startSynthesizedRing();
     return false;
   }
 };
 
 export const stopAlertRing = () => {
+  isAlertActive = false;
+  stopVibration();
+  stopSynthesizedRing();
+
+  // Stop native Flutter ringtone if running inside Android APK wrapper
+  if (flutterBridge && flutterBridge.isFlutter) {
+    flutterBridge.stopAlertRing().catch(() => {});
+  }
+
   if (currentAudio) {
     currentAudio.pause();
     currentAudio.currentTime = 0;
@@ -247,10 +380,63 @@ export const isSoundEnabled = (userType = 'admin') => {
   return true;
 };
 
+// Register cross-tab & service worker listeners for background alerts
+if (typeof window !== 'undefined') {
+  // 1. Service Worker PostMessage
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', (event) => {
+      if (event.data?.type === 'AGROYILT_INCOMING_ALERT') {
+        console.log('[NotificationSound] Background push alert received from SW:', event.data);
+        playAlertRing(true);
+        window.dispatchEvent(new CustomEvent('workerIncomingBooking', {
+          detail: {
+            source: 'push',
+            data: event.data.data || event.data
+          }
+        }));
+      }
+    });
+  }
+
+  // 2. BroadcastChannel
+  if (typeof BroadcastChannel !== 'undefined') {
+    try {
+      const alertChannel = new BroadcastChannel('agroyilt_booking_alert_channel');
+      alertChannel.onmessage = (event) => {
+        if (event.data?.type === 'AGROYILT_INCOMING_ALERT') {
+          console.log('[NotificationSound] Background push alert received via BroadcastChannel:', event.data);
+          playAlertRing(true);
+          window.dispatchEvent(new CustomEvent('workerIncomingBooking', {
+            detail: {
+              source: 'push',
+              data: event.data.data || event.data
+            }
+          }));
+        }
+      };
+    } catch (e) {}
+  }
+
+  // 3. Auto-resume audio when returning from background / unlocking phone
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && isAlertActive) {
+      if (currentAudio && currentAudio.paused) {
+        currentAudio.play().then(() => stopSynthesizedRing()).catch(() => startSynthesizedRing());
+      }
+    }
+  });
+  window.addEventListener('focus', () => {
+    if (isAlertActive && currentAudio && currentAudio.paused) {
+      currentAudio.play().then(() => stopSynthesizedRing()).catch(() => startSynthesizedRing());
+    }
+  });
+}
+
 export default {
   playNotificationSound,
   playSingleBeep,
   playAlertRing,
   stopAlertRing,
+  prewarmAudio,
   isSoundEnabled
 };
