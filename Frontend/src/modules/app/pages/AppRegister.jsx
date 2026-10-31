@@ -10,8 +10,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 const roles = [
   {
-    id: 'farmer',
-    label: 'Farmer',
+    id: 'customer',
+    label: 'Customer',
     description: 'Book agricultural equipment & services for your fields',
     icon: FiUser,
     color: '#2E7D32',

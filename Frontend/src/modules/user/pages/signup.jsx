@@ -313,7 +313,7 @@ const Signup = () => {
       className="min-h-[100dvh] flex flex-col relative overflow-x-hidden bg-white justify-center items-center"
     >
       <Helmet>
-        <title>Farmer Registration | AgroYilt</title>
+        <title>Customer Registration | AgroYilt</title>
         <link rel="canonical" href="https://agroyilt.com/" />
         <meta name="robots" content="noindex, follow" />
       </Helmet>

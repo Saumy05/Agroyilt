@@ -499,7 +499,7 @@ const AppLogin = () => {
   };
 
   const roleLabel = {
-    user: 'Farmer',
+    user: 'Customer',
     vendor: 'Vendor',
     worker: 'Independent Worker',
   };

@@ -253,7 +253,7 @@ const AppRegistrationFee = () => {
     );
   }
 
-  const roleName = pendingRole === 'USER' ? 'Farmer' : pendingRole === 'VENDOR' ? 'Vendor' : 'Worker';
+  const roleName = pendingRole === 'USER' ? 'Customer' : pendingRole === 'VENDOR' ? 'Vendor' : 'Worker';
 
   return (
     <div className="min-h-[100dvh] flex flex-col bg-gray-50">
