@@ -19,7 +19,7 @@ const { dispatchVendorRequest } = require('../../services/bookingSettlementServi
 const { getPlatformFeePercentage, computePlatformFee } = require('../../utils/vendorPayout');
 const { sendNotificationToUser, sendNotificationToVendor, sendNotificationToWorker } = require('../../services/firebaseAdmin');
 const { sendNewBookingNotification } = require('../../services/firebaseNotificationService');
-const { parseTimeToMinutes, parseSlotInterval, isIntervalOverlapping, validateSchedule, appInstantMs, DAY_MS } = require('../../utils/timeSlotHelper');
+const { parseTimeToMinutes, parseSlotInterval, isIntervalOverlapping, validateSchedule, appInstantMs, rentalSpan, DAY_MS } = require('../../utils/timeSlotHelper');
 
 // Longest day-based rental a farmer can book in one go
 const MAX_RENTAL_DAYS = 60;
@@ -1367,7 +1367,7 @@ const getUserBookings = async (req, res) => {
     // Run query and total count in parallel with lean() and precise lightweight projection
     const [bookings, total] = await Promise.all([
       Booking.find(query)
-        .select('_id bookingNumber providerType serviceCategory categoryIcon brandName brandIcon serviceName bookedItems selectedImplements address scheduledDate scheduledTime timeSlot rental_type status paymentStatus paymentMethod finalAmount totalAmount userPayableAmount workerRequestId parentRequestId rating settlementStatus workerPaymentStatus createdAt vendorId workerId serviceId categoryId')
+        .select('_id bookingNumber providerType serviceCategory categoryIcon brandName brandIcon serviceName bookedItems selectedImplements address scheduledDate scheduledTime timeSlot rental_type fulfillmentMode estimatedDuration endDate startedAt status paymentStatus paymentMethod finalAmount totalAmount userPayableAmount workerRequestId parentRequestId rating settlementStatus workerPaymentStatus createdAt vendorId workerId serviceId categoryId')
         .populate('vendorId', 'name businessName phone')
         .populate('serviceId', 'title iconUrl')
         .populate('categoryId', 'title slug requiresDriver')
@@ -2024,6 +2024,101 @@ const rescheduleBooking = async (req, res) => {
 };
 
 /**
+ * Day-based rental: the farmer keeps the machine longer. Adds whole 24-hour days when the machine is still free for them.
+ * Billing needs no change here: the final bill counts the real days kept, so the added days are simply billed if they are used.
+ */
+const extendRental = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+    const days = Number(req.body.days);
+
+    const booking = await Booking.findOne({ _id: id, userId });
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+
+    if (!(booking.rental_type === 'daily' && booking.fulfillmentMode === 'rental')) {
+      return res.status(400).json({ success: false, message: 'Only day-based rentals can be extended.' });
+    }
+    const EXTENDABLE = [
+      BOOKING_STATUS.CONFIRMED, BOOKING_STATUS.ACCEPTED, BOOKING_STATUS.ASSIGNED,
+      BOOKING_STATUS.JOURNEY_STARTED, BOOKING_STATUS.VISITED, BOOKING_STATUS.IN_PROGRESS
+    ];
+    if (!EXTENDABLE.includes(booking.status) || !booking.vendorId) {
+      return res.status(400).json({ success: false, message: `A booking that is ${booking.status} can no longer be extended.` });
+    }
+    const currentDays = Math.floor(Number(booking.estimatedDuration));
+    if (!Number.isInteger(days) || days < 1 || !(currentDays >= 1) || currentDays + days > MAX_RENTAL_DAYS) {
+      return res.status(400).json({ success: false, message: `You can rent for at most ${MAX_RENTAL_DAYS} days in total.` });
+    }
+
+    // Already past the return time: the extra time is being billed automatically, so there is nothing to add
+    const span = rentalSpan(booking);
+    if (booking.startedAt && span && span.endMs < Date.now()) {
+      return res.status(400).json({ success: false, message: 'The return time has already passed. Extra days are added to your bill automatically until you return the machine.' });
+    }
+
+    // The machine must be free for the added days
+    const newTotal = currentDays + days;
+    const conflict = await findVendorSlotConflict(
+      {
+        scheduledDate: booking.scheduledDate, timeSlot: booking.timeSlot, scheduledTime: booking.scheduledTime,
+        rental_type: booking.rental_type, estimatedDuration: newTotal, startedAt: booking.startedAt,
+        equipmentId: booking.equipmentId, unitsBooked: booking.unitsBooked, fulfillmentMode: booking.fulfillmentMode
+      },
+      booking.vendorId,
+      { excludeId: booking._id, statuses: [BOOKING_STATUS.REQUESTED, ...CONFLICT_STATUSES] }
+    );
+    if (conflict) {
+      return res.status(409).json({ success: false, message: 'This machine is already booked after your return time, so it cannot be kept longer.' });
+    }
+
+    const pickupMs = appInstantMs(booking.scheduledDate, booking.timeSlot?.start);
+    const previousEnd = booking.endDate || (pickupMs !== null ? new Date(pickupMs + currentDays * DAY_MS) : null);
+    const newEnd = pickupMs !== null ? new Date(pickupMs + newTotal * DAY_MS) : (previousEnd ? new Date(previousEnd.getTime() + days * DAY_MS) : null);
+
+    // Atomic on the day count we read: two taps cannot both add days
+    const updated = await Booking.findOneAndUpdate(
+      { _id: booking._id, userId, estimatedDuration: booking.estimatedDuration, status: { $in: EXTENDABLE } },
+      {
+        $set: { estimatedDuration: newTotal, endDate: newEnd, endReminderSent: false, overdueNoticeSent: false },
+        $push: { rentalExtensions: { days, previousEndDate: previousEnd } }
+      },
+      { new: true }
+    );
+    if (!updated) {
+      return res.status(409).json({ success: false, message: 'Your booking just changed. Please refresh and try again.' });
+    }
+
+    const dueAt = rentalSpan(updated);
+    const dueText = dueAt ? new Date(dueAt.endMs).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true }).toUpperCase() : '';
+    await createNotification({
+      vendorId: updated.vendorId,
+      type: 'booking_updated',
+      title: 'Rental Extended',
+      message: `The farmer added ${days} day${days > 1 ? 's' : ''} to booking ${updated.bookingNumber}. The machine is now due back ${dueText}.`,
+      relatedId: updated._id,
+      relatedType: 'booking',
+      pushData: { type: 'booking_updated', bookingId: updated._id.toString(), link: `/vendor/booking/${updated._id}` }
+    });
+    const io = req.app.get('io') || global.io;
+    if (io) {
+      io.to(`vendor_${updated.vendorId}`).emit('booking_updated', {
+        bookingId: updated._id, status: updated.status, message: `Booking ${updated.bookingNumber} was extended by ${days} day(s)`
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Added ${days} day${days > 1 ? 's' : ''}. Return time is now ${dueText}.`,
+      data: { estimatedDuration: updated.estimatedDuration, endDate: updated.endDate }
+    });
+  } catch (error) {
+    console.error('Extend rental error:', error);
+    res.status(500).json({ success: false, message: 'Failed to extend the rental. Please try again.' });
+  }
+};
+
+/**
  * Add review and rating after completion
  */
 const addReview = async (req, res) => {
@@ -2310,6 +2405,33 @@ const checkEquipmentAvailability = async (req, res) => {
         available: false,
         message: `Equipment is currently under maintenance (${maintenanceRecord.reason}). It will be available after ${new Date(maintenanceRecord.endDate).toLocaleDateString()}.`
       });
+    }
+
+    // 1b. A rental machine can be out for days: look at its whole booked periods, not just this day
+    try {
+      const VendorEquipment = require('../../models/VendorEquipment');
+      const machine = mongoose.isValidObjectId(equipmentId)
+        ? await VendorEquipment.findById(equipmentId).populate('categoryId', 'fulfillmentMode rentByUnit').lean()
+        : null;
+      if (machine?.categoryId?.fulfillmentMode === 'rental' && !machine.categoryId.rentByUnit) {
+        const { getRentalAvailability } = require('../../services/equipmentAvailability');
+        const dateKey = String(requestedDate).slice(0, 10);
+        const startMs = appInstantMs(dateKey, String(requestedTime || '00:00').split('-')[0].trim());
+        if (startMs !== null) {
+          const endMs = startMs + 60 * 60000; // only the start is known here: look at the first hour
+          const info = (await getRentalAvailability([machine])).get(String(machine._id));
+          const clash = info?.booked.find((p) => new Date(p.start).getTime() < endMs && (p.end === null || new Date(p.end).getTime() > startMs));
+          if (!clash) return res.status(200).json({ success: true, available: true, message: 'Equipment is available for this slot.' });
+          return res.status(200).json({
+            success: true,
+            available: false,
+            ...(clash.end ? { nextAvailableSlot: new Date(clash.end).toLocaleString('en-CA', { timeZone: 'Asia/Kolkata', hour12: false }).replace(',', '').slice(0, 16) } : {}),
+            message: 'Equipment is already booked for the requested time. Please check the next available slot.'
+          });
+        }
+      }
+    } catch (rentalErr) {
+      console.error('Rental availability check failed, using the day check:', rentalErr.message);
     }
 
     // 2. CHECK EXISTING BOOKINGS (Conflict Check)
@@ -3079,4 +3201,5 @@ const farmerSelectOfflinePayment = async (req, res) => {
 };
 
 module.exports.farmerConfirmFinalAmount = farmerConfirmFinalAmount;
+module.exports.extendRental = extendRental;
 module.exports.farmerSelectOfflinePayment = farmerSelectOfflinePayment;

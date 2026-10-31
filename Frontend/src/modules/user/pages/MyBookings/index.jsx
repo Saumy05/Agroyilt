@@ -22,6 +22,7 @@ import { apiCache } from '../../../../utils/apiCache';
 import workerBookingService from '../../../../services/workerBookingService';
 import { getPaymentState, getActualTimeRange } from '../../../../utils/bookingDisplay';
 import { formatDateDDMMYYYY } from '../../../../utils/formatDate';
+import { formatRentalReturn } from '../../../../utils/rentalReturn';
 
 const FILTERS = [
   { id: 'all', label: 'All Orders' },
@@ -475,6 +476,7 @@ const MyBookings = () => {
                 {actualTimes
                   ? ` • ${actualTimes}`
                   : (booking.scheduledTime || booking.timeSlot?.start ? ` • ${booking.scheduledTime || booking.timeSlot?.start}` : '')}
+                {formatRentalReturn(booking) ? ` • ${formatRentalReturn(booking)}` : ''}
               </span>
             </div>
             {durationLabel && (

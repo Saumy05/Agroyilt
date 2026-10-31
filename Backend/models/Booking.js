@@ -367,6 +367,13 @@ const bookingSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  // Day-based rental: days the farmer added after booking (each one is another 24 hours; billing still follows the real time kept)
+  rentalExtensions: [{
+    _id: false,
+    days: { type: Number, required: true },
+    previousEndDate: { type: Date, default: null },
+    addedAt: { type: Date, default: Date.now }
+  }],
   // Rental kept past its booked time (and grace): the farmer and vendor were told extra time is now billed
   overdueNoticeSent: {
     type: Boolean,

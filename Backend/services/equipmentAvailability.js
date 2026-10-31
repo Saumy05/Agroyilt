@@ -16,11 +16,6 @@ const periodOf = (b, nowMs) => {
   if (span) {
     startMs = span.startMs;
     endMs = span.endMs;
-    // Handed over late: the 24-hour days run from the real handover, so the machine is out until then
-    if (b.startedAt) {
-      const days = Math.floor(Number(b.estimatedDuration)) || 1;
-      endMs = Math.max(endMs, new Date(b.startedAt).getTime() + days * DAY_MS);
-    }
   } else {
     const interval = parseSlotInterval(b.timeSlot, b.scheduledTime, b.rental_type);
     const dayMs = appInstantMs(b.scheduledDate, '00:00');

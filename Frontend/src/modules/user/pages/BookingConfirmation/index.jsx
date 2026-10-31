@@ -21,6 +21,7 @@ import {
 import { bookingService } from '../../../../services/bookingService';
 import { waitForServerPayment } from '../../../../utils/paymentRecovery';
 import { paymentService } from '../../../../services/paymentService';
+import { formatRentalReturn } from '../../../../utils/rentalReturn';
 import { useSocket } from '../../../../context/SocketContext';
 import NotificationBell from '../../components/common/NotificationBell';
 import ConfirmDialog from '../../../../components/common/ConfirmDialog';
@@ -637,10 +638,8 @@ const BookingConfirmation = () => {
                       )}
                     </p>
                   )}
-                  {booking.rental_type === 'daily' && booking.fulfillmentMode === 'rental' && booking.endDate && (
-                    <p className="text-xs text-gray-600 font-medium mt-0.5">
-                      Return by {formatDate(booking.endDate)}, {new Date(booking.endDate).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true }).toUpperCase()}
-                    </p>
+                  {formatRentalReturn(booking) && (
+                    <p className="text-xs text-gray-600 font-medium mt-0.5">{formatRentalReturn(booking)}</p>
                   )}
                 </div>
               </div>

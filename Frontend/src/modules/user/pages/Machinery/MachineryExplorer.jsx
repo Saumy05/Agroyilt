@@ -121,7 +121,8 @@ const MachineryExplorer = () => {
   // Automatically sync endTime whenever startTime, quantity, or rentalType changes
   useEffect(() => {
     const qtyNum = parseFloat(quantity) || 1;
-    const hours = rentalType === 'hourly' ? qtyNum : (rentalType === 'daily' ? 8 * qtyNum : 4);
+    // A working day is 8 hours however many days are booked (8 x 3 days = 24 h used to end exactly at the start time and was refused)
+    const hours = rentalType === 'hourly' ? qtyNum : (rentalType === 'daily' ? 8 : 4);
     setEndTime(calculateEndTime(startTime, hours));
   }, [startTime, quantity, rentalType]);
 

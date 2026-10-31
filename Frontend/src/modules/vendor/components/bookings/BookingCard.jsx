@@ -5,6 +5,7 @@ import { vendorTheme as themeColors } from '../../../../theme';
 import StatusBadge from '../common/StatusBadge';
 import PriceDisplay from '../common/PriceDisplay';
 import ServiceTypeBadge from './ServiceTypeBadge';
+import { formatRentalReturn } from '../../../../utils/rentalReturn';
 
 const BookingCard = ({ booking, onClick }) => {
   const navigate = useNavigate();
@@ -69,6 +70,7 @@ const BookingCard = ({ booking, onClick }) => {
             <FiClock className="w-4 h-4 text-gray-500" />
             <p className="text-sm text-gray-600">
               {booking.timeSlot.date} at {booking.timeSlot.time}
+              {formatRentalReturn(booking) ? ` • ${formatRentalReturn(booking)}` : ''}
             </p>
           </div>
         )}

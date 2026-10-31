@@ -4,6 +4,7 @@ import { FiClock, FiMapPin, FiBell } from 'react-icons/fi';
 import { vendorTheme as themeColors } from '../../../../../theme';
 import { toastManager } from '../../../../../utils/toastManager';
 import { acceptBooking, rejectBooking } from '../../../services/bookingService';
+import { formatRentalReturn } from '../../../../../utils/rentalReturn';
 
 const PendingBookings = memo(({ bookings, setPendingBookings, setActiveAlertBooking }) => {
   const navigate = useNavigate();
@@ -52,8 +53,9 @@ const PendingBookings = memo(({ bookings, setPendingBookings, setActiveAlertBook
         }
       }
     }
-    if (dateStr && timeStr) return `${dateStr} • ${timeStr}`;
-    return dateStr || timeStr || 'Flexible';
+    const returnText = formatRentalReturn(b);
+    const base = dateStr && timeStr ? `${dateStr} • ${timeStr}` : (dateStr || timeStr || 'Flexible');
+    return returnText ? `${base} • ${returnText}` : base;
   };
 
   if (bookings.length === 0) {

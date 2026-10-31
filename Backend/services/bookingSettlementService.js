@@ -859,7 +859,9 @@ const dispatchVendorRequest = async (booking, { io = null, distance = null, chos
       address: booking.address,
       distance,
       rental_type: booking.rental_type || '',
+      fulfillmentMode: booking.fulfillmentMode || '',
       estimatedDuration: booking.estimatedDuration || '',
+      endDate: booking.endDate || null,
       landSize: booking.landSize || '',
       estimatedKm: booking.distanceTrip?.estimatedKm || '',
       estimatedFare: booking.distanceTrip?.estimatedFare || '',
@@ -1042,7 +1044,7 @@ const findVendorSlotConflict = async (target, vendorId, { excludeId = null, stat
   if (excludeId) query._id = { $ne: excludeId };
 
   const others = await Booking.find(query)
-    .select('equipmentId scheduledDate scheduledTime timeSlot rental_type estimatedDuration status bookingNumber acceptedAt createdAt fulfillmentMode unitsBooked');
+    .select('equipmentId scheduledDate scheduledTime timeSlot rental_type estimatedDuration status bookingNumber acceptedAt createdAt fulfillmentMode unitsBooked startedAt');
   const mine = parseSlotInterval(target.timeSlot, target.scheduledTime, target.rental_type);
   // Real period (ms) a booking occupies: the rental span, or its slot on its own day
   const periodOf = (b, span, interval) => {

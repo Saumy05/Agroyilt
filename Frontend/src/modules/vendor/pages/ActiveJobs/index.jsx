@@ -18,6 +18,7 @@ import { ConfirmDialog } from '../../components/common';
 import { useVendorDashboard } from '../../../../context/VendorDashboardContext';
 import { getPaymentState, getActualTimeRange } from '../../../../utils/bookingDisplay';
 import { formatDateDDMMYYYY } from '../../../../utils/formatDate';
+import { formatRentalReturn } from '../../../../utils/rentalReturn';
 
 const ActiveJobs = memo(() => {
   const navigate = useNavigate();
@@ -206,7 +207,7 @@ const ActiveJobs = memo(() => {
           timeSlot: {
             date: (getActualTimeRange(job) && job.startedAt ? formatDateDDMMYYYY(job.startedAt) : formatDateDDMMYYYY(job.scheduledDate)) || 'Date',
             // once the work has started the real start / end time replaces the booked slot
-            time: getActualTimeRange(job) || job.scheduledTime || 'Slot',
+            time: (getActualTimeRange(job) || job.scheduledTime || 'Slot') + (formatRentalReturn(job) ? ` · ${formatRentalReturn(job)}` : ''),
           },
           rental_type: job.rental_type,
           estimatedDuration: job.estimatedDuration,

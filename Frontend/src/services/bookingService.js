@@ -60,6 +60,13 @@ export const bookingService = {
     return response.data;
   },
 
+  // Day-based rental: keep the machine for more days
+  extendRental: async (id, days) => {
+    apiCache.invalidatePrefix('/users/bookings');
+    const response = await api.post(`/users/bookings/${id}/extend-rental`, { days });
+    return response.data;
+  },
+
   // Add review and rating
   addReview: async (id, reviewData) => {
     apiCache.invalidatePrefix('/users/bookings');

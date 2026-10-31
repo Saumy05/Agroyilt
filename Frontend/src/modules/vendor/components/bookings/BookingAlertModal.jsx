@@ -7,6 +7,7 @@ import { vendorTheme as themeColors } from '../../../../theme';
 import { playAlertRing, stopAlertRing } from '../../../../utils/notificationSound';
 import authStorage from '../../../../utils/authStorage';
 import { formatFullAddress } from '../../../../utils/formatAddress';
+import { formatRentalReturn } from '../../../../utils/rentalReturn';
 
 // Seconds left in a request's window: the server's expiry, else 15 minutes from when it was sent, else the default
 const getRemainingSeconds = (booking, fallback = 60) => {
@@ -173,9 +174,10 @@ const BookingAlertCard = ({ booking, onAccept, onReject, onAssign, initialTimeLe
     (booking?.startTime && booking?.endTime ? `${booking.startTime} - ${booking.endTime}` : (booking?.startTime || ''));
   const formattedTime = format12Hour(rawTime);
 
-  const scheduledDisplay = formattedDate && formattedTime
+  const rentalReturnText = formatRentalReturn(booking);
+  const scheduledDisplay = (formattedDate && formattedTime
     ? `${formattedDate} • ${formattedTime}`
-    : (formattedDate || formattedTime || 'Flexible / ASAP');
+    : (formattedDate || formattedTime || 'Flexible / ASAP')) + (rentalReturnText ? ` • ${rentalReturnText}` : '');
 
   return (
     <div className="bg-white w-[92vw] max-w-[340px] flex-none rounded-3xl overflow-hidden shadow-2xl relative flex flex-col font-sans border border-slate-100/90 mx-auto">

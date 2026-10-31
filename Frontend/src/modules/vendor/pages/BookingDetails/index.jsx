@@ -44,6 +44,7 @@ import LogoLoader from '../../../../components/common/LogoLoader'; // NEW
 import flutterBridge from '../../../../utils/flutterBridge';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from '../../../../utils/formatDate';
 import authStorage from '../../../../utils/authStorage';
+import { isDayRental, formatRentalReturn } from '../../../../utils/rentalReturn';
 import { configService } from '../../../../services/configService'; // For commission %
 import { getPaymentState, getActualTimeRange } from '../../../../utils/bookingDisplay';
 
@@ -229,10 +230,11 @@ export default function BookingDetails() {
 
           timeSlot: {
             date: apiData.scheduledDate ? formatDateDDMMYYYY(apiData.scheduledDate) : 'Today',
-            time: apiData.rental_type === 'daily' && apiData.fulfillmentMode === 'rental' && apiData.endDate
-              ? `Pickup ${apiData.timeSlot?.start} → Return ${new Date(apiData.endDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}, ${new Date(apiData.endDate).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true }).toUpperCase()}`
+            time: isDayRental(apiData)
+              ? `Pickup ${apiData.timeSlot?.start}`
               : (apiData.scheduledTime || apiData.timeSlot?.start ? `${apiData.timeSlot?.start} - ${apiData.timeSlot?.end}` : 'Flexible')
           },
+          rentalReturnText: formatRentalReturn(apiData),
           status: apiData.status,
           description: apiData.description || apiData.notes || 'No description provided',
           assignedTo: apiData.workerId ? { name: apiData.workerId.name } : (apiData.assignedAt ? { name: 'You (Self)' } : null),
@@ -1011,6 +1013,9 @@ export default function BookingDetails() {
               <span className="font-medium text-gray-800">{getActualTimeRange(booking) || booking.timeSlot?.time || 'Flexible'}</span>
             </div>
           </div>
+          {booking.rentalReturnText && (
+            <p className="mt-1.5 text-xs font-bold text-emerald-700">{booking.rentalReturnText}</p>
+          )}
         </div>
 
         {/* Address & Destination Card */}

@@ -5,6 +5,7 @@ import { toastManager } from '../../../../utils/toastManager';
 import { useNavigate } from 'react-router-dom';
 import CardShell from '../UserCategories/components/CardShell';
 import { adminUserService } from '../../../../services/adminUserService';
+import { formatRentalReturn } from '../../../../utils/rentalReturn';
 
 const FarmerBookings = () => {
   const [bookings, setBookings] = useState([]);
@@ -131,7 +132,7 @@ const FarmerBookings = () => {
                           </div>
                           <div className="flex items-center gap-2">
                             <FiClock className="w-4 h-4 text-purple-500" />
-                            <span>Slot: <span className="font-medium text-gray-800">{booking.scheduledTime || 'N/A'}</span></span>
+                            <span>Slot: <span className="font-medium text-gray-800">{booking.scheduledTime || 'N/A'}{formatRentalReturn(booking) ? ` • ${formatRentalReturn(booking)}` : ''}</span></span>
                           </div>
                         </div>
                       </div>

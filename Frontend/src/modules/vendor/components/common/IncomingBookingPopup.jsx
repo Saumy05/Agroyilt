@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { FiCheck, FiX, FiMapPin, FiClock } from 'react-icons/fi';
 import api from '../../../../services/api';
 import { toastManager } from '../../../../utils/toastManager';
+import { formatRentalReturn } from '../../../../utils/rentalReturn';
 
 const IncomingBookingPopup = () => {
   const [incomingData, setIncomingData] = useState(null);
@@ -130,6 +131,9 @@ const IncomingBookingPopup = () => {
                   <FiClock className="text-gray-400" />
                   {details.scheduledDate} {details.scheduledTime ? `at ${details.scheduledTime}` : ''}
                 </p>
+                {formatRentalReturn(details) && (
+                  <p className="text-xs text-emerald-700 font-bold mt-1">{formatRentalReturn(details)}</p>
+                )}
               </div>
             </div>
 

@@ -1,7 +1,7 @@
 const VendorEquipment = require('../../models/VendorEquipment');
 const Vendor = require('../../models/Vendor');
 const Settings = require('../../models/Settings');
-const { parseTimeToMinutes, parseSlotInterval, isIntervalOverlapping } = require('../../utils/timeSlotHelper');
+const { parseTimeToMinutes, parseSlotInterval, isIntervalOverlapping, rentalSpan, appInstantMs, DAY_MS } = require('../../utils/timeSlotHelper');
 const { getPlatformFeePercentage, computePlatformFee } = require('../../utils/vendorPayout');
 
 /**
@@ -147,7 +147,7 @@ exports.getPublicEquipment = async (req, res) => {
     }
 
     let equipment = await VendorEquipment.find(query)
-      .populate('categoryId', 'title slug homeIconUrl rentByUnit unitLabel')
+      .populate('categoryId', 'title slug homeIconUrl rentByUnit unitLabel fulfillmentMode')
       .populate('subCategoryIds', 'title slug')
       .populate('implements.subCategoryId', 'title slug')
       .populate('vendorId', 'name phone rating avatar')
@@ -199,7 +199,7 @@ exports.getPublicEquipmentById = async (req, res) => {
       _id: req.params.id,
       status: { $in: ['active', 'approved'] }
     })
-      .populate('categoryId', 'title slug homeIconUrl rentByUnit unitLabel')
+      .populate('categoryId', 'title slug homeIconUrl rentByUnit unitLabel fulfillmentMode')
       .populate('subCategoryIds', 'title slug')
       .populate('implements.subCategoryId', 'title slug')
       .populate('vendorId', 'name phone rating avatar address')
@@ -250,6 +250,32 @@ exports.checkAvailability = async (req, res) => {
 
     const Booking = require('../../models/Booking');
     const { BOOKING_STATUS } = require('../../utils/constants');
+
+    // A rental machine can be out for days: check the whole period asked for (date + time slot, or `days` of 24 hours from the start time)
+    const machine = await VendorEquipment.findById(id).populate('categoryId', 'fulfillmentMode rentByUnit').lean();
+    if (machine?.categoryId?.fulfillmentMode === 'rental' && !machine.categoryId.rentByUnit) {
+      const { getRentalAvailability } = require('../../services/equipmentAvailability');
+      const [slotStart, slotEnd] = String(timeSlot || '').split('-').map((t) => t.trim());
+      const startMs = appInstantMs(date, slotStart || '00:00');
+      const days = Math.floor(Number(req.query.days));
+      let endMs = null;
+      if (days >= 1) endMs = startMs === null ? null : startMs + days * DAY_MS;
+      else if (slotEnd) {
+        const sameDayEnd = appInstantMs(date, slotEnd);
+        if (sameDayEnd !== null && startMs !== null) endMs = sameDayEnd > startMs ? sameDayEnd : sameDayEnd + DAY_MS;
+      } else if (startMs !== null) endMs = appInstantMs(date, '23:59') + 60000;
+      if (startMs !== null && endMs !== null) {
+        const { booked } = (await getRentalAvailability([machine])).get(String(machine._id)) || { booked: [] };
+        const clash = booked.find((p) => new Date(p.start).getTime() < endMs && (p.end === null || new Date(p.end).getTime() > startMs));
+        return res.status(200).json({
+          success: true,
+          available: !clash,
+          message: clash
+            ? (clash.end ? `Already booked until ${new Date(clash.end).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true }).toUpperCase()}` : 'Currently on rent and not returned yet')
+            : 'Slot is available'
+        });
+      }
+    }
 
     const startOfDay = new Date(new Date(date).setHours(0, 0, 0, 0));
     const endOfDay = new Date(new Date(date).setHours(23, 59, 59, 999));
@@ -495,7 +521,11 @@ exports.findQualifiedVendors = async (req, res) => {
 
     const existingBookings = await Booking.find({
       vendorId: { $in: vendorIds },
-      scheduledDate: { $gte: startOfDay, $lte: endOfDay },
+      $or: [
+        { scheduledDate: { $gte: startOfDay, $lte: endOfDay } },
+        // a day-based rental that started earlier can still have the machine out on this date
+        { rental_type: 'daily', fulfillmentMode: 'rental', estimatedDuration: { $gte: 1 }, scheduledDate: { $gte: new Date(startOfDay.getTime() - 62 * DAY_MS), $lt: startOfDay } }
+      ],
       status: {
         $in: [
           BOOKING_STATUS.REQUESTED,
@@ -507,7 +537,7 @@ exports.findQualifiedVendors = async (req, res) => {
           BOOKING_STATUS.WORK_DONE
         ]
       }
-    }).select('vendorId equipmentId scheduledDate scheduledTime timeSlot rental_type status bookingNumber').lean();
+    }).select('vendorId equipmentId scheduledDate scheduledTime timeSlot rental_type fulfillmentMode estimatedDuration startedAt status bookingNumber').lean();
 
     const vendorBookingMap = new Map();
     existingBookings.forEach(b => {
@@ -588,6 +618,22 @@ exports.findQualifiedVendors = async (req, res) => {
         const isSameMachine = !b.equipmentId || b.equipmentId.toString() === eq._id.toString();
         if (!isSameMachine) continue;
 
+        // A day-based rental keeps the machine for pickup + days x 24 h: compare real periods, not just the pickup day
+        const bSpan = rentalSpan(b);
+        if (bSpan) {
+          const dayMs = appInstantMs(date, '00:00');
+          if (dayMs !== null) {
+            const reqStart = dayMs + reqInterval.startMinutes * 60000;
+            const reqEnd = dayMs + reqInterval.endMinutes * 60000;
+            if (bSpan.startMs < reqEnd && bSpan.endMs > reqStart) {
+              isAvailable = false;
+              conflictReason = 'On rent until ' + new Date(bSpan.endMs).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' });
+              break;
+            }
+          }
+          continue;
+        }
+        if (new Date(b.scheduledDate) < startOfDay) continue; // only here for being a rental that started earlier
         const bInterval = parseSlotInterval(b.timeSlot, b.scheduledTime, b.rental_type);
         if (isIntervalOverlapping(bInterval, reqInterval)) {
           isAvailable = false;

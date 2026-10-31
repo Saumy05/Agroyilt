@@ -14,6 +14,7 @@ import LogoLoader from '../../../../components/common/LogoLoader';
 import BreadcrumbsSchema from '../../../../components/common/BreadcrumbsSchema';
 import ServiceSchema from '../../../../components/common/ServiceSchema';
 import { toastManager } from '../../../../utils/toastManager';
+import { appInstant, appDateParts, formatAppDateTime } from '../../../../utils/rentalReturn';
 
 // Clean bilingual title into primary name and optional secondary
 const parseBilingualTitle = (rawTitle) => {
@@ -44,21 +45,13 @@ const calculateEndTime = (startStr, durationHours) => {
 // Longest day-based rental one booking can cover (the server enforces the same limit)
 const MAX_RENTAL_DAYS = 60;
 
-const pad2 = (n) => String(n).padStart(2, '0');
-const localDateStr = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const HALF_HOUR_MS = 30 * 60000;
 
-// The next half hour that has not passed yet (14:10 -> 14:30). Late at night it rolls over to tomorrow.
+// The next half hour that has not passed yet (14:10 -> 14:30). Late at night it rolls over to tomorrow. In app (Indian) time.
 const nextFreeSlot = () => {
-  const d = new Date(Date.now() + 5 * 60000);
-  d.setMinutes(d.getMinutes() <= 30 ? (d.getMinutes() === 0 ? 0 : 30) : 60, 0, 0);
-  return { date: localDateStr(d), time: `${pad2(d.getHours())}:${pad2(d.getMinutes())}` };
-};
-
-// "Mon, 2 Nov · 9:00 AM"
-const formatReturnAt = (d) => {
-  const date = d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
-  const time = d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true }).toUpperCase();
-  return `${date} · ${time}`;
+  const d = new Date(Math.ceil((Date.now() + 5 * 60000) / HALF_HOUR_MS) * HALF_HOUR_MS);
+  const { date, time } = appDateParts(d);
+  return { date, time };
 };
 
 const TIME_PRESETS = [
@@ -85,12 +78,8 @@ const EquipmentDetail = () => {
     } 
   })();
 
-  const todayStr = useMemo(() => localDateStr(new Date()), []);
-  const tomorrowStr = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    return localDateStr(d);
-  }, []);
+  const todayStr = useMemo(() => appDateParts(new Date()).date, []);
+  const tomorrowStr = useMemo(() => appDateParts(new Date(Date.now() + 86400000)).date, []);
   // Default pickup: the next free half hour, not a fixed 09:00 that may already have passed
   const defaultSlot = useMemo(() => nextFreeSlot(), []);
 
@@ -112,52 +101,56 @@ const EquipmentDetail = () => {
     sessionStorage.setItem(savedKey, JSON.stringify(data));
   }, [selectedRateType, quantity, units, selectedDate, startTime, endTime, selectedImplements, savedKey]);
 
+  // A day-based RENTAL machine is picked up and returned at the same time, whole 24-hour days apart (services keep a start and end time)
+  const isRentalMachine = equipment?.categoryId?.fulfillmentMode === 'rental';
+  const dayRentalMode = selectedRateType === 'daily' && isRentalMachine;
+
   // Sync endTime whenever startTime, quantity, or rateType changes
   useEffect(() => {
     if (selectedRateType === 'hourly') {
       const hours = parseFloat(quantity) || 1;
       setEndTime(calculateEndTime(startTime, hours));
-    } else if (selectedRateType === 'daily') {
+    } else if (dayRentalMode) {
       // A day-based rental is returned at the same clock time it was picked up
       setEndTime(startTime);
     }
-  }, [startTime, quantity, selectedRateType]);
+  }, [startTime, quantity, selectedRateType, dayRentalMode]);
 
   // Day-based rental: every day is 24 hours from pickup, so the return moment follows from pickup + number of days
   const returnAt = useMemo(() => {
-    if (selectedRateType !== 'daily' || !selectedDate || !startTime) return null;
+    if (!dayRentalMode || !selectedDate || !startTime) return null;
     const days = Math.max(1, Math.floor(parseFloat(quantity) || 1));
-    const pickup = new Date(`${selectedDate}T${startTime}`);
+    const pickup = appInstant(selectedDate, startTime);
     if (isNaN(pickup.getTime())) return null;
     return new Date(pickup.getTime() + days * 86400000);
-  }, [selectedRateType, selectedDate, startTime, quantity]);
+  }, [dayRentalMode, selectedDate, startTime, quantity]);
 
   // Rental machine already on rent / booked: the part of the chosen period that clashes with a booking (the server enforces the same)
   const availability = equipment?.availability || null;
   const clashingBooking = useMemo(() => {
     if (!availability?.booked?.length || !selectedDate || !startTime) return null;
-    const start = new Date(`${selectedDate}T${startTime}`);
+    const start = appInstant(selectedDate, startTime);
     if (isNaN(start.getTime())) return null;
     let end;
-    if (selectedRateType === 'daily') {
+    if (dayRentalMode) {
       end = returnAt;
     } else {
-      end = new Date(`${selectedDate}T${endTime}`);
+      end = appInstant(selectedDate, endTime);
       if (!isNaN(end.getTime()) && end <= start) end = new Date(end.getTime() + 86400000);
     }
     if (!end || isNaN(end.getTime())) return null;
     return availability.booked.find((p) => (
       new Date(p.start) < end && (p.end === null || new Date(p.end) > start)
     )) || null;
-  }, [availability, selectedRateType, selectedDate, startTime, endTime, returnAt]);
+  }, [availability, dayRentalMode, selectedDate, startTime, endTime, returnAt]);
 
   // Jump the form to the first moment the machine is free again (rounded up to the next half hour)
   const pickFirstFreeSlot = () => {
     if (!availability?.availableFrom) return;
-    const d = new Date(availability.availableFrom);
-    d.setMinutes(d.getMinutes() <= 30 ? (d.getMinutes() === 0 ? 0 : 30) : 60, 0, 0);
-    setSelectedDate(localDateStr(d));
-    setStartTime(`${pad2(d.getHours())}:${pad2(d.getMinutes())}`);
+    const d = new Date(Math.ceil(new Date(availability.availableFrom).getTime() / HALF_HOUR_MS) * HALF_HOUR_MS);
+    const { date, time } = appDateParts(d);
+    setSelectedDate(date);
+    setStartTime(time);
   };
 
   // Normalize quantity bounds when rate type changes
@@ -282,23 +275,13 @@ const EquipmentDetail = () => {
       return;
     }
 
-    const localNow = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000);
-    const today = localNow.toISOString().split('T')[0];
-    
-    if (selectedDate === today) {
-      const now = new Date();
-      const currentHours = now.getHours();
-      const currentMinutes = now.getMinutes();
-      const [startHours, startMinutes] = startTime.split(':').map(Number);
-      
-      if (startHours < currentHours || (startHours === currentHours && startMinutes <= currentMinutes)) {
-        toastManager.error('Start time has already passed. Please select a future time.');
-        return;
-      }
+    if (appInstant(selectedDate, startTime).getTime() <= Date.now()) {
+      toastManager.error('Start time has already passed. Please select a future time.');
+      return;
     }
 
     // A day-based rental is returned at the same clock time, so only slot-based bookings need a different end time
-    if (selectedRateType !== 'daily' && endTime === startTime) {
+    if (!dayRentalMode && endTime === startTime) {
       toastManager.error('End time cannot be the same as start time.');
       return;
     }
@@ -312,7 +295,7 @@ const EquipmentDetail = () => {
     };
 
     // A day-based rental has one pickup time (it comes back at the same time, whole days later)
-    const formattedSlot = selectedRateType === 'daily'
+    const formattedSlot = dayRentalMode
       ? format12Hour(startTime)
       : `${format12Hour(startTime)} - ${format12Hour(endTime)}`;
 
@@ -326,7 +309,7 @@ const EquipmentDetail = () => {
           date: selectedDate,
           slot: formattedSlot,
           startTime,
-          endTime: selectedRateType === 'daily' ? startTime : endTime,
+          endTime: dayRentalMode ? startTime : endTime,
           returnAt: returnAt ? returnAt.toISOString() : null,
           total,
           basePrice: baseTotal,
@@ -556,7 +539,7 @@ const EquipmentDetail = () => {
             <p className="text-xs font-black text-amber-900 uppercase tracking-wider">Currently on rent</p>
             <p className="text-xs font-semibold text-amber-900">
               {availability.availableFrom
-                ? `This machine is with another farmer and comes back ${formatReturnAt(new Date(availability.availableFrom))}. You can book it from then.`
+                ? `This machine is with another farmer and comes back ${formatAppDateTime(new Date(availability.availableFrom))}. You can book it from then.`
                 : 'This machine is with another farmer and its return time is not fixed yet. You can book a later date, but check back before you pay.'}
             </p>
             {availability.availableFrom && (
@@ -565,7 +548,7 @@ const EquipmentDetail = () => {
                 onClick={pickFirstFreeSlot}
                 className="px-3 py-1.5 rounded-lg bg-amber-700 text-white text-[11px] font-black cursor-pointer active:scale-95 transition-all"
               >
-                Book from {formatReturnAt(new Date(availability.availableFrom))}
+                Book from {formatAppDateTime(new Date(availability.availableFrom))}
               </button>
             )}
           </div>
@@ -642,13 +625,13 @@ const EquipmentDetail = () => {
                     <p className={`text-[10px] font-black uppercase tracking-wider ${
                       selectedRateType === 'daily' ? 'text-emerald-800' : 'text-slate-500'
                     }`}>
-                      24-Hour Day Rental
+                      {isRentalMachine ? '24-Hour Day Rental' : 'Full Day Package'}
                     </p>
                     <p className="text-sm font-black text-slate-900">
                       ₹{equipment.pricing.daily.price} <span className="text-[10px] font-bold text-slate-400">/day</span>
                     </p>
                     <span className="text-[9.5px] font-bold text-slate-500 block">
-                      Each day is 24 hours from pickup
+                      {isRentalMachine ? 'Each day is 24 hours from pickup' : 'Full 8-hour workday slot'}
                     </span>
                   </div>
                 </div>
@@ -953,10 +936,10 @@ const EquipmentDetail = () => {
             </span>
             <div>
               <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">
-                {selectedRateType === 'daily' ? 'Pickup Date & Time' : 'Schedule Date & Slot'}
+                {dayRentalMode ? 'Pickup Date & Time' : 'Schedule Date & Slot'}
               </h3>
               <p className="text-[10px] font-semibold text-slate-400">
-                {selectedRateType === 'daily'
+                {dayRentalMode
                   ? 'You keep it for full 24-hour days from pickup'
                   : 'Machinery will arrive at your field on this slot'}
               </p>
@@ -992,7 +975,7 @@ const EquipmentDetail = () => {
           {/* Custom Date Input */}
           <div>
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
-              {selectedRateType === 'daily' ? 'Pickup Date' : 'Booking Date'}
+              {dayRentalMode ? 'Pickup Date' : 'Booking Date'}
             </label>
             <input 
               type="date" 
@@ -1007,7 +990,7 @@ const EquipmentDetail = () => {
           {/* Time Selection */}
           <div>
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
-              {selectedRateType === 'daily' ? 'Pickup Time' : 'Service Slot Time'}
+              {dayRentalMode ? 'Pickup Time' : 'Service Slot Time'}
             </label>
             
             {/* Quick Time Presets */}
@@ -1028,10 +1011,10 @@ const EquipmentDetail = () => {
               ))}
             </div>
 
-            <div className={selectedRateType === 'daily' ? 'grid grid-cols-1 gap-2.5' : 'grid grid-cols-2 gap-2.5'}>
+            <div className={dayRentalMode ? 'grid grid-cols-1 gap-2.5' : 'grid grid-cols-2 gap-2.5'}>
               <div>
                 <span className="text-[10px] font-bold text-slate-400 block mb-1">
-                  {selectedRateType === 'daily' ? 'Pickup Time' : 'Start Time'}
+                  {dayRentalMode ? 'Pickup Time' : 'Start Time'}
                 </span>
                 <input 
                   type="time" 
@@ -1040,7 +1023,7 @@ const EquipmentDetail = () => {
                   onChange={e => setStartTime(e.target.value)}
                 />
               </div>
-              {selectedRateType !== 'daily' && (
+              {!dayRentalMode && (
                 <div>
                   <span className="text-[10px] font-bold text-slate-400 block mb-1">Estimated End</span>
                   <input 
@@ -1058,7 +1041,7 @@ const EquipmentDetail = () => {
               <div className="mt-2.5 flex items-center justify-between gap-3 bg-emerald-50 border border-emerald-200/70 rounded-xl px-3.5 py-2.5">
                 <div className="min-w-0">
                   <p className="text-[10px] font-black text-emerald-800 uppercase tracking-wider">Return by</p>
-                  <p className="text-xs font-black text-slate-900 truncate">{formatReturnAt(returnAt)}</p>
+                  <p className="text-xs font-black text-slate-900 truncate">{formatAppDateTime(returnAt)}</p>
                 </div>
                 <span className="text-[10px] font-bold text-emerald-800 bg-white border border-emerald-200 rounded-lg px-2 py-1 shrink-0">
                   {Math.max(1, Math.floor(parseFloat(quantity) || 1))} × 24 hrs
@@ -1070,9 +1053,7 @@ const EquipmentDetail = () => {
             {(() => {
               if (!selectedDate || !startTime || !endTime) return null;
               if (selectedDate === todayStr) {
-                const now = new Date();
-                const [sh, sm] = startTime.split(':').map(Number);
-                if (sh < now.getHours() || (sh === now.getHours() && sm <= now.getMinutes())) {
+                if (appInstant(selectedDate, startTime).getTime() <= Date.now()) {
                   return (
                     <p className="text-[11px] text-amber-700 font-bold mt-2 bg-amber-50 border border-amber-200 rounded-xl p-2">
                       ⚠️ Selected start time is in the past. Please choose a future slot.
@@ -1080,7 +1061,7 @@ const EquipmentDetail = () => {
                   );
                 }
               }
-              if (selectedRateType !== 'daily' && endTime === startTime) {
+              if (!dayRentalMode && endTime === startTime) {
                 return (
                   <p className="text-[11px] text-red-600 font-bold mt-2 bg-red-50 border border-red-200 rounded-xl p-2">
                     ⚠️ End time cannot be identical to start time.
@@ -1090,10 +1071,17 @@ const EquipmentDetail = () => {
               return null;
             })()}
 
+            {/* Hourly rental: how the final bill is worked out (same rule as the server: real hours kept, 10 minutes free) */}
+            {isRentalMachine && selectedRateType === 'hourly' && (
+              <p className="mt-2 text-[10.5px] font-semibold text-slate-500 leading-snug">
+                You pay for the hours you actually keep the machine, counted from handover (minimum 1 hour). Returning early? You pay only for the hours used and any extra you paid is refunded. Keeping it more than 10 minutes past a full hour adds another hour{equipment?.pricing?.hourly?.price ? ` (₹${equipment.pricing.hourly.price}/hr)` : ''}.
+              </p>
+            )}
+
             {clashingBooking && (
               <p className="text-[11px] text-red-600 font-bold mt-2 bg-red-50 border border-red-200 rounded-xl p-2">
-                ⚠️ Already booked {formatReturnAt(new Date(clashingBooking.start))}
-                {clashingBooking.end ? ` to ${formatReturnAt(new Date(clashingBooking.end))}` : ' (not returned yet)'}. Please choose another date or time.
+                ⚠️ Already booked {formatAppDateTime(new Date(clashingBooking.start))}
+                {clashingBooking.end ? ` to ${formatAppDateTime(new Date(clashingBooking.end))}` : ' (not returned yet)'}. Please choose another date or time.
               </p>
             )}
           </div>

@@ -18,6 +18,7 @@ import { MAX_SAVED_ADDRESSES, usableAddresses, pickDefaultAddress, addressKey, t
 import AddressSelectionModal from '../Checkout/components/AddressSelectionModal';
 import usePaymentMethods from '../../../../hooks/usePaymentMethods';
 import { estimateDistanceBill } from '../../../../utils/distanceFare';
+import { formatAppDateTime } from '../../../../utils/rentalReturn';
 
 const loadRazorpay = () => {
     return new Promise((resolve) => {
@@ -159,8 +160,9 @@ const MachineryCheckout = () => {
         estimatedKm,
         returnAt
     } = bookingData;
-    const isDayRental = rateType === 'daily';
-    const returnAtDate = isDayRental && returnAt ? new Date(returnAt) : null;
+    // Only the rental screen sends a return time; a day-based service (wizard) keeps its start and end time
+    const returnAtDate = rateType === 'daily' && returnAt ? new Date(returnAt) : null;
+    const isDayRental = Boolean(returnAtDate) && !isNaN(returnAtDate.getTime());
 
     const activeGstPercentage = typeof passedGstPercentage === 'number'
         ? passedGstPercentage
@@ -661,13 +663,23 @@ const MachineryCheckout = () => {
                     </div>
 
                     {/* Day-based rental: when it has to be back (each day is 24 hours from pickup) */}
-                    {returnAtDate && !isNaN(returnAtDate.getTime()) && (
-                        <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-2 mb-2.5 text-xs flex items-center justify-between gap-2">
-                            <span className="font-black text-emerald-900">Return by</span>
-                            <span className="font-black text-slate-800 text-right">
-                                {returnAtDate.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })} · {formatTime12Hour(`${returnAtDate.getHours()}:${returnAtDate.getMinutes()}`)}
-                            </span>
+                    {isDayRental && (
+                        <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-2 mb-2.5 text-xs space-y-1.5">
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="font-black text-emerald-900">Return by</span>
+                                <span className="font-black text-slate-800 text-right">{formatAppDateTime(returnAtDate)}</span>
+                            </div>
+                            {/* Matches how the final bill is worked out (24-hour days from handover, 1 hour free) */}
+                            <p className="text-[10.5px] font-semibold text-emerald-900/80 leading-snug">
+                                You pay for the 24-hour days you actually keep it, counted from handover. Returning early? You pay only for the days used and any extra you paid is refunded. Keeping it more than 1 hour past the return time adds another day{equipment?.pricing?.daily?.price ? ` (₹${equipment.pricing.daily.price}/day)` : ''}.
+                            </p>
                         </div>
+                    )}
+
+                    {rateType === 'hourly' && equipment?.categoryId?.fulfillmentMode === 'rental' && (
+                        <p className="rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-2 mb-2.5 text-[10.5px] font-semibold text-emerald-900/80 leading-snug">
+                            You pay for the hours you actually keep the machine, counted from handover (minimum 1 hour). Returning early? You pay only for the hours used and any extra you paid is refunded. Keeping it more than 10 minutes past a full hour adds another hour{equipment?.pricing?.hourly?.price ? ` (₹${equipment.pricing.hourly.price}/hr)` : ''}.
+                        </p>
                     )}
 
                     {/* By-the-piece rental: how many the farmer wants (the vendor's stock is not shown to the farmer) */}

@@ -38,6 +38,7 @@ import {
 } from 'react-icons/fi';
 import { FaRupeeSign } from 'react-icons/fa';
 import { bookingService } from '../../../../services/bookingService';
+import { isDayRental, getRentalReturnAt, formatAppDateTime } from '../../../../utils/rentalReturn';
 import { waitForServerPayment } from '../../../../utils/paymentRecovery';
 import { formatDateDDMMYYYY } from '../../../../utils/formatDate';
 import { paymentService } from '../../../../services/paymentService';
@@ -267,6 +268,9 @@ const BookingDetails = () => {
     phone: '+91 91177 04450'
   });
 
+  // Day-based rental: keep the machine for more days
+  const [extendDays, setExtendDays] = useState(0); // 0 = the "add days" panel is closed
+  const [extending, setExtending] = useState(false);
   const [farmerFinalAmount, setFarmerFinalAmount] = useState('');
   const [confirmingAmount, setConfirmingAmount] = useState(false);
   const [isEditingAmount, setIsEditingAmount] = useState(false);
@@ -708,6 +712,25 @@ const BookingDetails = () => {
     } catch (error) {
       toastManager.dismiss();
       toastManager.error('Failed to process request');
+    }
+  };
+
+  const handleExtendRental = async () => {
+    if (!booking || extendDays < 1) return;
+    try {
+      setExtending(true);
+      const response = await bookingService.extendRental(booking._id || booking.id, extendDays);
+      if (response.success) {
+        toastManager.success(response.message || 'Rental extended');
+        setExtendDays(0);
+        loadBooking();
+      } else {
+        toastManager.error(response.message || 'Could not extend the rental');
+      }
+    } catch (error) {
+      toastManager.error(error.response?.data?.message || 'Could not extend the rental');
+    } finally {
+      setExtending(false);
     }
   };
 
@@ -1351,6 +1374,46 @@ const BookingDetails = () => {
                   </p>
                 </div>
               </div>
+
+              {/* Day-based rental: need it longer? Add whole 24-hour days (only while it is still free for you) */}
+              {isDayRental(booking) && ['confirmed', 'accepted', 'assigned', 'journey_started', 'visited', 'in_progress'].includes(String(booking.status).toLowerCase()) && (
+                <div className="mt-2 rounded-xl border border-emerald-100 bg-emerald-50/50 p-2.5 text-xs">
+                  {extendDays < 1 ? (
+                    <button
+                      type="button"
+                      onClick={() => setExtendDays(1)}
+                      className="w-full py-2 rounded-lg bg-white border border-emerald-200 text-emerald-800 font-black text-[11px] uppercase tracking-wide cursor-pointer active:scale-95 transition-all"
+                    >
+                      Need it longer? Add days
+                    </button>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-black text-emerald-900">Add days</span>
+                        <div className="flex items-center gap-2 bg-white border border-emerald-200 rounded-lg p-1">
+                          <button type="button" onClick={() => setExtendDays((d) => Math.max(1, d - 1))} className="w-7 h-7 rounded-md bg-emerald-50 font-black text-emerald-800 cursor-pointer">−</button>
+                          <span className="min-w-6 text-center font-black text-slate-900">{extendDays}</span>
+                          <button type="button" onClick={() => setExtendDays((d) => Math.min(60, d + 1))} className="w-7 h-7 rounded-md bg-emerald-50 font-black text-emerald-800 cursor-pointer">+</button>
+                        </div>
+                      </div>
+                      {getRentalReturnAt(booking) && (
+                        <p className="text-[11px] font-semibold text-slate-600">
+                          New return time: <span className="font-black text-slate-900">{formatAppDateTime(new Date(getRentalReturnAt(booking).getTime() + extendDays * 86400000))}</span>
+                        </p>
+                      )}
+                      <p className="text-[10.5px] font-semibold text-slate-500 leading-snug">
+                        The extra days are added to your bill only if you really keep the machine that long.
+                      </p>
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => setExtendDays(0)} disabled={extending} className="flex-1 py-2 rounded-lg bg-white border border-slate-200 text-slate-600 font-black text-[11px] cursor-pointer">Cancel</button>
+                        <button type="button" onClick={handleExtendRental} disabled={extending} className="flex-1 py-2 rounded-lg bg-emerald-700 text-white font-black text-[11px] cursor-pointer disabled:opacity-60">
+                          {extending ? 'Adding...' : 'Confirm'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

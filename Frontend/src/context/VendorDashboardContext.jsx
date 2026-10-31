@@ -5,6 +5,7 @@ import { isWithinInterval, parseISO } from 'date-fns';
 import { registerFCMToken } from '../services/pushNotificationService';
 import { playAlertRing } from '../utils/notificationSound';
 import authStorage from '../utils/authStorage';
+import { formatRentalReturn } from '../utils/rentalReturn';
 
 const VendorDashboardContext = createContext(null);
 
@@ -171,7 +172,7 @@ export const VendorDashboardProvider = ({ children }) => {
         vendorEarnings: b.vendorEarnings, // Ensure it's explicitly passed
         timeSlot: {
           date: new Date(b.scheduledDate).toLocaleDateString(),
-          time: b.scheduledTime || 'Time not set'
+          time: (b.scheduledTime || 'Time not set') + (formatRentalReturn(b) ? ` · ${formatRentalReturn(b)}` : '')
         },
         status: b.status
       });
@@ -260,7 +261,7 @@ export const VendorDashboardProvider = ({ children }) => {
       vendorEarningIsEstimate: Boolean(booking.vendorEarningIsEstimate),
       timeSlot: {
         date: new Date(booking.scheduledDate).toLocaleDateString(),
-        time: booking.scheduledTime || 'Time not set'
+        time: (booking.scheduledTime || 'Time not set') + (formatRentalReturn(booking) ? ` · ${formatRentalReturn(booking)}` : '')
       },
       status: booking.status,
       assignedTo: booking.workerId ? { name: booking.workerId.name } : null,

@@ -226,14 +226,20 @@ function appInstantMs(dateInput, timeStr) {
  * Returns null for anything else (hourly, per-acre, per-km, services, or a daily rental with no day count), which keep
  * using the same-day slot check.
  */
-function rentalSpan({ rental_type, fulfillmentMode, scheduledDate, timeSlot, scheduledTime, estimatedDuration }) {
+function rentalSpan({ rental_type, fulfillmentMode, scheduledDate, timeSlot, scheduledTime, estimatedDuration, startedAt }) {
   if (rental_type !== 'daily' || fulfillmentMode !== 'rental') return null;
   const days = Math.floor(Number(estimatedDuration));
   if (!Number.isFinite(days) || days < 1) return null;
   const startStr = (typeof timeSlot === 'object' && timeSlot?.start) || (typeof scheduledTime === 'string' ? scheduledTime.split('-')[0].trim() : '');
   const startMs = appInstantMs(scheduledDate, startStr);
   if (startMs === null) return null;
-  return { startMs, endMs: startMs + days * DAY_MS };
+  let endMs = startMs + days * DAY_MS;
+  // Handed over late: each 24-hour day runs from the real handover, so the machine is out until then
+  if (startedAt) {
+    const handoverMs = new Date(startedAt).getTime();
+    if (Number.isFinite(handoverMs)) endMs = Math.max(endMs, handoverMs + days * DAY_MS);
+  }
+  return { startMs, endMs };
 }
 
 module.exports = {
