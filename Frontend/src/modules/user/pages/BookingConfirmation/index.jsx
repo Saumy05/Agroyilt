@@ -637,6 +637,11 @@ const BookingConfirmation = () => {
                       )}
                     </p>
                   )}
+                  {booking.rental_type === 'daily' && booking.fulfillmentMode === 'rental' && booking.endDate && (
+                    <p className="text-xs text-gray-600 font-medium mt-0.5">
+                      Return by {formatDate(booking.endDate)}, {new Date(booking.endDate).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true }).toUpperCase()}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

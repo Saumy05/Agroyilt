@@ -186,7 +186,8 @@ function validateSchedule(scheduledDate, timeSlot, now = new Date(), options = {
   if (start === null || end === null) return { ok: false, message: 'Valid time slot is required' };
   
   if (options.allowOvernight) {
-    if (!isInstant && end === start) {
+    // A day-based rental is picked up and returned at the same clock time, a whole number of 24-hour days apart
+    if (!isInstant && end === start && !options.sameTimeOk) {
       return { ok: false, message: 'End time cannot be the same as start time' };
     }
   } else {
@@ -209,8 +210,37 @@ function validateSchedule(scheduledDate, timeSlot, now = new Date(), options = {
   return { ok: true, dateKey };
 }
 
+const DAY_MS = 86400000;
+
+/** Absolute instant (ms) of a "YYYY-MM-DD" calendar date + "HH:mm" clock time in the app's timezone. */
+function appInstantMs(dateInput, timeStr) {
+  const key = appDateKey(dateInput);
+  const mins = parseTimeToMinutes(timeStr);
+  if (!key || mins === null) return null;
+  const [y, m, d] = key.split('-').map(Number);
+  return Date.UTC(y, m - 1, d) + mins * 60000 - APP_TZ_OFFSET_MINUTES * 60000;
+}
+
+/**
+ * Real [startMs, endMs) period a day-based RENTAL keeps the machine: pickup time + (days x 24 h).
+ * Returns null for anything else (hourly, per-acre, per-km, services, or a daily rental with no day count), which keep
+ * using the same-day slot check.
+ */
+function rentalSpan({ rental_type, fulfillmentMode, scheduledDate, timeSlot, scheduledTime, estimatedDuration }) {
+  if (rental_type !== 'daily' || fulfillmentMode !== 'rental') return null;
+  const days = Math.floor(Number(estimatedDuration));
+  if (!Number.isFinite(days) || days < 1) return null;
+  const startStr = (typeof timeSlot === 'object' && timeSlot?.start) || (typeof scheduledTime === 'string' ? scheduledTime.split('-')[0].trim() : '');
+  const startMs = appInstantMs(scheduledDate, startStr);
+  if (startMs === null) return null;
+  return { startMs, endMs: startMs + days * DAY_MS };
+}
+
 module.exports = {
   appDateKey,
+  appInstantMs,
+  rentalSpan,
+  DAY_MS,
   validateSchedule,
   parseTimeToMinutes,
   parseSlotInterval,

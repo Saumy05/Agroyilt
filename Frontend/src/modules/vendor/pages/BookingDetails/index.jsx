@@ -229,7 +229,9 @@ export default function BookingDetails() {
 
           timeSlot: {
             date: apiData.scheduledDate ? formatDateDDMMYYYY(apiData.scheduledDate) : 'Today',
-            time: apiData.scheduledTime || apiData.timeSlot?.start ? `${apiData.timeSlot?.start} - ${apiData.timeSlot?.end}` : 'Flexible'
+            time: apiData.rental_type === 'daily' && apiData.fulfillmentMode === 'rental' && apiData.endDate
+              ? `Pickup ${apiData.timeSlot?.start} → Return ${new Date(apiData.endDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}, ${new Date(apiData.endDate).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true }).toUpperCase()}`
+              : (apiData.scheduledTime || apiData.timeSlot?.start ? `${apiData.timeSlot?.start} - ${apiData.timeSlot?.end}` : 'Flexible')
           },
           status: apiData.status,
           description: apiData.description || apiData.notes || 'No description provided',

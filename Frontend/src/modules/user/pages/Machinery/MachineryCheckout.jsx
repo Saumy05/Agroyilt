@@ -156,8 +156,11 @@ const MachineryCheckout = () => {
         gstPercentage: passedGstPercentage,
         platformFee: passedPlatformFee,
         platformFeePercentage: passedPlatformFeePct,
-        estimatedKm
+        estimatedKm,
+        returnAt
     } = bookingData;
+    const isDayRental = rateType === 'daily';
+    const returnAtDate = isDayRental && returnAt ? new Date(returnAt) : null;
 
     const activeGstPercentage = typeof passedGstPercentage === 'number'
         ? passedGstPercentage
@@ -232,6 +235,8 @@ const MachineryCheckout = () => {
     };
 
     const formatTimeSlotDisplay = (slotStr, start, end) => {
+        // A day-based rental has one pickup time; it is returned at the same time, whole days later
+        if (isDayRental && (start || slotStr)) return formatTime12Hour(start || slotStr);
         if (start && end) {
             return `${formatTime12Hour(start)} – ${formatTime12Hour(end)}`;
         }
@@ -642,11 +647,11 @@ const MachineryCheckout = () => {
                     {/* Schedule Specs */}
                     <div className="grid grid-cols-3 gap-1.5 p-2 bg-slate-50/80 rounded-xl border border-slate-100 text-center mb-2.5">
                         <div className="p-1">
-                           <span className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Date</span>
+                           <span className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">{isDayRental ? 'Pickup Date' : 'Date'}</span>
                            <span className="text-xs font-black text-slate-800 block truncate">{formatToDDMMYYYY(date)}</span>
                         </div>
                         <div className="p-1 border-x border-slate-200/70">
-                           <span className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Time Slot</span>
+                           <span className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">{isDayRental ? 'Pickup Time' : 'Time Slot'}</span>
                            <span className="text-[10px] font-black text-slate-800 block truncate">{formatTimeSlotDisplay(slot, startTime, endTime)}</span>
                         </div>
                         <div className="p-1">
@@ -654,6 +659,16 @@ const MachineryCheckout = () => {
                            <span className="text-xs font-black text-emerald-800 block truncate">{formatDuration(quantity, rateType)}</span>
                         </div>
                     </div>
+
+                    {/* Day-based rental: when it has to be back (each day is 24 hours from pickup) */}
+                    {returnAtDate && !isNaN(returnAtDate.getTime()) && (
+                        <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-2 mb-2.5 text-xs flex items-center justify-between gap-2">
+                            <span className="font-black text-emerald-900">Return by</span>
+                            <span className="font-black text-slate-800 text-right">
+                                {returnAtDate.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })} · {formatTime12Hour(`${returnAtDate.getHours()}:${returnAtDate.getMinutes()}`)}
+                            </span>
+                        </div>
+                    )}
 
                     {/* By-the-piece rental: how many the farmer wants (the vendor's stock is not shown to the farmer) */}
                     {Number(units) > 0 && (

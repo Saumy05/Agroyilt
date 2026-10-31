@@ -167,6 +167,17 @@ exports.getPublicEquipment = async (req, res) => {
         }));
     }
 
+    // Rental machines: say when each is booked / out, so a machine already on rent is not shown as free
+    try {
+      const { getRentalAvailability } = require('../../services/equipmentAvailability');
+      const availability = await getRentalAvailability(equipment.filter((e) => !e.categoryId?.rentByUnit));
+      equipment = equipment.map((e) => (e.categoryId?.rentByUnit
+        ? e
+        : { ...e, availability: availability.get(String(e._id)) || { busyNow: false, openEnded: false, availableFrom: null, booked: [] } }));
+    } catch (availErr) {
+      console.error('Rental availability lookup failed (catalog still served):', availErr.message);
+    }
+
     res.status(200).json({
       success: true,
       count: equipment.length,
@@ -204,9 +215,20 @@ exports.getPublicEquipmentById = async (req, res) => {
       });
     }
 
+    let availability;
+    if (!equipment.categoryId?.rentByUnit) {
+      try {
+        const { getRentalAvailability } = require('../../services/equipmentAvailability');
+        availability = (await getRentalAvailability([equipment])).get(String(equipment._id))
+          || { busyNow: false, openEnded: false, availableFrom: null, booked: [] };
+      } catch (availErr) {
+        console.error('Rental availability lookup failed (details still served):', availErr.message);
+      }
+    }
+
     res.status(200).json({
       success: true,
-      data: equipment
+      data: availability ? { ...equipment, availability } : equipment
     });
   } catch (error) {
     console.error('Get public equipment by ID error:', error);

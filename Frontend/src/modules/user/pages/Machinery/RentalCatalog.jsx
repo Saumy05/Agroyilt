@@ -140,6 +140,13 @@ const RentalCatalog = () => {
                   <span className="absolute top-2 left-2 px-2 py-0.5 bg-white/95 rounded-full text-[8.5px] font-black uppercase text-emerald-800">
                     {item.categoryId?.title || 'Machinery'}
                   </span>
+                  {item.availability?.busyNow && (
+                    <span className="absolute bottom-2 left-2 px-2 py-0.5 bg-amber-500 rounded-full text-[8.5px] font-black uppercase text-white shadow-xs">
+                      {item.availability.availableFrom
+                        ? `On rent · back ${new Date(item.availability.availableFrom).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`
+                        : 'On rent'}
+                    </span>
+                  )}
                   {item.horsepower && (
                     <span className="absolute top-2 right-2 px-2 py-0.5 bg-slate-900/80 rounded-full text-[8.5px] font-black text-white">
                       {item.horsepower} HP

@@ -1331,7 +1331,7 @@ const BookingDetails = () => {
                           const deadline = new Date(start + durMs);
                           return formatDateDDMMYYYY(deadline);
                         })()
-                      : formatDate(booking.scheduledDate)
+                      : (booking.rental_type === 'daily' && booking.endDate ? formatDate(booking.endDate) : formatDate(booking.scheduledDate))
                     }
                   </p>
                   <p className="text-[11px] text-gray-600 font-medium">
@@ -1344,7 +1344,9 @@ const BookingDetails = () => {
                           const deadline = new Date(start + durMs);
                           return deadline.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
                         })()
-                      : (booking.timeSlot?.end || (booking.scheduledTime ? booking.scheduledTime.split('-')[1]?.trim() : '01:00 PM'))
+                      : (booking.rental_type === 'daily' && booking.endDate
+                        ? formatTimeOfDay(booking.endDate)
+                        : (booking.timeSlot?.end || (booking.scheduledTime ? booking.scheduledTime.split('-')[1]?.trim() : '01:00 PM')))
                     }
                   </p>
                 </div>

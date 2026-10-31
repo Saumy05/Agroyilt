@@ -967,7 +967,7 @@ const applyOnlinePayment = async (bookingId, { amount, method, paymentRef, io = 
     b.waveStartedAt = new Date();
     await b.save();
     const clash = await findVendorSlotConflict(
-      { scheduledDate: b.scheduledDate, timeSlot: b.timeSlot, scheduledTime: b.scheduledTime, rental_type: b.rental_type, equipmentId: b.equipmentId, unitsBooked: b.unitsBooked, fulfillmentMode: b.fulfillmentMode },
+      { scheduledDate: b.scheduledDate, timeSlot: b.timeSlot, scheduledTime: b.scheduledTime, rental_type: b.rental_type, estimatedDuration: b.estimatedDuration, equipmentId: b.equipmentId, unitsBooked: b.unitsBooked, fulfillmentMode: b.fulfillmentMode },
       b.vendorId,
       { excludeId: b._id }
     );
@@ -998,6 +998,9 @@ const applyOnlinePayment = async (bookingId, { amount, method, paymentRef, io = 
 // Slot conflicts & timer
 // ─────────────────────────────────────────────────────────────────────────────
 
+// How far back to look for a day-based rental that is still out (the booking limit is 60 rental days)
+const MAX_RENTAL_LOOKBACK_DAYS = 61;
+
 const CONFLICT_STATUSES = [
   BOOKING_STATUS.CONFIRMED,
   BOOKING_STATUS.ACCEPTED,
@@ -1018,17 +1021,35 @@ const CONFLICT_STATUSES = [
  *                            check one-sided so two racing requests cannot both back off.
  */
 const findVendorSlotConflict = async (target, vendorId, { excludeId = null, statuses = CONFLICT_STATUSES, beatenBy = null } = {}) => {
-  const { parseSlotInterval, isIntervalOverlapping } = require('../utils/timeSlotHelper');
+  const { parseSlotInterval, isIntervalOverlapping, rentalSpan, appInstantMs, DAY_MS } = require('../utils/timeSlotHelper');
   const day = new Date(target.scheduledDate);
   const start = new Date(day); start.setHours(0, 0, 0, 0);
   const end = new Date(day); end.setHours(23, 59, 59, 999);
 
-  const query = { vendorId, scheduledDate: { $gte: start, $lte: end }, status: { $in: statuses } };
+  // A day-based rental keeps the machine for pickup + days x 24 h, so it can clash on any day of that period:
+  // look at every booking starting inside the period, and at day-based rentals that started earlier and are still out.
+  const mySpan = rentalSpan(target);
+  const lastDay = mySpan ? new Date(mySpan.endMs) : end;
+  const lookBack = new Date(start.getTime() - MAX_RENTAL_LOOKBACK_DAYS * DAY_MS);
+  const query = {
+    vendorId,
+    status: { $in: statuses },
+    $or: [
+      { scheduledDate: { $gte: start, $lte: lastDay } },
+      { rental_type: 'daily', fulfillmentMode: 'rental', estimatedDuration: { $gte: 1 }, scheduledDate: { $gte: lookBack, $lt: start } }
+    ]
+  };
   if (excludeId) query._id = { $ne: excludeId };
 
   const others = await Booking.find(query)
-    .select('equipmentId scheduledDate scheduledTime timeSlot rental_type status bookingNumber acceptedAt createdAt fulfillmentMode unitsBooked');
+    .select('equipmentId scheduledDate scheduledTime timeSlot rental_type estimatedDuration status bookingNumber acceptedAt createdAt fulfillmentMode unitsBooked');
   const mine = parseSlotInterval(target.timeSlot, target.scheduledTime, target.rental_type);
+  // Real period (ms) a booking occupies: the rental span, or its slot on its own day
+  const periodOf = (b, span, interval) => {
+    if (span) return span;
+    const dayMs = appInstantMs(b.scheduledDate, '00:00');
+    return dayMs === null ? null : { startMs: dayMs + interval.startMinutes * 60000, endMs: dayMs + interval.endMinutes * 60000 };
+  };
   const targetIsRental = target.fulfillmentMode === 'rental';
 
   // Rented by the piece: there is no stock count, so a piece booking never clashes with another. The vendor receives every
@@ -1054,7 +1075,17 @@ const findVendorSlotConflict = async (target, vendorId, { excludeId = null, stat
       const earlier = t < beatenBy.at || (t.getTime() === beatenBy.at.getTime() && other._id.toString() < beatenBy.id.toString());
       if (!earlier) continue;
     }
-    if (isIntervalOverlapping(parseSlotInterval(other.timeSlot, other.scheduledTime, other.rental_type), mine)) return other;
+    const otherInterval = parseSlotInterval(other.timeSlot, other.scheduledTime, other.rental_type);
+    const otherSpan = rentalSpan(other);
+    if (mySpan || otherSpan) {
+      const a = periodOf(other, otherSpan, otherInterval);
+      const b = periodOf(target, mySpan, mine);
+      if (a && b && a.startMs < b.endMs && a.endMs > b.startMs) return other;
+      continue;
+    }
+    // A booking found only because it started on an earlier day is irrelevant unless one of the two is a day-based rental
+    if (new Date(other.scheduledDate) < start) continue;
+    if (isIntervalOverlapping(otherInterval, mine)) return other;
   }
   return null;
 };
