@@ -20,6 +20,23 @@ const registrationFeePaymentSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  // Permanent payer snapshot fields so receipts & admin lists persist even if the account is later deleted
+  payerName: {
+    type: String,
+    default: ''
+  },
+  payerPhone: {
+    type: String,
+    default: ''
+  },
+  payerEmail: {
+    type: String,
+    default: ''
+  },
+  businessName: {
+    type: String,
+    default: ''
+  },
   gatewayOrderId: {
     type: String,
     sparse: true

@@ -12,6 +12,7 @@ import WorkerBookingRequestAlertModal from '../components/bookings/WorkerBooking
 import workerService from '../../../services/workerService';
 import workerRequestService from '../../../services/workerRequestService';
 import { stopAlertRing } from '../../../utils/notificationSound';
+import { useWorkerLocationSync } from '../../../hooks/useWorkerLocationSync';
 
 // Lazy load wrapper with error handling
 const lazyLoad = (importFunc) => {
@@ -327,6 +328,9 @@ const WorkerRoutes = () => {
     /^\/worker\/job\/[^/]+\/?$/.test(location.pathname);
 
   const shouldShowBottomNav = !shouldHideBottomNav;
+
+  // Auto-sync real GPS location for active workers on app launch & resume
+  useWorkerLocationSync(!shouldHideBottomNav);
 
   return (
     <ErrorBoundary>

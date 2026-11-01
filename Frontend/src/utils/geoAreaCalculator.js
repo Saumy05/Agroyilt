@@ -106,7 +106,7 @@ export function convertArea(sqMeters, regionKey = 'standard') {
  * Computes polygon centroid to position labels and center view
  */
 export function calculatePolygonCenter(points) {
-  if (!points || points.length === 0) return { lat: 28.6139, lng: 77.209 };
+  if (!points || points.length === 0) return null;
   let totalLat = 0;
   let totalLng = 0;
   points.forEach((p) => {

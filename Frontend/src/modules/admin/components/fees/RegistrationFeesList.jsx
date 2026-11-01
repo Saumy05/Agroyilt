@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   FiSearch, 
@@ -321,10 +321,10 @@ const RegistrationFeesList = ({ role = 'USER' }) => {
                 <AnimatePresence>
                   {payments.map((p) => {
                     const payer = p.accountId || {};
-                    const payerName = payer.name || 'Unknown Member';
-                    const payerPhone = payer.phone || p.mobileNumberNormalized || '—';
-                    const payerEmail = payer.email;
-                    const businessName = payer.businessName;
+                    const payerName = payer.name || p.payerName || (p.paidByWorkerId ? `Member (Paid by ${p.paidByWorkerId.name || 'Leader'})` : 'Unknown Member');
+                    const payerPhone = payer.phone || p.payerPhone || p.mobileNumberNormalized || '—';
+                    const payerEmail = payer.email || p.payerEmail;
+                    const businessName = payer.businessName || p.businessName;
 
                     return (
                       <motion.tr
@@ -351,6 +351,11 @@ const RegistrationFeesList = ({ role = 'USER' }) => {
                                 {businessName && (
                                   <span className="bg-slate-100 text-slate-600 font-bold px-1.5 py-0.2 rounded text-[10px]">
                                     {businessName}
+                                  </span>
+                                )}
+                                {p.paidByWorkerId && (
+                                  <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold px-1.5 py-0.5 rounded text-[10px]" title={`Paid by Team Leader: ${p.paidByWorkerId.name || 'Leader'}`}>
+                                    Leader: {p.paidByWorkerId.name || 'Leader'}
                                   </span>
                                 )}
                               </div>
@@ -510,22 +515,27 @@ const RegistrationFeesList = ({ role = 'USER' }) => {
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center font-black text-slate-600 text-base shrink-0">
                       {selectedPayment.accountId?.profilePhoto ? (
-                        <img src={selectedPayment.accountId.profilePhoto} alt={selectedPayment.accountId?.name} className="w-full h-full object-cover" />
+                        <img src={selectedPayment.accountId.profilePhoto} alt={selectedPayment.accountId?.name || selectedPayment.payerName} className="w-full h-full object-cover" />
                       ) : (
-                        selectedPayment.accountId?.name?.charAt(0) ?.toUpperCase() || 'U'
+                        (selectedPayment.accountId?.name || selectedPayment.payerName || 'U').charAt(0).toUpperCase()
                       )}
                     </div>
                     <div>
                       <h4 className="font-black text-slate-900 text-sm">
-                        {selectedPayment.accountId?.name || 'Unknown User'}
+                        {selectedPayment.accountId?.name || selectedPayment.payerName || 'Unknown User'}
                       </h4>
                       <div className="text-xs text-slate-500 space-y-0.5 mt-0.5">
-                        <p className="flex items-center gap-1.5"><FiPhone className="text-blue-500" /> {selectedPayment.accountId?.phone || selectedPayment.mobileNumberNormalized}</p>
-                        {selectedPayment.accountId?.email && (
-                          <p className="flex items-center gap-1.5"><FiMail className="text-indigo-500" /> {selectedPayment.accountId.email}</p>
+                        <p className="flex items-center gap-1.5"><FiPhone className="text-blue-500" /> {selectedPayment.accountId?.phone || selectedPayment.payerPhone || selectedPayment.mobileNumberNormalized}</p>
+                        {(selectedPayment.accountId?.email || selectedPayment.payerEmail) && (
+                          <p className="flex items-center gap-1.5"><FiMail className="text-indigo-500" /> {selectedPayment.accountId?.email || selectedPayment.payerEmail}</p>
                         )}
-                        {selectedPayment.accountId?.businessName && (
-                          <p className="text-slate-700 font-bold">Business: {selectedPayment.accountId.businessName}</p>
+                        {(selectedPayment.accountId?.businessName || selectedPayment.businessName) && (
+                          <p className="text-slate-700 font-bold">Business: {selectedPayment.accountId?.businessName || selectedPayment.businessName}</p>
+                        )}
+                        {selectedPayment.paidByWorkerId && (
+                          <p className="text-emerald-700 text-[11px] font-semibold mt-1">
+                            Paid by Team Leader: <span className="font-bold">{selectedPayment.paidByWorkerId.name || 'Leader'}</span> ({selectedPayment.paidByWorkerId.phone})
+                          </p>
                         )}
                       </div>
                     </div>

@@ -107,6 +107,10 @@ const initiatePayment = async (req, res) => {
       roleModel: role === 'USER' ? 'User' : role === 'VENDOR' ? 'Vendor' : 'Worker',
       role,
       mobileNumberNormalized: account.phone,
+      payerName: account.name || '',
+      payerPhone: account.phone || '',
+      payerEmail: account.email || '',
+      businessName: account.businessName || '',
       status: 'PENDING',
       amount: feeConfig.amount,
       currency: feeConfig.currency,
@@ -434,6 +438,8 @@ const getRegistrationFeePayments = async (req, res) => {
         { mobileNumberNormalized: searchRegex },
         { gatewayOrderId: searchRegex },
         { gatewayPaymentId: searchRegex },
+        { payerName: searchRegex },
+        { businessName: searchRegex },
         { accountId: { $in: matchedAccountIds } }
       ];
     }
@@ -448,6 +454,10 @@ const getRegistrationFeePayments = async (req, res) => {
         .populate({
           path: 'accountId',
           select: 'name phone email businessName service serviceType profilePhoto address kyc_status approvalStatus'
+        })
+        .populate({
+          path: 'paidByWorkerId',
+          select: 'name phone email profilePhoto'
         })
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -490,6 +500,48 @@ const getRegistrationFeePayments = async (req, res) => {
       pendingCount: 0,
       failedCount: 0
     };
+
+    // For payments where accountId is missing/null (e.g. deleted or reset accounts), resolve payer details
+    const missingPayments = payments.filter(p => !p.accountId || !p.accountId.name);
+    if (missingPayments.length > 0) {
+      const phonesToLookup = [...new Set(missingPayments.filter(p => !p.payerName && p.mobileNumberNormalized).map(p => p.mobileNumberNormalized))];
+      
+      const liveWorkersByPhone = new Map();
+      const liveVendorsByPhone = new Map();
+      const liveUsersByPhone = new Map();
+
+      if (phonesToLookup.length > 0) {
+        const [wDocs, vDocs, uDocs] = await Promise.all([
+          Worker.find({ phone: { $in: phonesToLookup } }).select('name phone email').lean(),
+          Vendor.find({ phone: { $in: phonesToLookup } }).select('name phone email businessName').lean(),
+          User.find({ phone: { $in: phonesToLookup } }).select('name phone email').lean()
+        ]);
+        wDocs.forEach(w => liveWorkersByPhone.set(w.phone, w));
+        vDocs.forEach(v => liveVendorsByPhone.set(v.phone, v));
+        uDocs.forEach(u => liveUsersByPhone.set(u.phone, u));
+      }
+
+      for (const p of missingPayments) {
+        let resolved = null;
+        if (p.role === 'WORKER') resolved = liveWorkersByPhone.get(p.mobileNumberNormalized);
+        else if (p.role === 'VENDOR') resolved = liveVendorsByPhone.get(p.mobileNumberNormalized);
+        else if (p.role === 'USER') resolved = liveUsersByPhone.get(p.mobileNumberNormalized);
+
+        const name = p.payerName || resolved?.name || (p.paidByWorkerId ? `Team Member (Paid by ${p.paidByWorkerId.name || 'Leader'})` : '');
+        const phone = p.payerPhone || p.mobileNumberNormalized || resolved?.phone || '—';
+        const email = p.payerEmail || resolved?.email || '';
+        const businessName = p.businessName || resolved?.businessName || '';
+
+        p.accountId = {
+          _id: p.accountId?._id || p.accountId || null,
+          name: name || 'Unknown Member',
+          phone,
+          email,
+          businessName,
+          isHistorical: true
+        };
+      }
+    }
 
     res.status(200).json({
       success: true,

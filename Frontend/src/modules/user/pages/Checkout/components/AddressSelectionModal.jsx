@@ -351,7 +351,7 @@ const AddressSelectionModal = ({ isOpen, onClose, address = '', houseNumber = ''
           }}>
             Search Address
           </label>
-          
+
           {/* Search Box Container with Dropdown */}
           <div ref={searchContainerRef} style={{ position: 'relative', marginBottom: 16, zIndex: 50 }}>
             <div style={{ position: 'relative' }}>
@@ -547,12 +547,38 @@ const AddressSelectionModal = ({ isOpen, onClose, address = '', houseNumber = ''
                     {searchQuery.trim().length >= 3 && (
                       <button
                         type="button"
-                        onClick={() => {
+                        onClick={async () => {
+                          const query = searchQuery.trim();
+                          let resolvedLat = selectedLocation?.lat || flyToPosition?.lat;
+                          let resolvedLng = selectedLocation?.lng || flyToPosition?.lng;
+
+                          if ((!resolvedLat || !resolvedLng) && window.google?.maps?.Geocoder) {
+                            try {
+                              const geocoder = new window.google.maps.Geocoder();
+                              const geoRes = await new Promise((res) => {
+                                geocoder.geocode({ address: query }, (results, status) => {
+                                  if (status === 'OK' && results?.[0]?.geometry?.location) {
+                                    res({
+                                      lat: results[0].geometry.location.lat(),
+                                      lng: results[0].geometry.location.lng()
+                                    });
+                                  } else {
+                                    res(null);
+                                  }
+                                });
+                              });
+                              if (geoRes) {
+                                resolvedLat = geoRes.lat;
+                                resolvedLng = geoRes.lng;
+                              }
+                            } catch (_) { }
+                          }
+
                           const typedLoc = {
-                            lat: selectedLocation?.lat || flyToPosition?.lat || 28.6139,
-                            lng: selectedLocation?.lng || flyToPosition?.lng || 77.2090,
-                            address: searchQuery.trim(),
-                            components: [{ types: ['locality'], long_name: searchQuery.trim().split(',')[0] || '' }]
+                            lat: resolvedLat || null,
+                            lng: resolvedLng || null,
+                            address: query,
+                            components: [{ types: ['locality'], long_name: query.split(',')[0] || '' }]
                           };
                           handleLocationSelect(typedLoc);
                         }}
@@ -615,15 +641,45 @@ const AddressSelectionModal = ({ isOpen, onClose, address = '', houseNumber = ''
           {/* Save Button */}
           <button
             type="button"
-            onClick={() => {
+            onClick={async () => {
               const effectiveAddr = mapAddress || searchQuery.trim();
+              let lat = selectedLocation?.lat || flyToPosition?.lat;
+              let lng = selectedLocation?.lng || flyToPosition?.lng;
+
+              if ((!lat || !lng) && effectiveAddr && window.google?.maps?.Geocoder) {
+                try {
+                  const geocoder = new window.google.maps.Geocoder();
+                  const geoRes = await new Promise((res) => {
+                    geocoder.geocode({ address: effectiveAddr }, (results, status) => {
+                      if (status === 'OK' && results?.[0]?.geometry?.location) {
+                        res({
+                          lat: results[0].geometry.location.lat(),
+                          lng: results[0].geometry.location.lng()
+                        });
+                      } else {
+                        res(null);
+                      }
+                    });
+                  });
+                  if (geoRes) {
+                    lat = geoRes.lat;
+                    lng = geoRes.lng;
+                  }
+                } catch (_) { }
+              }
+
               const base = selectedLocation || {
                 address: effectiveAddr,
-                lat: flyToPosition?.lat || 28.6139,
-                lng: flyToPosition?.lng || 77.2090,
+                lat: lat || null,
+                lng: lng || null,
                 components: [{ types: ['locality'], long_name: effectiveAddr.split(',')[0] || '' }]
               };
-              const loc = { ...base, components: base.components || [] };
+              const loc = {
+                ...base,
+                lat: lat || base.lat || null,
+                lng: lng || base.lng || null,
+                components: base.components || []
+              };
               onSave(houseNumber, loc);
             }}
             disabled={!mapAddress && !searchQuery.trim()}

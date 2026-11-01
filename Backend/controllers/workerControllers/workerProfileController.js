@@ -158,11 +158,18 @@ const updateProfile = async (req, res) => {
       const lat = Number(req.body.location.lat);
       const lng = Number(req.body.location.lng);
       if (!isNaN(lat) && !isNaN(lng)) {
-        worker.location = {
-          lat,
-          lng,
-          updatedAt: new Date()
-        };
+        // Guard against saving hardcoded New Delhi fallback (28.6139, 77.2090) if worker is not in Delhi
+        const isDelhiFallback = Math.abs(lat - 28.6139) < 0.05 && Math.abs(lng - 77.209) < 0.05;
+        const targetCity = (req.body.address?.city || worker.address?.city || worker.districtName || '').toLowerCase();
+        const isInDelhi = targetCity.includes('delhi');
+
+        if (!isDelhiFallback || isInDelhi) {
+          worker.location = {
+            lat,
+            lng,
+            updatedAt: new Date()
+          };
+        }
       }
     }
 
@@ -326,9 +333,25 @@ const updateLocation = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Latitude and Longitude are required' });
     }
 
+    const nLat = Number(lat);
+    const nLng = Number(lng);
+    if (isNaN(nLat) || isNaN(nLng)) {
+      return res.status(400).json({ success: false, message: 'Valid coordinates required' });
+    }
+
+    // Guard against saving hardcoded New Delhi default
+    const isDelhiFallback = Math.abs(nLat - 28.6139) < 0.05 && Math.abs(nLng - 77.209) < 0.05;
+    if (isDelhiFallback) {
+      const existing = await Worker.findById(workerId).select('address districtName').lean();
+      const inDelhi = (existing?.address?.city || existing?.districtName || '').toLowerCase().includes('delhi');
+      if (!inDelhi) {
+        return res.status(200).json({ success: true, message: 'Ignored dummy default location' });
+      }
+    }
+
     // Update only the location field for performance
     await Worker.findByIdAndUpdate(workerId, {
-      location: { lat, lng, updatedAt: new Date() }
+      location: { lat: nLat, lng: nLng, updatedAt: new Date() }
     });
 
     res.status(200).json({ success: true, message: 'Location updated' });

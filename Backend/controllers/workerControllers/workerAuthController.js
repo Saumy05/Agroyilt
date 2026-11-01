@@ -129,13 +129,13 @@ const register = async (req, res) => {
     }
 
     // verificationToken handling
-    const { 
-      name, 
-      email, 
-      verificationToken, 
-      aadharNumber, 
-      aadharDocument, 
-      aadharBackDocument, 
+    const {
+      name,
+      email,
+      verificationToken,
+      aadharNumber,
+      aadharDocument,
+      aadharBackDocument,
       workerType,
       hasBike,
       drivingLicenseNumber,
@@ -234,6 +234,18 @@ const register = async (req, res) => {
     const workerFeeConfig = await RegistrationFeeConfig.findOne({ role: 'WORKER', isActive: true }).sort({ createdAt: -1 });
     const isFeeFree = !workerFeeConfig || !(Number(workerFeeConfig.amount) > 0);
 
+    // Save initial coordinates ONLY if real device coordinates were supplied (no autoguessing or city defaults)
+    let initialLocation = undefined;
+    const suppliedLat = req.body.lat ?? req.body.location?.lat;
+    const suppliedLng = req.body.lng ?? req.body.location?.lng;
+    if (suppliedLat !== undefined && suppliedLng !== undefined && !isNaN(Number(suppliedLat)) && !isNaN(Number(suppliedLng))) {
+      initialLocation = {
+        lat: Number(suppliedLat),
+        lng: Number(suppliedLng),
+        updatedAt: new Date()
+      };
+    }
+
     // Create worker
     const worker = await Worker.create({
       name,
@@ -266,7 +278,8 @@ const register = async (req, res) => {
       address: {
         state: locationFields.stateName || undefined,
         city: locationFields.districtName || undefined
-      }
+      },
+      ...(initialLocation ? { location: initialLocation } : {})
     });
 
     // Process Referral Attribution if referral code provided
@@ -322,8 +335,8 @@ const register = async (req, res) => {
             pushData: { type: 'admin_alert', link: '/admin/workers/all' }
           });
         }
-      } catch (e) { 
-        console.error('Notify admin error for worker:', e); 
+      } catch (e) {
+        console.error('Notify admin error for worker:', e);
       }
     }
 
@@ -442,7 +455,7 @@ const login = async (req, res) => {
         process.env.JWT_SECRET,
         { expiresIn: '30m' }
       );
-      
+
       return res.status(403).json({
         success: false,
         code: 'REGISTRATION_FEE_REQUIRED',
@@ -600,7 +613,7 @@ const loginWithMpin = async (req, res) => {
     }
 
     const worker = await Worker.findOne({ phone }).select('+mpin');
-    
+
     if (!worker) {
       return res.status(404).json({ success: false, message: 'Worker not found' });
     }
@@ -616,8 +629,8 @@ const loginWithMpin = async (req, res) => {
     }
 
     if (mpinService.isMpinLocked(worker)) {
-      return res.status(429).json({ 
-        success: false, 
+      return res.status(429).json({
+        success: false,
         message: `Too many failed attempts. Try again after ${mpinService.MPIN_LOCKOUT_MINUTES} minutes.`,
         lockUntil: worker.mpinLockedUntil
       });
@@ -665,7 +678,7 @@ const loginWithMpin = async (req, res) => {
         process.env.JWT_SECRET,
         { expiresIn: '30m' }
       );
-      
+
       return res.status(403).json({
         success: false,
         code: 'REGISTRATION_FEE_REQUIRED',

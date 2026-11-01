@@ -24,9 +24,10 @@ import fieldAreaService from '../../../../services/fieldAreaService';
 import { toastManager } from '../../../../utils/toastManager';
 import { flutterBridge } from '../../../../utils/flutterBridge';
 
-const defaultLocation = {
-  lat: 28.6139,
-  lng: 77.209
+// Initial nationwide camera center (pan-India) used only until user's actual device GPS resolves
+const INDIA_VIEW_CENTER = {
+  lat: 20.5937,
+  lng: 78.9629
 };
 
 const FieldAreaMeasurementModal = ({
@@ -39,7 +40,7 @@ const FieldAreaMeasurementModal = ({
   asPage = false // full-screen page (a route) instead of a popup over another screen
 }) => {
   const [points, setPoints] = useState(initialPoints || []);
-  const [center, setCenter] = useState(initialCenter || defaultLocation);
+  const [center, setCenter] = useState(initialCenter || INDIA_VIEW_CENTER);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchLoading, setSearchLoading] = useState(false);
   const [selectedRegion, setSelectedRegion] = useState('standard');
@@ -320,11 +321,10 @@ const FieldAreaMeasurementModal = ({
                 <button
                   type="button"
                   onClick={() => setActiveTab('map')}
-                  className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
-                    activeTab === 'map'
+                  className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${activeTab === 'map'
                       ? 'bg-white text-emerald-800 shadow-xs'
                       : 'text-slate-600 hover:text-slate-900'
-                  }`}
+                    }`}
                 >
                   <FiLayers size={13} />
                   <span>Map Drawing</span>
@@ -332,11 +332,10 @@ const FieldAreaMeasurementModal = ({
                 <button
                   type="button"
                   onClick={() => setActiveTab('manual')}
-                  className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
-                    activeTab === 'manual'
+                  className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${activeTab === 'manual'
                       ? 'bg-white text-emerald-800 shadow-xs'
                       : 'text-slate-600 hover:text-slate-900'
-                  }`}
+                    }`}
                 >
                   <FiEdit3 size={13} />
                   <span>Manual Input</span>
@@ -485,11 +484,10 @@ const FieldAreaMeasurementModal = ({
                         key={preset}
                         type="button"
                         onClick={() => setManualInput(String(preset))}
-                        className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
-                          parseFloat(manualInput) === preset
+                        className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${parseFloat(manualInput) === preset
                             ? 'bg-emerald-700 text-white shadow-2xs'
                             : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                        }`}
+                          }`}
                       >
                         {preset} Acre{preset !== 1 ? 's' : ''}
                       </button>

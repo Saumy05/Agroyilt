@@ -7,10 +7,12 @@ import {
 import { GOOGLE_MAPS_LOADER_ID, GOOGLE_MAPS_LIBRARIES } from '../../../../../utils/googleMapsLoader';
 import { FiCrosshair } from 'react-icons/fi';
 import { toastManager } from '../../../../../utils/toastManager';
+import flutterBridge from '../../../../../utils/flutterBridge';
 
 const MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
 
-const defaultCenter = { lat: 28.6139, lng: 77.2090 };
+// Neutral pan-India viewport for camera initialization until user's real GPS resolves
+const INDIA_DEFAULT_CENTER = { lat: 20.5937, lng: 78.9629 };
 
 const mapContainerStyle = { width: '100%', height: '100%' };
 
@@ -28,7 +30,7 @@ const LocationPicker = ({ onLocationSelect, initialPosition = null, flyToPositio
     libraries: GOOGLE_MAPS_LIBRARIES,
   });
 
-  const [marker, setMarker] = useState(initialPosition || defaultCenter);
+  const [marker, setMarker] = useState(initialPosition || null);
   const [loading, setLoading] = useState(false);
   const mapRef = useRef(null);
 
@@ -50,15 +52,40 @@ const LocationPicker = ({ onLocationSelect, initialPosition = null, flyToPositio
 
   // Get user's current location on mount for centering marker only (do not auto-reverse geocode)
   useEffect(() => {
-    if (!initialPosition && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const newPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-          setMarker(newPos);
-        },
-        () => {}
-      );
-    }
+    if (initialPosition) return;
+    let isMounted = true;
+
+    const resolveCurrentLocation = async () => {
+      // 1. Try native Flutter bridge first (in Android APK wrapper)
+      try {
+        if (flutterBridge && flutterBridge.isFlutter) {
+          const nativeLoc = await flutterBridge.getCurrentLocation();
+          if (isMounted && nativeLoc?.latitude && nativeLoc?.longitude) {
+            const newPos = { lat: Number(nativeLoc.latitude), lng: Number(nativeLoc.longitude) };
+            setMarker(newPos);
+            mapRef.current?.panTo(newPos);
+            return;
+          }
+        }
+      } catch (_) { }
+
+      // 2. Fallback to browser GPS
+      if (typeof navigator !== 'undefined' && navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            if (isMounted) {
+              const newPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+              setMarker(newPos);
+              mapRef.current?.panTo(newPos);
+            }
+          },
+          () => { }
+        );
+      }
+    };
+
+    resolveCurrentLocation();
+    return () => { isMounted = false; };
   }, [initialPosition]);
 
   const reverseGeocode = useCallback(async (position) => {
@@ -208,8 +235,8 @@ const LocationPicker = ({ onLocationSelect, initialPosition = null, flyToPositio
       <div className="relative h-64 bg-slate-100">
         <GoogleMap
           mapContainerStyle={mapContainerStyle}
-          center={marker}
-          zoom={15}
+          center={marker || flyToPosition || INDIA_DEFAULT_CENTER}
+          zoom={marker ? 16 : (flyToPosition ? 14 : 5)}
           options={mapOptions}
           onClick={handleMapClick}
           onLoad={(map) => {
@@ -217,7 +244,7 @@ const LocationPicker = ({ onLocationSelect, initialPosition = null, flyToPositio
             ensureButtonsAreNotSubmit();
           }}
         >
-          <Marker position={marker} />
+          {marker && <Marker position={marker} />}
         </GoogleMap>
 
         {/* Pin Instruction Overlay */}

@@ -2,22 +2,22 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { GoogleMap, useJsApiLoader, Marker } from '@react-google-maps/api';
 import { GOOGLE_MAPS_LOADER_ID, GOOGLE_MAPS_LIBRARIES } from '../../../../../utils/googleMapsLoader';
 import { toastManager } from '../../../../../utils/toastManager';
-
-
+import flutterBridge from '../../../../../utils/flutterBridge';
 
 const mapContainerStyle = {
   width: '100%',
   height: '300px'
 };
 
-const defaultCenter = {
-  lat: 28.6139,
-  lng: 77.2090
+// Neutral pan-India viewport for camera initialization until user's real GPS resolves
+const INDIA_DEFAULT_CENTER = {
+  lat: 20.5937,
+  lng: 78.9629
 };
 
 const GoogleMapPicker = ({ onLocationSelect, initialPosition = null }) => {
   const [map, setMap] = useState(null);
-  const [marker, setMarker] = useState(initialPosition || defaultCenter);
+  const [marker, setMarker] = useState(initialPosition || null);
   const [loading, setLoading] = useState(false);
 
   const { isLoaded, loadError } = useJsApiLoader({
@@ -39,23 +39,40 @@ const GoogleMapPicker = ({ onLocationSelect, initialPosition = null }) => {
 
   // Get user's current location on mount (center map/marker only, do not reverse geocode automatically)
   useEffect(() => {
-    if (!initialPosition && navigator.geolocation && isLoaded) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const newPos = {
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude
-          };
-          setMarker(newPos);
-          if (map) {
-            map.panTo(newPos);
+    if (initialPosition || !isLoaded) return;
+    let isMounted = true;
+
+    const resolveCurrentLocation = async () => {
+      try {
+        if (flutterBridge && flutterBridge.isFlutter) {
+          const nativeLoc = await flutterBridge.getCurrentLocation();
+          if (isMounted && nativeLoc?.latitude && nativeLoc?.longitude) {
+            const newPos = { lat: Number(nativeLoc.latitude), lng: Number(nativeLoc.longitude) };
+            setMarker(newPos);
+            if (map) map.panTo(newPos);
+            return;
           }
-        },
-        (error) => {
-          console.error('Error getting location:', error);
         }
-      );
-    }
+      } catch (_) { }
+
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            if (isMounted) {
+              const newPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+              setMarker(newPos);
+              if (map) map.panTo(newPos);
+            }
+          },
+          (error) => {
+            console.warn('[GoogleMapPicker] Browser geolocation error:', error.message);
+          }
+        );
+      }
+    };
+
+    resolveCurrentLocation();
+    return () => { isMounted = false; };
   }, [initialPosition, isLoaded, map]);
 
   // Reverse geocode to get address from coordinates (Google)
@@ -86,7 +103,7 @@ const GoogleMapPicker = ({ onLocationSelect, initialPosition = null }) => {
             let city = '';
             let state = '';
             let pincode = '';
-            
+
             (results[0].address_components || []).forEach(component => {
               if (component.types.includes('locality') || component.types.includes('administrative_area_level_2') || component.types.includes('administrative_area_level_3')) {
                 if (!city) city = component.long_name;
@@ -175,8 +192,8 @@ const GoogleMapPicker = ({ onLocationSelect, initialPosition = null }) => {
       <div className="relative bg-gray-200">
         <GoogleMap
           mapContainerStyle={mapContainerStyle}
-          center={marker}
-          zoom={15}
+          center={marker || INDIA_DEFAULT_CENTER}
+          zoom={marker ? 16 : 5}
           onClick={onMapClick}
           onLoad={setMap}
           options={{
