@@ -15,7 +15,7 @@ const INDIA_DEFAULT_CENTER = {
   lng: 78.9629
 };
 
-const GoogleMapPicker = ({ onLocationSelect, initialPosition = null }) => {
+const GoogleMapPicker = ({ onLocationSelect, initialPosition = null, fallbackArea = null }) => {
   const [map, setMap] = useState(null);
   const [marker, setMarker] = useState(initialPosition || null);
   const [loading, setLoading] = useState(false);
@@ -25,6 +25,35 @@ const GoogleMapPicker = ({ onLocationSelect, initialPosition = null }) => {
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
     libraries: GOOGLE_MAPS_LIBRARIES
   });
+
+  // Pan map camera to district/subdistrict as viewport fallback while GPS resolves
+  // CRITICAL: Viewport only — never places a fake pin or saves dummy coordinates
+  useEffect(() => {
+    if (initialPosition || !fallbackArea || !isLoaded) return;
+
+    const areaQuery = [
+      fallbackArea.subDistrictName,
+      fallbackArea.districtName || fallbackArea.city,
+      fallbackArea.stateName || fallbackArea.state,
+      'India'
+    ].filter(Boolean).join(', ');
+
+    if (!areaQuery || areaQuery === 'India') return;
+
+    if (window.google?.maps?.Geocoder) {
+      try {
+        const geocoder = new window.google.maps.Geocoder();
+        geocoder.geocode({ address: areaQuery }, (results, status) => {
+          if (status === 'OK' && results?.[0]?.geometry?.location && map) {
+            const loc = results[0].geometry.location;
+            const pos = { lat: loc.lat(), lng: loc.lng() };
+            map.panTo(pos);
+            map.setZoom(fallbackArea.subDistrictName ? 14 : 12);
+          }
+        });
+      } catch (_) {}
+    }
+  }, [fallbackArea, initialPosition, isLoaded, map]);
 
   // Update marker when initialPosition changes
   useEffect(() => {

@@ -23,7 +23,12 @@ const mapOptions = {
   gestureHandling: 'greedy',
 };
 
-const LocationPicker = ({ onLocationSelect, initialPosition = null, flyToPosition = null }) => {
+const LocationPicker = ({
+  onLocationSelect,
+  initialPosition = null,
+  flyToPosition = null,
+  fallbackArea = null // e.g. { subDistrictName, districtName, stateName, city }
+}) => {
   const { isLoaded, loadError } = useJsApiLoader({
     id: GOOGLE_MAPS_LOADER_ID,
     googleMapsApiKey: MAPS_API_KEY,
@@ -33,6 +38,35 @@ const LocationPicker = ({ onLocationSelect, initialPosition = null, flyToPositio
   const [marker, setMarker] = useState(initialPosition || null);
   const [loading, setLoading] = useState(false);
   const mapRef = useRef(null);
+
+  // Pan map camera to worker's district / subdistrict as viewport fallback while GPS resolves
+  // CRITICAL: Viewport only — never places a fake pin or saves dummy coordinates
+  useEffect(() => {
+    if (initialPosition || flyToPosition || !fallbackArea) return;
+
+    const areaQuery = [
+      fallbackArea.subDistrictName,
+      fallbackArea.districtName || fallbackArea.city,
+      fallbackArea.stateName || fallbackArea.state,
+      'India'
+    ].filter(Boolean).join(', ');
+
+    if (!areaQuery || areaQuery === 'India') return;
+
+    if (window.google?.maps?.Geocoder) {
+      try {
+        const geocoder = new window.google.maps.Geocoder();
+        geocoder.geocode({ address: areaQuery }, (results, status) => {
+          if (status === 'OK' && results?.[0]?.geometry?.location && mapRef.current) {
+            const loc = results[0].geometry.location;
+            const pos = { lat: loc.lat(), lng: loc.lng() };
+            mapRef.current.panTo(pos);
+            mapRef.current.setZoom(fallbackArea.subDistrictName ? 14 : 12);
+          }
+        });
+      } catch (_) {}
+    }
+  }, [fallbackArea, initialPosition, flyToPosition]);
 
   // Pan map when flyToPosition changes (from city search in parent)
   useEffect(() => {

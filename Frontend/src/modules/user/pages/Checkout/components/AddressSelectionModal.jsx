@@ -5,9 +5,18 @@ import { themeColors } from '../../../../../theme';
 import LocationPicker from './LocationPicker';
 import { toastManager } from '../../../../../utils/toastManager';
 
-const AddressSelectionModal = ({ isOpen, onClose, address = '', houseNumber = '', onHouseNumberChange, onSave }) => {
+const AddressSelectionModal = ({
+  isOpen,
+  onClose,
+  address = '',
+  houseNumber = '',
+  onHouseNumberChange,
+  onSave,
+  fallbackArea = null,
+  initialPosition = null
+}) => {
   const [isClosing, setIsClosing] = useState(false);
-  const [selectedLocation, setSelectedLocation] = useState(null);
+  const [selectedLocation, setSelectedLocation] = useState(initialPosition || null);
   const [mapAddress, setMapAddress] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
@@ -337,6 +346,7 @@ const AddressSelectionModal = ({ isOpen, onClose, address = '', houseNumber = ''
               onLocationSelect={handleLocationSelect}
               initialPosition={selectedLocation}
               flyToPosition={flyToPosition}
+              fallbackArea={fallbackArea}
             />
           </div>
         </div>

@@ -1505,32 +1505,68 @@ function buildSkillQuery(requiredSkills, extra = {}) {
 
 /**
  * A2: Sort workers into 3 distance waves.
- * Wave 0: 0-5 km, Wave 1: 5-15 km, Wave 2: 15+ km
+ * - Primary: Actual device GPS coordinates with Haversine distance
+ *   Wave 0: 0-5 km (Closest live GPS)
+ *   Wave 1: 5-15 km (Live GPS) OR Same District/Sub-District (Administrative fallback when GPS is pending)
+ *   Wave 2: 15+ km (Outer live GPS)
+ * - Fallback: When device GPS is not available, workers matching the farm's district/sub-district
+ *   are safely placed in Wave 1. Workers from different districts without nearby GPS are excluded.
  */
-function sortIntoWaves(workers, farmLat, farmLng) {
-  if (farmLat === undefined || farmLng === undefined ||
-      isNaN(Number(farmLat)) || isNaN(Number(farmLng))) {
-    return [workers, [], []]; // No location — all in one wave
-  }
+function sortIntoWaves(workers, farmLat, farmLng, requestLocation = {}) {
+  const farmCity = (requestLocation.city || requestLocation.districtName || '').trim().toLowerCase();
+  const farmState = (requestLocation.state || requestLocation.stateName || '').trim().toLowerCase();
 
   const wave0 = [], wave1 = [], wave2 = [];
+
   for (const w of workers) {
     const lat = Number(w.location?.lat);
     const lng = Number(w.location?.lng);
-    if (isNaN(lat) || isNaN(lng)) {
-      wave1.push(w); // No coords — mid bucket
+    const hasValidCoords = !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0;
+
+    // 1. Primary: Actual Live Device GPS Location
+    if (hasValidCoords && farmLat !== undefined && farmLng !== undefined && !isNaN(Number(farmLat)) && !isNaN(Number(farmLng))) {
+      const dist = calculateDistance({ lat: Number(farmLat), lng: Number(farmLng) }, { lat, lng });
+      w._distKm = dist;
+      if (dist <= 5) {
+        wave0.push(w);
+      } else if (dist <= 15) {
+        wave1.push(w);
+      } else {
+        wave2.push(w);
+      }
       continue;
     }
-    const dist = calculateDistance({ lat: Number(farmLat), lng: Number(farmLng) }, { lat, lng });
-    w._distKm = dist;
-    if      (dist <=  5) wave0.push(w);
-    else if (dist <= 15) wave1.push(w);
-    else                  wave2.push(w);
+
+    // 2. Fallback: District / Sub-district matching when device GPS has not yet reported
+    const workerCity = (w.districtName || w.address?.city || '').trim().toLowerCase();
+    const workerState = (w.stateName || w.address?.state || '').trim().toLowerCase();
+    const workerSubDistrict = (w.subDistrictName || '').trim().toLowerCase();
+
+    const isSameDistrict = workerCity && farmCity && (workerCity === farmCity || farmCity.includes(workerCity) || workerCity.includes(farmCity));
+    const isSameState = (!farmState || !workerState) || workerState === farmState;
+
+    if (isSameDistrict && isSameState) {
+      // Worker is verified in the same district/sub-district!
+      w._isDistrictFallback = true;
+      w._distKm = 999;
+      // Prioritize same subdistrict near front of Wave 1
+      if (workerSubDistrict && requestLocation.addressLine1 && requestLocation.addressLine1.toLowerCase().includes(workerSubDistrict)) {
+        wave1.unshift(w);
+      } else {
+        wave1.push(w);
+      }
+    }
+    // Workers with different districts and no GPS near the farm are safely excluded
   }
 
   wave0.sort((a, b) => (a._distKm || 0) - (b._distKm || 0));
-  wave1.sort((a, b) => (a._distKm || 0) - (b._distKm || 0));
+  wave1.sort((a, b) => {
+    if (a._isDistrictFallback && !b._isDistrictFallback) return 1;
+    if (!a._isDistrictFallback && b._isDistrictFallback) return -1;
+    return (a._distKm || 0) - (b._distKm || 0);
+  });
   wave2.sort((a, b) => (a._distKm || 0) - (b._distKm || 0));
+
   return [wave0, wave1, wave2];
 }
 
@@ -1697,12 +1733,12 @@ async function dispatchToIndependentWorkers({
 
     // A1: Equal pool — all active workers + free Team Leaders (no workerType filter)
     let candidates = await Worker.find(buildSkillQuery(requiredSkills))
-      .select('_id name workerType skills primaryService serviceCategory serviceCategories location address status fcmTokens approvalStatus isActive teamId')
+      .select('_id name workerType skills primaryService serviceCategory serviceCategories location address status fcmTokens approvalStatus isActive teamId stateId stateName districtId districtName subDistrictId subDistrictName')
       .lean();
 
     if (!candidates.length) {
       candidates = await Worker.find({ isActive: { $ne: false } })
-        .select('_id name workerType skills primaryService serviceCategory serviceCategories location address status fcmTokens approvalStatus isActive teamId')
+        .select('_id name workerType skills primaryService serviceCategory serviceCategories location address status fcmTokens approvalStatus isActive teamId stateId stateName districtId districtName subDistrictId subDistrictName')
         .lean();
     }
 
@@ -1727,8 +1763,8 @@ async function dispatchToIndependentWorkers({
       if (f?.name) farmerName = f.name;
     } catch (_) {}
 
-    // A2: Wave-wise dispatch by proximity
-    const [wave0, wave1, wave2] = sortIntoWaves(available, workerLocation?.lat, workerLocation?.lng);
+    // A2: Wave-wise dispatch by proximity (GPS primary, District/Sub-district fallback)
+    const [wave0, wave1, wave2] = sortIntoWaves(available, workerLocation?.lat, workerLocation?.lng, workerLocation || request.location);
     console.log(`[HOURLY DISPATCH] Wave0(0-5km): ${wave0.length} | Wave1(5-15km): ${wave1.length} | Wave2(15km+): ${wave2.length}`);
 
     // Proactive dispatch: ensure enough workers receive the job immediately without 10-20m wait
@@ -1782,12 +1818,12 @@ async function dispatchToIndependentWorkersForDaily({
 
     // A1: Equal pool
     let candidates = await Worker.find(buildSkillQuery(requiredSkills))
-      .select('_id name workerType skills primaryService serviceCategory serviceCategories location address status fcmTokens approvalStatus isActive teamId')
+      .select('_id name workerType skills primaryService serviceCategory serviceCategories location address status fcmTokens approvalStatus isActive teamId stateId stateName districtId districtName subDistrictId subDistrictName')
       .lean();
 
     if (!candidates.length) {
       candidates = await Worker.find({ isActive: { $ne: false } })
-        .select('_id name workerType skills primaryService serviceCategory serviceCategories location address status fcmTokens approvalStatus isActive teamId')
+        .select('_id name workerType skills primaryService serviceCategory serviceCategories location address status fcmTokens approvalStatus isActive teamId stateId stateName districtId districtName subDistrictId subDistrictName')
         .lean();
     }
 
@@ -1811,8 +1847,8 @@ async function dispatchToIndependentWorkersForDaily({
       if (f?.name) farmerName = f.name;
     } catch (_) {}
 
-    // A2: Wave-wise dispatch
-    const [wave0, wave1, wave2] = sortIntoWaves(available, workerLocation?.lat, workerLocation?.lng);
+    // A2: Wave-wise dispatch (GPS primary, District/Sub-district fallback)
+    const [wave0, wave1, wave2] = sortIntoWaves(available, workerLocation?.lat, workerLocation?.lng, workerLocation || request.location);
     console.log(`[DAILY DISPATCH] Wave0(0-5km): ${wave0.length} | Wave1(5-15km): ${wave1.length} | Wave2(15km+): ${wave2.length}`);
 
     // Proactive dispatch: ensure enough workers receive the job immediately without 10-20m wait

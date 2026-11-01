@@ -877,10 +877,16 @@ const EditProfile = () => {
       <AddressSelectionModal
         isOpen={isAddressModalOpen}
         onClose={() => setIsAddressModalOpen(false)}
-        address={formData.address?.fullAddress || ''} // Passing for initial view if supported later
+        address={formData.address?.fullAddress || ''}
         houseNumber={formData.address?.addressLine1 || ''}
         onHouseNumberChange={(val) => handleInputChange('address.addressLine1', val)}
         onSave={handleAddressSave}
+        initialPosition={formData.location?.lat && formData.location?.lng ? formData.location : null}
+        fallbackArea={{
+          subDistrictName: formData.subDistrictName || formData.address?.subDistrictName || '',
+          districtName: formData.districtName || formData.address?.city || '',
+          stateName: formData.stateName || formData.address?.state || ''
+        }}
       />
 
       <BottomNav />
