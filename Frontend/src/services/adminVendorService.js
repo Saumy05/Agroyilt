@@ -66,10 +66,18 @@ const adminVendorService = {
   },
 
   /**
-   * Delete vendor
+   * Delete vendor (soft delete)
    */
   deleteVendor: async (id) => {
     const response = await api.delete(`/admin/vendors/${id}`);
+    return response.data;
+  },
+
+  /**
+   * Restore soft-deleted vendor
+   */
+  restoreVendor: async (id) => {
+    const response = await api.patch(`/admin/vendors/${id}/restore`);
     return response.data;
   },
 

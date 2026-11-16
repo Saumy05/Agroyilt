@@ -12,5 +12,7 @@ router.get('/', equipmentController.getAllEquipment);
 router.patch('/:id/status', equipmentController.updateEquipmentStatus);
 router.put('/:id', equipmentController.updateEquipment);
 router.delete('/:id', equipmentController.deleteEquipment);
+router.patch('/:id/restore', equipmentController.restoreEquipment);
+router.put('/:id/restore', equipmentController.restoreEquipment);
 
 module.exports = router;

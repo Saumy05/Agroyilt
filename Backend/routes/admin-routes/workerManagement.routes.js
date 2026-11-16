@@ -19,6 +19,7 @@ const {
   toggleWorkerStatus,
   toggleWorkerAvailability,
   deleteWorker,
+  restoreWorker,
   addWorker
 } = require('../../controllers/adminControllers/adminWorkerController');
 
@@ -49,6 +50,8 @@ router.post('/workers/:id/pay', authenticate, isAdmin, requireAnyPermission('wor
 router.patch('/workers/:id/status', authenticate, isAdmin, requireAnyPermission('workers.block'), toggleWorkerStatus); // New
 router.patch('/workers/:id/availability', authenticate, isAdmin, requireAnyPermission('workers.edit'), toggleWorkerAvailability);
 router.delete('/workers/:id', authenticate, isAdmin, requireAnyPermission('workers.delete'), deleteWorker); // New
+router.patch('/workers/:id/restore', authenticate, isAdmin, requireAnyPermission('workers.delete'), restoreWorker);
+router.put('/workers/:id/restore', authenticate, isAdmin, requireAnyPermission('workers.delete'), restoreWorker);
 router.get('/workers/:id/jobs', authenticate, isAdmin, requireAnyPermission('workers.view'), getWorkerJobs);
 router.get('/workers/:id/earnings', authenticate, isAdmin, requireAnyPermission('workers.view'), getWorkerEarnings);
 

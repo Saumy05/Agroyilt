@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { FiGrid, FiPlus, FiEdit2, FiTrash2, FiSave, FiChevronUp, FiChevronDown, FiMove, FiX, FiSearch, FiMapPin, FiGlobe } from "react-icons/fi";
+import { FiGrid, FiPlus, FiEdit2, FiTrash2, FiSave, FiChevronUp, FiChevronDown, FiMove, FiX, FiSearch, FiMapPin, FiGlobe, FiRefreshCw } from "react-icons/fi";
 import { toast } from "react-hot-toast";
 import CardShell from "../components/CardShell";
 import Modal from "../components/Modal";
@@ -377,7 +377,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
   const fetchCategories = async () => {
     try {
       setFetching(true);
-      const params = { status: 'active' };
+      const params = activeTab === 'archived' ? { status: 'archived' } : { status: 'active' };
       if (searchTerm) params.search = searchTerm;
 
       const response = await categoryService.getAll(params);
@@ -411,6 +411,8 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
           rentByUnit: !!cat.rentByUnit,
           unitLabel: cat.unitLabel || '',
           chargedPerKm: !!cat.chargedPerKm,
+          isDeleted: Boolean(cat.isDeleted),
+          deletedAt: cat.deletedAt || null,
           scope: (!cat.scope || cat.scope === 'GLOBAL') ? 'GLOBAL_INDIA' : cat.scope,
           stateId: cat.stateId || null,
           state: cat.state || null,
@@ -433,6 +435,10 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
       setFetching(false);
     }
   };
+
+  useEffect(() => {
+    fetchCategories();
+  }, [activeTab]);
 
   useEffect(() => {
     fetchCategories();
@@ -647,16 +653,32 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
 
 
   const remove = async (id) => {
-    if (!window.confirm("Delete this category?")) return;
+    if (!window.confirm("Are you sure you want to delete (archive) this category? Associated services and vendor machinery listings will be safely preserved, and it can be restored anytime from the Archived view.")) return;
     try {
       setLoading(true);
       const res = await categoryService.delete(id);
       if (res.success) {
-        toast.success("Deleted");
+        toast.success("Category archived successfully");
         fetchCategories();
       }
     } catch (error) {
       toast.error("Delete failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const restore = async (id) => {
+    if (!window.confirm("Restore this category and its associated services?")) return;
+    try {
+      setLoading(true);
+      const res = await categoryService.restore(id);
+      if (res.success) {
+        toast.success("Category restored successfully");
+        fetchCategories();
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Restore failed");
     } finally {
       setLoading(false);
     }
@@ -762,6 +784,16 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
               }`}
             >
               📑 All Categories ({categoriesBase.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('archived')}
+              className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${
+                activeTab === 'archived'
+                  ? 'bg-rose-700 text-white shadow-sm'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              🗑️ Archived
             </button>
           </div>
 
@@ -1037,8 +1069,21 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
                     </td>
                     <td className="py-4 px-4">
                       <div className="flex justify-center gap-2">
-                        <button onClick={() => { setEditingId(c.id); setIsModalOpen(true); }} className="p-1.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100"><FiEdit2 /></button>
-                        <button onClick={() => remove(c.id)} className="p-1.5 bg-rose-50 text-rose-600 rounded hover:bg-rose-100"><FiTrash2 /></button>
+                        {c.isDeleted || activeTab === 'archived' ? (
+                          <button
+                            onClick={() => restore(c.id)}
+                            className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg transition-colors cursor-pointer"
+                            title="Restore Category"
+                          >
+                            <FiRefreshCw className="w-3.5 h-3.5" />
+                            <span>Restore</span>
+                          </button>
+                        ) : (
+                          <>
+                            <button onClick={() => { setEditingId(c.id); setIsModalOpen(true); }} className="p-1.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100" title="Edit Category"><FiEdit2 /></button>
+                            <button onClick={() => remove(c.id)} className="p-1.5 bg-rose-50 text-rose-600 rounded hover:bg-rose-100" title="Delete Category"><FiTrash2 /></button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

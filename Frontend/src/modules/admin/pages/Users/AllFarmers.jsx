@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiSearch, FiUser, FiPhone, FiMail, FiCheckCircle, FiSlash, FiCheck, FiTrash2, FiPlus, FiX, FiUserCheck, FiEye, FiAlertCircle } from 'react-icons/fi';
+import { FiSearch, FiUser, FiPhone, FiMail, FiCheckCircle, FiSlash, FiCheck, FiTrash2, FiPlus, FiX, FiUserCheck, FiEye, FiAlertCircle, FiRefreshCw } from 'react-icons/fi';
 import { toastManager } from '../../../../utils/toastManager';
 import { adminUserService } from '../../../../services/adminUserService';
 import { refreshAdminCounts } from '../../utils/adminCounts';
@@ -94,7 +94,9 @@ const AllFarmers = () => {
         search: debouncedSearch
       };
 
-      if (statusFilter !== 'all') {
+      if (statusFilter === 'archived') {
+        params.status = 'archived';
+      } else if (statusFilter !== 'all') {
         params.isActive = statusFilter === 'active';
       }
 
@@ -183,18 +185,34 @@ const AllFarmers = () => {
   };
 
   const handleDeleteUser = async (userId) => {
-    if (!window.confirm('Are you sure you want to delete this farmer? This action cannot be undone.')) {
+    if (!window.confirm('Are you sure you want to delete (archive) this farmer? Past bookings and invoices will be safely preserved, and the farmer can be restored anytime from the Archived view.')) {
       return;
     }
 
     try {
       const response = await adminUserService.deleteUser(userId);
       if (response.success) {
-        toastManager.success(response.message || 'Farmer deleted successfully');
+        toastManager.success(response.message || 'Farmer archived successfully');
         fetchUsers();
       }
     } catch (error) {
-      toastManager.error(error.message || 'Failed to delete farmer');
+      toastManager.error(error.message || 'Failed to archive farmer');
+    }
+  };
+
+  const handleRestoreUser = async (userId) => {
+    if (!window.confirm('Restore this farmer account to active state?')) {
+      return;
+    }
+
+    try {
+      const response = await adminUserService.restoreUser(userId);
+      if (response.success) {
+        toastManager.success(response.message || 'Farmer restored successfully');
+        fetchUsers();
+      }
+    } catch (error) {
+      toastManager.error(error.message || 'Failed to restore farmer');
     }
   };
 
@@ -252,6 +270,7 @@ const AllFarmers = () => {
             <option value="all">All Status</option>
             <option value="active">Active Only</option>
             <option value="inactive">Blocked Only</option>
+            <option value="archived">Archived / Deleted</option>
           </select>
 
           <FeeFilter value={feeFilter} onChange={(v) => { setFeeFilter(v); setPage(1); }} />
@@ -351,25 +370,33 @@ const AllFarmers = () => {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-col gap-1">
-                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider w-fit ${
-                            isApproved
-                              ? 'bg-green-100 text-green-700 border border-green-200'
-                              : isRejected
-                              ? 'bg-red-100 text-red-700 border border-red-200'
-                              : 'bg-amber-100 text-amber-700 border border-amber-200'
-                          }`}>
-                            {isApproved ? 'Approved' : isRejected ? 'Rejected' : 'Pending Approval'}
-                          </span>
-                          <FeeStatusBadge status={user.registrationFeeStatus} amount={user.registrationFeeAmount} role="USER" />
-                          {!user.isActive && (
-                            <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-gray-100 text-gray-600 w-fit">
-                              Blocked
+                          {user.isDeleted ? (
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-rose-100 text-rose-700 border border-rose-200 w-fit">
+                              Archived / Deleted
                             </span>
-                          )}
-                          {isRejected && user.rejectionReason && (
-                            <span className="text-[9px] text-red-500 max-w-[160px] truncate" title={user.rejectionReason}>
-                              {user.rejectionReason}
-                            </span>
+                          ) : (
+                            <>
+                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider w-fit ${
+                                isApproved
+                                  ? 'bg-green-100 text-green-700 border border-green-200'
+                                  : isRejected
+                                  ? 'bg-red-100 text-red-700 border border-red-200'
+                                  : 'bg-amber-100 text-amber-700 border border-amber-200'
+                              }`}>
+                                {isApproved ? 'Approved' : isRejected ? 'Rejected' : 'Pending Approval'}
+                              </span>
+                              <FeeStatusBadge status={user.registrationFeeStatus} amount={user.registrationFeeAmount} role="USER" />
+                              {!user.isActive && (
+                                <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-gray-100 text-gray-600 w-fit">
+                                  Blocked
+                                </span>
+                              )}
+                              {isRejected && user.rejectionReason && (
+                                <span className="text-[9px] text-red-500 max-w-[160px] truncate" title={user.rejectionReason}>
+                                  {user.rejectionReason}
+                                </span>
+                              )}
+                            </>
                           )}
                         </div>
                       </td>
@@ -389,42 +416,55 @@ const AllFarmers = () => {
                           >
                             <FiEye className="w-3.5 h-3.5" />
                           </button>
-                          {!isApproved && (
+                          {user.isDeleted ? (
                             <button
-                              onClick={() => handleApprove(user._id)}
-                              className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors border border-emerald-200 cursor-pointer"
-                              title="Approve Farmer"
+                              onClick={() => handleRestoreUser(user._id)}
+                              className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg transition-colors cursor-pointer"
+                              title="Restore Farmer"
                             >
-                              <FiCheck className="w-3.5 h-3.5" />
+                              <FiRefreshCw className="w-3.5 h-3.5" />
+                              <span>Restore</span>
                             </button>
+                          ) : (
+                            <>
+                              {!isApproved && (
+                                <button
+                                  onClick={() => handleApprove(user._id)}
+                                  className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors border border-emerald-200 cursor-pointer"
+                                  title="Approve Farmer"
+                                >
+                                  <FiCheck className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              {!isRejected && (
+                                <button
+                                  onClick={() => handleReject(user._id)}
+                                  className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors border border-amber-200 cursor-pointer"
+                                  title="Reject Farmer"
+                                >
+                                  <FiX className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleStatusToggle(user._id, user.isActive)}
+                                className={`p-1.5 rounded-lg transition-colors border cursor-pointer ${
+                                  user.isActive
+                                    ? 'text-gray-400 hover:text-red-500 hover:bg-red-50 border-gray-200'
+                                    : 'text-green-600 hover:bg-green-50 border-green-200'
+                                }`}
+                                title={user.isActive ? 'Block Farmer' : 'Activate Farmer'}
+                              >
+                                {user.isActive ? <FiSlash className="w-3.5 h-3.5" /> : <FiCheck className="w-3.5 h-3.5" />}
+                              </button>
+                              <button
+                                onClick={() => handleDeleteUser(user._id)}
+                                className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-red-200 cursor-pointer"
+                                title="Delete Farmer"
+                              >
+                                <FiTrash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
                           )}
-                          {!isRejected && (
-                            <button
-                              onClick={() => handleReject(user._id)}
-                              className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors border border-amber-200 cursor-pointer"
-                              title="Reject Farmer"
-                            >
-                              <FiX className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                          <button
-                            onClick={() => handleStatusToggle(user._id, user.isActive)}
-                            className={`p-1.5 rounded-lg transition-colors border cursor-pointer ${
-                              user.isActive
-                                ? 'text-gray-400 hover:text-red-500 hover:bg-red-50 border-gray-200'
-                                : 'text-green-600 hover:bg-green-50 border-green-200'
-                            }`}
-                            title={user.isActive ? 'Block Farmer' : 'Activate Farmer'}
-                          >
-                            {user.isActive ? <FiSlash className="w-3.5 h-3.5" /> : <FiCheck className="w-3.5 h-3.5" />}
-                          </button>
-                          <button
-                            onClick={() => handleDeleteUser(user._id)}
-                            className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-red-200 cursor-pointer"
-                            title="Delete Farmer"
-                          >
-                            <FiTrash2 className="w-3.5 h-3.5" />
-                          </button>
                         </div>
                       </td>
                     </tr>

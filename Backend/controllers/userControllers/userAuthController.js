@@ -101,6 +101,13 @@ const verifyLogin = async (req, res) => {
     // 2. Check if user exists
     const user = await User.findOne({ phone });
 
+    if (user && user.isDeleted) {
+      return res.status(403).json({
+        success: false,
+        message: 'This account has been deleted. Please contact support to restore your account.'
+      });
+    }
+
     // NEW FLOW: Always return a verification token, whether new or existing user.
     // The frontend will then either go to Register (if new) or Set MPIN / Reset MPIN.
     const verificationToken = generateVerificationToken(phone);
@@ -434,8 +441,15 @@ const deleteAccount = async (req, res) => {
       });
     }
 
-    // Permanently delete the user document from MongoDB
-    const deleted = await User.findByIdAndDelete(userId);
+    // Soft delete the user document to preserve booking and invoice audit trails
+    const deleted = await User.findByIdAndUpdate(userId, {
+      $set: {
+        isDeleted: true,
+        isActive: false,
+        deletedAt: new Date(),
+        deletedReason: 'Self-requested account deletion'
+      }
+    });
 
     if (!deleted) {
       return res.status(500).json({
@@ -444,11 +458,11 @@ const deleteAccount = async (req, res) => {
       });
     }
 
-    console.log(`[AUTH] ✅ User account permanently deleted: ${userId} (phone: ${user.phone})`);
+    console.log(`[AUTH] ✅ User account soft-deleted: ${userId} (phone: ${user.phone})`);
 
     res.status(200).json({
       success: true,
-      message: 'Account deleted successfully. You will need to register again to use the app.'
+      message: 'Account deleted successfully. Contact support if you need to restore your account.'
     });
   } catch (error) {
     console.error('Delete account error:', error);
@@ -479,6 +493,10 @@ const loginWithMpin = async (req, res) => {
     
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    if (user.isDeleted) {
+      return res.status(403).json({ success: false, message: 'Your account has been deleted. Please contact support to restore your account.' });
     }
 
     if (!user.isActive) {

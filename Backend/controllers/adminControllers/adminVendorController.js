@@ -28,6 +28,13 @@ const getAllVendors = async (req, res) => {
     // Build query
     const query = {};
 
+    // Soft delete filtering
+    if (req.query.status === 'archived' || req.query.isDeleted === 'true') {
+      query.isDeleted = true;
+    } else {
+      query.isDeleted = { $ne: true };
+    }
+
     if (approvalStatus) {
       query.approvalStatus = approvalStatus;
     }
@@ -689,13 +696,27 @@ const toggleVendorAvailability = async (req, res) => {
 };
 
 /**
- * Delete vendor
+ * Delete vendor (soft delete)
  */
 const deleteVendor = async (req, res) => {
   try {
     const { id } = req.params;
+    const { reason } = req.body || {};
 
-    const vendor = await Vendor.findByIdAndDelete(id);
+    const vendor = await Vendor.findByIdAndUpdate(
+      id,
+      {
+        $set: {
+          isDeleted: true,
+          isActive: false,
+          isOnline: false,
+          deletedAt: new Date(),
+          deletedBy: req.user?._id || null,
+          deletedReason: reason || 'Deleted by admin'
+        }
+      },
+      { new: true }
+    );
 
     if (!vendor) {
       return res.status(404).json({
@@ -704,15 +725,77 @@ const deleteVendor = async (req, res) => {
       });
     }
 
+    await auditAdminAction(
+      req,
+      'DELETE_VENDOR',
+      'VENDOR_MANAGEMENT',
+      `Soft-deleted vendor "${vendor.name}" (${vendor.phone})`,
+      vendor._id,
+      'Vendor',
+      vendor.name
+    );
+
     res.status(200).json({
       success: true,
-      message: 'Vendor deleted successfully'
+      message: 'Vendor deleted (archived) successfully'
     });
   } catch (error) {
     console.error('Delete vendor error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to delete vendor'
+    });
+  }
+};
+
+/**
+ * Restore soft-deleted vendor
+ */
+const restoreVendor = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const vendor = await Vendor.findByIdAndUpdate(
+      id,
+      {
+        $set: {
+          isDeleted: false,
+          isActive: true,
+          deletedAt: null,
+          deletedBy: null,
+          deletedReason: null
+        }
+      },
+      { new: true }
+    );
+
+    if (!vendor) {
+      return res.status(404).json({
+        success: false,
+        message: 'Vendor not found'
+      });
+    }
+
+    await auditAdminAction(
+      req,
+      'RESTORE_VENDOR',
+      'VENDOR_MANAGEMENT',
+      `Restored vendor "${vendor.name}" (${vendor.phone})`,
+      vendor._id,
+      'Vendor',
+      vendor.name
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'Vendor restored successfully',
+      data: vendor
+    });
+  } catch (error) {
+    console.error('Restore vendor error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to restore vendor'
     });
   }
 };
@@ -774,6 +857,7 @@ module.exports = {
   toggleVendorAvailability,
   updateVendorServices,
   deleteVendor,
+  restoreVendor,
   addVendor: async (req, res) => {
     try {
       const { name, email, phone, businessName, service, aadhar, pan, labDetails } = req.body;

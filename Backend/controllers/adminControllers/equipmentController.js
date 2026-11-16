@@ -10,7 +10,12 @@ exports.getAllEquipment = async (req, res) => {
   try {
     const { status, vendorId, stateId, districtId, subDistrictId } = req.query;
     const query = {};
-    if (status) query.status = status;
+    if (status === 'archived' || req.query.isDeleted === 'true') {
+      query.isDeleted = true;
+    } else {
+      query.isDeleted = { $ne: true };
+      if (status) query.status = status;
+    }
     if (vendorId) query.vendorId = vendorId;
     if (stateId) query.stateId = stateId;
     if (districtId) query.districtId = districtId;
@@ -148,15 +153,55 @@ exports.updateEquipmentStatus = async (req, res) => {
 };
 
 /**
- * Delete Equipment (Admin Only)
+ * Delete Equipment (Admin Only - soft delete)
  */
 exports.deleteEquipment = async (req, res) => {
   try {
-    const equipment = await VendorEquipment.findByIdAndDelete(req.params.id);
+    const { reason } = req.body || {};
+    const equipment = await VendorEquipment.findByIdAndUpdate(
+      req.params.id,
+      {
+        $set: {
+          isDeleted: true,
+          status: 'inactive',
+          deletedAt: new Date(),
+          deletedBy: req.user?._id || null,
+          deletedReason: reason || 'Deleted by admin'
+        }
+      },
+      { new: true }
+    );
     if (!equipment) {
-      return res.status(404).json({ success: false, message: 'Not found' });
+      return res.status(404).json({ success: false, message: 'Equipment not found' });
     }
-    res.status(200).json({ success: true, message: 'Deleted successfully' });
+    res.status(200).json({ success: true, message: 'Equipment deleted (archived) successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+/**
+ * Restore Equipment (Admin Only)
+ */
+exports.restoreEquipment = async (req, res) => {
+  try {
+    const equipment = await VendorEquipment.findByIdAndUpdate(
+      req.params.id,
+      {
+        $set: {
+          isDeleted: false,
+          status: 'approved',
+          deletedAt: null,
+          deletedBy: null,
+          deletedReason: null
+        }
+      },
+      { new: true }
+    );
+    if (!equipment) {
+      return res.status(404).json({ success: false, message: 'Equipment not found' });
+    }
+    res.status(200).json({ success: true, message: 'Equipment restored successfully', data: equipment });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error' });
   }

@@ -24,6 +24,13 @@ const getAllUsers = async (req, res) => {
     // Build query
     const query = {};
 
+    // Soft delete filtering
+    if (req.query.status === 'archived' || req.query.isDeleted === 'true') {
+      query.isDeleted = true;
+    } else {
+      query.isDeleted = { $ne: true };
+    }
+
     if (isActive !== undefined) {
       query.isActive = isActive === 'true';
     }
@@ -225,8 +232,21 @@ const toggleUserStatus = async (req, res) => {
 const deleteUser = async (req, res) => {
   try {
     const { id } = req.params;
+    const { reason } = req.body || {};
 
-    const user = await User.findByIdAndDelete(id);
+    const user = await User.findByIdAndUpdate(
+      id,
+      {
+        $set: {
+          isDeleted: true,
+          isActive: false,
+          deletedAt: new Date(),
+          deletedBy: req.user?._id || null,
+          deletedReason: reason || 'Deleted by admin'
+        }
+      },
+      { new: true }
+    );
 
     if (!user) {
       return res.status(404).json({
@@ -239,7 +259,7 @@ const deleteUser = async (req, res) => {
       req,
       'DELETE_USER',
       'USER_MANAGEMENT',
-      `Deleted farmer "${user.name}" (${user.phone})`,
+      `Soft-deleted farmer "${user.name}" (${user.phone})`,
       user._id,
       'User',
       user.name
@@ -247,13 +267,65 @@ const deleteUser = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Farmer deleted successfully'
+      message: 'Farmer deleted (archived) successfully'
     });
   } catch (error) {
     console.error('Delete user error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to delete farmer. Please try again.'
+    });
+  }
+};
+
+/**
+ * Restore soft-deleted user
+ */
+const restoreUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const user = await User.findByIdAndUpdate(
+      id,
+      {
+        $set: {
+          isDeleted: false,
+          isActive: true,
+          deletedAt: null,
+          deletedBy: null,
+          deletedReason: null
+        }
+      },
+      { new: true }
+    );
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Farmer not found'
+      });
+    }
+
+    await auditAdminAction(
+      req,
+      'RESTORE_USER',
+      'USER_MANAGEMENT',
+      `Restored farmer "${user.name}" (${user.phone})`,
+      user._id,
+      'User',
+      user.name
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'Farmer restored successfully',
+      data: user
+    });
+  } catch (error) {
+    console.error('Restore user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to restore farmer. Please try again.'
     });
   }
 };
@@ -650,6 +722,7 @@ module.exports = {
   getUserDetails,
   toggleUserStatus,
   deleteUser,
+  restoreUser,
   getUserBookings,
   getUserWalletTransactions,
   getAllUserBookings,

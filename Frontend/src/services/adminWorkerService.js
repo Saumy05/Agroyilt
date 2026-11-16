@@ -50,10 +50,18 @@ const adminWorkerService = {
   },
 
   /**
-   * Delete worker
+   * Delete worker (soft delete)
    */
   deleteWorker: async (id) => {
     const response = await api.delete(`/admin/workers/${id}`);
+    return response.data;
+  },
+
+  /**
+   * Restore soft-deleted worker
+   */
+  restoreWorker: async (id) => {
+    const response = await api.patch(`/admin/workers/${id}/restore`);
     return response.data;
   },
 

@@ -24,7 +24,7 @@ const validatePricing = (pricing) => {
 exports.getMyEquipment = async (req, res) => {
   try {
     const vendorId = req.user.id;
-    const equipment = await VendorEquipment.find({ vendorId })
+    const equipment = await VendorEquipment.find({ vendorId, isDeleted: { $ne: true } })
       .populate('categoryId', 'title slug homeIconUrl trackingType requiresDriver rentByUnit unitLabel chargedPerKm')
       .populate('subCategoryIds', 'title slug')
       .populate('implements.subCategoryId', 'title slug')
@@ -320,7 +320,19 @@ exports.deleteEquipment = async (req, res) => {
     const { id } = req.params;
     const vendorId = req.user.id;
 
-    const equipment = await VendorEquipment.findOneAndDelete({ _id: id, vendorId });
+    // Soft delete to protect past bookings and invoices
+    const equipment = await VendorEquipment.findOneAndUpdate(
+      { _id: id, vendorId },
+      {
+        $set: {
+          isDeleted: true,
+          status: 'inactive',
+          deletedAt: new Date(),
+          deletedReason: 'Deleted by vendor from inventory'
+        }
+      },
+      { new: true }
+    );
     if (!equipment) {
       return res.status(404).json({ success: false, message: 'Equipment not found' });
     }

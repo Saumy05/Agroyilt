@@ -58,6 +58,8 @@ const formatCategory = (cat) => ({
   rentByUnit: Boolean(cat.rentByUnit),
   unitLabel: cat.unitLabel || null,
   chargedPerKm: Boolean(cat.chargedPerKm),
+  isDeleted: Boolean(cat.isDeleted),
+  deletedAt: cat.deletedAt || null,
   metaTitle: cat.metaTitle,
   metaDescription: cat.metaDescription,
   createdAt: cat.createdAt,
@@ -242,7 +244,12 @@ const getAllCategories = async (req, res) => {
 
     // Build query
     const query = {};
-    if (status) query.status = status;
+    if (status === 'archived' || req.query.isDeleted === 'true') {
+      query.isDeleted = true;
+    } else {
+      query.isDeleted = { $ne: true };
+      if (status) query.status = status;
+    }
     if (showOnHome !== undefined) query.showOnHome = showOnHome === 'true';
     if (isPopular !== undefined) query.isPopular = isPopular === 'true';
     
@@ -777,13 +784,27 @@ const updateCategory = async (req, res) => {
 };
 
 /**
- * Delete category
+ * Delete category (soft delete)
  * DELETE /api/admin/categories/:id
  */
 const deleteCategory = async (req, res) => {
   try {
     const { id } = req.params;
-    const category = await Category.findByIdAndDelete(id);
+    const { reason } = req.body || {};
+
+    const category = await Category.findByIdAndUpdate(
+      id,
+      {
+        $set: {
+          isDeleted: true,
+          status: 'inactive',
+          deletedAt: new Date(),
+          deletedBy: req.user?._id || null,
+          deletedReason: reason || 'Deleted by admin'
+        }
+      },
+      { new: true }
+    );
 
     if (!category) {
       return res.status(404).json({
@@ -792,19 +813,84 @@ const deleteCategory = async (req, res) => {
       });
     }
 
-    // Also delete all associated services (equipment models) for this category
+    // Soft delete all associated services for this category
     const Service = require('../../models/Service');
-    await Service.deleteMany({ categoryId: id });
+    await Service.updateMany(
+      { categoryId: id },
+      {
+        $set: {
+          isDeleted: true,
+          status: 'inactive',
+          deletedAt: new Date()
+        }
+      }
+    );
 
     res.status(200).json({
       success: true,
-      message: 'Category and associated equipment deleted successfully'
+      message: 'Category and associated equipment archived successfully'
     });
   } catch (error) {
     console.error('Delete category error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to delete category'
+    });
+  }
+};
+
+/**
+ * Restore soft-deleted category
+ * PATCH /api/admin/categories/:id/restore
+ */
+const restoreCategory = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const category = await Category.findByIdAndUpdate(
+      id,
+      {
+        $set: {
+          isDeleted: false,
+          status: 'active',
+          deletedAt: null,
+          deletedBy: null,
+          deletedReason: null
+        }
+      },
+      { new: true }
+    );
+
+    if (!category) {
+      return res.status(404).json({
+        success: false,
+        message: 'Category not found'
+      });
+    }
+
+    // Restore associated services
+    const Service = require('../../models/Service');
+    await Service.updateMany(
+      { categoryId: id },
+      {
+        $set: {
+          isDeleted: false,
+          status: 'active',
+          deletedAt: null
+        }
+      }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'Category and associated equipment restored successfully',
+      data: formatCategoryResponse(category)
+    });
+  } catch (error) {
+    console.error('Restore category error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to restore category'
     });
   }
 };
@@ -847,5 +933,6 @@ module.exports = {
   createCategory,
   updateCategory,
   deleteCategory,
+  restoreCategory,
   updateCategoryOrder
 };

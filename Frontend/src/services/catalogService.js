@@ -43,9 +43,15 @@ export const categoryService = {
     return response.data;
   },
 
-  // Delete category
+  // Delete category (soft delete)
   delete: async (id) => {
     const response = await api.delete(`/admin/categories/${id}`);
+    return response.data;
+  },
+
+  // Restore soft-deleted category
+  restore: async (id) => {
+    const response = await api.patch(`/admin/categories/${id}/restore`);
     return response.data;
   },
 

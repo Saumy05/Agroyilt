@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { FiCheck, FiX, FiEye, FiSearch, FiFilter, FiDownload, FiLoader, FiPower, FiTrash2, FiPlus, FiUpload, FiUserCheck } from 'react-icons/fi';
+import { FiCheck, FiX, FiEye, FiSearch, FiFilter, FiDownload, FiLoader, FiPower, FiTrash2, FiPlus, FiUpload, FiUserCheck, FiRefreshCw } from 'react-icons/fi';
 import { toastManager } from '../../../../utils/toastManager';
 import { downloadFile } from '../../../../utils/downloadFile';
 import CardShell from '../UserCategories/components/CardShell';
@@ -162,6 +162,9 @@ const AllOwners = () => {
       if (createdByMe) {
         params.createdByMe = 'true';
       }
+      if (filterStatus === 'archived') {
+        params.status = 'archived';
+      }
       const response = await adminVendorService.getAllVendors(params);
       if (response.success) {
         if (response.counts?.myRegistrations !== undefined) {
@@ -199,7 +202,9 @@ const AllOwners = () => {
             other: owner.otherDocuments?.[0]
           },
           createdAt: owner.createdAt,
-          isActive: owner.isActive
+          isActive: owner.isActive,
+          isDeleted: owner.isDeleted,
+          deletedAt: owner.deletedAt
         }));
         setOwners(transformedOwners);
       } else {
@@ -215,7 +220,7 @@ const AllOwners = () => {
 
   useEffect(() => {
     loadOwners();
-  }, [createdByMe]);
+  }, [createdByMe, filterStatus]);
 
   // Real-time Socket Listener for vendor online status & availability
   useEffect(() => {
@@ -281,7 +286,11 @@ const AllOwners = () => {
         ? owner.service.join(' ')
         : (owner.service || '');
 
-      const matchesStatus = filterStatus === 'all' || owner.approvalStatus === filterStatus;
+      const matchesStatus = filterStatus === 'all'
+        ? !owner.isDeleted
+        : filterStatus === 'archived'
+        ? Boolean(owner.isDeleted)
+        : (owner.approvalStatus === filterStatus && !owner.isDeleted);
 
       const matchesSearch =
         (owner.name || '').toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
@@ -351,21 +360,40 @@ const AllOwners = () => {
   };
 
   const handleDelete = async (ownerId) => {
-    if (!window.confirm('Are you sure you want to delete this owner? This action cannot be undone.')) {
+    if (!window.confirm('Are you sure you want to delete (archive) this vendor? Historical bookings, payouts, and invoices will be safely preserved, and the vendor can be restored anytime from the Archived view.')) {
       return;
     }
 
     try {
       const response = await adminVendorService.deleteVendor(ownerId);
       if (response.success) {
-        setOwners(prev => prev.filter(o => o.id !== ownerId));
-        toastManager.success('Vendor deleted successfully');
+        toastManager.success(response.message || 'Vendor archived successfully');
+        loadOwners();
       } else {
-        toastManager.error(response.message || 'Failed to delete owner');
+        toastManager.error(response.message || 'Failed to archive vendor');
       }
     } catch (error) {
       console.error('Error deleting owner:', error);
-      toastManager.error('Failed to delete owner');
+      toastManager.error(error.message || 'Failed to archive vendor');
+    }
+  };
+
+  const handleRestore = async (ownerId) => {
+    if (!window.confirm('Restore this vendor account to active state?')) {
+      return;
+    }
+
+    try {
+      const response = await adminVendorService.restoreVendor(ownerId);
+      if (response.success) {
+        toastManager.success(response.message || 'Vendor restored successfully');
+        loadOwners();
+      } else {
+        toastManager.error(response.message || 'Failed to restore vendor');
+      }
+    } catch (error) {
+      console.error('Error restoring owner:', error);
+      toastManager.error(error.message || 'Failed to restore vendor');
     }
   };
 
@@ -583,7 +611,7 @@ const AllOwners = () => {
               />
             </div>
             <div className="flex gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-hide">
-              {['all', 'pending', 'approved', 'rejected'].map((status) => (
+              {['all', 'pending', 'approved', 'rejected', 'archived'].map((status) => (
                 <button
                   key={status}
                   onClick={() => setFilterStatus(status)}
@@ -722,18 +750,26 @@ const AllOwners = () => {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-col gap-1 items-start">
-                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border ${owner.approvalStatus === 'approved' ? 'bg-green-50 text-green-700 border-green-100' :
-                            owner.approvalStatus === 'rejected' ? 'bg-red-50 text-red-700 border-red-100' :
-                              'bg-yellow-50 text-yellow-700 border-yellow-100'
-                            }`}>
-                            {owner.approvalStatus}
-                          </span>
-                          <FeeStatusBadge status={owner.registrationFeeStatus} amount={owner.registrationFeeAmount} role="VENDOR" />
-                          <VendorAvailabilityToggleBadge
-                            vendor={owner}
-                            onToggle={handleToggleAvailability}
-                            loading={togglingAvailabilityId === owner.id}
-                          />
+                          {owner.isDeleted ? (
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-200">
+                              Archived / Deleted
+                            </span>
+                          ) : (
+                            <>
+                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border ${owner.approvalStatus === 'approved' ? 'bg-green-50 text-green-700 border-green-100' :
+                                owner.approvalStatus === 'rejected' ? 'bg-red-50 text-red-700 border-red-100' :
+                                  'bg-yellow-50 text-yellow-700 border-yellow-100'
+                                }`}>
+                                {owner.approvalStatus}
+                              </span>
+                              <FeeStatusBadge status={owner.registrationFeeStatus} amount={owner.registrationFeeAmount} role="VENDOR" />
+                              <VendorAvailabilityToggleBadge
+                                vendor={owner}
+                                onToggle={handleToggleAvailability}
+                                loading={togglingAvailabilityId === owner.id}
+                              />
+                            </>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-3">
@@ -746,44 +782,57 @@ const AllOwners = () => {
                           >
                             <FiEye className="w-3.5 h-3.5" />
                           </button>
- 
-                          {/* Toggle Active Status */}
-                          <button
-                            onClick={() => handleToggleStatus(owner.id, owner.isActive)}
-                            className={`p-1.5 rounded-lg transition-colors ${owner.isActive ? 'text-green-600 hover:bg-green-50' : 'text-gray-400 hover:bg-gray-100'}`}
-                            title={owner.isActive ? "Disable Login" : "Enable Login"}
-                          >
-                            <FiPower className={`w-3.5 h-3.5 ${owner.isActive ? 'fill-current' : ''}`} />
-                          </button>
- 
-                          {/* Approve/Reject (Only for pending) */}
-                          {owner.approvalStatus === 'pending' && (
+
+                          {owner.isDeleted ? (
+                            <button
+                              onClick={() => handleRestore(owner.id)}
+                              className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg transition-colors cursor-pointer"
+                              title="Restore Vendor"
+                            >
+                              <FiRefreshCw className="w-3.5 h-3.5" />
+                              <span>Restore</span>
+                            </button>
+                          ) : (
                             <>
+                              {/* Toggle Active Status */}
                               <button
-                                onClick={() => handleApprove(owner.id)}
-                                className="p-1.5 text-green-500 hover:bg-green-50 rounded-lg transition-colors"
-                                title="Approve"
+                                onClick={() => handleToggleStatus(owner.id, owner.isActive)}
+                                className={`p-1.5 rounded-lg transition-colors ${owner.isActive ? 'text-green-600 hover:bg-green-50' : 'text-gray-400 hover:bg-gray-100'}`}
+                                title={owner.isActive ? "Disable Login" : "Enable Login"}
                               >
-                                <FiCheck className="w-3.5 h-3.5" />
+                                <FiPower className={`w-3.5 h-3.5 ${owner.isActive ? 'fill-current' : ''}`} />
                               </button>
+
+                              {/* Approve/Reject (Only for pending) */}
+                              {owner.approvalStatus === 'pending' && (
+                                <>
+                                  <button
+                                    onClick={() => handleApprove(owner.id)}
+                                    className="p-1.5 text-green-500 hover:bg-green-50 rounded-lg transition-colors"
+                                    title="Approve"
+                                  >
+                                    <FiCheck className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleReject(owner.id)}
+                                    className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                    title="Reject"
+                                  >
+                                    <FiX className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
+                              )}
+
+                              {/* Delete Owner */}
                               <button
-                                onClick={() => handleReject(owner.id)}
+                                onClick={() => handleDelete(owner.id)}
                                 className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                                title="Reject"
+                                title="Delete Vendor"
                               >
-                                <FiX className="w-3.5 h-3.5" />
+                                <FiTrash2 className="w-3.5 h-3.5" />
                               </button>
                             </>
                           )}
- 
-                          {/* Delete Owner */}
-                          <button
-                            onClick={() => handleDelete(owner.id)}
-                            className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Delete Vendor"
-                          >
-                            <FiTrash2 className="w-3.5 h-3.5" />
-                          </button>
                         </div>
                       </td>
                     </tr>

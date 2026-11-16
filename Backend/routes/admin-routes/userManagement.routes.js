@@ -8,6 +8,7 @@ const {
   getUserDetails,
   toggleUserStatus,
   deleteUser,
+  restoreUser,
   getUserBookings,
   getUserWalletTransactions,
   getAllUserBookings,
@@ -28,6 +29,8 @@ router.get('/users/:id', authenticate, isAdmin, requireAnyPermission('users.view
 router.put('/users/:id/status', authenticate, isAdmin, requireAnyPermission('users.block'), toggleStatusValidation, toggleUserStatus);
 router.put('/users/:id/approval', authenticate, isAdmin, requireAnyPermission('users.edit'), updateApprovalStatus);
 router.delete('/users/:id', authenticate, isAdmin, requireAnyPermission('users.delete'), deleteUser);
+router.patch('/users/:id/restore', authenticate, isAdmin, requireAnyPermission('users.delete'), restoreUser);
+router.put('/users/:id/restore', authenticate, isAdmin, requireAnyPermission('users.delete'), restoreUser);
 router.get('/users/:id/bookings', authenticate, isAdmin, requireAnyPermission('users.view'), getUserBookings);
 router.get('/users/:id/wallet', authenticate, isAdmin, requireAnyPermission('users.view'), getUserWalletTransactions);
 router.put('/users/:id/kyc-status', authenticate, isAdmin, requireAnyPermission('users.edit'), updateKycStatus);

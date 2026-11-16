@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   FiCheckCircle, FiXCircle, FiEye, FiClock, 
   FiTruck, FiUser, FiMapPin, FiCalendar, FiSearch, FiFilter, FiMoreVertical, FiTrash2, FiSmartphone, FiRotateCcw
@@ -65,16 +65,30 @@ const EquipmentApproval = () => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this listing?')) return;
+    if (!window.confirm('Are you sure you want to delete (archive) this equipment listing? Existing bookings and invoices will be safely preserved, and it can be restored anytime from the Archived view.')) return;
     try {
       const res = await adminEquipmentService.delete(id);
       if (res.success) {
-        toastManager.success('Deleted successfully');
+        toastManager.success('Equipment archived successfully');
         refreshAdminCounts();
         fetchEquipment();
       }
     } catch (err) {
       toastManager.error('Delete failed');
+    }
+  };
+
+  const handleRestore = async (id) => {
+    if (!window.confirm('Restore this equipment listing to approved state?')) return;
+    try {
+      const res = await adminEquipmentService.restore(id);
+      if (res.success) {
+        toastManager.success('Equipment restored successfully');
+        refreshAdminCounts();
+        fetchEquipment();
+      }
+    } catch (err) {
+      toastManager.error(err.response?.data?.message || 'Restore failed');
     }
   };
 
@@ -97,7 +111,7 @@ const EquipmentApproval = () => {
         <div className="flex flex-col sm:flex-row items-center gap-4">
           {/* Status Tabs */}
           <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
-            {['pending', 'approved', 'rejected'].map(s => (
+            {['pending', 'approved', 'rejected', 'archived'].map(s => (
               <button
                 key={s}
                 onClick={() => setFilterStatus(s)}
@@ -184,15 +198,21 @@ const EquipmentApproval = () => {
                       </div>
                     </td>
                     <td className="px-6 py-6">
-                      <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-wider
-                        ${item.status === 'pending' ? 'bg-amber-50 text-amber-600 border border-amber-100' : 
-                          item.status === 'approved' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 
-                          'bg-red-50 text-red-600 border border-red-100'}`}>
-                        {item.status === 'pending' && <FiClock className="w-2.5 h-2.5" />}
-                        {item.status === 'approved' && <FiCheckCircle className="w-2.5 h-2.5" />}
-                        {item.status === 'rejected' && <FiXCircle className="w-2.5 h-2.5" />}
-                        {item.status}
-                      </div>
+                      {item.isDeleted ? (
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-rose-50 text-rose-600 border border-rose-100">
+                          Archived
+                        </div>
+                      ) : (
+                        <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-wider
+                          ${item.status === 'pending' ? 'bg-amber-50 text-amber-600 border border-amber-100' : 
+                            item.status === 'approved' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 
+                            'bg-red-50 text-red-600 border border-red-100'}`}>
+                          {item.status === 'pending' && <FiClock className="w-2.5 h-2.5" />}
+                          {item.status === 'approved' && <FiCheckCircle className="w-2.5 h-2.5" />}
+                          {item.status === 'rejected' && <FiXCircle className="w-2.5 h-2.5" />}
+                          {item.status}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-6">
                       <div className="flex items-center justify-center gap-2">
@@ -203,40 +223,53 @@ const EquipmentApproval = () => {
                         >
                           <FiEye className="w-4 h-4" />
                         </button>
-                        {item.status === 'pending' && (
+                        {item.isDeleted ? (
+                          <button
+                            onClick={() => handleRestore(item._id)}
+                            className="p-2.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-xl transition-all shadow-sm flex items-center gap-1 text-xs font-bold"
+                            title="Restore Equipment"
+                          >
+                            <FiRotateCcw className="w-4 h-4" />
+                            <span>Restore</span>
+                          </button>
+                        ) : (
                           <>
+                            {item.status === 'pending' && (
+                              <>
+                                <button 
+                                  onClick={() => (needsCategoryChoice(item) ? setSelectedItem(item) : handleStatusUpdate(item._id, 'approved'))}
+                                  className="p-2.5 bg-emerald-100 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm"
+                                  title="Approve"
+                                >
+                                  <FiCheckCircle className="w-4 h-4" />
+                                </button>
+                                <button 
+                                  onClick={() => handleReject(item._id)}
+                                  className="p-2.5 bg-red-100 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all shadow-sm"
+                                  title="Reject"
+                                >
+                                  <FiXCircle className="w-4 h-4" />
+                                </button>
+                              </>
+                            )}
+                            {item.status === 'rejected' && (
+                              <button
+                                onClick={() => handleStatusUpdate(item._id, 'pending')}
+                                className="p-2.5 bg-amber-100 text-amber-600 rounded-xl hover:bg-amber-500 hover:text-white transition-all shadow-sm"
+                                title="Reopen (move back to Pending)"
+                              >
+                                <FiRotateCcw className="w-4 h-4" />
+                              </button>
+                            )}
                             <button 
-                              onClick={() => (needsCategoryChoice(item) ? setSelectedItem(item) : handleStatusUpdate(item._id, 'approved'))}
-                              className="p-2.5 bg-emerald-100 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm"
-                              title="Approve"
+                              onClick={() => handleDelete(item._id)}
+                              className="p-2.5 bg-slate-50 text-slate-300 rounded-xl hover:bg-red-50 hover:text-red-500 transition-all"
+                              title="Delete"
                             >
-                              <FiCheckCircle className="w-4 h-4" />
-                            </button>
-                            <button 
-                              onClick={() => handleReject(item._id)}
-                              className="p-2.5 bg-red-100 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all shadow-sm"
-                              title="Reject"
-                            >
-                              <FiXCircle className="w-4 h-4" />
+                              <FiTrash2 className="w-4 h-4" />
                             </button>
                           </>
                         )}
-                        {item.status === 'rejected' && (
-                          <button
-                            onClick={() => handleStatusUpdate(item._id, 'pending')}
-                            className="p-2.5 bg-amber-100 text-amber-600 rounded-xl hover:bg-amber-500 hover:text-white transition-all shadow-sm"
-                            title="Reopen (move back to Pending)"
-                          >
-                            <FiRotateCcw className="w-4 h-4" />
-                          </button>
-                        )}
-                        <button 
-                          onClick={() => handleDelete(item._id)}
-                          className="p-2.5 bg-slate-50 text-slate-300 rounded-xl hover:bg-red-50 hover:text-red-500 transition-all"
-                          title="Delete"
-                        >
-                          <FiTrash2 className="w-4 h-4" />
-                        </button>
                       </div>
                     </td>
                   </motion.tr>

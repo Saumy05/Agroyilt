@@ -35,6 +35,13 @@ const getAllWorkers = async (req, res) => {
     // Build query
     const query = {};
 
+    // Soft delete filtering
+    if (req.query.status === 'archived' || req.query.isDeleted === 'true') {
+      query.isDeleted = true;
+    } else {
+      query.isDeleted = { $ne: true };
+    }
+
     if (approvalStatus) {
       query.approvalStatus = approvalStatus;
     }
@@ -1089,13 +1096,28 @@ const toggleWorkerAvailability = async (req, res) => {
 };
 
 /**
- * Delete worker details
+ * Delete worker details (soft delete)
  */
 const deleteWorker = async (req, res) => {
   try {
     const { id } = req.params;
+    const { reason } = req.body || {};
 
-    const worker = await Worker.findByIdAndDelete(id);
+    const worker = await Worker.findByIdAndUpdate(
+      id,
+      {
+        $set: {
+          isDeleted: true,
+          isActive: false,
+          status: WORKER_STATUS.OFFLINE,
+          isOnline: false,
+          deletedAt: new Date(),
+          deletedBy: req.user?._id || null,
+          deletedReason: reason || 'Deleted by admin'
+        }
+      },
+      { new: true }
+    );
 
     if (!worker) {
       return res.status(404).json({
@@ -1108,7 +1130,7 @@ const deleteWorker = async (req, res) => {
       req,
       'DELETE_WORKER',
       'WORKER_MANAGEMENT',
-      `Deleted worker "${worker.name}" (${worker.phone})`,
+      `Soft-deleted worker "${worker.name}" (${worker.phone})`,
       worker._id,
       'Worker',
       worker.name
@@ -1116,13 +1138,65 @@ const deleteWorker = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Worker deleted successfully'
+      message: 'Worker deleted (archived) successfully'
     });
   } catch (error) {
     console.error('Delete worker error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to delete worker'
+    });
+  }
+};
+
+/**
+ * Restore soft-deleted worker
+ */
+const restoreWorker = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const worker = await Worker.findByIdAndUpdate(
+      id,
+      {
+        $set: {
+          isDeleted: false,
+          isActive: true,
+          deletedAt: null,
+          deletedBy: null,
+          deletedReason: null
+        }
+      },
+      { new: true }
+    );
+
+    if (!worker) {
+      return res.status(404).json({
+        success: false,
+        message: 'Worker not found'
+      });
+    }
+
+    await auditAdminAction(
+      req,
+      'RESTORE_WORKER',
+      'WORKER_MANAGEMENT',
+      `Restored worker "${worker.name}" (${worker.phone})`,
+      worker._id,
+      'Worker',
+      worker.name
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'Worker restored successfully',
+      data: worker
+    });
+  } catch (error) {
+    console.error('Restore worker error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to restore worker'
     });
   }
 };
@@ -1314,5 +1388,6 @@ module.exports = {
   toggleWorkerStatus,
   toggleWorkerAvailability,
   deleteWorker,
+  restoreWorker,
   addWorker
 };

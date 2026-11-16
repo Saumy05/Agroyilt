@@ -221,6 +221,24 @@ const vendorEquipmentSchema = new mongoose.Schema({
     ref: 'Worker',
     default: null,
     index: true
+  },
+  isDeleted: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  deletedAt: {
+    type: Date,
+    default: null
+  },
+  deletedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Admin',
+    default: null
+  },
+  deletedReason: {
+    type: String,
+    default: null
   }
 }, {
   timestamps: true

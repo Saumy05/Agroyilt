@@ -25,7 +25,8 @@ import {
   FiUserCheck,
   FiPlus,
   FiChevronDown,
-  FiCheck
+  FiCheck,
+  FiRefreshCw
 } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import { useWorkCategories } from '../../../../hooks/useWorkCategories';
@@ -194,9 +195,11 @@ const AllWorkers = () => {
   const fetchWorkers = async () => {
     try {
       setLoading(true);
+      const isArchived = statusFilter === 'archived';
       const res = await workerService.getAllWorkers({
         search: search.trim() || undefined,
-        approvalStatus: statusFilter || undefined,
+        approvalStatus: isArchived ? undefined : (statusFilter || undefined),
+        status: isArchived ? 'archived' : undefined,
         workerType: workerTypeFilter || undefined,
         registrationFeeStatus: feeFilter || undefined,
         availability: availabilityFilter || undefined,
@@ -342,11 +345,17 @@ const AllWorkers = () => {
       } else if (actionStr === 'suspend') {
         res = await workerService.suspendWorker(id);
       } else if (actionStr === 'delete') {
-        if (!window.confirm('Are you sure you want to delete this worker? This action cannot be undone.')) {
+        if (!window.confirm('Are you sure you want to delete (archive) this worker? Past job and payment records will be safely preserved, and the worker can be restored later.')) {
           setActionLoading(null);
           return;
         }
         res = await workerService.deleteWorker(id);
+      } else if (actionStr === 'restore') {
+        if (!window.confirm('Restore this worker account to active state?')) {
+          setActionLoading(null);
+          return;
+        }
+        res = await workerService.restoreWorker(id);
       }
       
       if (res && res.success) {
@@ -578,6 +587,7 @@ const AllWorkers = () => {
           { id: 'approved', label: '✅ Approved' },
           { id: 'rejected', label: '❌ Rejected' },
           { id: 'suspended', label: '⚠️ Suspended' },
+          { id: 'archived', label: '🗑️ Archived / Deleted' },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -592,6 +602,8 @@ const AllWorkers = () => {
                   ? 'bg-red-100 text-red-800 border border-red-300'
                   : tab.id === 'suspended'
                   ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                  : tab.id === 'archived'
+                  ? 'bg-rose-900 text-white border border-rose-950'
                   : 'bg-slate-900 text-white'
                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
@@ -771,19 +783,27 @@ const AllWorkers = () => {
                     </td>
                     <td className="py-4 px-4">
                       <div className="flex flex-col gap-1.5 items-start">
-                        <div className="flex items-center gap-1 flex-wrap">
-                          <StatusBadge status={worker.approvalStatus} />
-                          <FeeStatusBadge status={worker.registrationFeeStatus} amount={worker.registrationFeeAmount} role="WORKER" />
-                        </div>
-                        <AvailabilityToggleBadge
-                          worker={worker}
-                          onToggle={handleToggleAvailability}
-                          loading={togglingAvailabilityId === worker._id}
-                        />
-                        {worker.approvalStatus === 'rejected' && worker.rejectionReason && (
-                          <span className="text-[10px] text-red-500 max-w-[150px] truncate" title={worker.rejectionReason}>
-                            {worker.rejectionReason}
+                        {worker.isDeleted ? (
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-rose-100 text-rose-700 border border-rose-200">
+                            Archived / Deleted
                           </span>
+                        ) : (
+                          <>
+                            <div className="flex items-center gap-1 flex-wrap">
+                              <StatusBadge status={worker.approvalStatus} />
+                              <FeeStatusBadge status={worker.registrationFeeStatus} amount={worker.registrationFeeAmount} role="WORKER" />
+                            </div>
+                            <AvailabilityToggleBadge
+                              worker={worker}
+                              onToggle={handleToggleAvailability}
+                              loading={togglingAvailabilityId === worker._id}
+                            />
+                            {worker.approvalStatus === 'rejected' && worker.rejectionReason && (
+                              <span className="text-[10px] text-red-500 max-w-[150px] truncate" title={worker.rejectionReason}>
+                                {worker.rejectionReason}
+                              </span>
+                            )}
+                          </>
                         )}
                       </div>
                     </td>
@@ -798,54 +818,68 @@ const AllWorkers = () => {
                           <FiEye size={16} />
                         </button>
 
-                        {worker.approvalStatus === 'pending' && (
+                        {worker.isDeleted ? (
+                          <button
+                            onClick={() => handleAction(worker._id, 'restore')}
+                            disabled={actionLoading === worker._id}
+                            className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                            title="Restore Worker"
+                          >
+                            <FiRefreshCw size={13} className={actionLoading === worker._id ? 'animate-spin' : ''} />
+                            <span>Restore</span>
+                          </button>
+                        ) : (
                           <>
+                            {worker.approvalStatus === 'pending' && (
+                              <>
+                                <button
+                                  onClick={() => handleAction(worker._id, 'approve')}
+                                  disabled={actionLoading === worker._id}
+                                  className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white flex items-center justify-center transition-colors disabled:opacity-50 cursor-pointer"
+                                  title="Approve Worker"
+                                >
+                                  <FiCheckCircle size={16} />
+                                </button>
+                                <button
+                                  onClick={() => handleAction(worker._id, 'reject')}
+                                  disabled={actionLoading === worker._id}
+                                  className="w-8 h-8 rounded-full bg-red-50 text-red-600 hover:bg-red-600 hover:text-white flex items-center justify-center transition-colors disabled:opacity-50 cursor-pointer"
+                                  title="Reject Worker"
+                                >
+                                  <FiXCircle size={16} />
+                                </button>
+                              </>
+                            )}
+                            {worker.approvalStatus === 'approved' && (
+                              <button
+                                onClick={() => handleAction(worker._id, 'suspend')}
+                                disabled={actionLoading === worker._id}
+                                className="w-8 h-8 rounded-full bg-amber-50 text-amber-600 hover:bg-amber-600 hover:text-white flex items-center justify-center transition-colors disabled:opacity-50 cursor-pointer"
+                                title="Suspend Worker"
+                              >
+                                <FiSlash size={16} />
+                              </button>
+                            )}
+                            {worker.approvalStatus === 'suspended' && (
+                              <button
+                                onClick={() => handleAction(worker._id, 'approve')}
+                                disabled={actionLoading === worker._id}
+                                className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white flex items-center justify-center transition-colors disabled:opacity-50 cursor-pointer"
+                                title="Re-activate Worker"
+                              >
+                                <FiCheckCircle size={16} />
+                              </button>
+                            )}
                             <button
-                              onClick={() => handleAction(worker._id, 'approve')}
+                              onClick={() => handleAction(worker._id, 'delete')}
                               disabled={actionLoading === worker._id}
-                              className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white flex items-center justify-center transition-colors disabled:opacity-50 cursor-pointer"
-                              title="Approve Worker"
+                              className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-600 flex items-center justify-center transition-colors disabled:opacity-50 cursor-pointer"
+                              title="Delete Worker"
                             >
-                              <FiCheckCircle size={16} />
-                            </button>
-                            <button
-                              onClick={() => handleAction(worker._id, 'reject')}
-                              disabled={actionLoading === worker._id}
-                              className="w-8 h-8 rounded-full bg-red-50 text-red-600 hover:bg-red-600 hover:text-white flex items-center justify-center transition-colors disabled:opacity-50 cursor-pointer"
-                              title="Reject Worker"
-                            >
-                              <FiXCircle size={16} />
+                              <FiTrash2 size={16} />
                             </button>
                           </>
                         )}
-                        {worker.approvalStatus === 'approved' && (
-                          <button
-                            onClick={() => handleAction(worker._id, 'suspend')}
-                            disabled={actionLoading === worker._id}
-                            className="w-8 h-8 rounded-full bg-amber-50 text-amber-600 hover:bg-amber-600 hover:text-white flex items-center justify-center transition-colors disabled:opacity-50 cursor-pointer"
-                            title="Suspend Worker"
-                          >
-                            <FiSlash size={16} />
-                          </button>
-                        )}
-                        {worker.approvalStatus === 'suspended' && (
-                          <button
-                            onClick={() => handleAction(worker._id, 'approve')}
-                            disabled={actionLoading === worker._id}
-                            className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white flex items-center justify-center transition-colors disabled:opacity-50 cursor-pointer"
-                            title="Re-activate Worker"
-                          >
-                            <FiCheckCircle size={16} />
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handleAction(worker._id, 'delete')}
-                          disabled={actionLoading === worker._id}
-                          className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-600 flex items-center justify-center transition-colors disabled:opacity-50 cursor-pointer"
-                          title="Delete Worker"
-                        >
-                          <FiTrash2 size={16} />
-                        </button>
                       </div>
                     </td>
                   </motion.tr>
@@ -1375,16 +1409,27 @@ const AllWorkers = () => {
                 )}
               </div>
 
-              {/* Modal Footer - Actions (Approve, Reject, Delete, Close) */}
+              {/* Modal Footer - Actions (Approve, Reject, Delete, Restore, Close) */}
               <div className="p-3 sm:p-4 border-t border-slate-100 bg-slate-50/95 backdrop-blur-xs flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => handleAction(selectedWorker._id, 'delete')}
-                  disabled={actionLoading === selectedWorker._id}
-                  className="w-full sm:w-auto px-4 py-2.5 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
-                >
-                  <FiTrash2 size={14} /> Delete Worker
-                </button>
+                {selectedWorker.isDeleted ? (
+                  <button
+                    type="button"
+                    onClick={() => handleAction(selectedWorker._id, 'restore')}
+                    disabled={actionLoading === selectedWorker._id}
+                    className="w-full sm:w-auto px-4 py-2.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white border border-emerald-300 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <FiRefreshCw size={14} className={actionLoading === selectedWorker._id ? 'animate-spin' : ''} /> Restore Worker
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleAction(selectedWorker._id, 'delete')}
+                    disabled={actionLoading === selectedWorker._id}
+                    className="w-full sm:w-auto px-4 py-2.5 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <FiTrash2 size={14} /> Delete Worker
+                  </button>
+                )}
 
                 <div className="w-full sm:w-auto flex items-center gap-2 flex-wrap sm:flex-nowrap">
                   {/* Reject button */}

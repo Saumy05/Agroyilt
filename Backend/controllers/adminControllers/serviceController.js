@@ -12,7 +12,12 @@ const getAllServices = async (req, res) => {
     const { status, brandId, categoryId } = req.query;
 
     const query = {};
-    if (status) query.status = status;
+    if (status === 'archived' || req.query.isDeleted === 'true') {
+      query.isDeleted = true;
+    } else {
+      query.isDeleted = { $ne: true };
+      if (status) query.status = status;
+    }
     if (brandId) query.brandId = brandId;
     if (categoryId) query.categoryId = categoryId;
 
@@ -246,15 +251,24 @@ const updateService = async (req, res) => {
 };
 
 /**
- * Delete service
+ * Delete service (soft delete)
  * DELETE /api/admin/services/:id
  */
 const deleteService = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Hard delete as requested
-    const service = await Service.findByIdAndDelete(id);
+    const service = await Service.findByIdAndUpdate(
+      id,
+      {
+        $set: {
+          isDeleted: true,
+          status: 'inactive',
+          deletedAt: new Date()
+        }
+      },
+      { new: true }
+    );
 
     if (!service) {
       return res.status(404).json({
@@ -265,7 +279,7 @@ const deleteService = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Service deleted permanently'
+      message: 'Service archived successfully'
     });
   } catch (error) {
     console.error('Delete service error:', error);
@@ -276,10 +290,52 @@ const deleteService = async (req, res) => {
   }
 };
 
+/**
+ * Restore service
+ * PATCH /api/admin/services/:id/restore
+ */
+const restoreService = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const service = await Service.findByIdAndUpdate(
+      id,
+      {
+        $set: {
+          isDeleted: false,
+          status: 'active',
+          deletedAt: null
+        }
+      },
+      { new: true }
+    );
+
+    if (!service) {
+      return res.status(404).json({
+        success: false,
+        message: 'Service not found'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Service restored successfully',
+      service
+    });
+  } catch (error) {
+    console.error('Restore service error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to restore service'
+    });
+  }
+};
+
 module.exports = {
   getAllServices,
   getServiceById,
   createService,
   updateService,
-  deleteService
+  deleteService,
+  restoreService
 };

@@ -16,6 +16,7 @@ const {
   toggleVendorStatus,
   toggleVendorAvailability,
   deleteVendor,
+  restoreVendor,
   updateVendorServices,
   addVendor
 } = require('../../controllers/adminControllers/adminVendorController');
@@ -38,6 +39,8 @@ router.patch('/vendors/:id/status', authenticate, isAdmin, requireAnyPermission(
 router.patch('/vendors/:id/availability', authenticate, isAdmin, requireAnyPermission('vendors.edit'), toggleVendorAvailability);
 router.patch('/vendors/:id/services', authenticate, isAdmin, requireAnyPermission('vendors.edit'), updateVendorServices);
 router.delete('/vendors/:id', authenticate, isAdmin, requireAnyPermission('vendors.delete'), deleteVendor); // New
+router.patch('/vendors/:id/restore', authenticate, isAdmin, requireAnyPermission('vendors.delete'), restoreVendor);
+router.put('/vendors/:id/restore', authenticate, isAdmin, requireAnyPermission('vendors.delete'), restoreVendor);
 router.get('/vendors/:id/bookings', authenticate, isAdmin, requireAnyPermission('vendors.view'), getVendorBookings);
 router.get('/vendors/:id/earnings', authenticate, isAdmin, requireAnyPermission('vendors.view'), getVendorEarnings);
 

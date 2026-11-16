@@ -1,4 +1,4 @@
-﻿import api from '../../../services/api';
+import api from '../../../services/api';
 
 /**
  * Admin Vendor Service
@@ -15,6 +15,8 @@ export const getAllVendors = async (params = {}) => {
     const queryParams = new URLSearchParams();
     if (params.search) queryParams.append('search', params.search);
     if (params.approvalStatus) queryParams.append('approvalStatus', params.approvalStatus);
+    if (params.status) queryParams.append('status', params.status);
+    if (params.isDeleted !== undefined) queryParams.append('isDeleted', params.isDeleted);
     if (params.isActive !== undefined) queryParams.append('isActive', params.isActive);
     if (params.page) queryParams.append('page', params.page);
     if (params.limit) queryParams.append('limit', params.limit);
@@ -129,12 +131,44 @@ export const getVendorEarnings = async (id, params = {}) => {
   }
 };
 
+/**
+ * Delete vendor (soft delete)
+ * @param {string} id - Vendor ID
+ * @returns {Promise<Object>} Delete result
+ */
+export const deleteVendor = async (id) => {
+  try {
+    const response = await api.delete(`/admin/vendors/${id}`);
+    return response.data;
+  } catch (error) {
+    console.error('Error deleting vendor:', error);
+    throw error;
+  }
+};
+
+/**
+ * Restore soft-deleted vendor
+ * @param {string} id - Vendor ID
+ * @returns {Promise<Object>} Restore result
+ */
+export const restoreVendor = async (id) => {
+  try {
+    const response = await api.patch(`/admin/vendors/${id}/restore`);
+    return response.data;
+  } catch (error) {
+    console.error('Error restoring vendor:', error);
+    throw error;
+  }
+};
+
 export default {
   getAllVendors,
   getVendorDetails,
   approveVendor,
   rejectVendor,
   suspendVendor,
+  deleteVendor,
+  restoreVendor,
   getVendorBookings,
   getVendorEarnings
 };

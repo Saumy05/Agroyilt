@@ -1,4 +1,4 @@
-﻿import api from './api';
+import api from './api';
 
 const adminEquipmentService = {
   getPending: async () => {
@@ -23,6 +23,11 @@ const adminEquipmentService = {
 
   delete: async (id) => {
     const response = await api.delete(`/admin/equipment/${id}`);
+    return response.data;
+  },
+
+  restore: async (id) => {
+    const response = await api.patch(`/admin/equipment/${id}/restore`);
     return response.data;
   }
 };

@@ -21,6 +21,8 @@ export const workerService = {
     if (params.limit) qp.append('limit', params.limit);
     if (params.search) qp.append('search', params.search);
     if (params.approvalStatus) qp.append('approvalStatus', params.approvalStatus);
+    if (params.status) qp.append('status', params.status);
+    if (params.isDeleted !== undefined) qp.append('isDeleted', params.isDeleted);
     if (params.isActive !== undefined) qp.append('isActive', params.isActive);
     if (params.workerType) qp.append('workerType', params.workerType);
     if (params.registrationFeeStatus) qp.append('registrationFeeStatus', params.registrationFeeStatus);
@@ -63,10 +65,18 @@ export const workerService = {
   },
 
   /**
-   * Delete worker
+   * Delete worker (soft delete)
    */
   deleteWorker: async (id) => {
     const response = await api.delete(`/admin/workers/${id}`);
+    return response.data;
+  },
+
+  /**
+   * Restore soft-deleted worker
+   */
+  restoreWorker: async (id) => {
+    const response = await api.patch(`/admin/workers/${id}/restore`);
     return response.data;
   },
 

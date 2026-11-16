@@ -9,6 +9,7 @@ const {
   createCategory,
   updateCategory,
   deleteCategory,
+  restoreCategory,
   updateCategoryOrder
 } = require('../../controllers/adminControllers/categoryController');
 
@@ -75,6 +76,8 @@ router.put('/categories/:id', authenticate, isAdmin, updateCategoryValidation, u
 
 // DELETE /api/admin/categories/:id - Delete category (soft delete)
 router.delete('/categories/:id', authenticate, isAdmin, deleteCategory);
+router.patch('/categories/:id/restore', authenticate, isAdmin, restoreCategory);
+router.put('/categories/:id/restore', authenticate, isAdmin, restoreCategory);
 
 // PATCH /api/admin/categories/:id/order - Update category order
 router.patch('/categories/:id/order', authenticate, isAdmin, updateCategoryOrder);

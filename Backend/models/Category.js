@@ -172,6 +172,24 @@ const categorySchema = new mongoose.Schema({
     default: SERVICE_STATUS.ACTIVE,
     index: true
   },
+  isDeleted: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  deletedAt: {
+    type: Date,
+    default: null
+  },
+  deletedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Admin',
+    default: null
+  },
+  deletedReason: {
+    type: String,
+    default: null
+  },
   isPopular: {
     type: Boolean,
     default: false,

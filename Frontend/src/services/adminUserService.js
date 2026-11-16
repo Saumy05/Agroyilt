@@ -1,4 +1,4 @@
-﻿import api from './api';
+import api from './api';
 
 export const adminUserService = {
   // Get all users with pagination and filtering
@@ -51,13 +51,23 @@ export const adminUserService = {
     }
   },
 
-  // Delete user
+  // Delete user (soft delete)
   deleteUser: async (id) => {
     try {
       const response = await api.delete(`/admin/users/${id}`);
       return response.data;
     } catch (error) {
       throw error.response?.data || { message: 'Failed to delete user' };
+    }
+  },
+
+  // Restore soft-deleted user
+  restoreUser: async (id) => {
+    try {
+      const response = await api.patch(`/admin/users/${id}/restore`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to restore user' };
     }
   },
 

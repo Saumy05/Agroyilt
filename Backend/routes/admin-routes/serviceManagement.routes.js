@@ -8,7 +8,8 @@ const {
   getServiceById,
   createService,
   updateService,
-  deleteService
+  deleteService,
+  restoreService
 } = require('../../controllers/adminControllers/serviceController');
 
 const serviceValidation = [
@@ -23,5 +24,7 @@ router.get('/services/:id', authenticate, isAdmin, getServiceById);
 router.post('/services', authenticate, isAdmin, serviceValidation, createService);
 router.put('/services/:id', authenticate, isAdmin, updateService);
 router.delete('/services/:id', authenticate, isAdmin, deleteService);
+router.patch('/services/:id/restore', authenticate, isAdmin, restoreService);
+router.put('/services/:id/restore', authenticate, isAdmin, restoreService);
 
 module.exports = router;

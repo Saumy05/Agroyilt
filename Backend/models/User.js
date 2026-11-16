@@ -183,6 +183,24 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  isDeleted: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  deletedAt: {
+    type: Date,
+    default: null
+  },
+  deletedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Admin',
+    default: null
+  },
+  deletedReason: {
+    type: String,
+    default: null
+  },
   approvalStatus: {
     type: String,
     enum: ['pending', 'approved', 'rejected'],

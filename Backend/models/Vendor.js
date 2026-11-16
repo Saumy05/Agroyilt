@@ -300,6 +300,24 @@ const vendorSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  isDeleted: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  deletedAt: {
+    type: Date,
+    default: null
+  },
+  deletedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Admin',
+    default: null
+  },
+  deletedReason: {
+    type: String,
+    default: null
+  },
   isPhoneVerified: {
     type: Boolean,
     default: false

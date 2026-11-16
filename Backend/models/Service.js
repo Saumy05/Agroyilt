@@ -86,6 +86,15 @@ const serviceSchema = new mongoose.Schema({
     default: SERVICE_STATUS.ACTIVE,
     index: true
   },
+  isDeleted: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  deletedAt: {
+    type: Date,
+    default: null
+  },
   description: {
     type: String,
     trim: true
