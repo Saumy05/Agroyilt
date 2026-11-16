@@ -353,6 +353,16 @@ const getJobById = async (req, res) => {
           syntheticBooking.serverTime = new Date();
         } catch (e) { /* windows are informational; the endpoints enforce them */ }
 
+        try {
+          const breakSvc = require('../../services/workerBreakService');
+          const bv = breakSvc.breakView(assignDoc);
+          syntheticBooking.breakStatus = bv.breakStatus;
+          syntheticBooking.breakStartedAt = bv.breakStartedAt;
+          syntheticBooking.breakDurationMinutes = bv.breakDurationMinutes;
+          syntheticBooking.breakMaxMinutes = bv.breakMaxMinutes;
+          syntheticBooking.breakRemainingSeconds = bv.remainingSeconds;
+        } catch (e) {}
+
         const isCash = Boolean(assignDoc.isCashBooking) || assignDoc.paymentMethod === 'cash' || parent?.paymentMethod === 'cash';
         if (isCash) {
           const { buildWorkerCashCollection } = require('../../services/workerFinancialService');

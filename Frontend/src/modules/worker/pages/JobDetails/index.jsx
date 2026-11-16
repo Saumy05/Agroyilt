@@ -1,5 +1,5 @@
 import { syncServerClock, nowMs } from '../../../../utils/serverClock';
-import React, { useState, useEffect, useLayoutEffect, useRef, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, lazy, Suspense } from 'react';
 import { useNavigate, useParams, useLocation, useSearchParams } from 'react-router-dom';
 import { FiMapPin, FiPhone, FiClock, FiUser, FiCheck, FiX, FiArrowRight, FiNavigation, FiTool, FiCheckCircle, FiDollarSign, FiCamera, FiPlus, FiTrash, FiXCircle, FiAward, FiFileText, FiAlertTriangle, FiCreditCard } from 'react-icons/fi';
 import { workerTheme as themeColors } from '../../../../theme';
@@ -32,81 +32,167 @@ const fmtClock = (ms) => {
 
 // Real-time Active Work Stopwatch component
 // Work time and break time are kept apart: work = time since start − finished breaks − the break running now.
+// Synchronized with serverClock and matches ActiveWorkMonitoringHub on the user side for complete consistency.
 const ActiveWorkStopwatch = ({ job }) => {
   const [work, setWork] = useState('00:00:00');
   const [breakUsed, setBreakUsed] = useState('00:00:00');
   const [breakTaken, setBreakTaken] = useState(false);
 
+  // Sync server clock so worker and farmer timers are identical regardless of local device time
+  syncServerClock(job?.serverTime);
+
+  const currentDayLog = job?.dailyLogs?.find(l => l.dayNumber === (job?.currentDayIndex || 1));
+
+  // Determine work start timestamp (matches user side candidate resolution)
+  const startTimestamp = useMemo(() => {
+    let candidate = null;
+    const t = currentDayLog?.workStartedAt || job?.workStartedAt || job?.visitOtpVerifiedAt || job?.startedAt || job?.inProgressAt;
+    if (t) {
+      const timeVal = new Date(t).getTime();
+      if (!isNaN(timeVal)) candidate = timeVal;
+    }
+    return candidate || nowMs();
+  }, [job, currentDayLog]);
+
+  // Determine break state
+  const doneBreakMinutes = Number(currentDayLog?.breakDurationMinutes ?? job?.breakDurationMinutes) || 0;
+  const doneBreakMs = doneBreakMinutes * 60 * 1000;
+  const currentBreakStatus = currentDayLog?.breakStatus || job?.breakStatus;
+  const currentBreakStartedAt = currentDayLog?.breakStartedAt || job?.breakStartedAt;
+  const onBreak = currentBreakStatus === 'ON_BREAK' && Boolean(currentBreakStartedAt);
+  const breakStartMs = onBreak ? new Date(currentBreakStartedAt).getTime() : null;
+
+  // Stopped state (worker tapped Stop Work / Stop Today)
+  const statusLower = (job?.status || '').toLowerCase();
+  const isStopped = statusLower === 'work_done' || job?.workStatus === 'SUBMITTED' || job?.journeyStatus === 'WORK_SUBMITTED';
+  const stopRaw = currentDayLog?.workSubmittedAt || job?.workSubmittedAt;
+  const stopTimestamp = useMemo(() => {
+    if (!isStopped) return null;
+    if (stopRaw) {
+      const timeVal = new Date(stopRaw).getTime();
+      if (!isNaN(timeVal)) return timeVal;
+    }
+    return null;
+  }, [isStopped, stopRaw]);
+
   useEffect(() => {
-    let start = null;
-    if (job?.workStartedAt) start = new Date(job.workStartedAt);
-    else if (job?.startedAt) start = new Date(job.startedAt);
-    else if (job?.inProgressAt) start = new Date(job.inProgressAt);
-
-    syncServerClock(job?.serverTime);
-    const startTime = start ? start.getTime() : nowMs();
-    const doneBreakMs = (Number(job?.breakDurationMinutes) || 0) * 60 * 1000;
-    const onBreak = job?.breakStatus === 'ON_BREAK' && job?.breakStartedAt;
-    const breakStart = onBreak ? new Date(job.breakStartedAt).getTime() : null;
-
     const updateTimer = () => {
-      const now = nowMs();
-      const runningBreakMs = breakStart ? Math.max(0, now - breakStart) : 0;
+      const now = stopTimestamp || nowMs();
+      const runningBreakMs = onBreak && !stopTimestamp && breakStartMs ? Math.max(0, now - breakStartMs) : 0;
       const totalBreakMs = doneBreakMs + runningBreakMs;
-      setWork(fmtClock(now - startTime - totalBreakMs));
+      const diffMs = Math.max(0, now - startTimestamp - totalBreakMs);
+      setWork(fmtClock(diffMs));
       setBreakUsed(fmtClock(totalBreakMs));
       setBreakTaken(totalBreakMs > 0);
     };
 
     updateTimer();
+    if (isStopped && stopTimestamp) return undefined;
     const interval = setInterval(updateTimer, 1000);
     return () => clearInterval(interval);
-  }, [job]);
+  }, [startTimestamp, stopTimestamp, isStopped, doneBreakMs, onBreak, breakStartMs]);
 
-  const startDisplay = (job?.workStartedAt ? new Date(job.workStartedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : null) || (job?.startedAt ? new Date(job.startedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'Recently');
+  const startDisplay = useMemo(() => {
+    try {
+      return new Date(startTimestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+    } catch {
+      return 'Recently';
+    }
+  }, [startTimestamp]);
 
-  if (job?.breakStatus === 'ON_BREAK') {
+  const stopDisplay = useMemo(() => {
+    if (!stopTimestamp) return '';
+    try {
+      return new Date(stopTimestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+    } catch {
+      return '';
+    }
+  }, [stopTimestamp]);
+
+  if (isStopped) {
     return (
-      <div className="bg-gradient-to-r from-amber-600 via-amber-700 to-amber-800 text-white rounded-2xl p-4 mb-4 shadow-lg flex items-center justify-between border border-amber-400/40 animate-fadeIn">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center text-white backdrop-blur-sm">
-            <span className="text-xl">☕</span>
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-300 animate-ping" />
-              <p className="text-[11px] font-black uppercase tracking-wider text-amber-200">On Break</p>
+      <div className="bg-gradient-to-r from-slate-600 via-slate-700 to-slate-800 text-white rounded-2xl p-4 mb-4 shadow-lg border border-slate-500/40 animate-fadeIn">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center text-white backdrop-blur-sm">
+              <FiClock className="w-6 h-6 text-slate-200" />
             </div>
-            <p className="text-2xl font-mono font-black tracking-wider text-white mt-0.5">{breakUsed}</p>
-            <p className="text-[10px] text-amber-200 font-semibold">Work timer paused • Resumes by itself when today's break time is over</p>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-slate-300" />
+                <p className="text-[11px] font-black uppercase tracking-wider text-slate-200">Total Work Time</p>
+              </div>
+              <p className="text-2xl sm:text-3xl font-mono font-black tracking-wider text-white mt-0.5">{work}</p>
+              {breakTaken && <p className="text-[10px] text-slate-300 font-semibold mt-0.5">☕ Break used today: {breakUsed} (not counted in work time)</p>}
+            </div>
+          </div>
+          <div className="text-right text-xs text-slate-200">
+            <p className="font-semibold text-[10px] uppercase tracking-wider">Stopped At</p>
+            <p className="font-bold text-white text-sm">{stopDisplay || 'Submitted'}</p>
           </div>
         </div>
-        <div className="text-right text-xs text-amber-100">
-          <p className="font-semibold text-[10px] uppercase tracking-wider">Work Done</p>
-          <p className="font-mono font-bold text-white text-base">{work}</p>
+        <div className="flex items-center justify-between text-xs text-slate-300/80 pt-2.5 mt-2.5 border-t border-white/10">
+          <span className="text-[10px] font-semibold">For information only — the rate is fixed</span>
+          <span className="font-bold text-white text-[11px]">⏹ Stopped {stopDisplay}</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (onBreak) {
+    return (
+      <div className="bg-gradient-to-r from-amber-600 via-amber-700 to-amber-800 text-white rounded-2xl p-4 mb-4 shadow-lg border border-amber-400/40 animate-fadeIn">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center text-white backdrop-blur-sm">
+              <span className="text-xl">☕</span>
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-300 animate-ping" />
+                <p className="text-[11px] font-black uppercase tracking-wider text-amber-200">Work Time (Paused: On Break)</p>
+              </div>
+              <p className="text-2xl sm:text-3xl font-mono font-black tracking-wider text-white mt-0.5">{work}</p>
+              <p className="text-[10px] text-amber-200 font-semibold mt-0.5">☕ Break used today: {breakUsed} (work timer paused)</p>
+            </div>
+          </div>
+          <div className="text-right text-xs text-amber-100">
+            <p className="font-semibold text-[10px] uppercase tracking-wider">Started At</p>
+            <p className="font-bold text-white text-sm">{startDisplay}</p>
+          </div>
+        </div>
+        <div className="flex items-center justify-between text-xs text-amber-100/80 pt-2.5 mt-2.5 border-t border-white/10">
+          <span className="text-[10px] font-semibold">Resumes automatically when break ends</span>
+          <span className="font-bold text-white text-[11px]">☕ On Break</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white rounded-2xl p-4 mb-4 shadow-lg flex items-center justify-between border border-amber-300/30 animate-fadeIn">
-      <div className="flex items-center gap-3">
-        <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center text-white backdrop-blur-sm shadow-inner">
-          <FiClock className="w-6 h-6 animate-pulse" />
-        </div>
-        <div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
-            <p className="text-[11px] font-black uppercase tracking-wider text-amber-100">Live Work Timer</p>
+    <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white rounded-2xl p-4 mb-4 shadow-lg border border-amber-300/30 animate-fadeIn">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center text-white backdrop-blur-sm shadow-inner">
+            <FiClock className="w-6 h-6 animate-pulse" />
           </div>
-          <p className="text-2xl font-mono font-black tracking-wider text-white mt-0.5">{work}</p>
-          {breakTaken && <p className="text-[10px] text-amber-100 font-semibold">Break used today: {breakUsed} (not counted in work time)</p>}
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+              <p className="text-[11px] font-black uppercase tracking-wider text-amber-100">Live Work Timer</p>
+            </div>
+            <p className="text-2xl sm:text-3xl font-mono font-black tracking-wider text-white mt-0.5">{work}</p>
+            {breakTaken && <p className="text-[10px] text-amber-100 font-semibold mt-0.5">Break used today: {breakUsed} (not counted in work time)</p>}
+          </div>
+        </div>
+        <div className="text-right text-xs text-amber-100">
+          <p className="font-semibold text-[10px] uppercase tracking-wider">Started At</p>
+          <p className="font-bold text-white text-sm">{startDisplay}</p>
         </div>
       </div>
-      <div className="text-right text-xs text-amber-100">
-        <p className="font-semibold text-[10px] uppercase tracking-wider">Started At</p>
-        <p className="font-bold text-white text-sm">{startDisplay}</p>
+      <div className="flex items-center justify-between text-xs text-amber-100/80 pt-2.5 mt-2.5 border-t border-white/10">
+        <span className="text-[10px] font-semibold">For information only — the rate is fixed</span>
+        <span className="font-bold text-white text-[11px]">🟢 Running</span>
       </div>
     </div>
   );
@@ -1038,8 +1124,13 @@ const JobDetails = () => {
             </div>
           )}
 
-          {/* Daily Schedule Card vs Hourly Stopwatch */}
-          {isDaily ? (
+          {/* Active Work Stopwatch for both hourly and daily jobs when work is in progress or stopped for today */}
+          {['in_progress', 'work_done'].includes(statusLower) && (
+            <ActiveWorkStopwatch job={job} />
+          )}
+
+          {/* Daily Schedule Card for DAILY bookings */}
+          {isDaily && (
             <div className="bg-gradient-to-r from-amber-600 via-amber-500 to-amber-700 text-white rounded-3xl p-5 mb-4 shadow-lg border border-amber-300/30">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2.5">
@@ -1109,10 +1200,6 @@ const JobDetails = () => {
                 <span>Status: <strong className="text-white uppercase font-black">{statusLower.replace('_', ' ')}</strong></span>
               </div>
             </div>
-          ) : (
-            statusLower === 'in_progress' && (
-              <ActiveWorkStopwatch job={job} />
-            )
           )}
 
           {isAssignmentJob && <LifecycleStepper status={statusLower} cash={job?.cashCollection?.isCashBooking ? job.cashCollection : null} />}
