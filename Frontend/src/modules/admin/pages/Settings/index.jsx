@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiSettings, FiGrid, FiDollarSign, FiSave, FiUser, FiMail, FiTrash2, FiPlus, FiUsers, FiShield, FiFileText, FiMapPin, FiPhone, FiHeadphones, FiMessageCircle, FiEdit, FiLock, FiUnlock, FiX, FiGlobe, FiUpload, FiCamera, FiCreditCard, FiEye, FiEyeOff } from 'react-icons/fi';
+import { FiSettings, FiGrid, FiDollarSign, FiSave, FiUser, FiMail, FiTrash2, FiPlus, FiUsers, FiShield, FiFileText, FiMapPin, FiPhone, FiHeadphones, FiMessageCircle, FiEdit, FiLock, FiUnlock, FiX, FiGlobe, FiUpload, FiCamera, FiCreditCard, FiEye, FiEyeOff, FiTag } from 'react-icons/fi';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { getSettings, updateSettings, updateAdminProfile, getAdminProfile, getAllAdmins, createAdmin, deleteAdmin, updateAdminDetails, toggleAdminStatus, getRegistrationFees, updateRegistrationFee } from '../../services/settingsService';
 import { toastManager } from '../../../../utils/toastManager';
@@ -11,6 +11,7 @@ import Policies from './Policies';
 import TravelCharges from './TravelCharges';
 import PaymentMethods from './PaymentMethods';
 import Languages from './Languages';
+import Coupons from './Coupons';
 import { TemplatesPanel as AgreementTemplates } from '../Agreements';
 
 const AdminSettings = () => {
@@ -940,6 +941,16 @@ const AdminSettings = () => {
         </div>
         <h3 className="text-lg font-bold text-gray-800 mb-2">Languages & Localization</h3>
         <p className="text-sm text-gray-500">Enable, disable, or add languages for the Worker and User apps</p>
+      </div>
+
+      {/* Coupons & Festival Offers Card */}
+      <div onClick={() => setActiveView('coupons')}
+        className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer group">
+        <div className="w-12 h-12 bg-orange-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-orange-100 transition-colors">
+          <FiTag className="w-6 h-6 text-orange-600" />
+        </div>
+        <h3 className="text-lg font-bold text-gray-800 mb-2">Coupons & Festival Offers</h3>
+        <p className="text-sm text-gray-500">Create & manage promotional discount codes for Diwali, Dussehra & seasonal campaigns</p>
       </div>
 
       {/* Admin Management Card - Super Admin Only */}
@@ -2159,6 +2170,13 @@ const AdminSettings = () => {
         {activeView === 'languages' && (
           <motion.div key="languages" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
             <Languages />
+          </motion.div>
+        )}
+
+        {/* Coupons & Festival Offers View */}
+        {activeView === 'coupons' && (
+          <motion.div key="coupons" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
+            <Coupons />
           </motion.div>
         )}
 

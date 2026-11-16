@@ -743,6 +743,34 @@ const createBooking = async (req, res) => {
     // This prevents inconsistency between Booking and VendorBill.
     console.log(`[CreateBooking] Payment=${paymentMethod}, FinalAmount=${finalAmount}, Penalty=${pendingPenalty}`);
 
+    // Apply Promo Code / Festival Coupon if provided
+    let appliedCoupon = null;
+    let couponDiscountAmount = 0;
+    const requestedCouponCode = req.body.couponCode || req.body.coupon;
+
+    if (requestedCouponCode && typeof requestedCouponCode === 'string' && requestedCouponCode.trim()) {
+      const cleanCode = requestedCouponCode.trim().toUpperCase();
+      const Coupon = require('../../models/Coupon');
+      const foundCoupon = await Coupon.findOne({ code: cleanCode, isDeleted: { $ne: true } });
+
+      if (!foundCoupon) {
+        return res.status(400).json({ success: false, message: `Coupon code "${cleanCode}" is invalid` });
+      }
+
+      const orderAmountForCoupon = (basePrice > 0 ? basePrice : finalAmount) || 0;
+      const validation = foundCoupon.isValidForOrder(userId, orderAmountForCoupon, finalCategory?._id || categoryId, serviceId);
+      if (!validation.valid) {
+        return res.status(400).json({ success: false, message: validation.message });
+      }
+
+      couponDiscountAmount = foundCoupon.calculateDiscount(orderAmountForCoupon);
+      appliedCoupon = foundCoupon;
+
+      discount = (discount || 0) + couponDiscountAmount;
+      finalAmount = Math.max(0, finalAmount - couponDiscountAmount);
+      console.log(`[CreateBooking] Applied Coupon "${cleanCode}": -₹${couponDiscountAmount}, New FinalAmount=${finalAmount}`);
+    }
+
     // NOTE: the carried-over penalty is cleared only after the booking is safely created (see end of createBooking).
 
     // Travel charge (admin: Settings > Travel Charges): road distance from the vendor to the farmer's booking location.
@@ -911,6 +939,8 @@ const createBooking = async (req, res) => {
       bookedItems: formattedBookedItems,
       basePrice,
       discount,
+      couponCode: appliedCoupon ? appliedCoupon.code : null,
+      couponId: appliedCoupon ? appliedCoupon._id : null,
       tax,
       gstPercentage,
       visitingCharges,
@@ -1306,6 +1336,26 @@ const createBooking = async (req, res) => {
       await User.updateOne({ _id: userId, 'wallet.penalty': { $gte: pendingPenalty } }, { $inc: { 'wallet.penalty': -pendingPenalty } });
     }
 
+    // Record coupon usage if coupon was applied
+    if (appliedCoupon && couponDiscountAmount > 0) {
+      try {
+        const Coupon = require('../../models/Coupon');
+        await Coupon.findByIdAndUpdate(appliedCoupon._id, {
+          $inc: { usageCount: 1 },
+          $push: {
+            usedBy: {
+              userId,
+              bookingId: booking._id,
+              discountApplied: couponDiscountAmount,
+              usedAt: new Date()
+            }
+          }
+        });
+      } catch (couponErr) {
+        console.error('[CreateBooking] Error updating coupon usage record:', couponErr);
+      }
+    }
+
     res.status(201).json({
       success: true,
       message: hasTargetVendor 
@@ -1695,6 +1745,19 @@ const cancelBooking = async (req, res) => {
     // A penalty that was baked into this unpaid booking goes back onto the farmer's account
     if (advancePaid <= 0 && (booking.penalty || 0) > 0) {
       await User.updateOne({ _id: userId }, { $inc: { 'wallet.penalty': booking.penalty } });
+    }
+
+    // Revert coupon usage if applied so the farmer can use it again
+    if (booking.couponId) {
+      try {
+        const Coupon = require('../../models/Coupon');
+        await Coupon.findByIdAndUpdate(booking.couponId, {
+          $inc: { usageCount: -1 },
+          $pull: { usedBy: { bookingId: booking._id } }
+        });
+      } catch (ce) {
+        console.error('Error rolling back coupon on cancel:', ce);
+      }
     }
 
     // Stop timers, expire alerts, tell every vendor that was alerted
@@ -2633,17 +2696,44 @@ const calculatePrice = async (req, res) => {
     const gstDecMultiplier = gstPercentage / 100;
 
     const basePrice = isAgriService ? totalServiceValue : (totalServiceValue || unitRate);
-    const discount = 0;
-    const tax = Math.round(basePrice * gstDecMultiplier);
+    let discount = 0;
+    let couponBreakdown = null;
+
+    const requestedCoupon = req.body.couponCode || req.query.couponCode;
+    if (requestedCoupon && typeof requestedCoupon === 'string' && requestedCoupon.trim()) {
+      try {
+        const Coupon = require('../../models/Coupon');
+        const c = await Coupon.findOne({ code: requestedCoupon.trim().toUpperCase(), isDeleted: { $ne: true } });
+        if (c) {
+          const userId = req.user?._id || req.user?.id || null;
+          const validation = c.isValidForOrder(userId, basePrice, categoryId, service?._id);
+          if (validation.valid) {
+            discount = c.calculateDiscount(basePrice);
+            couponBreakdown = {
+              code: c.code,
+              title: c.title,
+              discountType: c.discountType,
+              discountValue: c.discountValue,
+              discountAmount: discount
+            };
+          }
+        }
+      } catch (ce) {
+        console.error('Coupon preview error:', ce);
+      }
+    }
+
+    const tax = Math.round((basePrice - discount) * gstDecMultiplier);
     const platformFeePercentage = isAgriService ? getPlatformFeePercentage(settings) : 0;
     const platformFee = computePlatformFee(basePrice - discount, platformFeePercentage);
-    const finalAmount = basePrice - discount + tax + visitingCharges + platformFee;
+    const finalAmount = Math.max(0, basePrice - discount + tax + visitingCharges + platformFee);
 
     res.status(200).json({
       success: true,
       priceBreakdown: {
         basePrice,
         discount,
+        coupon: couponBreakdown,
         tax,
         visitingCharges,
         platformFee,

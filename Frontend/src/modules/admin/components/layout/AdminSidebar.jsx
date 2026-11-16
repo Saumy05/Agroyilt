@@ -33,6 +33,7 @@ import {
   FiPieChart,
   FiTrendingUp,
   FiSearch,
+  FiTag,
 } from "react-icons/fi";
 import adminMenu from "../../config/adminMenu.json";
 import dashboardService from "../../services/dashboardService";
@@ -65,6 +66,7 @@ const iconMap = {
   "Manage Website": FiGlobe,
   "Kisan Suvidha & Mandi": FiTrendingUp,
   "Machinery Approvals": FiTruck,
+  "Coupons & Offers": FiTag,
   Referrals: FiGift,
   "Admin Management": FiShield,
   Roles: FiKey,

@@ -171,6 +171,17 @@ const bookingSchema = new mongoose.Schema({
     default: 0,
     min: 0
   },
+  couponCode: {
+    type: String,
+    default: null,
+    trim: true,
+    uppercase: true
+  },
+  couponId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Coupon',
+    default: null
+  },
   tax: {
     type: Number,
     default: 0,

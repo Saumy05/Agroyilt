@@ -30,6 +30,7 @@ require('./models/District');
 require('./models/SubDistrict');
 require('./models/City');
 require('./models/Language');
+require('./models/Coupon');
 require('./models/AdminAuditLog');
 require('./models/Booking');
 require('./models/Service');
@@ -222,6 +223,7 @@ app.use('/api/users/bookings', require('./routes/user-routes/booking.routes'));
 app.use('/api/users', require('./routes/user-routes/cart.routes'));
 app.use('/api/users/requirements', require('./routes/user-routes/requirement.routes'));
 app.use('/api/users', require('./routes/user-routes/workerBooking.routes'));
+app.use('/api/coupons', require('./routes/user-routes/coupon.routes'));
 
 
 
@@ -295,6 +297,7 @@ app.use('/api/admin/disputes', require('./routes/admin-routes/disputeManagement.
 app.use('/api/admin/settlements', require('./routes/admin-routes/settlementManagement.routes'));
 app.use('/api/admin/website', require('./routes/admin-routes/websiteManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/languageManagement.routes'));
+app.use('/api/admin/coupons', require('./routes/admin-routes/couponManagement.routes'));
 app.use('/api/admin/kisan-suvidha', require('./routes/admin-routes/kisanSuvidhaManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/adminPayout.routes'));
 app.use('/api/admin/admins', require('./routes/admin-routes/adminManagement.routes'));

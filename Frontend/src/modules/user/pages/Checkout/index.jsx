@@ -20,6 +20,7 @@ import authStorage from '../../../../utils/authStorage';
 import { useCart } from '../../../../context/CartContext';
 import LiveBookingCard from '../../components/booking/LiveBookingCard';
 import RentalTypeCard from './components/RentalTypeCard';
+import CouponInput from '../../components/common/CouponInput';
 
 const toAssetUrl = (url) => {
   if (!url) return '';
@@ -57,6 +58,7 @@ const Checkout = () => {
   const [showVendorModal, setShowVendorModal] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('online'); // 'online' | 'pay_at_home'
   const [showPaymentConfirmModal, setShowPaymentConfirmModal] = useState(false); // Payment confirmation modal
+  const [appliedCoupon, setAppliedCoupon] = useState(null); // Festival / promo coupon
 
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(null);
@@ -390,7 +392,8 @@ const Checkout = () => {
 
         // Pass Full Breakdown to Backend
         basePrice: totalOriginalPrice,
-        discount: savings,
+        discount: (savings || 0) + (appliedCoupon?.discountAmount || 0),
+        couponCode: appliedCoupon?.code || undefined,
         tax: taxesAndFee,
         visitationFee: finalVisitedFee,
 
@@ -643,7 +646,8 @@ const Checkout = () => {
 
         // Pass Full Breakdown to Backend
         basePrice: totalOriginalPrice,
-        discount: savings,
+        discount: (savings || 0) + (appliedCoupon?.discountAmount || 0),
+        couponCode: appliedCoupon?.code || undefined,
         tax: taxesAndFee,
         visitationFee: finalVisitedFee,
 
@@ -1238,14 +1242,27 @@ const Checkout = () => {
   // Assuming "Free under plan" means NO Payment.
   const finalVisitedFee = itemTotal === 0 ? 0 : visitedFee;
 
-  const totalAmount = itemTotal + taxesAndFee + finalVisitedFee;
+  const couponDiscount = appliedCoupon ? (() => {
+    const base = itemTotal || totalOriginalPrice || 0;
+    if (appliedCoupon.minOrderAmount > 0 && base < appliedCoupon.minOrderAmount) return 0;
+    if (appliedCoupon.discountType === 'PERCENTAGE') {
+      let d = Math.round((base * appliedCoupon.discountValue) / 100);
+      if (appliedCoupon.maxDiscountAmount && d > appliedCoupon.maxDiscountAmount) {
+        d = appliedCoupon.maxDiscountAmount;
+      }
+      return d;
+    }
+    return Math.min(appliedCoupon.discountValue || appliedCoupon.discountAmount || 0, base);
+  })() : 0;
+  const rawTotal = itemTotal + taxesAndFee + finalVisitedFee;
+  const totalAmount = Math.max(0, rawTotal - couponDiscount);
   const amountToPay = totalAmount;
 
   // Helper for Free Plan Full Breakdown Display
   // If the booking is free, we still want to show what the Tax/Fee WOULD have been
-  const displayTax = totalAmount === 0 ? Math.round((totalOriginalPrice * currentGst) / 100) : taxesAndFee;
-  const displayFee = totalAmount === 0 ? visitedFee : finalVisitedFee;
-  const displaySavings = totalAmount === 0 ? (totalOriginalPrice + displayTax + displayFee) : savings;
+  const displayTax = totalAmount === 0 && itemTotal === 0 ? Math.round((totalOriginalPrice * currentGst) / 100) : taxesAndFee;
+  const displayFee = totalAmount === 0 && itemTotal === 0 ? visitedFee : finalVisitedFee;
+  const displaySavings = totalAmount === 0 && itemTotal === 0 ? (totalOriginalPrice + displayTax + displayFee) : (savings + couponDiscount);
 
   // Date and time slot helper functions
   const getDates = () => {
@@ -1688,6 +1705,17 @@ const Checkout = () => {
           </div>
         )}
 
+        {/* Offers & Promo Code Input */}
+        <CouponInput
+          bookingAmount={itemTotal || totalOriginalPrice}
+          appliedCoupon={appliedCoupon}
+          onApplyCoupon={(c) => setAppliedCoupon(c)}
+          onRemoveCoupon={() => setAppliedCoupon(null)}
+          categoryId={cartItems[0]?.categoryId}
+          serviceId={cartItems[0]?.serviceId}
+          className="mb-4"
+        />
+
         {/* Payment Summary */}
         <div className="bg-white border-2 border-slate-100 rounded-2xl p-5 mb-6 shadow-sm overflow-hidden relative">
           {/* Decorative Background for Header */}
@@ -1708,10 +1736,21 @@ const Checkout = () => {
             </div>
 
             {/* Discount Line */}
-            {displaySavings > 0 && (
+            {savings > 0 && (
               <div className="flex justify-between items-center">
-                <span className="text-sm font-medium text-green-600">Discount</span>
-                <span className="text-sm font-medium text-green-600">-₹{displaySavings.toLocaleString('en-IN')}</span>
+                <span className="text-sm font-medium text-green-600">Item Discount</span>
+                <span className="text-sm font-medium text-green-600">-₹{savings.toLocaleString('en-IN')}</span>
+              </div>
+            )}
+
+            {/* Festival / Promo Coupon Discount */}
+            {appliedCoupon && appliedCoupon.discountAmount > 0 && (
+              <div className="flex justify-between items-center text-emerald-600">
+                <span className="text-sm font-bold flex items-center gap-1.5">
+                  <FiTag className="w-3.5 h-3.5 text-orange-500" />
+                  <span>Promo Code ({appliedCoupon.code})</span>
+                </span>
+                <span className="text-sm font-black">-₹{appliedCoupon.discountAmount.toLocaleString('en-IN')}</span>
               </div>
             )}
 

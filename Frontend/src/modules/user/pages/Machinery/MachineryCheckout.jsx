@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   FiMapPin, FiTruck, FiCalendar, FiClock, 
   FiCheckCircle, FiShield, FiCreditCard, FiArrowLeft, 
-  FiDollarSign, FiTool, FiCheck, FiFileText, FiLock
+  FiDollarSign, FiTool, FiCheck, FiFileText, FiLock, FiTag
 } from 'react-icons/fi';
 import { motion } from 'framer-motion';
 import { toastManager } from '../../../../utils/toastManager';
@@ -19,6 +19,7 @@ import AddressSelectionModal from '../Checkout/components/AddressSelectionModal'
 import usePaymentMethods from '../../../../hooks/usePaymentMethods';
 import { estimateDistanceBill } from '../../../../utils/distanceFare';
 import { formatAppDateTime } from '../../../../utils/rentalReturn';
+import CouponInput from '../../components/common/CouponInput';
 
 const loadRazorpay = () => {
     return new Promise((resolve) => {
@@ -59,6 +60,7 @@ const MachineryCheckout = () => {
     const [showPaymentConfirmModal, setShowPaymentConfirmModal] = useState(false);
     const [adminRentalGst, setAdminRentalGst] = useState(null);
     const [adminPlatformFeePct, setAdminPlatformFeePct] = useState(0);
+    const [appliedCoupon, setAppliedCoupon] = useState(null);
     const [travel, setTravel] = useState(null); // travel charge for the vendor coming to the chosen address
 
     useEffect(() => {
@@ -200,7 +202,19 @@ const MachineryCheckout = () => {
         : (taxableBase + calculatedTax + (visitingCharges || 0) + platformFee);
 
     const travelCharge = Number(travel?.total) || 0;
-    const payableTotal = Math.round((calculatedTotal + travelCharge) * 100) / 100; // what the farmer actually pays
+    const couponDiscount = appliedCoupon ? (() => {
+        const base = calculatedBasePrice || taxableBase || calculatedTotal || 0;
+        if (appliedCoupon.minOrderAmount > 0 && base < appliedCoupon.minOrderAmount) return 0;
+        if (appliedCoupon.discountType === 'PERCENTAGE') {
+            let d = Math.round((base * appliedCoupon.discountValue) / 100);
+            if (appliedCoupon.maxDiscountAmount && d > appliedCoupon.maxDiscountAmount) {
+                d = appliedCoupon.maxDiscountAmount;
+            }
+            return d;
+        }
+        return Math.min(appliedCoupon.discountValue || appliedCoupon.discountAmount || 0, base);
+    })() : 0;
+    const payableTotal = Math.max(0, Math.round((calculatedTotal + travelCharge - couponDiscount) * 100) / 100); // what the farmer actually pays
     // Per-km jobs: approx final bill for the farmer's estimated distance (the real bill uses the GPS-measured distance)
     const approxBill = rateType === 'distance_based'
         ? estimateDistanceBill(bookingData.distancePricing, estimatedKm, activeGstPercentage, platformFeePct)
@@ -325,6 +339,8 @@ const MachineryCheckout = () => {
                 paymentMethod: effectivePaymentMethod,
                 amount: payableTotal,
                 basePrice: calculatedBasePrice,
+                discount: couponDiscount,
+                couponCode: appliedCoupon?.code || undefined,
                 tax: calculatedTax,
                 visitingCharges: visitingCharges || 0,
                 gstPercentage: activeGstPercentage,
@@ -702,6 +718,19 @@ const MachineryCheckout = () => {
                         </div>
                     )}
 
+                    {/* Promo Code & Festival Offers */}
+                    {!payAfterTrip && (
+                      <CouponInput
+                        bookingAmount={calculatedBasePrice || taxableBase || calculatedTotal}
+                        appliedCoupon={appliedCoupon}
+                        onApplyCoupon={(c) => setAppliedCoupon(c)}
+                        onRemoveCoupon={() => setAppliedCoupon(null)}
+                        categoryId={equipment.categoryId?._id || equipment.categoryId}
+                        serviceId={equipment._id}
+                        className="mb-2"
+                      />
+                    )}
+
                     {/* Itemized Digital Invoice Receipt */}
                     <div className="bg-gradient-to-b from-slate-50 to-emerald-50/30 p-3 rounded-xl border border-slate-200/80 space-y-1.5">
                         <div className="flex items-center justify-between pb-1.5 border-b border-dashed border-slate-200">
@@ -796,6 +825,17 @@ const MachineryCheckout = () => {
                               Platform Fee ({platformFeePct}%)
                             </span>
                             <span className="font-bold text-slate-700 text-xs">+ ₹{payAfterTrip ? approxBill.platformFee : platformFee}</span>
+                          </div>
+                        )}
+
+                        {/* Promo / Festival Coupon Discount */}
+                        {appliedCoupon && appliedCoupon.discountAmount > 0 && (
+                          <div className="flex justify-between items-center text-xs pt-1 border-t border-dashed border-emerald-200 text-emerald-800">
+                            <span className="font-black flex items-center gap-1 text-[11px]">
+                              <FiTag className="w-3 h-3 text-orange-500" />
+                              <span>Promo Code ({appliedCoupon.code})</span>
+                            </span>
+                            <span className="font-black text-xs text-emerald-700">- ₹{appliedCoupon.discountAmount}</span>
                           </div>
                         )}
 

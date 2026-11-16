@@ -2722,8 +2722,10 @@ const BookingDetails = () => {
 
                     {booking.paymentMethod !== 'plan_benefit' && booking.discount > 0 && (
                       <div className="flex justify-between text-sm">
-                        <span className="text-green-600">Discount</span>
-                        <span className="font-medium text-green-600">-₹{booking.discount.toLocaleString('en-IN')}</span>
+                        <span className="text-green-600 font-medium">
+                          {booking.couponCode ? `Promo Discount (${booking.couponCode})` : 'Discount'}
+                        </span>
+                        <span className="font-bold text-green-600">-₹{booking.discount.toLocaleString('en-IN')}</span>
                       </div>
                     )}
 

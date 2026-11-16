@@ -42,6 +42,7 @@ const WebsiteSettings = lazy(() => import('../pages/WebsiteSettings'));
 const EquipmentApproval = lazy(() => import('../pages/EquipmentApproval'));
 const Support = lazy(() => import('../pages/Support'));
 const Referrals = lazy(() => import('../pages/Referrals'));
+const Coupons = lazy(() => import('../pages/Settings/Coupons'));
 const KisanSuvidha = lazy(() => import('../pages/KisanSuvidha'));
 
 
@@ -109,6 +110,7 @@ const AdminRoutes = () => {
             <Route path="kisan-suvidha" element={<KisanSuvidha />} />
             <Route path="support" element={<Support />} />
             <Route path="referrals" element={<Referrals />} />
+            <Route path="coupons" element={<Coupons />} />
             <Route path="settings/*" element={<Settings />} />
             <Route path="admin-management" element={<AdminManagement />} />
             <Route path="roles" element={<Roles />} />

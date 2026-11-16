@@ -21,6 +21,9 @@ const connectDB = async () => {
     // Ensure default system languages (English default, Hindi enabled) are seeded
     require('../services/languageService').ensureDefaultLanguages().catch((err) => console.error('[languageService] seeding failed:', err.message));
 
+    // Ensure initial festival promo coupons are seeded if empty
+    require('../models/Coupon').seedDefaultCoupons().catch((err) => console.error('[Coupons] seeding failed:', err.message));
+
   } catch (error) {
     console.error('MongoDB connection error:', error.message);
     process.exit(1);

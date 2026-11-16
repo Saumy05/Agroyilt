@@ -305,7 +305,8 @@ const BookingDetailsPage = () => {
                             { label: `Platform fee${feePct ? ` (${feePct}%)` : ''}`, value: n(bill.platformFee), hideZero: true },
                             { label: 'Cancellation penalty', value: n(bill.penaltyCharges), hideZero: true }
                         ] : [
-                            { label: 'Service charges', value: n(booking.basePrice) - n(booking.discount) },
+                            { label: 'Base service charge', value: n(booking.basePrice) },
+                            ...(n(booking.discount) > 0 ? [{ label: `Promo discount${booking.couponCode ? ` (${booking.couponCode})` : ''}`, value: -n(booking.discount), isCredit: true }] : []),
                             { label: `GST${gstPct != null ? ` (${gstPct}%)` : ''}`, value: n(booking.tax) },
                             { label: 'Visiting charges', value: n(booking.visitingCharges), hideZero: true },
                             { label: 'Travel charge (to vendor)', value: n(booking.travelCharge), hideZero: true },
@@ -326,7 +327,9 @@ const BookingDetailsPage = () => {
                                     {rows.filter(r => !(r.hideZero && r.value === 0)).map(r => (
                                         <div key={r.label} className="flex justify-between text-sm text-gray-500">
                                             <span>{r.label}</span>
-                                            <span className="font-semibold text-gray-800">{money(r.value)}</span>
+                                            <span className={`font-semibold ${r.isCredit ? 'text-emerald-600' : 'text-gray-800'}`}>
+                                                {r.isCredit ? `- ${money(Math.abs(r.value))}` : money(r.value)}
+                                            </span>
                                         </div>
                                     ))}
                                     <div className="pt-3 border-t border-gray-50 flex justify-between font-bold text-lg text-gray-900">

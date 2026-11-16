@@ -121,6 +121,16 @@
     "children": []
   },
   {
+    "category": "OPERATIONS",
+    "title": "Coupons & Offers",
+    "route": "/admin/coupons",
+    "allowedRoles": [
+      "super_admin",
+      "admin"
+    ],
+    "children": []
+  },
+  {
     "category": "FINANCE & PAYOUTS",
     "title": "Payments",
     "route": "/admin/payments",
