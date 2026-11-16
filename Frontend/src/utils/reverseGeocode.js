@@ -24,21 +24,22 @@ const toPlace = (results) => {
   return Object.values(place).some(Boolean) ? place : null;
 };
 
-export const reverseGeocode = async (lat, lng) => {
+export const reverseGeocode = async (lat, lng, preferredLang) => {
   if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) return null;
   const latlng = { lat: Number(lat), lng: Number(lng) };
+  const lang = preferredLang || (typeof localStorage !== 'undefined' ? localStorage.getItem('userLanguageCode') : 'en') || 'en';
 
   try {
     if (window.google?.maps?.Geocoder) {
       const results = await new Promise((resolve) => {
-        new window.google.maps.Geocoder().geocode({ location: latlng }, (res, status) => resolve(status === 'OK' ? res : []));
+        new window.google.maps.Geocoder().geocode({ location: latlng, language: lang }, (res, status) => resolve(status === 'OK' ? res : []));
       });
       return toPlace(results);
     }
 
     const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
     if (!apiKey) return null;
-    const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${latlng.lat},${latlng.lng}&language=en&key=${apiKey}`);
+    const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${latlng.lat},${latlng.lng}&language=${lang}&key=${apiKey}`);
     const data = await response.json();
     return data.status === 'OK' ? toPlace(data.results) : null;
   } catch {

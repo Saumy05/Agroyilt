@@ -10,6 +10,7 @@ import authStorage from '../../../../utils/authStorage';
 import Policies from './Policies';
 import TravelCharges from './TravelCharges';
 import PaymentMethods from './PaymentMethods';
+import Languages from './Languages';
 import { TemplatesPanel as AgreementTemplates } from '../Agreements';
 
 const AdminSettings = () => {
@@ -930,6 +931,16 @@ const AdminSettings = () => {
           <p className="text-sm text-gray-500">Wording of the land lease agreements farmers sign. Only a Super Admin can change it</p>
         </div>
       )}
+
+      {/* Languages & Localization Card */}
+      <div onClick={() => setActiveView('languages')}
+        className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer group">
+        <div className="w-12 h-12 bg-teal-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-teal-100 transition-colors">
+          <FiGlobe className="w-6 h-6 text-teal-600" />
+        </div>
+        <h3 className="text-lg font-bold text-gray-800 mb-2">Languages & Localization</h3>
+        <p className="text-sm text-gray-500">Enable, disable, or add languages for the Worker and User apps</p>
+      </div>
 
       {/* Admin Management Card - Super Admin Only */}
       {isSuperAdmin && (
@@ -2141,6 +2152,13 @@ const AdminSettings = () => {
         {activeView === 'agreementTemplates' && isSuperAdmin && (
           <motion.div key="agreementTemplates" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
             <AgreementTemplates />
+          </motion.div>
+        )}
+
+        {/* Languages & Localization View */}
+        {activeView === 'languages' && (
+          <motion.div key="languages" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
+            <Languages />
           </motion.div>
         )}
 

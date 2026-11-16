@@ -2,3 +2,24 @@
 // "Loader must not be called again with different options" if two screens ask for different ones.
 export const GOOGLE_MAPS_LOADER_ID = 'google-map-script';
 export const GOOGLE_MAPS_LIBRARIES = ['places', 'geometry', 'drawing'];
+
+/**
+ * Get current language for Google Maps localization
+ * Matches user's chosen language ('en', 'hi', etc.)
+ */
+export const getGoogleMapsLanguage = () => {
+  if (typeof localStorage !== 'undefined') {
+    return localStorage.getItem('userLanguageCode') || 'en';
+  }
+  return 'en';
+};
+
+/**
+ * Common loader options for Google Maps API
+ */
+export const getGoogleMapsLoaderOptions = () => ({
+  id: GOOGLE_MAPS_LOADER_ID,
+  googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
+  libraries: GOOGLE_MAPS_LIBRARIES,
+  language: getGoogleMapsLanguage()
+});

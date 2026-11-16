@@ -15,7 +15,7 @@ import { useLanguage } from '../../../../context/LanguageContext';
 
 const Settings = () => {
   const navigate = useNavigate();
-  const { currentCode, changeLanguage } = useLanguage();
+  const { currentCode, changeLanguage, activeLanguagesList } = useLanguage();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [settings, setSettings] = useState({
@@ -51,8 +51,8 @@ const Settings = () => {
         if (res.success && res.worker?.settings) {
           setSettings(res.worker.settings);
           // The worker's saved language also applies on this device
-          if (['en', 'hi'].includes(res.worker.settings.language)) {
-            changeLanguage(res.worker.settings.language === 'hi' ? 'Hindi' : 'English');
+          if (res.worker.settings.language) {
+            changeLanguage(res.worker.settings.language);
           }
           // Sync with localStorage for legacy components
           localStorage.setItem('workerSettings', JSON.stringify(res.worker.settings));
@@ -119,7 +119,7 @@ const Settings = () => {
   const handleLanguageChange = async (lang) => {
     const updated = { ...settings, language: lang };
     setSettings(updated);
-    changeLanguage(lang === 'hi' ? 'Hindi' : 'English');
+    changeLanguage(lang);
     await updateDBSettings(updated);
   };
 
@@ -250,14 +250,14 @@ const Settings = () => {
           </div>
 
           <div className="space-y-2" translate="no">
-            {[
-              { code: 'en', name: 'English' },
-              { code: 'hi', name: 'हिंदी' },
-            ].map((lang) => (
+            {(activeLanguagesList && activeLanguagesList.length > 0 ? activeLanguagesList : [
+              { code: 'en', name: 'English', nativeName: 'English', flag: '🇬🇧' },
+              { code: 'hi', name: 'Hindi', nativeName: 'हिंदी', flag: '🇮🇳' },
+            ]).map((lang) => (
               <button
                 key={lang.code}
                 onClick={() => handleLanguageChange(lang.code)}
-                className={`w-full py-3 px-4 rounded-lg text-left transition-all ${currentCode === lang.code
+                className={`w-full py-3 px-4 rounded-lg text-left transition-all flex items-center justify-between ${currentCode === lang.code
                   ? 'text-white'
                   : 'bg-gray-50 text-gray-700'
                   }`}
@@ -270,7 +270,20 @@ const Settings = () => {
                     : {}
                 }
               >
-                {lang.name}
+                <div className="flex items-center gap-2.5">
+                  <span className="text-base">{lang.flag || '🌐'}</span>
+                  <span className="font-medium">{lang.nativeName || lang.name}</span>
+                  {lang.nativeName && lang.nativeName !== lang.name && (
+                    <span className={`text-xs ${currentCode === lang.code ? 'text-white/80' : 'text-gray-400'}`}>
+                      ({lang.name})
+                    </span>
+                  )}
+                </div>
+                {currentCode === lang.code && (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-white/20">
+                    Active
+                  </span>
+                )}
               </button>
             ))}
           </div>
