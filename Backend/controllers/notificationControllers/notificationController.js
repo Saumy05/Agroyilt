@@ -348,20 +348,111 @@ const getAdminNotifications = async (req, res) => {
 };
 
 /**
+ * Get booking-specific notifications for Admin
+ */
+const getBookingNotifications = async (req, res) => {
+  try {
+    const { isRead, filter, page = 1, limit = 50 } = req.query;
+
+    const query = {
+      $or: [
+        { type: { $regex: 'booking' } },
+        { relatedType: { $in: ['Booking', 'WorkerBookingRequest'] } }
+      ]
+    };
+
+    if (isRead !== undefined) {
+      query.isRead = isRead === 'true';
+    }
+
+    if (filter && filter !== 'All Types') {
+      if (filter === 'new_booking') {
+        query.type = { $in: ['booking_created', 'booking_request', 'booking_requested', 'worker_booking_request'] };
+      } else if (filter === 'cancelled') {
+        query.type = { $in: ['booking_cancelled', 'worker_booking_cancelled', 'worker_request_cancelled'] };
+      } else if (filter === 'payment_failed') {
+        query.type = 'payment_failed';
+      }
+    }
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const [notifications, total, unreadCount] = await Promise.all([
+      Notification.find(query).sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit)),
+      Notification.countDocuments(query),
+      Notification.countDocuments({
+        $or: [
+          { type: { $regex: 'booking' } },
+          { relatedType: { $in: ['Booking', 'WorkerBookingRequest'] } }
+        ],
+        isRead: false
+      })
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: notifications,
+      unreadCount,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('Get booking notifications error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch booking notifications'
+    });
+  }
+};
+
+/**
+ * Mark all booking notifications as read for Admin
+ */
+const markAllBookingNotificationsAsRead = async (req, res) => {
+  try {
+    await Notification.updateMany({
+      $or: [
+        { type: { $regex: 'booking' } },
+        { relatedType: { $in: ['Booking', 'WorkerBookingRequest'] } }
+      ],
+      isRead: false
+    }, {
+      isRead: true,
+      readAt: new Date()
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'All booking notifications marked as read'
+    });
+  } catch (error) {
+    console.error('Mark all booking notifications as read error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to mark booking notifications as read'
+    });
+  }
+};
+
+/**
  * Mark notification as read
  */
 const markAsRead = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
-    const userRole = req.user.role;
+    const userRole = (req.user.role || '').toUpperCase();
 
     // Build query based on user role
     let query = { _id: id };
     if (userRole === 'USER') query.userId = userId;
     else if (userRole === 'VENDOR') query.vendorId = userId;
     else if (userRole === 'WORKER') query.workerId = userId;
-    else if (userRole === 'ADMIN') query.adminId = userId;
+    // Admins can mark any system or booking notification as read
 
     const notification = await Notification.findOne(query);
 
@@ -396,14 +487,14 @@ const markAsRead = async (req, res) => {
 const markAllAsRead = async (req, res) => {
   try {
     const userId = req.user.id;
-    const userRole = req.user.role;
+    const userRole = (req.user.role || '').toUpperCase();
 
     // Build query based on user role
     let query = { isRead: false };
     if (userRole === 'USER') query.userId = userId;
     else if (userRole === 'VENDOR') query.vendorId = userId;
     else if (userRole === 'WORKER') query.workerId = userId;
-    else if (userRole === 'ADMIN') query.adminId = userId;
+    else if (userRole.includes('ADMIN')) query.$or = [{ adminId: userId }, { adminId: null }];
 
     await Notification.updateMany(query, {
       isRead: true,
@@ -430,14 +521,14 @@ const deleteNotification = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
-    const userRole = req.user.role;
+    const userRole = (req.user.role || '').toUpperCase();
 
     // Build query based on user role
     let query = { _id: id };
     if (userRole === 'USER') query.userId = userId;
     else if (userRole === 'VENDOR') query.vendorId = userId;
     else if (userRole === 'WORKER') query.workerId = userId;
-    else if (userRole === 'ADMIN') query.adminId = userId;
+    // Admins can delete any admin-facing or booking notification
 
     const notification = await Notification.findOneAndDelete(query);
 
@@ -619,6 +710,8 @@ module.exports = {
   getVendorNotifications,
   getWorkerNotifications,
   getAdminNotifications,
+  getBookingNotifications,
+  markAllBookingNotificationsAsRead,
   markAsRead,
   markAllAsRead,
   deleteNotification,

@@ -1,51 +1,80 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiBell, FiCheck, FiX, FiInfo, FiTrash2, FiShoppingBag, FiAlertTriangle } from 'react-icons/fi';
+import api from '../../../../services/api';
+import { refreshAdminCounts } from '../../utils/adminCounts';
+import { toastManager } from '../../../../utils/toastManager';
 
 const BookingNotifications = () => {
   const [filter, setFilter] = useState('All Types');
-  const [notifications, setNotifications] = useState([
-    {
-      id: 1,
-      title: 'New Booking Received',
-      message: 'Booking #ORD-001 has been placed by John Doe',
-      time: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
-      bookingId: 'ORD-001',
-      type: 'new_booking',
-      unread: true,
-    },
-    {
-      id: 2,
-      title: 'Booking Cancelled',
-      message: 'Booking #ORD-002 has been cancelled by customer',
-      time: new Date(Date.now() - 1000 * 60 * 120).toISOString(),
-      bookingId: 'ORD-002',
-      type: 'cancelled',
-      unread: true,
-    },
-    {
-      id: 3,
-      title: 'Payment Failed',
-      message: 'Payment for Booking #ORD-003 has failed',
-      time: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
-      bookingId: 'ORD-003',
-      type: 'payment_failed',
-      unread: false,
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchBookingNotifications = useCallback(async () => {
+    try {
+      setLoading(true);
+      const params = {};
+      if (filter !== 'All Types') params.filter = filter;
+      const res = await api.get('/notifications/admin/bookings', { params });
+      if (res.data?.success && Array.isArray(res.data.data)) {
+        setNotifications(
+          res.data.data.map((n) => ({
+            id: n._id,
+            title: n.title,
+            message: n.message,
+            time: n.createdAt,
+            bookingId: n.data?.bookingId || n.data?.bookingNumber || n.data?.requestId || n.relatedId || 'Booking',
+            type: n.type,
+            unread: !n.isRead,
+          }))
+        );
+      }
+    } catch (error) {
+      console.error('Failed to load booking notifications:', error);
+      toastManager.error('Failed to load booking notifications');
+    } finally {
+      setLoading(false);
     }
-  ]);
+  }, [filter]);
 
-  const unreadCount = notifications.filter(n => n.unread).length;
+  useEffect(() => {
+    fetchBookingNotifications();
+  }, [fetchBookingNotifications]);
 
-  const markAllRead = () => {
-    setNotifications(notifications.map(n => ({ ...n, unread: false })));
+  const unreadCount = notifications.filter((n) => n.unread).length;
+
+  const markAllRead = async () => {
+    try {
+      await api.put('/notifications/admin/bookings/read-all');
+      setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
+      refreshAdminCounts();
+      toastManager.success('All booking notifications marked as read');
+    } catch (error) {
+      console.error('Failed to mark all as read:', error);
+      toastManager.error('Failed to mark notifications as read');
+    }
   };
 
-  const deleteNotification = (id) => {
-    setNotifications(notifications.filter(n => n.id !== id));
+  const deleteNotification = async (id) => {
+    try {
+      await api.delete(`/notifications/${id}`);
+      setNotifications((prev) => prev.filter((n) => n.id !== id));
+      refreshAdminCounts();
+    } catch (error) {
+      console.error('Failed to delete notification:', error);
+      toastManager.error('Failed to delete notification');
+    }
   };
 
-  const markAsRead = (id) => {
-    setNotifications(notifications.map(n => n.id === id ? { ...n, unread: false } : n));
+  const markAsRead = async (id) => {
+    try {
+      await api.put(`/notifications/${id}/read`);
+      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, unread: false } : n)));
+      refreshAdminCounts();
+    } catch (error) {
+      console.error('Failed to mark notification as read:', error);
+      toastManager.error('Failed to mark notification as read');
+    }
   };
 
   const cleanTitle = (title) => {
@@ -80,26 +109,22 @@ const BookingNotifications = () => {
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
-      hour12: true
+      hour12: true,
     });
   };
 
   const getIcon = (type) => {
-    switch (type) {
-      case 'new_booking': return <FiShoppingBag className="text-white w-4 h-4" />;
-      case 'cancelled': return <FiX className="text-white w-4 h-4" />;
-      case 'payment_failed': return <FiAlertTriangle className="text-white w-4 h-4" />;
-      default: return <FiInfo className="text-white w-4 h-4" />;
-    }
+    if (type?.includes('cancel') || type?.includes('reject')) return <FiX className="text-white w-4 h-4" />;
+    if (type?.includes('payment') || type?.includes('due')) return <FiAlertTriangle className="text-white w-4 h-4" />;
+    if (type?.includes('create') || type?.includes('request') || type?.includes('confirm')) return <FiShoppingBag className="text-white w-4 h-4" />;
+    return <FiInfo className="text-white w-4 h-4" />;
   };
 
   const getGradient = (type) => {
-    switch (type) {
-      case 'new_booking': return 'bg-gradient-to-br from-blue-500 to-indigo-600 shadow-blue-500/20';
-      case 'cancelled': return 'bg-gradient-to-br from-red-500 to-rose-600 shadow-red-500/20';
-      case 'payment_failed': return 'bg-gradient-to-br from-amber-500 to-orange-600 shadow-amber-500/20';
-      default: return 'bg-gradient-to-br from-gray-500 to-slate-600 shadow-gray-500/20';
-    }
+    if (type?.includes('cancel') || type?.includes('reject')) return 'bg-gradient-to-br from-red-500 to-rose-600 shadow-red-500/20';
+    if (type?.includes('payment') || type?.includes('due')) return 'bg-gradient-to-br from-amber-500 to-orange-600 shadow-amber-500/20';
+    if (type?.includes('create') || type?.includes('request') || type?.includes('confirm')) return 'bg-gradient-to-br from-blue-500 to-indigo-600 shadow-blue-500/20';
+    return 'bg-gradient-to-br from-gray-500 to-slate-600 shadow-gray-500/20';
   };
 
   return (
@@ -127,7 +152,8 @@ const BookingNotifications = () => {
           )}
           <button
             onClick={markAllRead}
-            className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3.5 py-1.5 rounded-lg transition-colors shadow-2xs"
+            disabled={unreadCount === 0}
+            className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3.5 py-1.5 rounded-lg transition-colors shadow-2xs disabled:opacity-50 cursor-pointer"
           >
             Mark All Read
           </button>
@@ -136,63 +162,69 @@ const BookingNotifications = () => {
 
       {/* Notifications List */}
       <div className="bg-white rounded-xl shadow-2xs border border-gray-100 overflow-hidden divide-y divide-gray-100">
-        <AnimatePresence>
-          {notifications.filter(n => filter === 'All Types' || n.type === filter).length === 0 ? (
-            <div className="p-8 text-center text-xs font-medium text-gray-500">No booking notifications</div>
-          ) : (
-            notifications.filter(n => filter === 'All Types' || n.type === filter).map((notification) => (
-              <motion.div
-                key={notification.id}
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className={`p-3 flex items-start justify-between hover:bg-gray-50/60 transition-colors group relative ${notification.unread ? 'bg-gradient-to-r from-blue-50/30 via-white to-white' : ''}`}
-              >
-                <div className="flex items-start gap-3">
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-2xs ${getGradient(notification.type)}`}>
-                    {getIcon(notification.type)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      {notification.unread && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
-                      )}
-                      <h3 className={`text-xs sm:text-sm ${notification.unread ? 'font-black text-gray-950' : 'font-bold text-gray-800'}`}>
-                        {cleanTitle(notification.title)}
-                      </h3>
-                      <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 ml-1">
-                        {notification.bookingId}
-                      </span>
+        {loading ? (
+          <div className="p-8 text-center text-xs font-medium text-gray-500">Loading booking notifications...</div>
+        ) : (
+          <AnimatePresence>
+            {notifications.length === 0 ? (
+              <div className="p-8 text-center text-xs font-medium text-gray-500">No booking notifications</div>
+            ) : (
+              notifications.map((notification) => (
+                <motion.div
+                  key={notification.id}
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className={`p-3 flex items-start justify-between hover:bg-gray-50/60 transition-colors group relative ${
+                    notification.unread ? 'bg-gradient-to-r from-blue-50/30 via-white to-white' : ''
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-2xs ${getGradient(notification.type)}`}>
+                      {getIcon(notification.type)}
                     </div>
-                    <p className="text-[11px] sm:text-xs text-gray-600 leading-snug">{notification.message}</p>
-                    <div className="mt-1 text-[10px] text-gray-400 font-medium">
-                      {formatNotificationTime(notification.time)}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        {notification.unread && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />}
+                        <h3 className={`text-xs sm:text-sm ${notification.unread ? 'font-black text-gray-950' : 'font-bold text-gray-800'}`}>
+                          {cleanTitle(notification.title)}
+                        </h3>
+                        {notification.bookingId && notification.bookingId !== 'Booking' && (
+                          <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 ml-1">
+                            {notification.bookingId}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] sm:text-xs text-gray-600 leading-snug">{notification.message}</p>
+                      <div className="mt-1 text-[10px] text-gray-400 font-medium">
+                        {formatNotificationTime(notification.time)}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex items-center gap-1">
-                  {notification.unread && (
+                  <div className="flex items-center gap-1">
+                    {notification.unread && (
+                      <button
+                        title="Mark as read"
+                        onClick={() => markAsRead(notification.id)}
+                        className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                      >
+                        <FiCheck className="w-4 h-4" />
+                      </button>
+                    )}
                     <button
-                      title="Mark as read"
-                      onClick={() => markAsRead(notification.id)}
-                      className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                      onClick={() => deleteNotification(notification.id)}
+                      className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                      title="Delete"
                     >
-                      <FiCheck className="w-4 h-4" />
+                      <FiTrash2 className="w-3.5 h-3.5" />
                     </button>
-                  )}
-                  <button
-                    onClick={() => deleteNotification(notification.id)}
-                    className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                    title="Delete"
-                  >
-                    <FiTrash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </motion.div>
-            ))
-          )}
-        </AnimatePresence>
+                  </div>
+                </motion.div>
+              ))
+            )}
+          </AnimatePresence>
+        )}
       </div>
     </motion.div>
   );

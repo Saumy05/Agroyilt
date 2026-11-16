@@ -8,6 +8,7 @@ import AdminSearch from './AdminSearch';
 import { adminAuthService } from '../../../../services/authService';
 import authStorage from '../../../../utils/authStorage';
 import LogoutModal from '../../../../components/common/LogoutModal';
+import { refreshAdminCounts } from '../../utils/adminCounts';
 
 const AdminHeader = ({ onMenuClick }) => {
   const location = useLocation();
@@ -146,6 +147,7 @@ const AdminHeader = ({ onMenuClick }) => {
       // Optimistic update
       setNotifications(prev => prev.map(n => n._id === id ? { ...n, isRead: true } : n));
       setUnreadCount(prev => Math.max(0, prev - 1));
+      refreshAdminCounts();
     } catch (error) {
       console.error('Error marking as read:', error);
     }
@@ -157,6 +159,7 @@ const AdminHeader = ({ onMenuClick }) => {
       await api.put(`/notifications/read-all`);
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
       setUnreadCount(0);
+      refreshAdminCounts();
     } catch (error) {
       console.error('Error marking all as read:', error);
     }
@@ -167,6 +170,7 @@ const AdminHeader = ({ onMenuClick }) => {
       const { default: api } = await import('../../../../services/api');
       await api.delete(`/notifications/${id}`);
       setNotifications(prev => prev.filter(n => n._id !== id));
+      refreshAdminCounts();
       // If deleted was unread, decrease count? We don't know easily without checking.
       // Ideally re-fetch or check current state
       fetchNotifications();

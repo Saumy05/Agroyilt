@@ -12,6 +12,7 @@ const Settings = require('../../models/Settings');
 const VendorEquipment = require('../../models/VendorEquipment');
 const Dispute = require('../../models/Dispute');
 const SupportTicket = require('../../models/SupportTicket');
+const Notification = require('../../models/Notification');
 const supportClaims = require('../../services/supportClaimService');
 
 const { BOOKING_STATUS, PAYMENT_STATUS, VENDOR_STATUS } = require('../../utils/constants');
@@ -414,16 +415,20 @@ const getSidebarCounts = async (req, res) => {
       return Object.keys(scope).length > 0 ? { $and: [base, scope] } : base;
     };
 
+    const adminId = req.user._id || req.user.id;
+
     const [
       farmers,
       vendors,
       workers,
-      bookings,
+      openBookings,
       machinery,
       disputes,
       support,
       withdrawals,
-      settlements
+      settlements,
+      notifications,
+      bookingNotifications
     ] = await Promise.all([
       // Applications waiting for review: accounts are created as pending before the MPIN step,
       // so only count the ones that finished sign-up (an abandoned sign-up is not a review item)
@@ -438,12 +443,38 @@ const getSidebarCounts = async (req, res) => {
       // Support tickets waiting in the unclaimed queue
       SupportTicket.countDocuments(supportClaims.viewFilter('unassigned', req.user)),
       Withdrawal.countDocuments({ status: 'pending' }),
-      Settlement.countDocuments({ status: 'pending' })
+      Settlement.countDocuments({ status: 'pending' }),
+      // Unread notifications for this admin
+      Notification.countDocuments({ adminId, isRead: false }),
+      // Unread booking notifications & alerts
+      Notification.countDocuments({
+        $or: [
+          { type: { $regex: 'booking' } },
+          { relatedType: { $in: ['Booking', 'WorkerBookingRequest'] } }
+        ],
+        isRead: false
+      })
     ]);
+
+    // Parent bookings badge displays open bookings, or booking notifications if open bookings is 0
+    const bookings = openBookings > 0 ? openBookings : bookingNotifications;
 
     res.status(200).json({
       success: true,
-      data: { farmers, vendors, workers, bookings, machinery, disputes, support, withdrawals, settlements }
+      data: {
+        farmers,
+        vendors,
+        workers,
+        bookings,
+        openBookings,
+        machinery,
+        disputes,
+        support,
+        withdrawals,
+        settlements,
+        notifications,
+        bookingNotifications
+      }
     });
   } catch (error) {
     console.error('Sidebar counts error:', error);

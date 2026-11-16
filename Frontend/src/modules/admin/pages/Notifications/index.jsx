@@ -30,6 +30,7 @@ import { useNavigate } from 'react-router-dom';
 import { toastManager } from '../../../../utils/toastManager';
 import authStorage from '../../../../utils/authStorage';
 import api from '../../../../services/api';
+import { refreshAdminCounts } from '../../utils/adminCounts';
 
 // Saved notifications carry no targetRole, so the admin role they concern is worked out from the type.
 const getNotificationRole = (n) => {
@@ -233,6 +234,7 @@ const Notifications = () => {
       setNotifications(prev =>
         prev.map(n => n._id === id ? { ...n, isRead: true } : n)
       );
+      refreshAdminCounts();
     } catch (error) {
       console.error('Error marking notification read:', error);
     }
@@ -242,6 +244,7 @@ const Notifications = () => {
     try {
       await api.put('/notifications/read-all').catch(() => {});
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+      refreshAdminCounts();
       toastManager.success('All notifications marked as read');
     } catch (error) {
       console.error('Error marking all as read:', error);
@@ -254,6 +257,7 @@ const Notifications = () => {
         await api.delete(`/notifications/${id}`);
       }
       setNotifications(prev => prev.filter(n => n._id !== id));
+      refreshAdminCounts();
       toastManager.success('Notification deleted');
     } catch (error) {
       console.error('Error deleting notification:', error);
@@ -265,6 +269,7 @@ const Notifications = () => {
       try {
         await api.delete('/notifications/delete-all').catch(() => {});
         setNotifications([]);
+        refreshAdminCounts();
         toastManager.success('All notifications cleared');
       } catch (error) {
         console.error('Error clearing notifications:', error);
