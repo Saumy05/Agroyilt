@@ -482,6 +482,8 @@ const getPublicHomeContent = async (req, res) => {
         id: item._id ? item._id.toString() : item.id,
         targetCategoryId: item.targetCategoryId?.toString() || null,
         targetServiceId: item.targetServiceId?.toString() || null,
+        couponId: item.couponId ? item.couponId.toString() : null,
+        couponCode: item.couponCode || null
       })),
       curated: (contentObj.curated || []).map(item => ({
         ...item,

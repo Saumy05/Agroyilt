@@ -7,6 +7,7 @@ import ToggleSwitch from "../components/ToggleSwitch"; // Import ToggleSwitch
 import { ensureIds, saveCatalog, slugify, toAssetUrl } from "../utils";
 
 import { homeContentService, serviceService, categoryService } from "../../../../../services/catalogService";
+import couponService from "../../../../../services/couponService";
 import { toastManager } from '../../../../../utils/toastManager';
 
 
@@ -145,8 +146,31 @@ const HomePage = ({ catalog, setCatalog, selectedCity }) => {
   const [editingBannerId, setEditingBannerId] = useState(null);
 
   const [isPromoModalOpen, setIsPromoModalOpen] = useState(false);
-  const [promoForm, setPromoForm] = useState({ title: "", subtitle: "", buttonText: "Explore", gradientClass: "from-blue-600 to-blue-800", imageUrl: "", targetCategoryId: "", slug: "", targetServiceId: "", scrollToSection: "" });
+  const [promoForm, setPromoForm] = useState({
+    title: "",
+    subtitle: "",
+    buttonText: "Explore",
+    gradientClass: "from-blue-600 to-blue-800",
+    imageUrl: "",
+    targetCategoryId: "",
+    slug: "",
+    targetServiceId: "",
+    scrollToSection: "",
+    couponCode: "",
+    couponId: ""
+  });
   const [editingPromoId, setEditingPromoId] = useState(null);
+  const [availableCoupons, setAvailableCoupons] = useState([]);
+
+  useEffect(() => {
+    couponService.getAdminCoupons()
+      .then(res => {
+        if (res.success && Array.isArray(res.coupons)) {
+          setAvailableCoupons(res.coupons.filter(c => c.isActive && !c.isDeleted));
+        }
+      })
+      .catch(err => console.warn('Could not load coupons in admin HomePage:', err));
+  }, []);
 
   const [isCuratedModalOpen, setIsCuratedModalOpen] = useState(false);
   const [curatedForm, setCuratedForm] = useState({ title: "", gifUrl: "", youtubeUrl: "" });
@@ -483,7 +507,19 @@ const HomePage = ({ catalog, setCatalog, selectedCity }) => {
   // Promo handlers
   const resetPromoForm = () => {
     setEditingPromoId(null);
-    setPromoForm({ title: "", subtitle: "", buttonText: "Explore", gradientClass: "from-blue-600 to-blue-800", imageUrl: "", targetCategoryId: "", slug: "", targetServiceId: "", scrollToSection: "" });
+    setPromoForm({
+      title: "",
+      subtitle: "",
+      buttonText: "Explore",
+      gradientClass: "from-blue-600 to-blue-800",
+      imageUrl: "",
+      targetCategoryId: "",
+      slug: "",
+      targetServiceId: "",
+      scrollToSection: "",
+      couponCode: "",
+      couponId: ""
+    });
     setIsPromoModalOpen(false);
   };
 
@@ -842,6 +878,13 @@ const HomePage = ({ catalog, setCatalog, selectedCity }) => {
                       </td>
                       <td className="py-2.5 px-3">
                         <div className="text-sm font-semibold text-gray-900">{p.title || "—"}</div>
+                        {p.couponCode && (
+                          <div className="inline-flex items-center gap-1 text-[10px] font-black text-amber-800 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-md mt-1">
+                            <span>🎟️</span>
+                            <span>{p.couponCode}</span>
+                            <span className="text-[9px] text-amber-600 font-semibold">• Auto-apply</span>
+                          </div>
+                        )}
                       </td>
                       <td className="py-2.5 px-3">
                         <div className="text-sm text-gray-600">{p.subtitle || "—"}</div>
@@ -1792,6 +1835,51 @@ const HomePage = ({ catalog, setCatalog, selectedCity }) => {
                 placeholder="from-blue-600 to-blue-800"
               />
             </div>
+          </div>
+
+          {/* Coupon Linking Section (Solution 3) */}
+          <div className="bg-amber-50/70 border border-amber-200/90 rounded-xl p-3.5 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold text-amber-950 uppercase tracking-wider">
+                🎟️ Link with Coupon / Offer (Optional)
+              </label>
+              {promoForm.couponCode && (
+                <span className="text-[10px] font-black uppercase tracking-wider bg-amber-500 text-white px-2 py-0.5 rounded-full">
+                  Linked: {promoForm.couponCode}
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-amber-800/90 leading-snug">
+              Select an active coupon from "Coupons & Offers". When a user clicks this promo card, the coupon will automatically apply at checkout!
+            </p>
+            <select
+              value={promoForm.couponCode || ""}
+              onChange={(e) => {
+                const code = e.target.value;
+                if (!code) {
+                  setPromoForm((p) => ({ ...p, couponCode: "", couponId: "" }));
+                  return;
+                }
+                const found = availableCoupons.find((c) => c.code === code);
+                setPromoForm((p) => ({
+                  ...p,
+                  couponCode: code,
+                  couponId: found?._id || "",
+                  title: p.title || found?.title || `Special Offer (${code})`,
+                  subtitle: p.subtitle || (found?.discountType === 'PERCENTAGE'
+                    ? `Use code ${code} to get ${found.discountValue}% OFF`
+                    : `Use code ${code} to get flat ₹${found.discountValue} OFF`)
+                }));
+              }}
+              className="w-full px-3.5 py-2.5 border border-amber-300 rounded-lg text-xs font-bold text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer"
+            >
+              <option value="">None (General Promo / No Coupon)</option>
+              {availableCoupons.map((coupon) => (
+                <option key={coupon._id || coupon.code} value={coupon.code}>
+                  {coupon.code} — {coupon.discountType === 'PERCENTAGE' ? `${coupon.discountValue}% OFF` : `₹${coupon.discountValue} FLAT OFF`} ({coupon.title})
+                </option>
+              ))}
+            </select>
           </div>
           <RedirectionSelector
             categories={categories}

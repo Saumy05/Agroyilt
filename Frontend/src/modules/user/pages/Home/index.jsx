@@ -341,6 +341,13 @@ const Home = () => {
   };
 
   const handlePromoClick = (promo) => {
+    // Solution 2: Save coupon code for auto-apply at checkout
+    if (promo.couponCode) {
+      try {
+        sessionStorage.setItem('agroyilt_auto_coupon', promo.couponCode);
+      } catch (_) {}
+    }
+
     let cat = null;
     if (promo.targetCategoryId) {
       cat = categories.find(c => (c.id === promo.targetCategoryId || c._id === promo.targetCategoryId));
@@ -351,6 +358,9 @@ const Home = () => {
     }
 
     if (cat) {
+      if (promo.couponCode) {
+        toastManager.success(`Offer "${promo.couponCode}" will auto-apply at checkout!`);
+      }
       handleCategoryClick(cat);
       return;
     }
@@ -367,11 +377,18 @@ const Home = () => {
     if (promo.route && !promo.slug) {
       if (promo.scrollToSection) {
         navigate(promo.route, {
-          state: { scrollToSection: promo.scrollToSection }
+          state: { scrollToSection: promo.scrollToSection, promoCoupon: promo.couponCode }
         });
       } else {
-        navigate(promo.route);
+        navigate(promo.route, { state: { promoCoupon: promo.couponCode } });
       }
+      return;
+    }
+
+    // If no target category was configured, default to machinery explorer
+    if (promo.couponCode) {
+      toastManager.success(`Offer "${promo.couponCode}" will auto-apply at checkout!`);
+      navigate('/user/machinery-explorer');
     }
   };
 
@@ -577,6 +594,8 @@ const Home = () => {
                       image: toAssetUrl(promo.imageUrl),
                       targetCategoryId: promo.targetCategoryId,
                       slug: promo.slug,
+                      couponCode: promo.couponCode || null,
+                      couponId: promo.couponId || null,
                       scrollToSection: promo.scrollToSection,
                       order: promo.order || 0,
                       route: null

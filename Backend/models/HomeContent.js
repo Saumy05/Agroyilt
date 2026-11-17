@@ -41,6 +41,16 @@ const homeContentSchema = new mongoose.Schema({
       type: String,
       default: ''
     },
+    couponCode: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    couponId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Coupon',
+      default: null
+    },
     order: {
       type: Number,
       default: 0
@@ -87,6 +97,16 @@ const homeContentSchema = new mongoose.Schema({
     scrollToSection: {
       type: String,
       default: ''
+    },
+    couponCode: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    couponId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Coupon',
+      default: null
     },
     order: {
       type: Number,

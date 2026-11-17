@@ -128,6 +128,7 @@ const PromoCarousel = memo(({ promos, onPromoClick }) => {
               subtitle={promo.subtitle}
               buttonText={promo.buttonText}
               image={promo.image}
+              couponCode={promo.couponCode}
               className={promo.className}
               onClick={() => onPromoClick?.(promo)}
             />

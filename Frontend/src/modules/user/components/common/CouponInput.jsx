@@ -18,6 +18,18 @@ const CouponInput = ({
   const [availableCoupons, setAvailableCoupons] = useState([]);
   const [loadingOffers, setLoadingOffers] = useState(false);
 
+  // Auto-apply pending coupon from promo card click (Solution 2)
+  useEffect(() => {
+    if (appliedCoupon) return;
+    try {
+      const pendingCode = sessionStorage.getItem('agroyilt_auto_coupon');
+      if (pendingCode && bookingAmount > 0) {
+        sessionStorage.removeItem('agroyilt_auto_coupon');
+        handleApply(pendingCode);
+      }
+    } catch (_) {}
+  }, [bookingAmount, appliedCoupon]);
+
   const handleApply = async (codeToApply = null) => {
     const targetCode = (codeToApply || code || '').trim().toUpperCase();
     if (!targetCode) {

@@ -89,6 +89,8 @@ const updateHomeContent = async (req, res) => {
         if (newItem.seeAllTargetCategoryId === '') newItem.seeAllTargetCategoryId = null;
         if (newItem.targetServiceId === '') newItem.targetServiceId = null;
         if (newItem.seeAllTargetServiceId === '') newItem.seeAllTargetServiceId = null;
+        if (newItem.couponId === '') newItem.couponId = null;
+        if (newItem.couponCode) newItem.couponCode = String(newItem.couponCode).trim().toUpperCase();
 
         // Handle nested cards in categorySections
         if (Array.isArray(newItem.cards)) {
