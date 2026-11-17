@@ -2,9 +2,9 @@ const { TranslationServiceClient } = require('@google-cloud/translate');
 
 /**
  * Google Cloud Translate Client Configuration
- * Uses API Key from environment variables
+ * Uses API Key from environment variables (falls back to GOOGLE_MAPS_API_KEY)
  */
-const GOOGLE_TRANSLATE_API_KEY = process.env.GOOGLE_TRANSLATE_API_KEY;
+const GOOGLE_TRANSLATE_API_KEY = process.env.GOOGLE_TRANSLATE_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
 
 const languageCodeMap = {
   'en': 'en',

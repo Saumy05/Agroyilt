@@ -2,6 +2,7 @@ import React, { useEffect } from 'react'; // Updated index to .jsx
 import { BrowserRouter } from 'react-router-dom';
 import toast, { Toaster, useToasterStore } from 'react-hot-toast';
 import AppRoutes from './routes';
+import AutoTranslate from './components/AutoTranslate';
 import { SocketProvider } from './context/SocketContext';
 import { CartProvider } from './context/CartContext';
 import { GeoProvider } from './context/GeoContext';
@@ -133,6 +134,7 @@ function App() {
           <GeoProvider>
             <CartProvider>
               <div className="App">
+                <AutoTranslate />
                 <ToastLimiter />
                 <NoInternetScreen />
                 <AppRoutes />

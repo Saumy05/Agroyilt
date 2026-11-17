@@ -3,8 +3,11 @@
  * Implements Google Cloud Translate API with 24-hour in-memory cache
  * Batching and Object translation support
  */
-const axios = require('axios');
+const axiosRaw = require('axios');
+const axios = axiosRaw.default || axiosRaw;
 const { GOOGLE_TRANSLATE_API_KEY, languageCodeMap } = require('../config/googleCloud');
+
+const getApiKey = () => GOOGLE_TRANSLATE_API_KEY || process.env.GOOGLE_TRANSLATE_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
 
 // Simple 24h TTL Cache
 const translationCache = new Map();
@@ -29,13 +32,19 @@ setInterval(cleanupCache, 60 * 60 * 1000);
  * Core Translation Function
  */
 const translateText = async (text, targetLang, sourceLang = 'en') => {
-    if (!text || text.trim() === '') return text;
+    if (!text || typeof text !== 'string' || text.trim() === '') return text;
     if (targetLang === sourceLang) return text;
 
     const cacheKey = `${sourceLang}_${targetLang}_${Buffer.from(text).toString('base64')}`;
     const cached = translationCache.get(cacheKey);
     if (cached && (Date.now() - cached.timestamp < TTL)) {
         return cached.translation;
+    }
+
+    const apiKey = getApiKey();
+    if (!apiKey) {
+        console.warn('[TranslationService] No API key available for translation');
+        return text;
     }
 
     // Exponential Backoff Retry Logic
@@ -45,7 +54,7 @@ const translateText = async (text, targetLang, sourceLang = 'en') => {
 
     while (retries <= maxRetries) {
         try {
-            const url = `https://translation.googleapis.com/language/translate/v2?key=${GOOGLE_TRANSLATE_API_KEY}`;
+            const url = `https://translation.googleapis.com/language/translate/v2?key=${apiKey}`;
             const response = await axios.post(url, {
                 q: text,
                 target: targetLang,
@@ -83,23 +92,62 @@ const translateText = async (text, targetLang, sourceLang = 'en') => {
 };
 
 /**
- * Batch Translation
+ * High-performance Batch Translation
+ * Checks cache first, then groups remaining texts into single API requests (chunks of 50)
  */
 const translateBatch = async (texts, targetLang, sourceLang = 'en') => {
     if (!Array.isArray(texts) || texts.length === 0) return [];
-    
-    // Process unique texts only
-    const uniqueTexts = [...new Set(texts)];
-    const translations = await Promise.all(
-        uniqueTexts.map(text => translateText(text, targetLang, sourceLang))
-    );
+    if (targetLang === sourceLang) return texts;
 
-    const translationMap = uniqueTexts.reduce((acc, text, index) => {
-        acc[text] = translations[index];
-        return acc;
-    }, {});
+    const apiKey = getApiKey();
+    if (!apiKey) return texts;
 
-    return texts.map(text => translationMap[text]);
+    const uniqueTexts = [...new Set(texts.filter(t => t && typeof t === 'string' && t.trim() !== ''))];
+    const translationMap = {};
+    const uncached = [];
+
+    for (const text of uniqueTexts) {
+        const cacheKey = `${sourceLang}_${targetLang}_${Buffer.from(text).toString('base64')}`;
+        const cached = translationCache.get(cacheKey);
+        if (cached && (Date.now() - cached.timestamp < TTL)) {
+            translationMap[text] = cached.translation;
+        } else {
+            uncached.push(text);
+        }
+    }
+
+    // Process uncached texts in chunks of 50 in a single Google Translate API request
+    const CHUNK_SIZE = 50;
+    for (let i = 0; i < uncached.length; i += CHUNK_SIZE) {
+        const chunk = uncached.slice(i, i + CHUNK_SIZE);
+        try {
+            const url = `https://translation.googleapis.com/language/translate/v2?key=${apiKey}`;
+            const response = await axios.post(url, {
+                q: chunk,
+                target: targetLang,
+                source: sourceLang,
+                format: 'text'
+            });
+
+            if (response.data?.data?.translations) {
+                response.data.data.translations.forEach((item, idx) => {
+                    const original = chunk[idx];
+                    const trans = item.translatedText;
+                    translationMap[original] = trans;
+                    if (trans !== original) {
+                        const cacheKey = `${sourceLang}_${targetLang}_${Buffer.from(original).toString('base64')}`;
+                        translationCache.set(cacheKey, { translation: trans, timestamp: Date.now() });
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('[TranslationService Batch] Error translating chunk:', error.message);
+            // Fallback for this chunk to original texts
+            chunk.forEach(t => { translationMap[t] = t; });
+        }
+    }
+
+    return texts.map(text => translationMap[text] || text);
 };
 
 /**

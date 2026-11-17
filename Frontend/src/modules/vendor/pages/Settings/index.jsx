@@ -5,6 +5,7 @@ import { toastManager } from '../../../../utils/toastManager';
 import { vendorTheme as themeColors } from '../../../../theme';
 import { vendorAuthService } from '../../../../services/authService';
 import { registerFCMToken, removeFCMToken } from '../../../../services/pushNotificationService';
+import { useLanguage } from '../../../../context/LanguageContext';
 import api from '../../../../services/api';
 import authStorage from '../../../../utils/authStorage';
 import Header from '../../components/layout/Header';
@@ -14,6 +15,7 @@ import LogoutModal from '../../../../components/common/LogoutModal';
 
 const Settings = () => {
   const navigate = useNavigate();
+  const { currentCode, changeLanguage, activeLanguagesList } = useLanguage();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -118,10 +120,19 @@ const Settings = () => {
     }
   };
 
-  const handleLanguageChange = (lang) => {
+  const handleLanguageChange = async (lang) => {
     const updated = { ...settings, language: lang };
     setSettings(updated);
     localStorage.setItem('vendorSettings', JSON.stringify(updated));
+    changeLanguage(lang);
+    try {
+      await vendorAuthService.updateProfile({
+        settings: { language: lang }
+      });
+    } catch (e) {
+      // Non-fatal if offline
+    }
+    toastManager.success('Language updated');
   };
 
   const handleLogout = async () => {
@@ -282,30 +293,34 @@ const Settings = () => {
             <h3 className="font-bold text-gray-800">Language</h3>
           </div>
 
-          <div className="space-y-2">
-            {[
-              { code: 'en', name: 'English' },
-              { code: 'hi', name: 'हिंदी' },
-            ].map((lang) => (
-              <button
-                key={lang.code}
-                onClick={() => handleLanguageChange(lang.code)}
-                className={`w-full py-3 px-4 rounded-lg text-left transition-all ${settings.language === lang.code
-                  ? 'text-white'
-                  : 'bg-gray-50 text-gray-700'
+          <div className="space-y-2" translate="no">
+            {(activeLanguagesList && activeLanguagesList.length > 0 ? activeLanguagesList : [
+              { code: 'en', name: 'English', nativeName: 'English' },
+              { code: 'hi', name: 'Hindi', nativeName: 'हिंदी' },
+            ]).map((lang) => {
+              const isSelected = (currentCode || settings.language) === lang.code;
+              return (
+                <button
+                  key={lang.code}
+                  type="button"
+                  onClick={() => handleLanguageChange(lang.code)}
+                  className={`w-full py-3 px-4 rounded-lg text-left transition-all flex items-center justify-between cursor-pointer ${
+                    isSelected ? 'text-white font-bold' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
                   }`}
-                style={
-                  settings.language === lang.code
-                    ? {
-                      background: themeColors.button,
-                      boxShadow: `0 2px 8px ${themeColors.button}40`,
-                    }
-                    : {}
-                }
-              >
-                {lang.name}
-              </button>
-            ))}
+                  style={
+                    isSelected
+                      ? {
+                        background: themeColors.button,
+                        boxShadow: `0 2px 8px ${themeColors.button}40`,
+                      }
+                      : {}
+                  }
+                >
+                  <span>{lang.nativeName || lang.name}</span>
+                  {isSelected && <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full font-normal">Active</span>}
+                </button>
+              );
+            })}
           </div>
         </div>
 

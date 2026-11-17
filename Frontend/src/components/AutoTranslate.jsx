@@ -26,6 +26,8 @@ const AutoTranslate = () => {
 
   useEffect(() => {
     if (currentCode === 'en' || typeof document === 'undefined') return undefined;
+    // Don't auto-translate the admin management portal
+    if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')) return undefined;
 
     const target = currentCode;
     const originals = new WeakMap(); // text node -> the English text it had

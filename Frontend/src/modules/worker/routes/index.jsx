@@ -334,8 +334,6 @@ const WorkerRoutes = () => {
 
   return (
     <ErrorBoundary>
-      {/* Follows the language chosen in Settings: translates the English-only screens */}
-      <AutoTranslate />
       {/* Main content area - leaves space for bottom nav when needed */}
       <div className={shouldShowBottomNav ? "pb-24" : ""}>
         <Suspense fallback={<LoadingFallback />}>

@@ -12,7 +12,8 @@ const Header = memo(({
   showBack = true,
   showSearch = false,
   showNotifications = true,
-  notificationCount = 0
+  notificationCount = 0,
+  rightAction = null
 }) => {
   const navigate = useNavigate();
   const [count, setCount] = useState(notificationCount);
@@ -140,6 +141,7 @@ const Header = memo(({
 
         {/* Right: Help Support & Notifications */}
         <div className="flex items-center gap-1.5">
+          {rightAction}
           {!showBack && (
             <button
               onClick={() => navigate('/worker/help-support')}
