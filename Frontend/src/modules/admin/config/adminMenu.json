@@ -72,7 +72,7 @@
     "route": "/admin/bookings",
     "badgeKey": "bookings",
     "childBadges": {
-      "All Bookings": "openBookings",
+      "All Bookings": "pendingBookings",
       "Booking Notifications": "bookingNotifications"
     },
     "allowedRoles": [

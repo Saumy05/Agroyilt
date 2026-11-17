@@ -8,30 +8,71 @@ import {
 import { toastManager } from '../../../../utils/toastManager';
 import { adminBookingService } from '../../../../services/adminBookingService';
 
-const BookingStatsCard = ({ title, count, icon: Icon, colorClass, bgClass, active, onClick }) => (
+const BookingStatsCard = ({ title, subtitle, count, icon: Icon, colorClass, bgClass, active, onClick }) => (
   <button
     type="button"
     onClick={onClick}
-    className={`p-3 rounded-xl border shadow-sm flex items-center justify-between text-left w-full transition-all active:scale-[0.98] hover:shadow-md ${bgClass} ${active ? 'border-gray-800 ring-2 ring-gray-800/20' : 'border-gray-100'}`}
+    className={`p-3 rounded-xl border shadow-2xs flex flex-col justify-between text-left w-full transition-all active:scale-[0.98] hover:shadow-md cursor-pointer ${bgClass} ${
+      active
+        ? 'border-gray-900 ring-2 ring-gray-900/20 shadow-sm'
+        : 'border-gray-200/70 hover:border-gray-300'
+    }`}
   >
-    <div>
-      <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-2 ${colorClass.replace('text-', 'bg-').replace('600', '100')}`}>
-        <Icon className={`w-4 h-4 ${colorClass}`} />
+    <div className="flex items-center justify-between w-full mb-1">
+      <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${colorClass.replace('text-', 'bg-').replace('600', '100').replace('700', '100')}`}>
+        <Icon className={`w-3.5 h-3.5 ${colorClass}`} />
       </div>
-      <h3 className="text-gray-500 text-[10px] font-bold uppercase tracking-wider">{title}</h3>
-      <p className="text-xl font-bold text-gray-800 mt-0.5">{count}</p>
+      <p className="text-lg sm:text-xl font-black text-gray-900 tracking-tight">{count}</p>
     </div>
-    <div className={`w-12 h-12 rounded-full opacity-10 -mr-3 -mb-3 ${colorClass.replace('text-', 'bg-')}`}></div>
+    <div>
+      <h3 className="text-gray-900 text-xs font-bold leading-tight">{title}</h3>
+      {subtitle && <p className="text-[10px] text-gray-500 font-medium leading-tight mt-0.5">{subtitle}</p>}
+    </div>
   </button>
 );
 
 // The cards double as the status filter; the groups of real statuses behind each come from the server
 const STATUS_CARDS = [
-  { key: 'awaiting', title: 'Awaiting', icon: FiClock, bgClass: 'bg-yellow-50', colorClass: 'text-yellow-600' },
-  { key: 'confirmed', title: 'Confirmed', icon: FiCheckCircle, bgClass: 'bg-blue-50', colorClass: 'text-blue-600' },
-  { key: 'inProgress', title: 'In Progress', icon: FiBox, bgClass: 'bg-purple-50', colorClass: 'text-purple-600' },
-  { key: 'completed', title: 'Completed', icon: FiTruck, bgClass: 'bg-green-50', colorClass: 'text-green-600' },
-  { key: 'cancelled', title: 'Cancelled', icon: FiXCircle, bgClass: 'bg-red-50', colorClass: 'text-red-600' }
+  {
+    key: 'awaiting',
+    title: 'Pending Acceptance',
+    subtitle: 'Abhi accept nahi hui',
+    icon: FiClock,
+    bgClass: 'bg-amber-50/70 border-amber-200/80',
+    colorClass: 'text-amber-600'
+  },
+  {
+    key: 'confirmed',
+    title: 'Accepted & Confirmed',
+    subtitle: 'Accept ho chuki hai',
+    icon: FiCheckCircle,
+    bgClass: 'bg-blue-50/70 border-blue-200/80',
+    colorClass: 'text-blue-600'
+  },
+  {
+    key: 'inProgress',
+    title: 'In Progress',
+    subtitle: 'Kaam chal raha hai',
+    icon: FiBox,
+    bgClass: 'bg-purple-50/70 border-purple-200/80',
+    colorClass: 'text-purple-600'
+  },
+  {
+    key: 'completed',
+    title: 'Completed',
+    subtitle: 'Poori ho gayi',
+    icon: FiTruck,
+    bgClass: 'bg-emerald-50/70 border-emerald-200/80',
+    colorClass: 'text-emerald-600'
+  },
+  {
+    key: 'cancelled',
+    title: 'Cancelled / Rejected',
+    subtitle: 'Cancel ya reject',
+    icon: FiXCircle,
+    bgClass: 'bg-red-50/70 border-red-200/80',
+    colorClass: 'text-red-600'
+  }
 ];
 const ALL_STATUS = 'All Status';
 
@@ -164,11 +205,12 @@ const Bookings = () => {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
       {/* Stats Grid: tap a card to filter the list by it */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
         {STATUS_CARDS.map(card => (
           <BookingStatsCard
             key={card.key}
             title={card.title}
+            subtitle={card.subtitle}
             count={counts[card.key] ?? 0}
             icon={card.icon}
             bgClass={card.bgClass}
@@ -179,10 +221,11 @@ const Bookings = () => {
         ))}
         <BookingStatsCard
           title="Total Orders"
+          subtitle="Sabhi bookings"
           count={totalAll}
           icon={FiShoppingBag}
-          bgClass="bg-gray-50"
-          colorClass="text-gray-600"
+          bgClass="bg-slate-50 border-slate-200/80"
+          colorClass="text-slate-700"
           active={statusFilter === ALL_STATUS}
           onClick={() => { setPage(1); setStatusFilter(ALL_STATUS); }}
         />

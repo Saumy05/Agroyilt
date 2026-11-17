@@ -297,7 +297,10 @@ const AdminSidebar = ({ isOpen, onClose }) => {
 
           {/* Badge Display */}
           {counts[item.badgeKey] > 0 && (
-            <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse mr-2">
+            <span
+              title={item.title === 'Bookings' && counts.pendingBookings > 0 ? `${counts.pendingBookings} Pending Acceptance` : undefined}
+              className={`${item.title === 'Bookings' && counts.pendingBookings > 0 ? 'bg-amber-500' : 'bg-red-500'} text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse mr-2`}
+            >
               {counts[item.badgeKey] > 99 ? '99+' : counts[item.badgeKey]}
             </span>
           )}
@@ -342,11 +345,20 @@ const AdminSidebar = ({ isOpen, onClose }) => {
                         }
                       `}>
                       <span>{child}</span>
-                      {counts[item.childBadges?.[child]] > 0 && (
-                        <span className="bg-red-500 text-white text-[10px] h-4 min-w-[18px] px-1.5 flex items-center justify-center rounded-full font-black">
-                          {counts[item.childBadges[child]] > 99 ? '99+' : counts[item.childBadges[child]]}
-                        </span>
-                      )}
+                      {(() => {
+                        const badgeKey = item.childBadges?.[child];
+                        const val = counts[badgeKey] || (child === 'All Bookings' && counts.openBookings > 0 ? counts.openBookings : 0);
+                        if (!val || val <= 0) return null;
+                        const isPending = badgeKey === 'pendingBookings' && counts.pendingBookings > 0;
+                        return (
+                          <span
+                            title={isPending ? `${val} Pending Acceptance` : undefined}
+                            className={`${isPending ? 'bg-amber-500' : 'bg-red-500'} text-white text-[10px] h-4 min-w-[18px] px-1.5 flex items-center justify-center rounded-full font-black shadow-xs`}
+                          >
+                            {val > 99 ? '99+' : val}
+                          </span>
+                        );
+                      })()}
                     </div>
                   );
                 })}

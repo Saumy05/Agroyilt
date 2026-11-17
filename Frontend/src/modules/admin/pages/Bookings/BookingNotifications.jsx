@@ -1,8 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { FiBell, FiCheck, FiX, FiInfo, FiTrash2, FiShoppingBag, FiAlertTriangle, FiExternalLink } from 'react-icons/fi';
+import {
+  FiBell, FiCheck, FiX, FiInfo, FiTrash2, FiShoppingBag,
+  FiAlertTriangle, FiExternalLink, FiClock, FiCheckCircle,
+  FiBox, FiArrowRight, FiRefreshCw
+} from 'react-icons/fi';
 import api from '../../../../services/api';
+import { adminBookingService } from '../../../../services/adminBookingService';
 import { refreshAdminCounts } from '../../utils/adminCounts';
 import { toastManager } from '../../../../utils/toastManager';
 
@@ -11,6 +16,38 @@ const BookingNotifications = () => {
   const [filter, setFilter] = useState('All Types');
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Booking stats overview
+  const [bookingStats, setBookingStats] = useState({
+    awaiting: 0,
+    confirmed: 0,
+    inProgress: 0,
+    completed: 0,
+    cancelled: 0,
+    total: 0
+  });
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  const fetchStatusCounts = useCallback(async () => {
+    try {
+      setStatsLoading(true);
+      const res = await adminBookingService.getAllBookings({ limit: 1 });
+      if (res.success && res.statusCounts) {
+        setBookingStats({
+          awaiting: res.statusCounts.awaiting || 0,
+          confirmed: res.statusCounts.confirmed || 0,
+          inProgress: res.statusCounts.inProgress || 0,
+          completed: res.statusCounts.completed || 0,
+          cancelled: res.statusCounts.cancelled || 0,
+          total: res.pagination?.total || 0
+        });
+      }
+    } catch (err) {
+      console.error('Failed to load status counts in notifications:', err);
+    } finally {
+      setStatsLoading(false);
+    }
+  }, []);
 
   const fetchBookingNotifications = useCallback(async () => {
     try {
@@ -41,7 +78,8 @@ const BookingNotifications = () => {
 
   useEffect(() => {
     fetchBookingNotifications();
-  }, [fetchBookingNotifications]);
+    fetchStatusCounts();
+  }, [fetchBookingNotifications, fetchStatusCounts]);
 
   const unreadCount = notifications.filter((n) => n.unread).length;
 
@@ -133,6 +171,94 @@ const BookingNotifications = () => {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+      {/* Live Booking Status Overview Strip */}
+      <div className="bg-white p-3.5 sm:p-4 rounded-xl shadow-2xs border border-gray-100">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <h2 className="text-xs sm:text-sm font-bold text-gray-800">Booking Status Overview</h2>
+            <span className="text-[10px] text-gray-400 font-medium hidden sm:inline">• Live counts</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate('/admin/bookings')}
+            className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+          >
+            <span>All Bookings</span>
+            <FiArrowRight className="w-3 h-3" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          {/* Awaiting / Pending Acceptance */}
+          <div
+            onClick={() => navigate('/admin/bookings')}
+            className="p-3 rounded-xl bg-amber-50/70 border border-amber-200/80 hover:border-amber-300 transition-all cursor-pointer group"
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-bold text-amber-900">Pending</span>
+              <div className="w-6 h-6 rounded-md bg-amber-200/60 flex items-center justify-center text-amber-700">
+                <FiClock className="w-3.5 h-3.5" />
+              </div>
+            </div>
+            <p className="text-lg sm:text-xl font-black text-amber-900">
+              {statsLoading ? '...' : bookingStats.awaiting}
+            </p>
+            <p className="text-[10px] text-amber-700 font-medium">Abhi accept nahi hui</p>
+          </div>
+
+          {/* Accepted & Confirmed */}
+          <div
+            onClick={() => navigate('/admin/bookings')}
+            className="p-3 rounded-xl bg-blue-50/70 border border-blue-200/80 hover:border-blue-300 transition-all cursor-pointer group"
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-bold text-blue-900">Accepted</span>
+              <div className="w-6 h-6 rounded-md bg-blue-200/60 flex items-center justify-center text-blue-700">
+                <FiCheckCircle className="w-3.5 h-3.5" />
+              </div>
+            </div>
+            <p className="text-lg sm:text-xl font-black text-blue-900">
+              {statsLoading ? '...' : bookingStats.confirmed}
+            </p>
+            <p className="text-[10px] text-blue-700 font-medium">Accept ho chuki hai</p>
+          </div>
+
+          {/* In Progress */}
+          <div
+            onClick={() => navigate('/admin/bookings')}
+            className="p-3 rounded-xl bg-purple-50/70 border border-purple-200/80 hover:border-purple-300 transition-all cursor-pointer group"
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-bold text-purple-900">In Progress</span>
+              <div className="w-6 h-6 rounded-md bg-purple-200/60 flex items-center justify-center text-purple-700">
+                <FiBox className="w-3.5 h-3.5" />
+              </div>
+            </div>
+            <p className="text-lg sm:text-xl font-black text-purple-900">
+              {statsLoading ? '...' : bookingStats.inProgress}
+            </p>
+            <p className="text-[10px] text-purple-700 font-medium">Kaam chal raha hai</p>
+          </div>
+
+          {/* Total Orders */}
+          <div
+            onClick={() => navigate('/admin/bookings')}
+            className="p-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-slate-300 transition-all cursor-pointer group"
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-bold text-slate-800">Total Bookings</span>
+              <div className="w-6 h-6 rounded-md bg-slate-200/70 flex items-center justify-center text-slate-700">
+                <FiShoppingBag className="w-3.5 h-3.5" />
+              </div>
+            </div>
+            <p className="text-lg sm:text-xl font-black text-slate-900">
+              {statsLoading ? '...' : bookingStats.total}
+            </p>
+            <p className="text-[10px] text-slate-500 font-medium">Kul orders</p>
+          </div>
+        </div>
+      </div>
+
       {/* Controls Bar */}
       <div className="bg-white p-3.5 rounded-xl shadow-2xs border border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-3">
         <div>

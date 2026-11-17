@@ -422,6 +422,8 @@ const getSidebarCounts = async (req, res) => {
       vendors,
       workers,
       openBookings,
+      pendingBookings,
+      acceptedBookings,
       machinery,
       disputes,
       support,
@@ -435,8 +437,29 @@ const getSidebarCounts = async (req, res) => {
       User.countDocuments(scoped('user', { approvalStatus: 'pending', isMpinSet: true })),
       Vendor.countDocuments(scoped('vendor', { approvalStatus: VENDOR_STATUS.PENDING, isActive: true, isMpinSet: true })),
       Worker.countDocuments(scoped('worker', { approvalStatus: 'pending', isMpinSet: true })),
-      // Open bookings (not completed / cancelled), same definition the sidebar used before
-      Booking.countDocuments(scoped('booking', { status: { $nin: [BOOKING_STATUS.COMPLETED, BOOKING_STATUS.CANCELLED] } })),
+      // Open bookings (not completed, cancelled or rejected)
+      Booking.countDocuments(scoped('booking', { status: { $nin: [BOOKING_STATUS.COMPLETED, BOOKING_STATUS.CANCELLED, BOOKING_STATUS.REJECTED] } })),
+      // Pending/Unaccepted bookings (awaiting vendor acceptance / admin review)
+      Booking.countDocuments(scoped('booking', {
+        status: {
+          $in: [
+            BOOKING_STATUS.SEARCHING,
+            BOOKING_STATUS.REQUESTED,
+            BOOKING_STATUS.AWAITING_PAYMENT,
+            BOOKING_STATUS.PENDING
+          ]
+        }
+      })),
+      // Confirmed/Accepted bookings
+      Booking.countDocuments(scoped('booking', {
+        status: {
+          $in: [
+            BOOKING_STATUS.CONFIRMED,
+            BOOKING_STATUS.ACCEPTED,
+            BOOKING_STATUS.ASSIGNED
+          ]
+        }
+      })),
       VendorEquipment.countDocuments({ status: 'pending' }),
       // New disputes nobody has picked up yet ('pending' is the legacy alias of OPEN)
       Dispute.countDocuments({ status: { $in: ['OPEN', 'pending'] } }),
@@ -457,8 +480,8 @@ const getSidebarCounts = async (req, res) => {
       })
     ]);
 
-    // Parent bookings badge displays open bookings, or booking notifications if open bookings is 0
-    const bookings = openBookings > 0 ? openBookings : bookingNotifications;
+    // Parent bookings badge: priority to pending/unaccepted bookings (urgent action), then openBookings, then bookingNotifications
+    const bookings = pendingBookings > 0 ? pendingBookings : (openBookings > 0 ? openBookings : bookingNotifications);
 
     res.status(200).json({
       success: true,
@@ -468,6 +491,8 @@ const getSidebarCounts = async (req, res) => {
         workers,
         bookings,
         openBookings,
+        pendingBookings,
+        acceptedBookings,
         machinery,
         disputes,
         support,
