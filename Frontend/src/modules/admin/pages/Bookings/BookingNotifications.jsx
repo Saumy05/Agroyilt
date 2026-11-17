@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiBell, FiCheck, FiX, FiInfo, FiTrash2, FiShoppingBag, FiAlertTriangle } from 'react-icons/fi';
+import { useNavigate } from 'react-router-dom';
+import { FiBell, FiCheck, FiX, FiInfo, FiTrash2, FiShoppingBag, FiAlertTriangle, FiExternalLink } from 'react-icons/fi';
 import api from '../../../../services/api';
 import { refreshAdminCounts } from '../../utils/adminCounts';
 import { toastManager } from '../../../../utils/toastManager';
 
 const BookingNotifications = () => {
+  const navigate = useNavigate();
   const [filter, setFilter] = useState('All Types');
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -115,6 +117,7 @@ const BookingNotifications = () => {
 
   const getIcon = (type) => {
     if (type?.includes('cancel') || type?.includes('reject')) return <FiX className="text-white w-4 h-4" />;
+    if (type?.includes('complete') || type?.includes('done')) return <FiCheck className="text-white w-4 h-4" />;
     if (type?.includes('payment') || type?.includes('due')) return <FiAlertTriangle className="text-white w-4 h-4" />;
     if (type?.includes('create') || type?.includes('request') || type?.includes('confirm')) return <FiShoppingBag className="text-white w-4 h-4" />;
     return <FiInfo className="text-white w-4 h-4" />;
@@ -122,6 +125,7 @@ const BookingNotifications = () => {
 
   const getGradient = (type) => {
     if (type?.includes('cancel') || type?.includes('reject')) return 'bg-gradient-to-br from-red-500 to-rose-600 shadow-red-500/20';
+    if (type?.includes('complete') || type?.includes('done')) return 'bg-gradient-to-br from-emerald-500 to-green-600 shadow-emerald-500/20';
     if (type?.includes('payment') || type?.includes('due')) return 'bg-gradient-to-br from-amber-500 to-orange-600 shadow-amber-500/20';
     if (type?.includes('create') || type?.includes('request') || type?.includes('confirm')) return 'bg-gradient-to-br from-blue-500 to-indigo-600 shadow-blue-500/20';
     return 'bg-gradient-to-br from-gray-500 to-slate-600 shadow-gray-500/20';
@@ -139,6 +143,7 @@ const BookingNotifications = () => {
           >
             <option value="All Types">All Types</option>
             <option value="new_booking">New Bookings</option>
+            <option value="completed">Completed</option>
             <option value="cancelled">Cancelled</option>
             <option value="payment_failed">Payment Issues</option>
           </select>
@@ -190,9 +195,18 @@ const BookingNotifications = () => {
                           {cleanTitle(notification.title)}
                         </h3>
                         {notification.bookingId && notification.bookingId !== 'Booking' && (
-                          <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 ml-1">
-                            {notification.bookingId}
-                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/admin/bookings/${notification.bookingId}`);
+                            }}
+                            className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded border border-blue-100 transition-colors cursor-pointer ml-1"
+                            title="View Booking"
+                          >
+                            <span>{notification.bookingId}</span>
+                            <FiExternalLink className="w-2.5 h-2.5 opacity-60" />
+                          </button>
                         )}
                       </div>
                       <p className="text-[11px] sm:text-xs text-gray-600 leading-snug">{notification.message}</p>

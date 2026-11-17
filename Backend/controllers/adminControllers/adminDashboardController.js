@@ -446,11 +446,12 @@ const getSidebarCounts = async (req, res) => {
       Settlement.countDocuments({ status: 'pending' }),
       // Unread notifications for this admin
       Notification.countDocuments({ adminId, isRead: false }),
-      // Unread booking notifications & alerts
+      // Unread booking notifications & alerts for this admin
       Notification.countDocuments({
+        adminId,
         $or: [
           { type: { $regex: 'booking' } },
-          { relatedType: { $in: ['Booking', 'WorkerBookingRequest'] } }
+          { relatedType: { $in: ['Booking', 'booking', 'WorkerBookingRequest'] } }
         ],
         isRead: false
       })

@@ -1356,6 +1356,17 @@ const createBooking = async (req, res) => {
       }
     }
 
+    try {
+      const { notifyBookingCreated } = require('../../services/adminBookingNotifier');
+      notifyBookingCreated({
+        booking,
+        customerName: user.name,
+        serviceTitle: service?.title || 'Equipment Service'
+      });
+    } catch (adminNotifErr) {
+      console.warn('[CreateBooking] Failed to notify admins:', adminNotifErr.message);
+    }
+
     res.status(201).json({
       success: true,
       message: hasTargetVendor 
@@ -1959,6 +1970,17 @@ const cancelBooking = async (req, res) => {
       } catch (vErr) {
         console.warn('[cancelBooking] Error syncing vendor cancellation (non-fatal):', vErr.message);
       }
+    }
+
+    try {
+      const { notifyBookingCancelled } = require('../../services/adminBookingNotifier');
+      notifyBookingCancelled({
+        booking,
+        reason,
+        cancelledBy: req.user?.name || 'Farmer'
+      });
+    } catch (adminNotifErr) {
+      console.warn('[cancelBooking] Failed to notify admins:', adminNotifErr.message);
     }
 
     res.status(200).json({

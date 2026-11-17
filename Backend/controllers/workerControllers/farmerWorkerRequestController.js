@@ -3892,6 +3892,17 @@ const announceConfirmation = async ({ request, assignments, bookings, method }) 
     status: 'confirmed', paymentMethod: isCash ? 'cash' : 'online', serverTimestamp: new Date()
   });
   emitSafe(`user_${farmerId}`, 'userBookingsUpdated', {});
+
+  try {
+    const { notifyWorkerBookingConfirmed } = require('../../services/adminBookingNotifier');
+    notifyWorkerBookingConfirmed({
+      request,
+      workerCount: assignments.length,
+      amount: bookings.reduce((sum, b) => sum + (b.totalAmount || 0), 0)
+    });
+  } catch (adminNotifErr) {
+    console.warn('[announceConfirmation] Failed to notify admins:', adminNotifErr.message);
+  }
 };
 exports.announceConfirmation = announceConfirmation;
 

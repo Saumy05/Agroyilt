@@ -1063,6 +1063,16 @@ exports.workerCompleteJob = async (req, res) => {
       status: BOOKING_STATUS.COMPLETED
     });
 
+    try {
+      const { notifyBookingCompleted } = require('../../services/adminBookingNotifier');
+      notifyBookingCompleted({
+        booking,
+        totalAmount: booking.totalAmount
+      });
+    } catch (adminNotifErr) {
+      console.warn('[trackingVerifyOtp] Failed to notify admins:', adminNotifErr.message);
+    }
+
     return res.json({
       success: true,
       message: 'Job completed and payment settled successfully.',
