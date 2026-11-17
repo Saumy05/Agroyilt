@@ -2,6 +2,7 @@ const Category = require('../../models/Category');
 const Brand = require('../../models/Brand');
 const Service = require('../../models/Service');
 const HomeContent = require('../../models/HomeContent');
+const Coupon = require('../../models/Coupon');
 
 /**
  * Public Catalog Controllers
@@ -470,21 +471,54 @@ const getPublicHomeContent = async (req, res) => {
 
     const contentObj = homeContent.toObject();
 
+    // Auto-hide banners & promos if their linked coupon is inactive, deleted, or expired
+    const couponCodesToValidate = [
+      ...(contentObj.banners || []).map(b => b.couponCode).filter(Boolean),
+      ...(contentObj.promos || []).map(p => p.couponCode).filter(Boolean)
+    ];
+
+    let validCouponCodes = new Set();
+    if (couponCodesToValidate.length > 0) {
+      const now = new Date();
+      const activeCoupons = await Coupon.find({
+        code: { $in: couponCodesToValidate.map(c => String(c).trim().toUpperCase()) },
+        isActive: true,
+        isDeleted: { $ne: true },
+        $or: [
+          { endDate: null },
+          { endDate: { $gte: now } }
+        ]
+      }).select('code').lean();
+
+      validCouponCodes = new Set(activeCoupons.map(c => c.code.toUpperCase()));
+    }
+
+    // Helper: items without a couponCode stay visible (general promos).
+    // Items WITH a couponCode only show if the coupon is currently active & not expired!
+    const isCouponItemValid = (item) => {
+      if (!item.couponCode) return true;
+      return validCouponCodes.has(String(item.couponCode).trim().toUpperCase());
+    };
+
     const formattedContent = {
-      banners: (contentObj.banners || []).map(item => ({
-        ...item,
-        id: item._id ? item._id.toString() : item.id,
-        targetCategoryId: item.targetCategoryId?.toString() || null,
-        targetServiceId: item.targetServiceId?.toString() || null,
-      })),
-      promos: (contentObj.promos || []).map(item => ({
-        ...item,
-        id: item._id ? item._id.toString() : item.id,
-        targetCategoryId: item.targetCategoryId?.toString() || null,
-        targetServiceId: item.targetServiceId?.toString() || null,
-        couponId: item.couponId ? item.couponId.toString() : null,
-        couponCode: item.couponCode || null
-      })),
+      banners: (contentObj.banners || [])
+        .filter(isCouponItemValid)
+        .map(item => ({
+          ...item,
+          id: item._id ? item._id.toString() : item.id,
+          targetCategoryId: item.targetCategoryId?.toString() || null,
+          targetServiceId: item.targetServiceId?.toString() || null,
+        })),
+      promos: (contentObj.promos || [])
+        .filter(isCouponItemValid)
+        .map(item => ({
+          ...item,
+          id: item._id ? item._id.toString() : item.id,
+          targetCategoryId: item.targetCategoryId?.toString() || null,
+          targetServiceId: item.targetServiceId?.toString() || null,
+          couponId: item.couponId ? item.couponId.toString() : null,
+          couponCode: item.couponCode || null
+        })),
       curated: (contentObj.curated || []).map(item => ({
         ...item,
         id: item._id ? item._id.toString() : item.id,

@@ -160,17 +160,38 @@ const HomePage = ({ catalog, setCatalog, selectedCity }) => {
     couponId: ""
   });
   const [editingPromoId, setEditingPromoId] = useState(null);
+  const [allCoupons, setAllCoupons] = useState([]);
   const [availableCoupons, setAvailableCoupons] = useState([]);
 
   useEffect(() => {
     couponService.getAdminCoupons()
       .then(res => {
         if (res.success && Array.isArray(res.coupons)) {
-          setAvailableCoupons(res.coupons.filter(c => c.isActive && !c.isDeleted));
+          setAllCoupons(res.coupons);
+          const now = new Date();
+          setAvailableCoupons(
+            res.coupons.filter(c => c.isActive && !c.isDeleted && (!c.endDate || new Date(c.endDate) >= now))
+          );
         }
       })
       .catch(err => console.warn('Could not load coupons in admin HomePage:', err));
   }, []);
+
+  const getCouponStatus = (code) => {
+    if (!code) return null;
+    const clean = String(code).trim().toUpperCase();
+    const coupon = allCoupons.find(c => c.code?.toUpperCase() === clean);
+    if (!coupon || coupon.isDeleted) {
+      return { status: 'deleted', label: 'Deleted', isAvailable: false };
+    }
+    if (!coupon.isActive) {
+      return { status: 'inactive', label: 'Inactive', isAvailable: false };
+    }
+    if (coupon.endDate && new Date(coupon.endDate) < new Date()) {
+      return { status: 'expired', label: 'Expired', isAvailable: false };
+    }
+    return { status: 'active', label: 'Active', isAvailable: true };
+  };
 
   const [isCuratedModalOpen, setIsCuratedModalOpen] = useState(false);
   const [curatedForm, setCuratedForm] = useState({ title: "", gifUrl: "", youtubeUrl: "" });
@@ -878,13 +899,30 @@ const HomePage = ({ catalog, setCatalog, selectedCity }) => {
                       </td>
                       <td className="py-2.5 px-3">
                         <div className="text-sm font-semibold text-gray-900">{p.title || "—"}</div>
-                        {p.couponCode && (
-                          <div className="inline-flex items-center gap-1 text-[10px] font-black text-amber-800 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-md mt-1">
-                            <span>🎟️</span>
-                            <span>{p.couponCode}</span>
-                            <span className="text-[9px] text-amber-600 font-semibold">• Auto-apply</span>
-                          </div>
-                        )}
+                        {p.couponCode && (() => {
+                          const couponStatus = getCouponStatus(p.couponCode);
+                          if (!couponStatus || couponStatus.isAvailable) {
+                            return (
+                              <div className="inline-flex items-center gap-1 text-[10px] font-black text-emerald-800 bg-emerald-50 border border-emerald-300 px-2 py-0.5 rounded-md mt-1">
+                                <span>🎟️</span>
+                                <span>{p.couponCode}</span>
+                                <span className="text-[9px] text-emerald-600 font-semibold">• Active (Auto-apply)</span>
+                              </div>
+                            );
+                          }
+                          return (
+                            <div className="flex flex-col gap-0.5 mt-1">
+                              <div className="inline-flex items-center gap-1 text-[10px] font-black text-rose-800 bg-rose-50 border border-rose-300 px-2 py-0.5 rounded-md">
+                                <span>⚠️</span>
+                                <span>{p.couponCode}</span>
+                                <span className="text-[9px] text-rose-600 font-bold uppercase">• {couponStatus.label}</span>
+                              </div>
+                              <span className="text-[9px] font-bold text-rose-600">
+                                (Hidden from users)
+                              </span>
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="py-2.5 px-3">
                         <div className="text-sm text-gray-600">{p.subtitle || "—"}</div>
@@ -1860,7 +1898,7 @@ const HomePage = ({ catalog, setCatalog, selectedCity }) => {
                   setPromoForm((p) => ({ ...p, couponCode: "", couponId: "" }));
                   return;
                 }
-                const found = availableCoupons.find((c) => c.code === code);
+                const found = (allCoupons || []).find((c) => c.code === code);
                 setPromoForm((p) => ({
                   ...p,
                   couponCode: code,
@@ -1874,12 +1912,23 @@ const HomePage = ({ catalog, setCatalog, selectedCity }) => {
               className="w-full px-3.5 py-2.5 border border-amber-300 rounded-lg text-xs font-bold text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer"
             >
               <option value="">None (General Promo / No Coupon)</option>
+              {promoForm.couponCode && !availableCoupons.some(c => c.code === promoForm.couponCode) && (
+                <option value={promoForm.couponCode} className="text-rose-600 font-bold">
+                  {promoForm.couponCode} (⚠️ Inactive or Expired in Coupons & Offers)
+                </option>
+              )}
               {availableCoupons.map((coupon) => (
                 <option key={coupon._id || coupon.code} value={coupon.code}>
                   {coupon.code} — {coupon.discountType === 'PERCENTAGE' ? `${coupon.discountValue}% OFF` : `₹${coupon.discountValue} FLAT OFF`} ({coupon.title})
                 </option>
               ))}
             </select>
+            {promoForm.couponCode && !availableCoupons.some(c => c.code === promoForm.couponCode) && (
+              <div className="flex items-center gap-2 p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-[11px] font-bold">
+                <span>⚠️</span>
+                <span>This coupon is currently inactive or expired. This promo will remain automatically hidden from users until re-activated or replaced.</span>
+              </div>
+            )}
           </div>
           <RedirectionSelector
             categories={categories}
