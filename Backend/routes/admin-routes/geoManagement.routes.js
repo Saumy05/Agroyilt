@@ -45,7 +45,7 @@ const { authenticate } = require('../../middleware/authMiddleware');
 const { isSuperAdmin } = require('../../middleware/roleMiddleware');
 
 // All routes require Super Admin
-router.use(authenticate, isSuperAdmin);
+router.use(['/states', '/districts', '/sub-districts'], authenticate, isSuperAdmin);
 
 // ── States ──────────────────────────────────────────────────────────────────
 router.route('/states')

@@ -294,6 +294,7 @@ adminSchema.methods.toPublicJSON = function () {
     cityId: this.cityId,
     cityName: this.cityName,
     permissions: this.permissions || {},
+    salary: this.salary || {},
     isActive: this.isActive,
     lastLogin: this.lastLogin,
     createdBy: this.createdBy,

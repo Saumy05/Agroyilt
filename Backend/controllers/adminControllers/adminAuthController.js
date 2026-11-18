@@ -99,6 +99,7 @@ const login = async (req, res) => {
         subDistrictId: admin.subDistrictId,
         subDistrictName: admin.subDistrictName,
         permissions: admin.permissions || {},
+        salary: admin.salary || {},
         profilePhoto: admin.profilePhoto
       },
       ...tokens
@@ -244,6 +245,7 @@ const getProfile = async (req, res) => {
         subDistrictId: admin.subDistrictId,
         subDistrictName: admin.subDistrictName,
         permissions: admin.permissions || {},
+        salary: admin.salary || {},
         profilePhoto: admin.profilePhoto,
         lastLogin: admin.lastLogin,
         createdBy: admin.createdBy,
