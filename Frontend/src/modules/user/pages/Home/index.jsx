@@ -252,23 +252,23 @@ const Home = () => {
               return !s.includes('soil') && !t.includes('soil');
             })
             .map(cat => ({
-            id: cat.id,
-            _id: cat.id,
-            title: cat.title,
-            slug: cat.slug,
-            icon: toAssetUrl(cat.icon),
-            hasSaleBadge: cat.hasSaleBadge,
-            badge: cat.badge,
-            requiresDriver: cat.requiresDriver,
-            sectionType: cat.sectionType || 'General',
-            showOnHome: cat.showOnHome ?? true,
-            homeOrder: cat.homeOrder ?? 0,
-            isAlwaysMain: cat.isAlwaysMain,
-            parentCategory: cat.parentCategory,
-            parentCategories: cat.parentCategories,
-            bookingType: cat.bookingType || (/labour|labor|worker|manpower|service|shramik|majdoor/i.test(cat.title || '') ? 'WORKER' : 'VENDOR'),
-            fulfillmentMode: cat.fulfillmentMode || 'service'
-          }));
+              id: cat.id,
+              _id: cat.id,
+              title: cat.title,
+              slug: cat.slug,
+              icon: toAssetUrl(cat.icon),
+              hasSaleBadge: cat.hasSaleBadge,
+              badge: cat.badge,
+              requiresDriver: cat.requiresDriver,
+              sectionType: cat.sectionType || 'General',
+              showOnHome: cat.showOnHome ?? true,
+              homeOrder: cat.homeOrder ?? 0,
+              isAlwaysMain: cat.isAlwaysMain,
+              parentCategory: cat.parentCategory,
+              parentCategories: cat.parentCategories,
+              bookingType: cat.bookingType || (/labour|labor|worker|manpower|service|shramik|majdoor/i.test(cat.title || '') ? 'WORKER' : 'VENDOR'),
+              fulfillmentMode: cat.fulfillmentMode || 'service'
+            }));
           setCategories(mappedCategories);
           if (mappedCategories.length > 0) hasData = true;
         }
@@ -345,7 +345,7 @@ const Home = () => {
     if (promo.couponCode) {
       try {
         sessionStorage.setItem('agroyilt_auto_coupon', promo.couponCode);
-      } catch (_) {}
+      } catch (_) { }
     }
 
     let cat = null;
@@ -620,39 +620,39 @@ const Home = () => {
 
             {/* Land Lease & Theka Marketplace Banner (SOW #20) */}
             {leaseTypes.anyEnabled && (
-            <motion.section variants={itemVariants} className="px-3.5 sm:px-5 py-1.5">
-              <div
-                onClick={() => navigate('/user/land-lease')}
-                className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-800 via-teal-900 to-[#1b4332] p-3.5 sm:p-4 text-white shadow-xs border border-emerald-700/30 cursor-pointer group hover:shadow-md transition-all"
-              >
-                <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-emerald-400/10 rounded-full blur-xl pointer-events-none" />
-                <div className="flex items-center justify-between relative z-10 gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center text-2xl shrink-0 border border-white/20 group-hover:scale-105 transition-transform">
-                      🌾
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] uppercase font-black tracking-wider text-emerald-300 bg-black/25 px-2 py-0.5 rounded-full border border-emerald-400/20">
-                          Land Lease / Contract
-                        </span>
-                        <span className="text-[10px] font-extrabold text-amber-300 bg-amber-500/20 px-1.5 py-0.5 rounded">New</span>
+              <motion.section variants={itemVariants} className="px-3.5 sm:px-5 py-1.5">
+                <div
+                  onClick={() => navigate('/user/land-lease')}
+                  className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-800 via-teal-900 to-[#1b4332] p-3.5 sm:p-4 text-white shadow-xs border border-emerald-700/30 cursor-pointer group hover:shadow-md transition-all"
+                >
+                  <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-emerald-400/10 rounded-full blur-xl pointer-events-none" />
+                  <div className="flex items-center justify-between relative z-10 gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center text-2xl shrink-0 border border-white/20 group-hover:scale-105 transition-transform">
+                        🌾
                       </div>
-                      <h3 className="text-xs sm:text-sm font-black text-white mt-1 truncate">
-                        Land Lease & Theka Marketplace
-                      </h3>
-                      <p className="text-[10.5px] sm:text-xs text-emerald-100/90 font-medium truncate mt-0.5">
-                        Take or give farmland on Fixed Rent or Crop Share
-                      </p>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] uppercase font-black tracking-wider text-emerald-300 bg-black/25 px-2 py-0.5 rounded-full border border-emerald-400/20">
+                            Land Lease / Contract
+                          </span>
+                          <span className="text-[10px] font-extrabold text-amber-300 bg-amber-500/20 px-1.5 py-0.5 rounded">New</span>
+                        </div>
+                        <h3 className="text-xs sm:text-sm font-black text-white mt-1 truncate">
+                          Land Lease & Theka Marketplace
+                        </h3>
+                        <p className="text-[10.5px] sm:text-xs text-emerald-100/90 font-medium truncate mt-0.5">
+                          Take or give farmland on Fixed Rent or Crop Share
+                        </p>
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="shrink-0 w-8 h-8 rounded-full bg-white/15 flex items-center justify-center group-hover:bg-white group-hover:text-emerald-900 transition-all text-white">
-                    <FiChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                    <div className="shrink-0 w-8 h-8 rounded-full bg-white/15 flex items-center justify-center group-hover:bg-white group-hover:text-emerald-900 transition-all text-white">
+                      <FiChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                    </div>
                   </div>
                 </div>
-              </div>
-            </motion.section>
+              </motion.section>
             )}
 
 
