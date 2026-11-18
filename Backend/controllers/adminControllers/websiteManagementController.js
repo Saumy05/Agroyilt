@@ -1,6 +1,7 @@
 const Blog = require('../../models/Blog');
 const Article = require('../../models/Article');
 const WebsiteReview = require('../../models/WebsiteReview');
+const LandingContent = require('../../models/LandingContent');
 
 // Blog Controllers
 exports.getBlogs = async (req, res) => {
@@ -122,5 +123,80 @@ exports.deleteReview = async (req, res) => {
     res.status(200).json({ success: true, message: "Review deleted" });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ── Landing Page Content Controllers ──────────────────────────────────────────
+
+// @desc    Get Landing Page Content (Public & Admin)
+// @route   GET /api/public/website/landing-content
+// @route   GET /api/admin/website/landing-content
+exports.getLandingContent = async (req, res) => {
+  try {
+    let content = await LandingContent.findOne().lean();
+    if (!content) {
+      content = {
+        hero: {},
+        about: {},
+        problemSolution: {},
+        services: {},
+        workflow: {},
+        videoTutorials: {},
+        ecosystem: {},
+        features: {},
+        testimonials: {},
+        companyDeepDive: {},
+        faq: {},
+        cta: {},
+        footer: {},
+        navbar: {}
+      };
+    }
+    res.status(200).json({ success: true, data: content });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Update Landing Page Content (Admin)
+// @route   PUT /api/admin/website/landing-content
+exports.updateLandingContent = async (req, res) => {
+  try {
+    const updateData = { ...req.body };
+    if (req.user && req.user._id) {
+      updateData.lastUpdatedBy = req.user._id;
+    }
+
+    let content = await LandingContent.findOne();
+    if (content) {
+      const sections = [
+        'hero', 'about', 'problemSolution', 'services', 'workflow',
+        'videoTutorials', 'ecosystem', 'features', 'testimonials',
+        'companyDeepDive', 'faq', 'cta', 'footer', 'navbar'
+      ];
+
+      sections.forEach(sec => {
+        if (updateData[sec] !== undefined) {
+          content[sec] = updateData[sec];
+          content.markModified(sec);
+        }
+      });
+
+      if (updateData.lastUpdatedBy) {
+        content.lastUpdatedBy = updateData.lastUpdatedBy;
+      }
+
+      await content.save();
+    } else {
+      content = await LandingContent.create(updateData);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Landing page content updated successfully',
+      data: content
+    });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
   }
 };

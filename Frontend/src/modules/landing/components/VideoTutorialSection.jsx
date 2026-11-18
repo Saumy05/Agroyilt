@@ -18,6 +18,7 @@ import {
   FiMapPin
 } from 'react-icons/fi';
 import TranslatedText from '../../../components/TranslatedText';
+import { useLandingContent } from '../../../context/LandingContentContext';
 
 const guides = {
   farmer: {
@@ -134,12 +135,32 @@ const guides = {
 };
 
 const VideoTutorialSection = () => {
+  const { content } = useLandingContent();
+  const vt = content?.videoTutorials || {};
+
   const [activeTab, setActiveTab] = useState('farmer');
   const [format, setFormat] = useState('landscape'); // 'landscape' | 'vertical'
   const [isPlaying, setIsPlaying] = useState(false);
   const videoRef = useRef(null);
 
-  const current = guides[activeTab];
+  const defaultCurrent = guides[activeTab];
+  const dynamicGuide = vt.guides?.[activeTab] || {};
+
+  const current = {
+    ...defaultCurrent,
+    badge: dynamicGuide.badge || defaultCurrent.badge,
+    title: dynamicGuide.title || defaultCurrent.title,
+    subtitle: dynamicGuide.subtitle || defaultCurrent.subtitle,
+    duration: dynamicGuide.duration || defaultCurrent.duration,
+    ctaText: dynamicGuide.ctaText || defaultCurrent.ctaText,
+    features: (dynamicGuide.features && dynamicGuide.features.length > 0)
+      ? dynamicGuide.features.map((feat, idx) => ({
+          ...feat,
+          icon: defaultCurrent.features[idx % defaultCurrent.features.length].icon
+        }))
+      : defaultCurrent.features
+  };
+
   const videoSrc = format === 'landscape' ? current.landscapeSrc : current.verticalSrc;
 
   // Reset play state and pause on tab/format switch
@@ -182,7 +203,7 @@ const VideoTutorialSection = () => {
             className="inline-flex items-center space-x-1.5 sm:space-x-2 bg-yellow-400/10 text-yellow-400 border border-yellow-400/25 px-3 sm:px-4 py-1 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-widest mb-3 sm:mb-4 shadow-sm"
           >
             <span className="w-1.5 sm:w-2 h-1.5 sm:h-2 rounded-full bg-yellow-400 animate-pulse" />
-            <span><TranslatedText>Step-by-Step App Video Guides</TranslatedText></span>
+            <span><TranslatedText>{vt.badge || 'Step-by-Step App Video Guides'}</TranslatedText></span>
           </motion.div>
 
           <motion.h2
@@ -192,7 +213,7 @@ const VideoTutorialSection = () => {
             transition={{ delay: 0.1 }}
             className="text-2xl sm:text-3xl md:text-5xl font-black tracking-tight mb-2 sm:mb-4"
           >
-            <TranslatedText>See How AgroYilt Works in Action</TranslatedText>
+            <TranslatedText>{vt.title || 'See How AgroYilt Works in Action'}</TranslatedText>
           </motion.h2>
 
           <motion.p
@@ -203,8 +224,7 @@ const VideoTutorialSection = () => {
             className="text-gray-400 text-xs sm:text-sm md:text-base leading-relaxed"
           >
             <TranslatedText>
-              Watch genuine screen recordings from the AgroYilt app with clear Hindi voiceover.
-              See how easy it is to book machines, hire farm workers, set your daily rates, or register your machinery fleet.
+              {vt.subtitle || 'Watch genuine screen recordings from the AgroYilt app with clear Hindi voiceover. See how easy it is to book machines, hire farm workers, set your daily rates, or register your machinery fleet.'}
             </TranslatedText>
           </motion.p>
         </div>
@@ -329,7 +349,7 @@ const VideoTutorialSection = () => {
                     <FiPlay size={20} className="ml-1 sm:text-[26px]" />
                   </motion.div>
                   <p className="mt-2 sm:mt-3 text-[10px] sm:text-xs font-bold text-white tracking-wide bg-black/60 px-3 py-1 rounded-full">
-                    Click to Play Hindi Guide
+                    <TranslatedText>{vt.playPrompt || 'Click to Play Hindi Guide'}</TranslatedText>
                   </p>
                 </div>
               )}
@@ -405,7 +425,7 @@ const VideoTutorialSection = () => {
                 </motion.div>
               </Link>
               <p className="text-center text-[10px] sm:text-[11px] text-gray-500 mt-2">
-                No credit card required • Available in English & Hindi
+                <TranslatedText>{vt.note || 'No credit card required • Available in English & Hindi'}</TranslatedText>
               </p>
             </div>
           </div>

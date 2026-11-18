@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, useInView } from 'framer-motion';
 import { HiOutlineUser, HiOutlineTruck, HiOutlineShieldCheck } from 'react-icons/hi';
 import { usePageTranslation } from '../../../hooks/usePageTranslation';
+import { useLandingContent } from '../../../context/LandingContentContext';
 
 import farmerImg from '../landing_images/tracter.jpg';
 import ownerImg from '../landing_images/harvester.jpg';
@@ -20,10 +21,23 @@ const StepConnector = ({ isActive }) => (
 );
 
 const WorkflowSection = () => {
+  const { content } = useLandingContent();
+  const wfData = content?.workflow || {};
+
   const [activeTab, setActiveTab] = useState('farmer');
   const [activeStep, setActiveStep] = useState(0);
   const sectionRef = useRef(null);
   const isInView = useInView(sectionRef, { once: true });
+
+  const farmerSteps = Array.isArray(wfData.farmerSteps) && wfData.farmerSteps.length > 0
+    ? wfData.farmerSteps
+    : ["OTP Login", "Select Location", "Search Machine", "Check Slot", "Secure Pay", "Review"];
+  const ownerSteps = Array.isArray(wfData.ownerSteps) && wfData.ownerSteps.length > 0
+    ? wfData.ownerSteps
+    : ["KYC Auth", "List Machine", "Admin Verify", "Get Orders", "Start Work", "Direct Pay"];
+  const adminSteps = Array.isArray(wfData.adminSteps) && wfData.adminSteps.length > 0
+    ? wfData.adminSteps
+    : ["Verify KYC", "Fleet Monitor", "Global Push", "Escrow Pay", "Analytics", "Support"];
 
   // Auto-advance steps
   useEffect(() => {
@@ -36,21 +50,24 @@ const WorkflowSection = () => {
   }, [activeTab, isInView]);
 
   const allTexts = useMemo(() => [
-    "How It Works", "A seamless experience built for India's agriculture ecosystem.",
-    "Farmer Journey", "Owner Journey", "Admin Journey",
-    "OTP Login", "Select Location", "Search Machine", "Check Slot", "Secure Pay", "Review",
-    "KYC Auth", "List Machine", "Admin Verify", "Get Orders", "Start Work", "Direct Pay",
-    "Verify KYC", "Fleet Monitor", "Global Push", "Escrow Pay", "Analytics", "Support",
-    "Integrated with Real-time OTP & GPS Tracking for complete transparency",
+    wfData.title || "How It Works",
+    wfData.subtitle || "A seamless experience built for India's agriculture ecosystem.",
+    wfData.farmerLabel || "Farmer Journey",
+    wfData.ownerLabel || "Owner Journey",
+    wfData.adminLabel || "Admin Journey",
+    ...farmerSteps,
+    ...ownerSteps,
+    ...adminSteps,
+    wfData.transparencyNote || "Integrated with Real-time OTP & GPS Tracking for complete transparency",
     "farmer", "owner", "admin"
-  ], []);
+  ], [wfData, farmerSteps, ownerSteps, adminSteps]);
 
   const { getTranslatedText } = usePageTranslation(allTexts);
 
   const roleConfig = {
-    farmer: { label: getTranslatedText("Farmer Journey"), shortLabel: getTranslatedText("Farmer"), icon: <HiOutlineUser />, color: 'green', image: farmerImg, steps: ["OTP Login", "Select Location", "Search Machine", "Check Slot", "Secure Pay", "Review"] },
-    owner: { label: getTranslatedText("Owner Journey"), shortLabel: getTranslatedText("Owner"), icon: <HiOutlineTruck />, color: 'yellow', image: ownerImg, steps: ["KYC Auth", "List Machine", "Admin Verify", "Get Orders", "Start Work", "Direct Pay"] },
-    admin: { label: getTranslatedText("Admin Journey"), shortLabel: getTranslatedText("Admin"), icon: <HiOutlineShieldCheck />, color: 'blue', image: adminImg, steps: ["Verify KYC", "Fleet Monitor", "Global Push", "Escrow Pay", "Analytics", "Support"] },
+    farmer: { label: getTranslatedText(wfData.farmerLabel || "Farmer Journey"), shortLabel: getTranslatedText("Farmer"), icon: <HiOutlineUser />, color: 'green', image: farmerImg, steps: farmerSteps },
+    owner: { label: getTranslatedText(wfData.ownerLabel || "Owner Journey"), shortLabel: getTranslatedText("Owner"), icon: <HiOutlineTruck />, color: 'yellow', image: ownerImg, steps: ownerSteps },
+    admin: { label: getTranslatedText(wfData.adminLabel || "Admin Journey"), shortLabel: getTranslatedText("Admin"), icon: <HiOutlineShieldCheck />, color: 'blue', image: adminImg, steps: adminSteps },
   };
 
   const colorMap = {
@@ -78,9 +95,9 @@ const WorkflowSection = () => {
           className="mb-5 sm:mb-8 md:mb-10"
         >
           <span className="text-[10px] text-green-400 font-black uppercase tracking-[0.3em]">Platform</span>
-          <h2 className="text-2xl sm:text-3xl md:text-4xl font-black mt-1.5 sm:mt-2 mb-2 sm:mb-3 tracking-tight">{getTranslatedText("How It Works")}</h2>
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-black mt-1.5 sm:mt-2 mb-2 sm:mb-3 tracking-tight">{getTranslatedText(wfData.title || "How It Works")}</h2>
           <p className="text-xs sm:text-sm text-gray-400 max-w-2xl mx-auto font-medium">
-            {getTranslatedText("A seamless experience built for India's agriculture ecosystem.")}
+            {getTranslatedText(wfData.subtitle || "A seamless experience built for India's agriculture ecosystem.")}
           </p>
         </motion.div>
 
@@ -196,7 +213,7 @@ const WorkflowSection = () => {
                 {/* Footer note */}
                 <div className="flex items-center space-x-2 sm:space-x-3 text-gray-500 pt-3 sm:pt-4 border-t border-gray-800">
                   <HiOutlineShieldCheck size={16} className="text-green-500 flex-shrink-0" />
-                  <p className="text-[9px] sm:text-[10px] font-medium italic">{getTranslatedText("Integrated with Real-time OTP & GPS Tracking for complete transparency")}</p>
+                  <p className="text-[9px] sm:text-[10px] font-medium italic">{getTranslatedText(wfData.transparencyNote || "Integrated with Real-time OTP & GPS Tracking for complete transparency")}</p>
                 </div>
               </div>
             </motion.div>

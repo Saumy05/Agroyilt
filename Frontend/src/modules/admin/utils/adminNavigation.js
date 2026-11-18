@@ -61,6 +61,7 @@ export const getChildRoute = (parentRoute, childName) => {
       "Worker Dues": "/admin/settlements/worker-dues",
     },
     "/admin/manage-website": {
+      "Landing Page": "/admin/manage-website/landing-page",
       "Blogs": "/admin/manage-website/blogs",
       "Articles": "/admin/manage-website/articles",
       "Reviews": "/admin/manage-website/reviews",

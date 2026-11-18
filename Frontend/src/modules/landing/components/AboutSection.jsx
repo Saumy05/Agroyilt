@@ -11,6 +11,7 @@ import {
 } from 'react-icons/fi';
 import TranslatedText from '../../../components/TranslatedText';
 import axios from 'axios';
+import { useLandingContent } from '../../../context/LandingContentContext';
 
 const getYouTubeEmbedUrl = (url) => {
     if (!url) return null;
@@ -22,6 +23,8 @@ const getYouTubeEmbedUrl = (url) => {
 };
 
 const AboutSection = () => {
+    const { content } = useLandingContent();
+    const aboutData = content?.about || {};
     const [aboutContent, setAboutContent] = useState(null);
     const API_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
@@ -38,38 +41,47 @@ const AboutSection = () => {
         };
         fetchAbout();
     }, []);
-    const services = [
+
+    const serviceIcons = [
+        <FiTruck className="text-green-600" size={24} />,
+        <FiShoppingBag className="text-orange-500" size={24} />,
+        <FiWind className="text-blue-500" size={24} />,
+        <FiSettings className="text-red-500" size={24} />,
+        <FiDroplet className="text-cyan-500" size={24} />,
+        <FiSun className="text-yellow-500" size={24} />
+    ];
+
+    const defaultServices = [
         {
-            icon: <FiTruck className="text-green-600" size={24} />,
             title: "Tractor & Harvester Booking",
             desc: "Get tractors, harvesters, threshers, sprayers, cultivators, and rotavators on rent."
         },
         {
-            icon: <FiShoppingBag className="text-orange-500" size={24} />,
             title: "Seeds & Fertilizer Ordering",
             desc: "Order farm items easily from nearby shops"
         },
         {
-            icon: <FiWind className="text-blue-500" size={24} />,
             title: "Drone & Modern Farming Services",
             desc: "Access new farming technology and equipment."
         },
         {
-            icon: <FiSettings className="text-red-500" size={24} />,
             title: "Heavy Machinary",
             desc: "Book heavy machines like Jcb, cranes, dumpers, loaders, drilling machines."
         },
         {
-            icon: <FiDroplet className="text-cyan-500" size={24} />,
             title: "Borewell Services",
             desc: "Get borewll services when needed"
         },
         {
-            icon: <FiSun className="text-yellow-500" size={24} />,
             title: "Weather & Farming Support",
             desc: "Get useful updates and support for better planning."
         }
     ];
+
+    const services = (aboutData.services && aboutData.services.length > 0 ? aboutData.services : defaultServices).map((s, idx) => ({
+        ...s,
+        icon: serviceIcons[idx % serviceIcons.length]
+    }));
 
     return (
         <section id="about" className="py-8 sm:py-14 md:py-20 bg-white overflow-hidden">
@@ -81,7 +93,7 @@ const AboutSection = () => {
                         viewport={{ once: true }}
                     >
                         <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-gray-900 mb-4 sm:mb-6">
-                            <TranslatedText>{aboutContent ? aboutContent.title : "About AgroYilt"}</TranslatedText>
+                            <TranslatedText>{aboutContent?.title || aboutData.title || "About AgroYilt"}</TranslatedText>
                         </h2>
                         {aboutContent && aboutContent.content ? (
                             <div className="space-y-4 text-sm sm:text-base md:text-lg text-gray-600 leading-relaxed whitespace-pre-line">
@@ -91,12 +103,12 @@ const AboutSection = () => {
                             <div className="space-y-4 text-sm sm:text-base md:text-lg text-gray-600 leading-relaxed">
                                 <p>
                                     <TranslatedText>
-                                        AgroYilt is made to help farmers with daily farming needs in one place. They can also book tractors, harvesters, rotavators, drones, JCB, borewell machines, and other equipment on rent.
+                                        {aboutData.p1 || "AgroYilt is made to help farmers with daily farming needs in one place. They can also book tractors, harvesters, rotavators, drones, JCB, borewell machines, and other equipment on rent."}
                                     </TranslatedText>
                                 </p>
                                 <p>
                                     <TranslatedText>
-                                        Farmers can order seeds, fertilizers, and other farm items from nearby shops. AgroYilt aims to make farming work easy, fast, and on time with useful support and modern technology.
+                                        {aboutData.p2 || "Farmers can order seeds, fertilizers, and other farm items from nearby shops. AgroYilt aims to make farming work easy, fast, and on time with useful support and modern technology."}
                                     </TranslatedText>
                                 </p>
                             </div>
@@ -185,7 +197,7 @@ const AboutSection = () => {
                     <div className="mb-10 sm:mb-16 md:mb-20">
                         <div className="text-center mb-6">
                             <h3 className="text-xl sm:text-2xl md:text-3xl font-black text-gray-900">
-                                <TranslatedText>Watch & Learn</TranslatedText>
+                                <TranslatedText>{aboutData.watchLearnTitle || "Watch & Learn"}</TranslatedText>
                             </h3>
                         </div>
                         <div className={`grid grid-cols-1 ${aboutContent?.videos?.length > 1 ? 'md:grid-cols-2 lg:grid-cols-2' : 'max-w-3xl mx-auto'} gap-5 sm:gap-8`}>
@@ -278,7 +290,7 @@ const AboutSection = () => {
                 <div>
                     <div className="text-center mb-6 md:mb-10">
                         <h3 className="text-2xl sm:text-3xl font-black text-gray-900">
-                            <TranslatedText>Our Services</TranslatedText>
+                            <TranslatedText>{aboutData.servicesTitle || "Our Services"}</TranslatedText>
                         </h3>
                     </div>
 

@@ -6,6 +6,7 @@ import {
 } from 'react-icons/hi';
 import { FiZap, FiSmartphone, FiCheckCircle, FiBox } from 'react-icons/fi';
 import { usePageTranslation } from '../../../hooks/usePageTranslation';
+import { useLandingContent } from '../../../context/LandingContentContext';
 
 // ─────────────── STATIC DATA (never needs updating) ───────────────
 
@@ -296,17 +297,45 @@ const RoleCard = ({ role, idx, t }) => {
 // ─────────────── MAIN COMPONENT ───────────────
 
 const EcosystemFlow = () => {
+  const { content } = useLandingContent();
+  const eco = content?.ecosystem || {};
+
+  const journeySteps = useMemo(() => {
+    if (eco.steps && eco.steps.length > 0) {
+      return eco.steps.map((step, idx) => ({
+        ...JOURNEY_STEPS[idx % JOURNEY_STEPS.length],
+        id: idx + 1,
+        actor: step.actor || JOURNEY_STEPS[idx % JOURNEY_STEPS.length].actor,
+        action: step.action || JOURNEY_STEPS[idx % JOURNEY_STEPS.length].action,
+        detail: step.detail || JOURNEY_STEPS[idx % JOURNEY_STEPS.length].detail
+      }));
+    }
+    return JOURNEY_STEPS;
+  }, [eco.steps]);
+
+  const ecosystemRoles = useMemo(() => {
+    if (eco.roles && eco.roles.length > 0) {
+      return eco.roles.map((r, idx) => ({
+        ...ECOSYSTEM_ROLES[idx % ECOSYSTEM_ROLES.length],
+        role: r.role || ECOSYSTEM_ROLES[idx % ECOSYSTEM_ROLES.length].role,
+        points: (r.points && r.points.length > 0) ? r.points : ECOSYSTEM_ROLES[idx % ECOSYSTEM_ROLES.length].points
+      }));
+    }
+    return ECOSYSTEM_ROLES;
+  }, [eco.roles]);
+
   const allTexts = useMemo(() => [
-    'How It Actually Works',
-    'From Request to',
-    'Completion',
-    'A 6-step transparent journey — designed so no farmer ever has to wait for equipment.',
+    eco.badge || 'How It Actually Works',
+    eco.titlePart1 || 'From Request to',
+    eco.titlePart2 || 'Completion',
+    eco.subtitle || 'A 6-step transparent journey — designed so no farmer ever has to wait for equipment.',
     'Click any node to see its steps',
     'Who\'s involved',
-    'Booking Complete',
-    ...JOURNEY_STEPS.flatMap(s => [s.actor, s.action, s.detail]),
-    ...ECOSYSTEM_ROLES.flatMap(r => [r.role, ...r.points]),
-  ], []);
+    eco.completionBadge || 'Booking Complete',
+    ...journeySteps.flatMap(s => [s.actor, s.action, s.detail]),
+    ...ecosystemRoles.flatMap(r => [r.role, ...r.points]),
+  ], [eco, journeySteps, ecosystemRoles]);
+
   const { getTranslatedText: t } = usePageTranslation(allTexts);
   return (
     <section className="py-8 sm:py-12 md:py-16 bg-gray-950 overflow-hidden relative">
@@ -324,12 +353,12 @@ const EcosystemFlow = () => {
           viewport={{ once: true }}
           className="text-center mb-6 sm:mb-10 md:mb-12"
         >
-          <span className="text-[10px] text-yellow-400 font-black uppercase tracking-[0.3em]">{t('How It Actually Works')}</span>
+          <span className="text-[10px] text-yellow-400 font-black uppercase tracking-[0.3em]">{t(eco.badge || 'How It Actually Works')}</span>
           <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-white mt-1.5 sm:mt-2 mb-2 sm:mb-3 tracking-tight">
-            {t('From Request to')}<span className="text-green-400"> {t('Completion')}</span>
+            {t(eco.titlePart1 || 'From Request to')}<span className="text-green-400"> {t(eco.titlePart2 || 'Completion')}</span>
           </h2>
           <p className="text-xs sm:text-sm text-gray-500 max-w-lg mx-auto">
-            {t('A 6-step transparent journey — designed so no farmer ever has to wait for equipment.')}
+            {t(eco.subtitle || 'A 6-step transparent journey — designed so no farmer ever has to wait for equipment.')}
           </p>
         </motion.div>
 
@@ -348,7 +377,7 @@ const EcosystemFlow = () => {
           </div>
 
           <div className="relative z-10 flex flex-col gap-4 sm:gap-6 md:gap-8">
-            {JOURNEY_STEPS.map((step, idx) => (
+            {journeySteps.map((step, idx) => (
               <JourneyStep key={step.id} step={step} idx={idx} t={t} />
             ))}
           </div>
@@ -363,7 +392,7 @@ const EcosystemFlow = () => {
           >
             <div className="flex items-center space-x-2 bg-green-900/40 border border-green-700 px-4 sm:px-5 py-1.5 sm:py-2 rounded-full">
               <HiOutlineStar size={12} className="text-yellow-400" />
-              <span className="text-green-400 font-black text-[11px] sm:text-xs tracking-widest uppercase">{t('Booking Complete')}</span>
+              <span className="text-green-400 font-black text-[11px] sm:text-xs tracking-widest uppercase">{t(eco.completionBadge || 'Booking Complete')}</span>
               <HiOutlineStar size={12} className="text-yellow-400" />
             </div>
           </motion.div>
@@ -372,7 +401,7 @@ const EcosystemFlow = () => {
         {/* Mobile/Tablet Slider */}
         <div className="md:hidden -mx-4">
           <div className="flex flex-nowrap items-stretch overflow-x-auto w-full gap-3 pb-6 no-scrollbar snap-x snap-mandatory px-4 touch-pan-x relative">
-            {ECOSYSTEM_ROLES.map((role, idx) => (
+            {ecosystemRoles.map((role, idx) => (
               <RoleCard key={role.role} role={role} idx={idx} t={t} />
             ))}
           </div>
@@ -380,7 +409,7 @@ const EcosystemFlow = () => {
 
         {/* Desktop Grid */}
         <div className="hidden md:grid md:grid-cols-3 gap-6 mt-10">
-          {ECOSYSTEM_ROLES.map((role, idx) => (
+          {ecosystemRoles.map((role, idx) => (
             <RoleCard key={role.role} role={role} idx={idx} t={t} />
           ))}
         </div>

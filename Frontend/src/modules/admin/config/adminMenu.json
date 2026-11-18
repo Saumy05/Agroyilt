@@ -258,6 +258,7 @@
       "admin"
     ],
     "children": [
+      "Landing Page",
       "Blogs",
       "Articles",
       "Reviews",

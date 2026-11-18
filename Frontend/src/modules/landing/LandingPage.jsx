@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
+import { LandingContentProvider } from '../../context/LandingContentContext';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
 import ProblemSolution from './components/ProblemSolution';
@@ -23,29 +24,31 @@ const LandingPage = () => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-white overflow-x-hidden w-full max-w-full">
-      <Helmet>
-        <title>Agroyilt | Professional Agriculture Equipment & Farm Solutions</title>
-        <meta name="description" content="Empowering Indian farmers with easy access to high-quality agriculture machinery. Rent tractors, harvesters, and tools from verified local vendors." />
-        <link rel="canonical" href="https://agroyilt.com/" />
-      </Helmet>
-      <Navbar />
-      <Hero />
-      <AboutSection />
-      <ProblemSolution />
-      <ServicesSection />
-      <WorkflowSection />
-      <VideoTutorialSection />
-      <EcosystemFlow />
-      <LiveContentSection />
-      <FeatureSection />
-      <TestimonialSection />
-      <CompanyDeepDive />
-      <FAQSection />
+    <LandingContentProvider>
+      <div className="min-h-screen bg-white overflow-x-hidden w-full max-w-full">
+        <Helmet>
+          <title>Agroyilt | Professional Agriculture Equipment & Farm Solutions</title>
+          <meta name="description" content="Empowering Indian farmers with easy access to high-quality agriculture machinery. Rent tractors, harvesters, and tools from verified local vendors." />
+          <link rel="canonical" href="https://agroyilt.com/" />
+        </Helmet>
+        <Navbar />
+        <Hero />
+        <AboutSection />
+        <ProblemSolution />
+        <ServicesSection />
+        <WorkflowSection />
+        <VideoTutorialSection />
+        <EcosystemFlow />
+        <LiveContentSection />
+        <FeatureSection />
+        <TestimonialSection />
+        <CompanyDeepDive />
+        <FAQSection />
 
-      <CTA />
-      <Footer />
-    </div>
+        <CTA />
+        <Footer />
+      </div>
+    </LandingContentProvider>
   );
 };
 

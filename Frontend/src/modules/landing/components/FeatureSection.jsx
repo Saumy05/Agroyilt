@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { motion, useInView } from 'framer-motion';
 import { HiOutlineMap, HiOutlineCalendar, HiOutlineBadgeCheck, HiOutlineCloud, HiOutlineChartBar, HiOutlineLockClosed } from 'react-icons/hi';
 import { usePageTranslation } from '../../../hooks/usePageTranslation';
+import { useLandingContent } from '../../../context/LandingContentContext';
 import featureImg from '../landing_images/dron_spraying1.jpg';
 
 const FeatureCard = ({ feature, idx, isCompactMobile = false }) => {
@@ -71,27 +72,49 @@ const FeatureCard = ({ feature, idx, isCompactMobile = false }) => {
 };
 
 const FeatureSection = () => {
+  const { content } = useLandingContent();
+  const featuresData = content?.features || {};
+
+  const defaultItems = [
+    { title: "Real-time Tracking", desc: "Live GPS tracking of your booked tractor or harvester in real-time." },
+    { title: "Easy Scheduling", desc: "Pre-book machines for your harvest season to avoid last-minute rushes." },
+    { title: "Verified Operators", desc: "Every machine comes with a skilled and verified operator for efficiency." },
+    { title: "Weather Alerts", desc: "In-app weather monitoring to help you plan your farming activities better." },
+    { title: "Proof of Work", desc: "Secure image & speedometer proof uploads for transparent billing." },
+    { title: "OTP Security", desc: "Fully secure transactions with mobile OTP based work verification." }
+  ];
+
+  const items = featuresData.items && featuresData.items.length > 0 ? featuresData.items : defaultItems;
+
   const allTexts = useMemo(() => [
-    "Real-time Tracking", "Live GPS tracking of your booked tractor or harvester in real-time.",
-    "Easy Scheduling", "Pre-book machines for your harvest season to avoid last-minute rushes.",
-    "Verified Operators", "Every machine comes with a skilled and verified operator for efficiency.",
-    "Weather Alerts", "In-app weather monitoring to help you plan your farming activities better.",
-    "Proof of Work", "Secure image & speedometer proof uploads for transparent billing.",
-    "OTP Security", "Fully secure transactions with mobile OTP based work verification.",
-    "Built for Modern Farmers", "Packed with features that simplify every step of the agriculture process.",
-    "Elite Tech", "Certified 2024", "Modern Farming Features"
-  ], []);
+    featuresData.badge || "Modern Farming Features",
+    featuresData.title || "Built for Modern Farmers",
+    featuresData.subtitle || "Packed with features that simplify every step of the agriculture process.",
+    featuresData.liveTrackingBadge || "Live Tracking",
+    ...items.flatMap(item => [item.title, item.desc])
+  ], [featuresData, items]);
 
   const { getTranslatedText } = usePageTranslation(allTexts);
 
-  const features = [
-    { title: getTranslatedText("Real-time Tracking"), desc: getTranslatedText("Live GPS tracking of your booked tractor or harvester in real-time."), icon: <HiOutlineMap className="w-8 h-8" /> },
-    { title: getTranslatedText("Easy Scheduling"), desc: getTranslatedText("Pre-book machines for your harvest season to avoid last-minute rushes."), icon: <HiOutlineCalendar className="w-8 h-8" /> },
-    { title: getTranslatedText("Verified Operators"), desc: getTranslatedText("Every machine comes with a skilled and verified operator for efficiency."), icon: <HiOutlineBadgeCheck className="w-8 h-8" /> },
-    { title: getTranslatedText("Weather Alerts"), desc: getTranslatedText("In-app weather monitoring to help you plan your farming activities better."), icon: <HiOutlineCloud className="w-8 h-8" /> },
-    { title: getTranslatedText("Proof of Work"), desc: getTranslatedText("Secure image & speedometer proof uploads for transparent billing."), icon: <HiOutlineChartBar className="w-8 h-8" /> },
-    { title: getTranslatedText("OTP Security"), desc: getTranslatedText("Fully secure transactions with mobile OTP based work verification."), icon: <HiOutlineLockClosed className="w-8 h-8" /> },
+  const icons = [
+    <HiOutlineMap className="w-8 h-8" />,
+    <HiOutlineCalendar className="w-8 h-8" />,
+    <HiOutlineBadgeCheck className="w-8 h-8" />,
+    <HiOutlineCloud className="w-8 h-8" />,
+    <HiOutlineChartBar className="w-8 h-8" />,
+    <HiOutlineLockClosed className="w-8 h-8" />
   ];
+
+  const features = items.map((item, idx) => ({
+    title: getTranslatedText(item.title),
+    desc: getTranslatedText(item.desc),
+    icon: icons[idx % icons.length]
+  }));
+
+  const badgeText = getTranslatedText(featuresData.badge || "Modern Farming Features");
+  const titleText = getTranslatedText(featuresData.title || "Built for Modern Farmers");
+  const subtitleText = getTranslatedText(featuresData.subtitle || "Packed with features that simplify every step of the agriculture process.");
+  const liveBadgeText = getTranslatedText(featuresData.liveTrackingBadge || "Live Tracking");
 
   return (
     <section id="features" className="py-8 sm:py-12 md:py-16 bg-white overflow-hidden">
@@ -100,12 +123,12 @@ const FeatureSection = () => {
 
           {/* Heading - shown first on mobile & desktop */}
           <div className="w-full lg:hidden text-center">
-            <span className="text-[10px] text-green-700 font-black uppercase tracking-[0.3em]">{getTranslatedText("Modern Farming Features")}</span>
+            <span className="text-[10px] text-green-700 font-black uppercase tracking-[0.3em]">{badgeText}</span>
             <h2 className="text-2xl sm:text-3xl font-black text-gray-900 mt-1.5 mb-2 tracking-tight leading-tight">
-              {getTranslatedText("Built for Modern Farmers")}
+              {titleText}
             </h2>
             <p className="text-xs sm:text-sm text-gray-500 font-medium max-w-sm mx-auto leading-relaxed">
-              {getTranslatedText("Packed with features that simplify every step of the agriculture process.")}
+              {subtitleText}
             </p>
           </div>
 
@@ -124,7 +147,7 @@ const FeatureSection = () => {
             >
               <img
                 src={featureImg}
-                alt={getTranslatedText("Modern Farming Features")}
+                alt={badgeText}
                 className="w-full h-44 sm:h-64 md:h-[430px] object-cover"
               />
               {/* Overlay gradient */}
@@ -140,7 +163,7 @@ const FeatureSection = () => {
               className="absolute top-3 left-3 sm:top-6 sm:left-6 bg-black/60 backdrop-blur-md text-white px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full flex items-center space-x-1.5 sm:space-x-2 border border-white/10"
             >
               <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-400 rounded-full animate-pulse" />
-              <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest">Live Tracking</span>
+              <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest">{liveBadgeText}</span>
             </motion.div>
           </div>
 
@@ -152,12 +175,12 @@ const FeatureSection = () => {
               viewport={{ once: true }}
               className="mb-6 md:mb-8 text-left"
             >
-              <span className="text-xs text-green-700 font-black uppercase tracking-[0.3em]">{getTranslatedText("Modern Farming Features")}</span>
+              <span className="text-xs text-green-700 font-black uppercase tracking-[0.3em]">{badgeText}</span>
               <h2 className="text-3xl md:text-4xl font-black text-gray-900 mt-2 mb-3 tracking-tight leading-tight">
-                {getTranslatedText("Built for Modern Farmers")}
+                {titleText}
               </h2>
               <p className="text-sm text-gray-500 font-medium max-w-sm leading-relaxed">
-                {getTranslatedText("Packed with features that simplify every step of the agriculture process.")}
+                {subtitleText}
               </p>
             </motion.div>
           </div>

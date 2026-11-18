@@ -8,6 +8,7 @@ import harvesterHero from '../landing_images/hero_premium.png';
 import TranslatedText from '../../../components/TranslatedText';
 import PlayStoreButton from './PlayStoreButton';
 import { FiPlay } from 'react-icons/fi';
+import { useLandingContent } from '../../../context/LandingContentContext';
 
 // Register ScrollTrigger once with safe config.
 // ignoreMobileResize: true prevents GSAP from attaching a media-query listener
@@ -42,6 +43,9 @@ const particles = [
 ];
 
 const Hero = () => {
+  const { content } = useLandingContent();
+  const heroData = content?.hero || {};
+
   const heroRef = useRef(null);
   const bgRef = useRef(null);
   const contentRef = useRef(null);
@@ -136,7 +140,7 @@ const Hero = () => {
             className="inline-flex items-center space-x-2 bg-yellow-500/15 backdrop-blur-md text-yellow-400 px-3.5 sm:px-5 py-1 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-bold mb-4 sm:mb-6 tracking-widest uppercase border border-yellow-500/30 shadow-lg"
           >
             <span className="w-1.5 sm:w-2 h-1.5 sm:h-2 bg-yellow-400 rounded-full animate-pulse" />
-            <span><TranslatedText>Founded in India</TranslatedText></span>
+            <span><TranslatedText>{heroData.badge || 'Founded in India'}</TranslatedText></span>
           </motion.div>
 
           {/* Headline */}
@@ -146,7 +150,7 @@ const Hero = () => {
             transition={{ duration: 0.8, delay: 0.1, ease: [0.25, 0.46, 0.45, 0.94] }}
             className="text-4xl sm:text-5xl md:text-7xl font-black text-white leading-tight md:leading-none mb-2 tracking-tighter"
           >
-            AGROYILT
+            {heroData.headline || 'AGROYILT'}
           </motion.h1>
 
           <motion.div
@@ -162,7 +166,7 @@ const Hero = () => {
             transition={{ duration: 0.7, delay: 0.3 }}
             className="text-lg sm:text-xl md:text-2xl font-bold text-yellow-400 mb-3 sm:mb-5 font-serif italic"
           >
-            <TranslatedText>Grow more with AGROYILT</TranslatedText>
+            <TranslatedText>{heroData.tagline || 'Grow more with AGROYILT'}</TranslatedText>
           </motion.p>
 
           <motion.p
@@ -172,7 +176,7 @@ const Hero = () => {
             className="text-xs sm:text-sm md:text-base text-gray-300 mb-6 sm:mb-8 max-w-2xl leading-relaxed font-medium"
           >
             <TranslatedText>
-              AgroYilt is made for farmers. Farmers can book tractors, harvesters, rotavators, drones, JCB, borewell machines, labour, and other equipment on rent. With AgroYilt, they can also easily order seeds, fertilizers, and other farming items from nearby shops. Our goal is to make farming work easy, fast, and on time. Farmers can get modern technology, useful services, weather updates, and support in one place. AgroYilt helps save time, reduce trouble, and improve farming work. We want every farmer to get the right machine, right service, and right support at the right time.
+              {heroData.description || 'AgroYilt is made for farmers. Farmers can book tractors, harvesters, rotavators, drones, JCB, borewell machines, labour, and other equipment on rent. With AgroYilt, they can also easily order seeds, fertilizers, and other farming items from nearby shops. Our goal is to make farming work easy, fast, and on time. Farmers can get modern technology, useful services, weather updates, and support in one place. AgroYilt helps save time, reduce trouble, and improve farming work. We want every farmer to get the right machine, right service, and right support at the right time.'}
             </TranslatedText>
           </motion.p>
 
@@ -189,7 +193,7 @@ const Hero = () => {
                 whileTap={{ scale: 0.97 }}
                 className="w-full sm:w-auto bg-green-600 text-white px-6 py-3 rounded-full text-xs sm:text-sm font-bold cursor-pointer shadow-xl text-center transition-colors hover:bg-green-700"
               >
-                <TranslatedText>Book Now</TranslatedText>
+                <TranslatedText>{heroData.btnBookNow || 'Book Now'}</TranslatedText>
               </motion.div>
             </Link>
 
@@ -200,7 +204,7 @@ const Hero = () => {
                   whileTap={{ scale: 0.97 }}
                   className="bg-white/10 backdrop-blur-md text-white border border-white/30 px-3.5 sm:px-6 py-2.5 sm:py-3 rounded-full text-xs sm:text-sm font-bold cursor-pointer text-center truncate"
                 >
-                  <TranslatedText>Owner Registration</TranslatedText>
+                  <TranslatedText>{heroData.btnOwner || 'Owner Registration'}</TranslatedText>
                 </motion.div>
               </Link>
               <Link to="/worker/login">
@@ -209,7 +213,7 @@ const Hero = () => {
                   whileTap={{ scale: 0.97 }}
                   className="bg-amber-600 text-white px-3.5 sm:px-6 py-2.5 sm:py-3 rounded-full text-xs sm:text-sm font-bold cursor-pointer shadow-xl text-center transition-colors hover:bg-amber-700 truncate"
                 >
-                  <TranslatedText>Worker Join</TranslatedText>
+                  <TranslatedText>{heroData.btnWorker || 'Worker Join'}</TranslatedText>
                 </motion.div>
               </Link>
             </div>
@@ -228,7 +232,7 @@ const Hero = () => {
                   className="bg-white/10 backdrop-blur-md text-white border border-yellow-400/50 px-3 sm:px-5 py-2.5 sm:py-3 rounded-full text-xs sm:text-sm font-bold cursor-pointer text-center flex items-center justify-center gap-1.5 truncate"
                 >
                   <FiPlay size={12} className="text-yellow-400 shrink-0" />
-                  <span className="truncate"><TranslatedText>Watch Guides</TranslatedText></span>
+                  <span className="truncate"><TranslatedText>{heroData.btnWatchGuides || 'Watch Guides'}</TranslatedText></span>
                 </motion.div>
               </a>
               <PlayStoreButton className="bg-white text-green-800 hover:bg-yellow-400 px-3 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm truncate" />
@@ -238,9 +242,9 @@ const Hero = () => {
           {/* Stats */}
           <div ref={statsRef} className="flex flex-wrap items-center gap-x-5 gap-y-3 sm:gap-x-8 md:gap-x-14">
             {[
-              { value: formatNumber(stats.farmers), label: 'Happy Farmers' },
-              { value: formatNumber(stats.owners), label: 'Verified Owners' },
-              { value: formatNumber(stats.workers), label: 'Verified Workers' },
+              { value: formatNumber(stats.farmers), label: heroData.stat1Label || 'Happy Farmers' },
+              { value: formatNumber(stats.owners), label: heroData.stat2Label || 'Verified Owners' },
+              { value: formatNumber(stats.workers), label: heroData.stat3Label || 'Verified Workers' },
             ].map((stat, i) => (
               <motion.div
                 key={i}

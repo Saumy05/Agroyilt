@@ -3,17 +3,21 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { FiPlus, FiMinus, FiHelpCircle } from 'react-icons/fi';
 import TranslatedText from '../../../components/TranslatedText';
 import axios from 'axios';
+import { useLandingContent } from '../../../context/LandingContentContext';
 
 const FAQSection = () => {
+    const { content } = useLandingContent();
+    const faqData = content?.faq || {};
+
     const [activeIndex, setActiveIndex] = useState(0);
     const [activeTab, setActiveTab] = useState('Farmer');
     const [faqs, setFaqs] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
 
-    const tabs = ['Farmer', 'Owner', 'General'];
+    const tabs = faqData.tabs && faqData.tabs.length > 0 ? faqData.tabs : ['Farmer', 'Owner', 'General'];
     const API_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
-    const mockFaqs = [
+    const defaultFaqs = [
         { question: "Is registration free on AgroYilt?", answer: "Yes, registration for both farmers and shop/machine owners is completely free. You only pay for the services you use or when you make a sale.", category: "General", color: "blue" },
         { question: "How do I book a tractor or harvester?", answer: "Simply login as a farmer, browse 'Agricultural Services', choose your machine, select a vendor based on ratings, and pick your date to confirm the booking.", category: "Farmer", color: "green" },
         { question: "How can I register my shop or machinery?", answer: "Click on 'Join as Vendor', enter your business details and upload necessary documents. Once approved by the admin, you can start listing your items.", category: "Owner", color: "orange" },
@@ -28,6 +32,8 @@ const FAQSection = () => {
         { question: "How do I manage multiple machines as an owner?", answer: "Our vendor dashboard allows you to add and manage multiple machines easily. You can see independent bookings and income for each machine in one place.", category: "Owner", color: "orange" }
     ];
 
+    const fallbackFaqs = faqData.faqs && faqData.faqs.length > 0 ? faqData.faqs : defaultFaqs;
+
     useEffect(() => {
         const fetchFAQs = async () => {
             try {
@@ -35,17 +41,17 @@ const FAQSection = () => {
                 if (response.data.success && response.data.data.length > 0) {
                     setFaqs(response.data.data);
                 } else {
-                    setFaqs(mockFaqs); // Fallback if no data in db
+                    setFaqs(fallbackFaqs); // Fallback if no data in db
                 }
             } catch (error) {
                 console.error("Error fetching FAQs:", error);
-                setFaqs(mockFaqs); // Fallback on error
+                setFaqs(fallbackFaqs); // Fallback on error
             } finally {
                 setIsLoading(false);
             }
         };
         fetchFAQs();
-    }, []);
+    }, [faqData.faqs]);
 
     const filteredFaqs = faqs.filter(faq => faq.category === activeTab);
 
@@ -63,10 +69,10 @@ const FAQSection = () => {
                         viewport={{ once: true }}
                     >
                         <span className="text-green-600 font-black tracking-widest uppercase text-[10px] sm:text-xs mb-2 sm:mb-3 block">
-                            <TranslatedText>Support Center</TranslatedText>
+                            <TranslatedText>{faqData.badge || "Support Center"}</TranslatedText>
                         </span>
                         <h2 className="text-2xl sm:text-4xl md:text-5xl font-black text-gray-900 mb-3 sm:mb-6 leading-tight">
-                            <TranslatedText>Frequently Asked Questions</TranslatedText>
+                            <TranslatedText>{faqData.title || "Frequently Asked Questions"}</TranslatedText>
                         </h2>
                         <div className="h-1 sm:h-1.5 w-16 sm:w-20 bg-green-600 mx-auto rounded-full mb-6 sm:mb-8" />
                         

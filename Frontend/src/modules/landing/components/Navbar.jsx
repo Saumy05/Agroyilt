@@ -5,8 +5,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguage } from '../../../context/LanguageContext';
 import TranslatedText from '../../../components/TranslatedText';
 import Logo from '../../../components/common/Logo';
+import { useLandingContent } from '../../../context/LandingContentContext';
 
 const Navbar = () => {
+  const { content } = useLandingContent();
+  const navData = content?.navbar || {};
   const [isOpen, setIsOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const location = useLocation();
@@ -91,12 +94,12 @@ const Navbar = () => {
                 <span className={`font-black text-base sm:text-lg md:text-xl tracking-tight leading-none transition-colors ${
                   (isScrolled || isLightPage) ? 'text-gray-900' : 'text-white'
                 }`}>
-                  AGROYILT
+                  {navData.brandName || "AGROYILT"}
                 </span>
                 <span className={`text-[8px] sm:text-[9px] font-bold tracking-widest uppercase leading-tight mt-0.5 transition-colors ${
                   (isScrolled || isLightPage) ? 'text-green-700 font-extrabold' : 'text-yellow-400'
                 }`}>
-                  Smart Agriculture
+                  {navData.brandTagline || "Smart Agriculture"}
                 </span>
               </div>
             </Link>
@@ -168,20 +171,20 @@ const Navbar = () => {
                 to="/user/login"
                 className="bg-green-700 text-white px-3 xl:px-4 py-2 rounded-full text-xs font-bold hover:bg-green-800 transition-colors shadow-md whitespace-nowrap shrink-0"
               >
-                <TranslatedText>Join as User</TranslatedText>
+                <TranslatedText>{navData.joinUserBtn || "Join as User"}</TranslatedText>
               </Link>
               <Link
                 to="/vendor/login"
                 className={`px-3 xl:px-4 py-2 rounded-full text-xs font-bold transition-all border whitespace-nowrap shrink-0 ${(isScrolled || isLightPage) ? 'border-green-700 text-green-700 hover:bg-green-50' : 'border-white text-white hover:bg-white/10'
                   }`}
               >
-                <TranslatedText>Join as Vendor</TranslatedText>
+                <TranslatedText>{navData.joinVendorBtn || "Join as Vendor"}</TranslatedText>
               </Link>
               <Link
                 to="/worker/login"
                 className="bg-amber-600 text-white px-3 xl:px-4 py-2 rounded-full text-xs font-bold hover:bg-amber-700 transition-colors shadow-md whitespace-nowrap shrink-0"
               >
-                <TranslatedText>Join as Worker</TranslatedText>
+                <TranslatedText>{navData.joinWorkerBtn || "Join as Worker"}</TranslatedText>
               </Link>
             </div>
           </div>
@@ -193,7 +196,7 @@ const Navbar = () => {
               to="/user/login"
               className="bg-green-600 hover:bg-green-700 active:scale-95 text-white px-3 py-1.5 rounded-full text-xs font-bold shadow-sm transition-all flex items-center space-x-1 shrink-0"
             >
-              <span><TranslatedText>Book Now</TranslatedText></span>
+              <span><TranslatedText>{navData.bookNowBtn || "Book Now"}</TranslatedText></span>
             </Link>
 
             {/* Mobile Language Icon */}
@@ -302,7 +305,7 @@ const Navbar = () => {
                   className="block w-full text-center bg-green-700 text-white px-4 py-2.5 rounded-xl text-sm font-bold shadow-md hover:bg-green-800 transition-colors"
                   onClick={() => setIsOpen(false)}
                 >
-                  <TranslatedText>Join as User</TranslatedText>
+                  <TranslatedText>{navData.joinUserBtn || "Join as User"}</TranslatedText>
                 </Link>
                 <div className="grid grid-cols-2 gap-2">
                   <Link
@@ -310,14 +313,14 @@ const Navbar = () => {
                     className="block w-full text-center border-2 border-green-700 text-green-700 px-3 py-2 rounded-xl text-xs font-bold hover:bg-green-50 transition-colors"
                     onClick={() => setIsOpen(false)}
                   >
-                    <TranslatedText>Join as Vendor</TranslatedText>
+                    <TranslatedText>{navData.joinVendorBtn || "Join as Vendor"}</TranslatedText>
                   </Link>
                   <Link
                     to="/worker/login"
                     className="block w-full text-center bg-amber-600 text-white px-3 py-2 rounded-xl text-xs font-bold hover:bg-amber-700 transition-colors shadow-sm"
                     onClick={() => setIsOpen(false)}
                   >
-                    <TranslatedText>Join as Worker</TranslatedText>
+                    <TranslatedText>{navData.joinWorkerBtn || "Join as Worker"}</TranslatedText>
                   </Link>
                 </div>
               </div>

@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import { motion, useInView, useMotionValue, useTransform, useSpring } from 'framer-motion';
 import { FiTrendingUp, FiTarget, FiBox, FiUsers, FiGlobe, FiShield } from 'react-icons/fi';
 import { usePageTranslation } from '../../../hooks/usePageTranslation';
+import { useLandingContent } from '../../../context/LandingContentContext';
 
 // Color palette per card index
 const cardColors = [
@@ -90,47 +91,67 @@ const ImpactCard = ({ impact, idx, getTranslatedText }) => {
 };
 
 const CompanyDeepDive = () => {
-    const allTexts = useMemo(() => [
-        "Our Vision & Mission",
-        "Organizing the Unstructured",
-        "Agricultural Service Sector",
-        "To build India's—and eventually the world's—largest digital ecosystem for farm mechanization and smart agriculture, enabling farmers to access modern equipment, AI-driven advisory, and agricultural inputs efficiently.",
-        "No farmers should lose income because a tractor or harvester arrived late.",
-        "Market Opportunity",
-        "India has tractors, India has farmers, but India doesn't have a system.",
-        "We are building the system.",
-        "With over 140 million households depending on agriculture, the shift toward Agritech is not just a trend—it's a necessity.",
-        "Impact on Rural Ecosystem",
-        "Farmers in India", "The backbone of the Indian economy.",
-        "GDP Contribution", "Agriculture's significant share in national GDP.",
-        "Mechanization", "Huge scope for digital mechanization platforms.",
-        "Opportunity", "Agricultural services market is scaling rapidly.",
-        "Increase Productivity", "Reduce Equipment Costs", "Create Rural Employment",
-        "Improve Farmers' Income", "Modern Tech to Villages", "Timely Availability",
-        "Scalability",
-        "Designed for rapid expansion through districts and villages, integrating AI and data-driven farming. Our framework scales across multi-state regions and global economies.",
-        "AI Integration", "District Expansion",
-        "Founder & CEO", "Designating Partner", "Co Founder",
-        "Transforming agriculture through technology.",
-        "Company",
-    ], []);
+    const { content } = useLandingContent();
+    const cdd = content?.companyDeepDive || {};
 
-    const { getTranslatedText } = usePageTranslation(allTexts);
-
-    const marketStats = [
+    const defaultMarketStats = [
         { label: "Farmers in India", value: "140M+", desc: "The backbone of the Indian economy." },
         { label: "GDP Contribution", value: "18%", desc: "Agriculture's significant share in national GDP." },
         { label: "Mechanization", value: "Low", desc: "Huge scope for digital mechanization platforms." },
         { label: "Opportunity", value: "Billions", desc: "Agricultural services market is scaling rapidly." }
     ];
-    const impacts = [
-        { title: "Increase Productivity", icon: <FiTrendingUp /> },
-        { title: "Reduce Equipment Costs", icon: <FiShield /> },
-        { title: "Create Rural Employment", icon: <FiUsers /> },
-        { title: "Improve Farmers' Income", icon: <FiBox /> },
-        { title: "Modern Tech to Villages", icon: <FiGlobe /> },
-        { title: "Timely Availability", icon: <FiTarget /> }
+
+    const defaultImpacts = [
+        "Increase Productivity",
+        "Reduce Equipment Costs",
+        "Create Rural Employment",
+        "Improve Farmers' Income",
+        "Modern Tech to Villages",
+        "Timely Availability"
     ];
+
+    const marketStats = cdd.marketStats && cdd.marketStats.length > 0 ? cdd.marketStats : defaultMarketStats;
+    const impactList = cdd.impacts && cdd.impacts.length > 0 ? cdd.impacts : defaultImpacts;
+
+    const allTexts = useMemo(() => [
+        cdd.visionBadge || "Our Vision & Mission",
+        cdd.visionTitlePart1 || "Organizing the Unstructured",
+        cdd.visionTitlePart2 || "Agricultural Service Sector",
+        cdd.visionQuote || "To build India's—and eventually the world's—largest digital ecosystem for farm mechanization and smart agriculture, enabling farmers to access modern equipment, AI-driven advisory, and agricultural inputs efficiently.",
+        cdd.problemQuote || "No farmers should lose income because a tractor or harvester arrived late.",
+        cdd.marketTitle || "Market Opportunity",
+        cdd.marketSubtitlePrefix || "India has tractors, India has farmers, but India doesn't have a system.",
+        cdd.marketSubtitleHighlight || "We are building the system.",
+        cdd.marketSubtitleSuffix || "With over 140 million households depending on agriculture, the shift toward Agritech is not just a trend—it's a necessity.",
+        cdd.impactTitle || "Impact on Rural Ecosystem",
+        cdd.scalabilityTitle || "Scalability",
+        cdd.scalabilityDesc || "Designed for rapid expansion through districts and villages, integrating AI and data-driven farming. Our framework scales across multi-state regions and global economies.",
+        cdd.scalabilityTag1 || "AI Integration",
+        cdd.scalabilityTag2 || "District Expansion",
+        cdd.founderRole || "Founder & CEO",
+        cdd.founderSubRole || "Designated Partner",
+        cdd.cofounderRole || "Co Founder",
+        cdd.quote || "Transforming agriculture through technology.",
+        cdd.companyLabel || "Company",
+        ...marketStats.flatMap(s => [s.label, s.desc]),
+        ...impactList
+    ], [cdd, marketStats, impactList]);
+
+    const { getTranslatedText } = usePageTranslation(allTexts);
+
+    const impactIcons = [
+        <FiTrendingUp />,
+        <FiShield />,
+        <FiUsers />,
+        <FiBox />,
+        <FiGlobe />,
+        <FiTarget />
+    ];
+
+    const impacts = impactList.map((title, i) => ({
+        title,
+        icon: impactIcons[i % impactIcons.length]
+    }));
 
     return (
         <section id="company" className="py-8 sm:py-12 md:py-16 bg-white overflow-hidden">
@@ -143,16 +164,16 @@ const CompanyDeepDive = () => {
                     viewport={{ once: true }}
                     className="mb-8 sm:mb-12 text-center max-w-4xl mx-auto"
                 >
-                    <h2 className="text-[10px] sm:text-xs text-green-700 font-bold tracking-[0.3em] uppercase mb-2 sm:mb-4">{getTranslatedText("Our Vision & Mission")}</h2>
+                    <h2 className="text-[10px] sm:text-xs text-green-700 font-bold tracking-[0.3em] uppercase mb-2 sm:mb-4">{getTranslatedText(cdd.visionBadge || "Our Vision & Mission")}</h2>
                     <p className="text-xl sm:text-2xl md:text-4xl font-black text-gray-900 leading-tight mb-4 sm:mb-6 tracking-tighter">
-                        {getTranslatedText("Organizing the Unstructured")} <br />
-                        <span className="text-green-600 font-serif italic text-lg sm:text-xl md:text-3xl">{getTranslatedText("Agricultural Service Sector")}</span>
+                        {getTranslatedText(cdd.visionTitlePart1 || "Organizing the Unstructured")} <br />
+                        <span className="text-green-600 font-serif italic text-lg sm:text-xl md:text-3xl">{getTranslatedText(cdd.visionTitlePart2 || "Agricultural Service Sector")}</span>
                     </p>
                     <p className="text-xs sm:text-sm md:text-base text-gray-600 leading-relaxed font-medium bg-gray-50 p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-gray-100 italic shadow-inner">
-                        "{getTranslatedText("To build India's—and eventually the world's—largest digital ecosystem for farm mechanization and smart agriculture, enabling farmers to access modern equipment, AI-driven advisory, and agricultural inputs efficiently.")}"
+                        "{getTranslatedText(cdd.visionQuote || "To build India's—and eventually the world's—largest digital ecosystem for farm mechanization and smart agriculture, enabling farmers to access modern equipment, AI-driven advisory, and agricultural inputs efficiently.")}"
                     </p>
                     <p className="mt-4 sm:mt-6 text-sm sm:text-base md:text-lg font-black text-red-600">
-                        ➡️ {getTranslatedText("No farmers should lose income because a tractor or harvester arrived late.")}
+                        ➡️ {getTranslatedText(cdd.problemQuote || "No farmers should lose income because a tractor or harvester arrived late.")}
                     </p>
                 </motion.div>
 
@@ -164,10 +185,10 @@ const CompanyDeepDive = () => {
                         viewport={{ once: true }}
                         className="max-w-4xl mx-auto"
                     >
-                        <h3 className="text-2xl sm:text-3xl font-black text-gray-900 mb-2 sm:mb-4 tracking-tight text-center">{getTranslatedText("Market Opportunity")}</h3>
+                        <h3 className="text-2xl sm:text-3xl font-black text-gray-900 mb-2 sm:mb-4 tracking-tight text-center">{getTranslatedText(cdd.marketTitle || "Market Opportunity")}</h3>
                         <p className="text-gray-600 mb-6 sm:mb-8 leading-relaxed text-xs sm:text-sm md:text-base text-center max-w-2xl mx-auto">
-                            {getTranslatedText("India has tractors, India has farmers, but India doesn't have a system.")}
-                            <strong className="text-green-700"> {getTranslatedText("We are building the system.")}</strong> {getTranslatedText("With over 140 million households depending on agriculture, the shift toward Agritech is not just a trend—it's a necessity.")}
+                            {getTranslatedText(cdd.marketSubtitlePrefix || "India has tractors, India has farmers, but India doesn't have a system.")}
+                            <strong className="text-green-700"> {getTranslatedText(cdd.marketSubtitleHighlight || "We are building the system.")}</strong> {getTranslatedText(cdd.marketSubtitleSuffix || "With over 140 million households depending on agriculture, the shift toward Agritech is not just a trend—it's a necessity.")}
                         </p>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-4">
                             {marketStats.map((stat, i) => (
@@ -189,7 +210,7 @@ const CompanyDeepDive = () => {
                         viewport={{ once: true }}
                         className="text-xl sm:text-2xl font-black text-gray-900 text-center mb-2 uppercase tracking-tight"
                     >
-                        {getTranslatedText("Impact on Rural Ecosystem")}
+                        {getTranslatedText(cdd.impactTitle || "Impact on Rural Ecosystem")}
                     </motion.h3>
                     <motion.div
                         initial={{ width: 0 }}
@@ -216,34 +237,34 @@ const CompanyDeepDive = () => {
                         <div className="absolute top-0 right-0 p-6 opacity-10 pointer-events-none">
                             <FiTrendingUp size={80} />
                         </div>
-                        <h3 className="text-xl sm:text-2xl font-black mb-2 sm:mb-4">{getTranslatedText("Scalability")}</h3>
+                        <h3 className="text-xl sm:text-2xl font-black mb-2 sm:mb-4">{getTranslatedText(cdd.scalabilityTitle || "Scalability")}</h3>
                         <p className="text-green-100 mb-4 sm:mb-6 leading-relaxed font-medium text-xs sm:text-sm">
-                            {getTranslatedText("Designed for rapid expansion through districts and villages, integrating AI and data-driven farming. Our framework scales across multi-state regions and global economies.")}
+                            {getTranslatedText(cdd.scalabilityDesc || "Designed for rapid expansion through districts and villages, integrating AI and data-driven farming. Our framework scales across multi-state regions and global economies.")}
                         </p>
                         <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                            <span className="bg-white/10 backdrop-blur-md px-3 sm:px-4 py-1 sm:py-1.5 rounded-full text-[9px] sm:text-[10px] font-bold border border-white/20 uppercase tracking-wider">{getTranslatedText("AI Integration")}</span>
-                            <span className="bg-white/10 backdrop-blur-md px-3 sm:px-4 py-1 sm:py-1.5 rounded-full text-[9px] sm:text-[10px] font-bold border border-white/20 uppercase tracking-wider">{getTranslatedText("District Expansion")}</span>
+                            <span className="bg-white/10 backdrop-blur-md px-3 sm:px-4 py-1 sm:py-1.5 rounded-full text-[9px] sm:text-[10px] font-bold border border-white/20 uppercase tracking-wider">{getTranslatedText(cdd.scalabilityTag1 || "AI Integration")}</span>
+                            <span className="bg-white/10 backdrop-blur-md px-3 sm:px-4 py-1 sm:py-1.5 rounded-full text-[9px] sm:text-[10px] font-bold border border-white/20 uppercase tracking-wider">{getTranslatedText(cdd.scalabilityTag2 || "District Expansion")}</span>
                         </div>
                     </div>
 
                     <div className="bg-white p-5 sm:p-8 rounded-2xl sm:rounded-[2.5rem] border border-gray-100 shadow-md flex flex-col justify-center">
                         <div className="flex flex-col gap-3 sm:gap-4 mb-3 sm:mb-4">
                             <div>
-                                <p className="text-[9px] font-black uppercase tracking-widest text-green-700 mb-1">{getTranslatedText("Founder & CEO")}</p>
-                                <h3 className="text-lg sm:text-2xl font-black text-gray-900 leading-tight">Chinmay Anand</h3>
-                                <p className="text-[11px] sm:text-xs text-gray-500 font-bold">Designated Partner</p>
+                                <p className="text-[9px] font-black uppercase tracking-widest text-green-700 mb-1">{getTranslatedText(cdd.founderRole || "Founder & CEO")}</p>
+                                <h3 className="text-lg sm:text-2xl font-black text-gray-900 leading-tight">{cdd.founderName || "Chinmay Anand"}</h3>
+                                <p className="text-[11px] sm:text-xs text-gray-500 font-bold">{getTranslatedText(cdd.founderSubRole || "Designated Partner")}</p>
                             </div>
                             <div>
-                                <p className="text-[9px] font-black uppercase tracking-widest text-green-700 mb-1">{getTranslatedText("Co Founder")}</p>
-                                <h3 className="text-lg sm:text-2xl font-black text-gray-900 leading-tight">Ifat Khanam</h3>
+                                <p className="text-[9px] font-black uppercase tracking-widest text-green-700 mb-1">{getTranslatedText(cdd.cofounderRole || "Co Founder")}</p>
+                                <h3 className="text-lg sm:text-2xl font-black text-gray-900 leading-tight">{cdd.cofounderName || "Ifat Khanam"}</h3>
                             </div>
                         </div>
                         <p className="text-[10px] sm:text-[11px] text-gray-600 font-medium leading-relaxed italic border-l-4 border-green-600 pl-3 sm:pl-4 mt-1 sm:mt-2">
-                            "{getTranslatedText("Transforming agriculture through technology.")}"
+                            "{getTranslatedText(cdd.quote || "Transforming agriculture through technology.")}"
                         </p>
                         <div className="mt-4 sm:mt-6">
-                            <p className="text-[8px] sm:text-[9px] font-black uppercase text-gray-400 tracking-wider mb-0.5">{getTranslatedText("Company")}</p>
-                            <p className="text-[10px] sm:text-[11px] font-black text-gray-800 leading-tight">GLOBAL RURAL OUTREACH ORGANISATION LLP</p>
+                            <p className="text-[8px] sm:text-[9px] font-black uppercase text-gray-400 tracking-wider mb-0.5">{getTranslatedText(cdd.companyLabel || "Company")}</p>
+                            <p className="text-[10px] sm:text-[11px] font-black text-gray-800 leading-tight">{cdd.companyName || "GLOBAL RURAL OUTREACH ORGANISATION LLP"}</p>
                         </div>
                     </div>
                 </div>

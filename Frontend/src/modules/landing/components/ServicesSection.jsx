@@ -5,6 +5,7 @@ import { GiScythe, GiDustCloud, GiDrippingTube, GiWheat } from 'react-icons/gi';
 import { RiGamepadLine } from 'react-icons/ri';
 import { HiX, HiOutlineUsers, HiArrowRight, HiArrowLeft } from 'react-icons/hi';
 import { usePageTranslation } from '../../../hooks/usePageTranslation';
+import { useLandingContent } from '../../../context/LandingContentContext';
 
 // Import Images
 import tractorImg from '../landing_images/tracter1.jpg';
@@ -32,6 +33,19 @@ const textVariants = {
 };
 
 const ServicesSection = () => {
+  const { content } = useLandingContent();
+  const servData = content?.services || {};
+
+  const activeServices = useMemo(() => {
+    if (Array.isArray(servData.items) && servData.items.length > 0) {
+      return servData.items.map((item, idx) => ({
+        ...services[idx % services.length],
+        ...item
+      }));
+    }
+    return services;
+  }, [servData.items]);
+
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedService, setSelectedService] = useState(null);
   const [direction, setDirection] = useState(1);
@@ -40,10 +54,14 @@ const ServicesSection = () => {
   const startTimeRef = useRef(Date.now());
 
   const allTexts = useMemo(() => [
-    "Agriculture Services", "Smart farming solutions designed for modern agriculture.",
-    "Premium Solution", "View Details", "Book Now via App", "Contact support", "Service Highlights",
-    ...services.flatMap(s => [s.title, s.desc, s.details, ...s.specs])
-  ], []);
+    servData.title || "Agriculture Services",
+    servData.subtitle || "Smart farming solutions designed for modern agriculture.",
+    servData.badge || "Premium Solution",
+    servData.btnViewDetails || "View Details",
+    servData.btnBookNow || "Book Now via App",
+    "Contact support", "Service Highlights",
+    ...activeServices.flatMap(s => [s.title, s.desc, s.details, ...(s.specs || [])])
+  ], [servData, activeServices]);
   const { getTranslatedText } = usePageTranslation(allTexts);
 
   const goTo = useCallback((idx, dir = 1) => {
@@ -53,8 +71,8 @@ const ServicesSection = () => {
     setProgress(0);
   }, []);
 
-  const nextSlide = useCallback(() => goTo((currentIndex + 1) % services.length, 1), [currentIndex, goTo]);
-  const prevSlide = useCallback(() => goTo((currentIndex - 1 + services.length) % services.length, -1), [currentIndex, goTo]);
+  const nextSlide = useCallback(() => goTo((currentIndex + 1) % activeServices.length, 1), [currentIndex, goTo, activeServices.length]);
+  const prevSlide = useCallback(() => goTo((currentIndex - 1 + activeServices.length) % activeServices.length, -1), [currentIndex, goTo, activeServices.length]);
 
   // Auto progress
   useEffect(() => {
@@ -70,7 +88,7 @@ const ServicesSection = () => {
     return () => clearInterval(id);
   }, [nextSlide]);
 
-  const service = services[currentIndex];
+  const service = activeServices[currentIndex] || activeServices[0] || services[0];
 
   const imageVariants = {
     enter: (d) => ({ opacity: 0, scale: 1.08, x: d > 0 ? 40 : -40 }),
@@ -90,10 +108,10 @@ const ServicesSection = () => {
           className="text-center mb-6 sm:mb-8"
         >
           <h2 className="text-xl sm:text-2xl md:text-3xl font-black text-gray-900 mb-1 sm:mb-2 tracking-tight">
-            {getTranslatedText("Agriculture Services")}
+            {getTranslatedText(servData.title || "Agriculture Services")}
           </h2>
           <p className="text-xs sm:text-sm text-gray-500 max-w-2xl mx-auto font-medium">
-            {getTranslatedText("Smart farming solutions designed for modern agriculture.")}
+            {getTranslatedText(servData.subtitle || "Smart farming solutions designed for modern agriculture.")}
           </p>
         </motion.div>
 
@@ -228,7 +246,7 @@ const ServicesSection = () => {
                     onClick={() => setSelectedService(service)}
                     className={`inline-flex items-center space-x-1.5 ${service.color.btn} text-white px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-black text-[9px] sm:text-[10px] uppercase tracking-widest transition-colors shadow-md`}
                   >
-                    <span>{getTranslatedText("View Details")}</span>
+                    <span>{getTranslatedText(servData.btnViewDetails || "View Details")}</span>
                     <HiArrowRight size={12} />
                   </motion.button>
                 </motion.div>

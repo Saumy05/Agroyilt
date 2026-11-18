@@ -2,6 +2,7 @@ import React, { useMemo, useState, useRef } from 'react';
 import { motion, useInView, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import { HiOutlineSearch, HiOutlineShieldCheck, HiOutlineCurrencyDollar, HiOutlineClock, HiArrowRight } from 'react-icons/hi';
 import { usePageTranslation } from '../../../hooks/usePageTranslation';
+import { useLandingContent } from '../../../context/LandingContentContext';
 
 const problems = [
   "High cost of modern farm machinery",
@@ -124,16 +125,24 @@ const SolutionRow = ({ item, index, getTranslatedText }) => {
 const ProblemSolution = () => {
   const sectionRef = useRef(null);
   const isInView = useInView(sectionRef, { once: true });
+  const { content } = useLandingContent();
+  const psData = content?.problemSolution || {};
+
+  const activeProblems = Array.isArray(psData.problems) && psData.problems.length > 0 ? psData.problems : problems;
+  const activeSolutions = Array.isArray(psData.solutions) && psData.solutions.length > 0
+    ? psData.solutions.map((s, idx) => ({ ...solutions[idx % solutions.length], ...s }))
+    : solutions;
 
   const allTexts = useMemo(() => [
-    "The Challenge & The Change", "Modernizing Agriculture Rental",
-    "Traditional Challenges", "Digital Ecosystem for Farm Access",
-    ...problems,
-    "Problem is not lack of machinery, Problem is lack of access.",
-    "Our Solution: AgroYilt",
-    ...solutions.flatMap(s => [s.title, s.desc]),
+    psData.badge || "The Challenge & The Change",
+    psData.title || "Modernizing Agriculture Rental",
+    psData.problemsTitle || "Traditional Challenges",
+    psData.solutionsTitle || "Our Solution: AgroYilt",
+    psData.bottomQuote || "Problem is not lack of machinery, Problem is lack of access.",
+    ...activeProblems,
+    ...activeSolutions.flatMap(s => [s.title, s.desc]),
     "Drones", "Farm Workforce", "Marketplace"
-  ], []);
+  ], [psData, activeProblems, activeSolutions]);
 
   const { getTranslatedText } = usePageTranslation(allTexts);
 
@@ -151,10 +160,10 @@ const ProblemSolution = () => {
           className="text-center mb-6 md:mb-10"
         >
           <span className="text-[10px] text-green-700 font-black tracking-[0.3em] uppercase">
-            {getTranslatedText("The Challenge & The Change")}
+            {getTranslatedText(psData.badge || "The Challenge & The Change")}
           </span>
           <p className="text-xl sm:text-2xl md:text-3xl font-black tracking-tight text-gray-900 leading-tight mt-1.5 sm:mt-2">
-            {getTranslatedText("Modernizing Agriculture Rental")}
+            {getTranslatedText(psData.title || "Modernizing Agriculture Rental")}
           </p>
           <motion.div
             initial={{ width: 0 }}
@@ -190,13 +199,13 @@ const ProblemSolution = () => {
                 className="w-2 h-2 rounded-full bg-red-500"
               />
               <h3 className="text-base sm:text-lg font-black text-red-600 tracking-tight">
-                {getTranslatedText("Traditional Challenges")}
+                {getTranslatedText(psData.problemsTitle || "Traditional Challenges")}
               </h3>
             </div>
 
             {/* Problem list */}
             <div className="space-y-2.5 sm:space-y-3.5 mb-5 sm:mb-7">
-              {problems.map((item, i) => (
+              {activeProblems.map((item, i) => (
                 <ProblemRow key={i} item={item} index={i} getTranslatedText={getTranslatedText} />
               ))}
             </div>
@@ -216,7 +225,7 @@ const ProblemSolution = () => {
                 className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent skew-x-12"
               />
               <p className="text-xs sm:text-sm font-bold leading-snug relative z-10">
-                "{getTranslatedText("Problem is not lack of machinery, Problem is lack of access.")}"
+                "{getTranslatedText(psData.bottomQuote || "Problem is not lack of machinery, Problem is lack of access.")}"
               </p>
             </motion.div>
           </motion.div>
@@ -250,7 +259,7 @@ const ProblemSolution = () => {
               className="inline-flex items-center space-x-1.5 sm:space-x-2 bg-green-800 text-green-400 px-3 sm:px-4 py-1 sm:py-1.5 rounded-full text-[9px] sm:text-[10px] font-black mb-3 sm:mb-5 tracking-widest uppercase shadow-sm border border-green-700"
             >
               <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
-              <span>{getTranslatedText("Our Solution: AgroYilt")}</span>
+              <span>{getTranslatedText(psData.solutionsTitle || "Our Solution: AgroYilt")}</span>
             </motion.div>
 
             {/* Title */}
@@ -261,12 +270,12 @@ const ProblemSolution = () => {
               transition={{ delay: 0.25, duration: 0.5 }}
               className="text-xl sm:text-2xl font-black text-white mb-4 sm:mb-6 leading-tight tracking-tight"
             >
-              {getTranslatedText("Digital Ecosystem for Farm Access")}
+              {getTranslatedText(psData.subtitle || "Digital Ecosystem for Farm Access")}
             </motion.h3>
 
             {/* Solution rows */}
             <div className="space-y-1 mb-5 sm:mb-7 relative z-10">
-              {solutions.map((item, i) => (
+              {activeSolutions.map((item, i) => (
                 <SolutionRow key={i} item={item} index={i} getTranslatedText={getTranslatedText} />
               ))}
             </div>

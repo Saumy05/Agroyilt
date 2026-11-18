@@ -6,5 +6,6 @@ const websiteController = require('../../controllers/adminControllers/websiteMan
 router.get('/blogs', websiteController.getBlogs);
 router.get('/articles', websiteController.getArticles);
 router.get('/reviews', websiteController.getReviews);
+router.get('/landing-content', websiteController.getLandingContent);
 
 module.exports = router;

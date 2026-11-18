@@ -9,6 +9,7 @@ import Reviews from './Reviews';
 import FAQ from './FAQ';
 import AboutUs from './AboutUs';
 import AppGuide from './AppGuide';
+import LandingPageEditor from './LandingPageEditor';
 
 const WebsiteSettings = () => {
   const location = useLocation();
@@ -22,7 +23,8 @@ const WebsiteSettings = () => {
         transition={{ duration: 0.3 }}
       >
         <Routes>
-          <Route path="/" element={<Navigate to="blogs" replace />} />
+          <Route path="/" element={<Navigate to="landing-page" replace />} />
+          <Route path="landing-page" element={<LandingPageEditor />} />
           <Route path="blogs" element={<Blogs />} />
           <Route path="articles" element={<Articles />} />
           <Route path="reviews" element={<Reviews />} />

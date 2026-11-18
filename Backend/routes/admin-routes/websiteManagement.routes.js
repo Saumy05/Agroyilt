@@ -1,6 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const websiteController = require('../../controllers/adminControllers/websiteManagementController');
+const { authenticate } = require('../../middleware/authMiddleware');
+const { isAdmin } = require('../../middleware/roleMiddleware');
+
+// Landing Page Content
+router.route('/landing-content')
+  .get(websiteController.getLandingContent)
+  .put(authenticate, isAdmin, websiteController.updateLandingContent);
 
 // Blog CRUD
 router.route('/blog')

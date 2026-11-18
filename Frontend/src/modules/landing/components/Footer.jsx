@@ -1,8 +1,12 @@
 import React from 'react';
 import { FaFacebook, FaTwitter, FaInstagram, FaLinkedin } from 'react-icons/fa';
 import Logo from '../../../components/common/Logo';
+import { useLandingContent } from '../../../context/LandingContentContext';
 
 const Footer = () => {
+    const { content } = useLandingContent();
+    const footData = content?.footer || {};
+
     return (
         <footer className="bg-gray-950 text-gray-400 py-10 sm:py-16 md:py-20 border-t border-gray-900">
             <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -13,16 +17,15 @@ const Footer = () => {
                             <Logo className="h-9 sm:h-12 w-auto brightness-0 invert" />
                         </div>
                         <p className="text-yellow-500 font-black tracking-widest text-[10px] uppercase mt-1 sm:mt-2 mb-2 sm:mb-4">
-                            By Chinmay Anand
+                            {footData.tagline || 'By Chinmay Anand'}
                         </p>
                         <p className="leading-relaxed text-xs sm:text-sm">
-                            AgriTech Platform for On-Demand Farm Machinery & Smart Agriculture.
-                            <strong className="text-gray-300"> GLOBAL RURAL OUTREACH ORGANISATION LLP</strong>. Smart farming for a smarter future.
+                            {footData.aboutText || 'AgriTech Platform for On-Demand Farm Machinery & Smart Agriculture. GLOBAL RURAL OUTREACH ORGANISATION LLP. Smart farming for a smarter future.'}
                         </p>
                         <div className="flex space-x-4 sm:space-x-5 pt-1">
-                            <a href="https://www.facebook.com/share/1YgEfFD8jW/" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors"><FaFacebook size={20} className="sm:text-[24px]" /></a>
-                            <a href="https://www.instagram.com/agroyilt?igsh=MWticXBlbHR4YnVjMQ==" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors"><FaInstagram size={20} className="sm:text-[24px]" /></a>
-                            <a href="https://www.linkedin.com/in/global-rural-outreach-organisation-llp-groo-4923873b8/" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors"><FaLinkedin size={20} className="sm:text-[24px]" /></a>
+                            <a href={footData.facebook || "https://www.facebook.com/share/1YgEfFD8jW/"} target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors"><FaFacebook size={20} className="sm:text-[24px]" /></a>
+                            <a href={footData.instagram || "https://www.instagram.com/agroyilt?igsh=MWticXBlbHR4YnVjMQ=="} target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors"><FaInstagram size={20} className="sm:text-[24px]" /></a>
+                            <a href={footData.linkedin || "https://www.linkedin.com/in/global-rural-outreach-organisation-llp-groo-4923873b8/"} target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors"><FaLinkedin size={20} className="sm:text-[24px]" /></a>
                         </div>
                     </div>
 
@@ -44,17 +47,17 @@ const Footer = () => {
                         <ul className="space-y-2.5 sm:space-y-4 text-xs sm:text-sm">
                             <li className="flex items-start sm:items-center space-x-2.5 sm:space-x-3">
                                 <span className="text-green-500 text-sm mt-0.5 sm:mt-0">📍</span>
-                                <span>gulni kushaha Banka bihar 813211</span>
+                                <span>{footData.address || 'gulni kushaha Banka bihar 813211'}</span>
                             </li>
                             <li className="flex items-center space-x-2.5 sm:space-x-3">
                                 <span className="text-green-500 text-sm">📞</span>
                                 <div>
-                                    <p className="font-bold text-gray-300">+91 91177 04450</p>
+                                    <p className="font-bold text-gray-300">{footData.phone || '+91 91177 04450'}</p>
                                 </div>
                             </li>
                             <li className="flex items-center space-x-2.5 sm:space-x-3">
                                 <span className="text-green-500 text-sm">📧</span>
-                                <span className="text-gray-300">agroyilt@gmail.com</span>
+                                <span className="text-gray-300">{footData.email || 'agroyilt@gmail.com'}</span>
                             </li>
                             <li className="pt-1">
                                 <a
@@ -75,8 +78,8 @@ const Footer = () => {
 
                     {/* Newsletter */}
                     <div>
-                        <h4 className="text-white font-bold text-base sm:text-lg mb-3 sm:mb-6">Stay Updated</h4>
-                        <p className="text-xs sm:text-sm mb-3 sm:mb-6 leading-relaxed">Get the latest harvest season offers and new machine alerts.</p>
+                        <h4 className="text-white font-bold text-base sm:text-lg mb-3 sm:mb-6">{footData.newsletterTitle || 'Stay Updated'}</h4>
+                        <p className="text-xs sm:text-sm mb-3 sm:mb-6 leading-relaxed">{footData.newsletterSubtitle || 'Get the latest harvest season offers and new machine alerts.'}</p>
                         <form className="flex" onSubmit={(e) => e.preventDefault()}>
                             <input 
                                 type="email" 
@@ -91,7 +94,7 @@ const Footer = () => {
                 </div>
 
                 <div className="pt-6 sm:pt-8 border-t border-gray-900 text-center text-[10px] sm:text-xs uppercase tracking-widest font-medium text-gray-500">
-                    <p>&copy; {new Date().getFullYear()} AgroYilt Technologies. Building the future of farming.</p>
+                    <p>&copy; {new Date().getFullYear()} {footData.copyright || 'AgroYilt Technologies. Building the future of farming.'}</p>
                 </div>
             </div>
         </footer>
