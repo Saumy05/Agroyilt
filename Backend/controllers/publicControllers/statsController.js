@@ -1,5 +1,6 @@
 const User = require('../../models/User');
 const Vendor = require('../../models/Vendor');
+const Worker = require('../../models/Worker');
 
 /**
  * Get Public Stats for Landing Page
@@ -9,12 +10,18 @@ exports.getPublicStats = async (req, res) => {
     try {
         const farmerCount = await User.countDocuments({ role: 'user', isActive: true });
         const ownerCount = await Vendor.countDocuments({ approvalStatus: 'approved', isActive: true });
+        const workerCount = await Worker.countDocuments({ 
+            approvalStatus: 'approved', 
+            isActive: true,
+            isDeleted: { $ne: true }
+        });
 
         res.status(200).json({
             success: true,
             data: {
                 farmers: farmerCount,
-                owners: ownerCount
+                owners: ownerCount,
+                workers: workerCount
             }
         });
     } catch (error) {

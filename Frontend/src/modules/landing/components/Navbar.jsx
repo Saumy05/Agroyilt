@@ -102,14 +102,14 @@ const Navbar = () => {
             </Link>
           </div>
 
-          <div className="hidden md:flex items-center space-x-6">
-            <div className="flex items-center space-x-6 mr-4">
+          <div className="hidden lg:flex items-center space-x-4 xl:space-x-6">
+            <div className="flex items-center space-x-3 xl:space-x-6 mr-2 xl:mr-4">
               {navLinks.map((link, idx) => (
                 <Link
                   key={idx}
                   to={link.href}
                   onClick={(e) => handleNavClick(e, link)}
-                  className={`text-sm font-medium transition-colors hover:text-yellow-500 ${(isScrolled || isLightPage) ? 'text-gray-700' : 'text-white'
+                  className={`text-sm font-medium transition-colors hover:text-yellow-500 whitespace-nowrap ${(isScrolled || isLightPage) ? 'text-gray-700' : 'text-white'
                     }`}
                 >
                   {link.name}
@@ -117,12 +117,12 @@ const Navbar = () => {
               ))}
             </div>
 
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2 xl:space-x-3">
               {/* Language Selector */}
-              <div className="relative group mr-2" ref={dropdownRef}>
+              <div className="relative group mr-1 xl:mr-2" ref={dropdownRef}>
                 <button
                   onClick={() => setShowLanguageDropdown(!showLanguageDropdown)}
-                  className={`flex items-center space-x-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all border ${(isScrolled || isLightPage)
+                  className={`flex items-center space-x-1 px-2.5 xl:px-3 py-1.5 rounded-full text-xs font-bold transition-all border whitespace-nowrap ${(isScrolled || isLightPage)
                     ? 'border-gray-200 text-gray-700 hover:bg-gray-50'
                     : 'border-white/30 text-white hover:bg-white/10'
                     } ${showLanguageDropdown ? 'bg-green-50/10' : ''}`}
@@ -166,20 +166,20 @@ const Navbar = () => {
 
               <Link
                 to="/user/login"
-                className="bg-green-700 text-white px-4 py-2 rounded-full text-xs font-bold hover:bg-green-800 transition-colors shadow-md"
+                className="bg-green-700 text-white px-3 xl:px-4 py-2 rounded-full text-xs font-bold hover:bg-green-800 transition-colors shadow-md whitespace-nowrap shrink-0"
               >
                 <TranslatedText>Join as User</TranslatedText>
               </Link>
               <Link
                 to="/vendor/login"
-                className={`px-4 py-2 rounded-full text-xs font-bold transition-all border ${(isScrolled || isLightPage) ? 'border-green-700 text-green-700 hover:bg-green-50' : 'border-white text-white hover:bg-white/10'
+                className={`px-3 xl:px-4 py-2 rounded-full text-xs font-bold transition-all border whitespace-nowrap shrink-0 ${(isScrolled || isLightPage) ? 'border-green-700 text-green-700 hover:bg-green-50' : 'border-white text-white hover:bg-white/10'
                   }`}
               >
                 <TranslatedText>Join as Vendor</TranslatedText>
               </Link>
               <Link
                 to="/worker/login"
-                className="bg-amber-600 text-white px-4 py-2 rounded-full text-xs font-bold hover:bg-amber-700 transition-colors shadow-md"
+                className="bg-amber-600 text-white px-3 xl:px-4 py-2 rounded-full text-xs font-bold hover:bg-amber-700 transition-colors shadow-md whitespace-nowrap shrink-0"
               >
                 <TranslatedText>Join as Worker</TranslatedText>
               </Link>
@@ -187,7 +187,7 @@ const Navbar = () => {
           </div>
 
           {/* Mobile Right Actions: Quick Action + Language + Hamburger */}
-          <div className="md:hidden flex items-center space-x-2 sm:space-x-3">
+          <div className="lg:hidden flex items-center space-x-2 sm:space-x-3">
             {/* Quick CTA to eliminate the vacant space */}
             <Link
               to="/user/login"
@@ -264,7 +264,7 @@ const Navbar = () => {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="md:hidden bg-white border-t border-gray-100 overflow-hidden"
+            className="lg:hidden bg-white border-t border-gray-100 overflow-hidden"
           >
             <div className="px-4 pt-2 pb-6 space-y-1 sm:px-3">
               {navLinks.map((link, idx) => (

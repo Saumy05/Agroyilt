@@ -46,7 +46,7 @@ const Hero = () => {
   const bgRef = useRef(null);
   const contentRef = useRef(null);
   const statsRef = useRef(null);
-  const [stats, setStats] = useState({ farmers: 0, owners: 0 });
+  const [stats, setStats] = useState({ farmers: 0, owners: 0, workers: 0 });
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -86,10 +86,11 @@ const Hero = () => {
   };
 
   const formatNumber = (num) => {
-    if (num >= 1000) {
-      return (num / 1000).toFixed(1) + 'k+';
+    const n = Number(num) || 0;
+    if (n >= 1000) {
+      return (n / 1000).toFixed(1) + 'k+';
     }
-    return num + '+';
+    return n + '+';
   };
 
   return (
@@ -235,10 +236,11 @@ const Hero = () => {
           </motion.div>
 
           {/* Stats */}
-          <div ref={statsRef} className="flex items-center space-x-6 sm:space-x-8 md:space-x-14">
+          <div ref={statsRef} className="flex flex-wrap items-center gap-x-5 gap-y-3 sm:gap-x-8 md:gap-x-14">
             {[
               { value: formatNumber(stats.farmers), label: 'Happy Farmers' },
               { value: formatNumber(stats.owners), label: 'Verified Owners' },
+              { value: formatNumber(stats.workers), label: 'Verified Workers' },
             ].map((stat, i) => (
               <motion.div
                 key={i}
@@ -251,7 +253,7 @@ const Hero = () => {
                 <p className="text-2xl sm:text-3xl md:text-4xl font-black tracking-tighter group-hover:text-yellow-400 transition-colors">
                   {stat.value}
                 </p>
-                <p className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-widest font-bold mt-0.5 sm:mt-1">
+                <p className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-wider sm:tracking-widest font-bold mt-0.5 sm:mt-1">
                   <TranslatedText>{stat.label}</TranslatedText>
                 </p>
               </motion.div>
