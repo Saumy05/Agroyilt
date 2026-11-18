@@ -35,7 +35,21 @@ exports.getAllStates = catchAsync(async (req, res) => {
     .sort({ displayOrder: 1, name: 1 })
     .lean();
 
-  res.json({ success: true, count: states.length, states });
+  // Compute district counts per state
+  const districtCounts = await District.aggregate([
+    { $group: { _id: '$stateId', count: { $sum: 1 } } }
+  ]);
+  const countMap = {};
+  districtCounts.forEach(c => {
+    if (c._id) countMap[c._id.toString()] = c.count;
+  });
+
+  const statesWithCount = states.map(s => ({
+    ...s,
+    districtCount: countMap[s._id.toString()] || 0
+  }));
+
+  res.json({ success: true, count: statesWithCount.length, states: statesWithCount });
 });
 
 /**
@@ -165,7 +179,21 @@ exports.getAllDistricts = catchAsync(async (req, res) => {
     .sort({ displayOrder: 1, name: 1 })
     .lean();
 
-  res.json({ success: true, count: districts.length, districts });
+  // Compute sub-district counts per district
+  const subDistrictCounts = await SubDistrict.aggregate([
+    { $group: { _id: '$districtId', count: { $sum: 1 } } }
+  ]);
+  const countMap = {};
+  subDistrictCounts.forEach(c => {
+    if (c._id) countMap[c._id.toString()] = c.count;
+  });
+
+  const districtsWithCount = districts.map(d => ({
+    ...d,
+    subDistrictCount: countMap[d._id.toString()] || 0
+  }));
+
+  res.json({ success: true, count: districtsWithCount.length, districts: districtsWithCount });
 });
 
 /**

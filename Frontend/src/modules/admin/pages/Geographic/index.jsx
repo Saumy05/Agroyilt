@@ -1,11 +1,14 @@
 /**
  * Geographic Management Admin Page
  * Manages States, Districts, and Sub-Districts.
- * Replaces the old City Management functionality.
  *
- * Hierarchy: GLOBAL_INDIA → State → District → SubDistrict
+ * Hierarchical Drill-Down Navigation:
+ * GLOBAL_INDIA → State → District → SubDistrict
+ *
+ * Click State → Drills into its Districts
+ * Click District → Drills into its Sub-Districts (Tehsils)
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { INDIAN_STATES } from './indianStates';
 import GooglePlaceList from './GooglePlaceList';
@@ -14,19 +17,20 @@ import { toastManager } from '../../../../utils/toastManager';
 import { stateService, districtService, subDistrictService } from '../../services/geoService';
 import {
   FiPlus, FiEdit2, FiTrash2, FiToggleLeft, FiToggleRight,
-  FiChevronDown, FiChevronRight, FiGlobe, FiMapPin, FiSearch, FiX
+  FiChevronRight, FiGlobe, FiMapPin, FiLayers, FiSearch, FiX,
+  FiArrowLeft, FiFilter
 } from 'react-icons/fi';
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
 const TABS = [
   { id: 'states',        label: 'States',        icon: FiGlobe },
   { id: 'districts',     label: 'Districts',      icon: FiMapPin },
-  { id: 'subdistricts',  label: 'Sub-Districts',  icon: FiChevronRight }
+  { id: 'subdistricts',  label: 'Sub-Districts',  icon: FiLayers }
 ];
 
 const Badge = ({ active }) => (
-  <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${
-    active ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'
+  <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+    active ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-red-100 text-red-600 border border-red-200'
   }`}>
     {active ? 'Active' : 'Inactive'}
   </span>
@@ -69,41 +73,49 @@ const Modal = ({ isOpen, onClose, title, children }) => {
 const GeographicManagement = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
-  const [activeTab, setActiveTab] = useState(
-    tabParam && ['states', 'districts', 'subdistricts'].includes(tabParam) ? tabParam : 'states'
-  );
+  const stateIdParam = searchParams.get('stateId') || '';
+  const districtIdParam = searchParams.get('districtId') || '';
+
+  const activeTab = tabParam && ['states', 'districts', 'subdistricts'].includes(tabParam)
+    ? tabParam
+    : 'states';
+
   const [search, setSearch] = useState('');
 
-  useEffect(() => {
-    if (tabParam && ['states', 'districts', 'subdistricts'].includes(tabParam)) {
-      setActiveTab(tabParam);
-    }
-  }, [tabParam]);
-
-  // ── States ──────────────────────────────────────────────────────────────────
+  // ── States State ────────────────────────────────────────────────────────────
   const [states, setStates] = useState([]);
   const [statesLoading, setStatesLoading] = useState(false);
   const [stateModal, setStateModal] = useState(false);
   const [editingState, setEditingState] = useState(null);
   const [stateForm, setStateForm] = useState({ name: '', code: '', isActive: true });
+  const [stateCustom, setStateCustom] = useState(false);
 
-  // ── Districts ────────────────────────────────────────────────────────────────
+  // ── Districts State ─────────────────────────────────────────────────────────
   const [districts, setDistricts] = useState([]);
   const [districtsLoading, setDistrictsLoading] = useState(false);
   const [districtModal, setDistrictModal] = useState(false);
   const [editingDistrict, setEditingDistrict] = useState(null);
   const [districtForm, setDistrictForm] = useState({ name: '', stateId: '', isActive: true });
 
-  // ── Sub-Districts ────────────────────────────────────────────────────────────
+  // ── Sub-Districts State ─────────────────────────────────────────────────────
   const [subDistricts, setSubDistricts] = useState([]);
   const [subDistrictsLoading, setSubDistrictsLoading] = useState(false);
   const [subDistrictModal, setSubDistrictModal] = useState(false);
   const [editingSubDistrict, setEditingSubDistrict] = useState(null);
   const [subDistrictForm, setSubDistrictForm] = useState({ name: '', districtId: '', isActive: true });
 
-  // Filtered districts for the sub-district form dropdown
+  // Filtered districts for dropdown inside sub-district modal
   const [filteredDistricts, setFilteredDistricts] = useState([]);
   const [stateFilterForSubDist, setStateFilterForSubDist] = useState('');
+
+  // ── Active Selection Helpers ────────────────────────────────────────────────
+  const selectedState = useMemo(() => {
+    return states.find(s => s._id === stateIdParam) || null;
+  }, [states, stateIdParam]);
+
+  const selectedDistrict = useMemo(() => {
+    return districts.find(d => d._id === districtIdParam) || null;
+  }, [districts, districtIdParam]);
 
   // ── Loaders ──────────────────────────────────────────────────────────────────
   const loadStates = useCallback(async () => {
@@ -111,41 +123,109 @@ const GeographicManagement = () => {
     try {
       const res = await stateService.getAll();
       if (res.success) setStates(res.states || []);
-    } catch { toastManager.error('Failed to load states'); }
-    finally { setStatesLoading(false); }
+    } catch {
+      toastManager.error('Failed to load states');
+    } finally {
+      setStatesLoading(false);
+    }
   }, []);
 
-  const loadDistricts = useCallback(async (stateId = null) => {
+  const loadDistricts = useCallback(async (sId = null) => {
     setDistrictsLoading(true);
     try {
-      const params = stateId ? { stateId } : {};
+      const params = sId ? { stateId: sId } : {};
       const res = await districtService.getAll(params);
       if (res.success) setDistricts(res.districts || []);
-    } catch { toastManager.error('Failed to load districts'); }
-    finally { setDistrictsLoading(false); }
+    } catch {
+      toastManager.error('Failed to load districts');
+    } finally {
+      setDistrictsLoading(false);
+    }
   }, []);
 
-  const loadSubDistricts = useCallback(async (districtId = null) => {
+  const loadSubDistricts = useCallback(async (dId = null, sId = null) => {
     setSubDistrictsLoading(true);
     try {
-      const params = districtId ? { districtId } : {};
+      const params = {};
+      if (dId) params.districtId = dId;
+      if (sId) params.stateId = sId;
       const res = await subDistrictService.getAll(params);
       if (res.success) setSubDistricts(res.subDistricts || []);
-    } catch { toastManager.error('Failed to load sub-districts'); }
-    finally { setSubDistrictsLoading(false); }
+    } catch {
+      toastManager.error('Failed to load sub-districts');
+    } finally {
+      setSubDistrictsLoading(false);
+    }
   }, []);
 
-  useEffect(() => { loadStates(); }, []);
+  // Initial load: states
   useEffect(() => {
-    if (activeTab === 'districts') loadDistricts();
-    if (activeTab === 'subdistricts') {
-      loadDistricts(); // for dropdown
-      loadSubDistricts();
+    loadStates();
+  }, [loadStates]);
+
+  // Load districts / subdistricts depending on current tab and parameters
+  useEffect(() => {
+    if (activeTab === 'districts') {
+      loadDistricts(stateIdParam || null);
+    } else if (activeTab === 'subdistricts') {
+      // Load districts for context/dropdowns
+      loadDistricts(stateIdParam || null);
+      loadSubDistricts(districtIdParam || null, stateIdParam || null);
     }
-  }, [activeTab]);
+  }, [activeTab, stateIdParam, districtIdParam, loadDistricts, loadSubDistricts]);
+
+  // ── Drill-down and Navigation Handlers ──────────────────────────────────────
+  const handleDrillDownToDistricts = (state) => {
+    setSearch('');
+    setSearchParams({
+      tab: 'districts',
+      stateId: state._id
+    });
+  };
+
+  const handleDrillDownToSubDistricts = (district) => {
+    setSearch('');
+    const sId = district.stateId?._id || district.stateId || stateIdParam;
+    setSearchParams({
+      tab: 'subdistricts',
+      stateId: sId || '',
+      districtId: district._id
+    });
+  };
+
+  const handleGoToStates = () => {
+    setSearch('');
+    setSearchParams({ tab: 'states' });
+  };
+
+  const handleGoToDistricts = (sId = stateIdParam) => {
+    setSearch('');
+    const params = { tab: 'districts' };
+    if (sId) params.stateId = sId;
+    setSearchParams(params);
+  };
+
+  const handleStateFilterChange = (newSId) => {
+    setSearch('');
+    if (!newSId) {
+      setSearchParams({ tab: activeTab });
+    } else {
+      if (activeTab === 'subdistricts') {
+        setSearchParams({ tab: 'subdistricts', stateId: newSId });
+      } else {
+        setSearchParams({ tab: 'districts', stateId: newSId });
+      }
+    }
+  };
+
+  const handleDistrictFilterChange = (newDId) => {
+    setSearch('');
+    const params = { tab: 'subdistricts', stateId: stateIdParam };
+    if (newDId) params.districtId = newDId;
+    setSearchParams(params);
+  };
 
   // ── State CRUD ─────────────────────────────────────────────────────────────
-  const [stateCustom, setStateCustom] = useState(false); // true: type a name instead of picking from the list
   const openStateModal = (state = null) => {
     setEditingState(state);
     setStateForm(state
@@ -156,8 +236,9 @@ const GeographicManagement = () => {
     setStateModal(true);
   };
 
-  // States not added yet, for the Add State dropdown
-  const addableStates = INDIAN_STATES.filter(s => !states.some(x => String(x.name).trim().toLowerCase() === s.name.toLowerCase()));
+  const addableStates = INDIAN_STATES.filter(
+    s => !states.some(x => String(x.name).trim().toLowerCase() === s.name.toLowerCase())
+  );
 
   const handleStateSubmit = async (e) => {
     e.preventDefault();
@@ -192,16 +273,21 @@ const GeographicManagement = () => {
       await stateService.toggleStatus(state._id);
       toastManager.success(`State ${state.isActive ? 'deactivated' : 'activated'}`);
       loadStates();
-    } catch { toastManager.error('Toggle failed'); }
+    } catch {
+      toastManager.error('Toggle failed');
+    }
   };
 
   // ── District CRUD ──────────────────────────────────────────────────────────
   const openDistrictModal = (district = null) => {
     if (!states.length) loadStates();
     setEditingDistrict(district);
+    const defaultStateId = district
+      ? (district.stateId?._id || district.stateId || '')
+      : (stateIdParam || (states.find(s => s.isActive)?._id || ''));
     setDistrictForm(district
-      ? { name: district.name, stateId: district.stateId?._id || district.stateId || '', isActive: district.isActive }
-      : { name: '', stateId: '', isActive: true }
+      ? { name: district.name, stateId: defaultStateId, isActive: district.isActive }
+      : { name: '', stateId: defaultStateId, isActive: true }
     );
     setDistrictModal(true);
   };
@@ -217,7 +303,8 @@ const GeographicManagement = () => {
         toastManager.success('District created');
       }
       setDistrictModal(false);
-      loadDistricts();
+      loadDistricts(stateIdParam || null);
+      loadStates(); // Refresh district counts
     } catch (err) {
       toastManager.error(err.response?.data?.message || 'Operation failed');
     }
@@ -228,7 +315,8 @@ const GeographicManagement = () => {
     try {
       await districtService.delete(district._id);
       toastManager.success('District deleted');
-      loadDistricts();
+      loadDistricts(stateIdParam || null);
+      loadStates();
     } catch (err) {
       toastManager.error(err.response?.data?.message || 'Delete failed');
     }
@@ -238,20 +326,26 @@ const GeographicManagement = () => {
     try {
       await districtService.toggleStatus(district._id);
       toastManager.success(`District ${district.isActive ? 'deactivated' : 'activated'}`);
-      loadDistricts();
-    } catch { toastManager.error('Toggle failed'); }
+      loadDistricts(stateIdParam || null);
+    } catch {
+      toastManager.error('Toggle failed');
+    }
   };
 
   // ── Sub-District CRUD ──────────────────────────────────────────────────────
   const openSubDistrictModal = (sd = null) => {
-    if (!districts.length) loadDistricts();
+    if (!districts.length) loadDistricts(stateIdParam || null);
     if (!states.length) loadStates();
     setEditingSubDistrict(sd);
+    const defaultDistrictId = sd
+      ? (sd.districtId?._id || sd.districtId || '')
+      : (districtIdParam || (districts.find(d => d.isActive)?._id || ''));
+
     setSubDistrictForm(sd
-      ? { name: sd.name, districtId: sd.districtId?._id || sd.districtId || '', isActive: sd.isActive }
-      : { name: '', districtId: '', isActive: true }
+      ? { name: sd.name, districtId: defaultDistrictId, isActive: sd.isActive }
+      : { name: '', districtId: defaultDistrictId, isActive: true }
     );
-    setStateFilterForSubDist('');
+    setStateFilterForSubDist(stateIdParam || '');
     setFilteredDistricts(districts);
     setSubDistrictModal(true);
   };
@@ -267,7 +361,8 @@ const GeographicManagement = () => {
         toastManager.success('Sub-district created');
       }
       setSubDistrictModal(false);
-      loadSubDistricts();
+      loadSubDistricts(districtIdParam || null, stateIdParam || null);
+      loadDistricts(stateIdParam || null); // Refresh subdistrict counts
     } catch (err) {
       toastManager.error(err.response?.data?.message || 'Operation failed');
     }
@@ -278,7 +373,8 @@ const GeographicManagement = () => {
     try {
       await subDistrictService.delete(sd._id);
       toastManager.success('Sub-district deleted');
-      loadSubDistricts();
+      loadSubDistricts(districtIdParam || null, stateIdParam || null);
+      loadDistricts(stateIdParam || null);
     } catch (err) {
       toastManager.error(err.response?.data?.message || 'Delete failed');
     }
@@ -288,197 +384,593 @@ const GeographicManagement = () => {
     try {
       await subDistrictService.toggleStatus(sd._id);
       toastManager.success(`Sub-district ${sd.isActive ? 'deactivated' : 'activated'}`);
-      loadSubDistricts();
-    } catch { toastManager.error('Toggle failed'); }
+      loadSubDistricts(districtIdParam || null, stateIdParam || null);
+    } catch {
+      toastManager.error('Toggle failed');
+    }
   };
 
   // ── Search filter ─────────────────────────────────────────────────────────
   const filterBySearch = (items) => {
     if (!search.trim()) return items;
     const lower = search.toLowerCase();
-    return items.filter(i => i.name?.toLowerCase().includes(lower));
+    return items.filter(i =>
+      i.name?.toLowerCase().includes(lower) ||
+      i.code?.toLowerCase().includes(lower) ||
+      i.stateName?.toLowerCase().includes(lower) ||
+      i.districtName?.toLowerCase().includes(lower)
+    );
   };
-
-  // ── Row renderer ──────────────────────────────────────────────────────────
-  const renderRow = (item, onEdit, onDelete, onToggle, extra = null) => (
-    <tr key={item._id} className="hover:bg-gray-50/60 transition-colors border-b border-gray-100 last:border-0">
-      <td className="py-3.5 px-5 font-medium text-gray-900">{item.name}</td>
-      {extra}
-      <td className="py-3.5 px-5">
-        <Badge active={item.isActive} />
-      </td>
-      <td className="py-3.5 px-5">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => onEdit(item)}
-            className="p-1.5 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-            title="Edit"
-          >
-            <FiEdit2 className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => onToggle(item)}
-            className="p-1.5 rounded-lg text-gray-500 hover:text-amber-600 hover:bg-amber-50 transition-colors"
-            title={item.isActive ? 'Deactivate' : 'Activate'}
-          >
-            {item.isActive ? <FiToggleRight className="w-4 h-4 text-emerald-500" /> : <FiToggleLeft className="w-4 h-4 text-gray-400" />}
-          </button>
-          <button
-            onClick={() => onDelete(item)}
-            className="p-1.5 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors"
-            title="Delete"
-          >
-            <FiTrash2 className="w-4 h-4" />
-          </button>
-        </div>
-      </td>
-    </tr>
-  );
 
   const loading = statesLoading || districtsLoading || subDistrictsLoading;
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
+      {/* ── Page Header ────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Geographic Management</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Manage States, Districts and Sub-Districts for service availability scope.
+            Click into any State to view its Districts, or click a District to manage its Sub-Districts (Tehsils).
           </p>
         </div>
 
         {/* Global scope note */}
-        <div className="flex items-center gap-2.5 px-4 py-2.5 bg-emerald-50 border border-emerald-200 rounded-xl">
+        <div className="flex items-center gap-2.5 px-4 py-2 bg-emerald-50 border border-emerald-200 rounded-xl">
           <FiGlobe className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-          <span className="text-sm font-semibold text-emerald-700">GLOBAL_INDIA = Entire India</span>
+          <span className="text-sm font-semibold text-emerald-800">GLOBAL_INDIA = Entire India</span>
         </div>
       </div>
 
-      {/* Scope hierarchy info */}
-      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-        <p className="text-sm text-blue-800 font-medium">
-          📍 Service Scope Hierarchy: <strong>GLOBAL INDIA</strong> → <strong>State</strong> → <strong>District</strong> → <strong>Sub-District</strong>
-        </p>
-        <p className="text-xs text-blue-600 mt-1">
-          GLOBAL_INDIA services are visible across all of India. State-scoped services are visible within that state only.
-        </p>
+      {/* ── Interactive Breadcrumb & Hierarchy Navigator ─────────────────────── */}
+      <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-2xl p-4 sm:p-5 text-white shadow-md">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center flex-wrap gap-2 text-sm">
+            {/* Level 1: All States */}
+            <button
+              onClick={handleGoToStates}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-all ${
+                activeTab === 'states'
+                  ? 'bg-teal-500 text-white shadow'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
+              }`}
+            >
+              <FiGlobe className="w-4 h-4" />
+              <span>All States</span>
+              <span className="text-xs bg-slate-800/80 px-1.5 py-0.5 rounded-full text-slate-300">
+                {states.length}
+              </span>
+            </button>
+
+            {/* Level 2: State breadcrumb */}
+            {activeTab !== 'states' && (
+              <>
+                <FiChevronRight className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                <button
+                  onClick={() => handleGoToDistricts(stateIdParam)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-all ${
+                    activeTab === 'districts'
+                      ? 'bg-teal-500 text-white shadow'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
+                  }`}
+                >
+                  <FiMapPin className="w-4 h-4" />
+                  <span>{selectedState?.name || 'All Districts'}</span>
+                  {selectedState && (
+                    <span className="text-xs bg-slate-800/80 px-1.5 py-0.5 rounded-full text-teal-200">
+                      {selectedState.districtCount ?? districts.length} Districts
+                    </span>
+                  )}
+                </button>
+              </>
+            )}
+
+            {/* Level 3: District breadcrumb */}
+            {activeTab === 'subdistricts' && (
+              <>
+                <FiChevronRight className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium bg-teal-500 text-white shadow">
+                  <FiLayers className="w-4 h-4" />
+                  <span>{selectedDistrict?.name || 'All Sub-Districts'}</span>
+                  {selectedDistrict && (
+                    <span className="text-xs bg-slate-800/80 px-1.5 py-0.5 rounded-full text-teal-200">
+                      {selectedDistrict.subDistrictCount ?? subDistricts.length} Sub-districts
+                    </span>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Quick Context Switchers & Back Action */}
+          <div className="flex items-center gap-2 flex-wrap ml-auto">
+            {/* Quick State Switcher (when on Districts or Sub-Districts) */}
+            {activeTab !== 'states' && (
+              <div className="flex items-center gap-1.5 bg-slate-800/90 border border-slate-700 px-2.5 py-1.5 rounded-xl text-xs">
+                <FiFilter className="text-teal-400 w-3.5 h-3.5" />
+                <span className="text-slate-400">State:</span>
+                <select
+                  value={stateIdParam}
+                  onChange={(e) => handleStateFilterChange(e.target.value)}
+                  className="bg-transparent text-white font-medium focus:outline-none cursor-pointer pr-1"
+                >
+                  <option value="" className="text-gray-900">All States</option>
+                  {states.map(s => (
+                    <option key={s._id} value={s._id} className="text-gray-900">
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Quick District Switcher (when on Sub-Districts) */}
+            {activeTab === 'subdistricts' && (
+              <div className="flex items-center gap-1.5 bg-slate-800/90 border border-slate-700 px-2.5 py-1.5 rounded-xl text-xs">
+                <FiFilter className="text-teal-400 w-3.5 h-3.5" />
+                <span className="text-slate-400">District:</span>
+                <select
+                  value={districtIdParam}
+                  onChange={(e) => handleDistrictFilterChange(e.target.value)}
+                  className="bg-transparent text-white font-medium focus:outline-none cursor-pointer pr-1"
+                >
+                  <option value="" className="text-gray-900">All Districts</option>
+                  {districts.map(d => (
+                    <option key={d._id} value={d._id} className="text-gray-900">
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Back Button */}
+            {activeTab === 'subdistricts' && (
+              <button
+                onClick={() => handleGoToDistricts(stateIdParam)}
+                className="flex items-center gap-1 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 hover:text-white rounded-xl text-xs font-semibold transition-colors"
+              >
+                <FiArrowLeft className="w-3.5 h-3.5" />
+                <span>Back to Districts</span>
+              </button>
+            )}
+
+            {activeTab === 'districts' && (
+              <button
+                onClick={handleGoToStates}
+                className="flex items-center gap-1 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 hover:text-white rounded-xl text-xs font-semibold transition-colors"
+              >
+                <FiArrowLeft className="w-3.5 h-3.5" />
+                <span>Back to States</span>
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
-        {TABS.map(tab => (
+      {/* ── View Header & Actions Toolbar ────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+        {/* Tabs toggle */}
+        <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
+          {TABS.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => {
+                if (tab.id === 'states') handleGoToStates();
+                else if (tab.id === 'districts') handleGoToDistricts(stateIdParam);
+                else {
+                  setSearchParams({
+                    tab: 'subdistricts',
+                    stateId: stateIdParam,
+                    districtId: districtIdParam
+                  });
+                }
+              }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
+                activeTab === tab.id
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-800'
+              }`}
+            >
+              <tab.icon className="w-3.5 h-3.5" />
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Search + Add Button */}
+        <div className="flex gap-2.5 items-center flex-1 max-w-lg justify-end">
+          <div className="relative flex-1">
+            <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder={
+                activeTab === 'states'
+                  ? 'Search states...'
+                  : activeTab === 'districts'
+                  ? selectedState ? `Search districts in ${selectedState.name}...` : 'Search districts...'
+                  : selectedDistrict ? `Search sub-districts in ${selectedDistrict.name}...` : 'Search sub-districts...'
+              }
+              className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400"
+            />
+          </div>
+
           <button
-            key={tab.id}
-            onClick={() => { setActiveTab(tab.id); setSearchParams({ tab: tab.id }, { replace: true }); }}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-              activeTab === tab.id
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-600 hover:text-gray-800'
-            }`}
+            onClick={() => {
+              if (activeTab === 'states') openStateModal();
+              else if (activeTab === 'districts') openDistrictModal();
+              else openSubDistrictModal();
+            }}
+            className="flex items-center gap-2 px-4 py-2.5 bg-teal-600 text-white rounded-xl text-sm font-semibold hover:bg-teal-700 transition-colors flex-shrink-0 shadow-sm"
           >
-            <tab.icon className="w-4 h-4" />
-            {tab.label}
+            <FiPlus className="w-4 h-4" />
+            <span>
+              {activeTab === 'states'
+                ? 'Add State'
+                : activeTab === 'districts'
+                ? selectedState ? `Add District to ${selectedState.name}` : 'Add District'
+                : selectedDistrict ? `Add Sub-District to ${selectedDistrict.name}` : 'Add Sub-District'
+              }
+            </span>
           </button>
-        ))}
-      </div>
-
-      {/* Search + Add */}
-      <div className="flex gap-3 items-center">
-        <div className="relative flex-1 max-w-sm">
-          <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder={`Search ${activeTab}...`}
-            className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400"
-          />
         </div>
-        <button
-          onClick={() => {
-            if (activeTab === 'states') openStateModal();
-            else if (activeTab === 'districts') openDistrictModal();
-            else openSubDistrictModal();
-          }}
-          className="flex items-center gap-2 px-4 py-2.5 bg-teal-600 text-white rounded-xl text-sm font-semibold hover:bg-teal-700 transition-colors"
-        >
-          <FiPlus className="w-4 h-4" />
-          Add {activeTab === 'states' ? 'State' : activeTab === 'districts' ? 'District' : 'Sub-District'}
-        </button>
       </div>
 
-      {/* Table */}
+      {/* ── Context Notification Pill ────────────────────────────────────────── */}
+      {activeTab === 'districts' && selectedState && (
+        <div className="flex items-center justify-between px-4 py-3 bg-teal-50/70 border border-teal-200 rounded-xl text-sm text-teal-900">
+          <div className="flex items-center gap-2">
+            <FiMapPin className="w-4 h-4 text-teal-600" />
+            <span>
+              Showing districts for <strong>{selectedState.name}</strong> ({filterBySearch(districts).length} found).
+              Click on any district to explore its <strong>Sub-Districts (Tehsils)</strong>.
+            </span>
+          </div>
+          <button
+            onClick={() => handleStateFilterChange('')}
+            className="text-xs font-semibold text-teal-700 hover:text-teal-900 underline flex-shrink-0 ml-2"
+          >
+            Show All Districts
+          </button>
+        </div>
+      )}
+
+      {activeTab === 'subdistricts' && (selectedDistrict || selectedState) && (
+        <div className="flex items-center justify-between px-4 py-3 bg-blue-50/70 border border-blue-200 rounded-xl text-sm text-blue-900">
+          <div className="flex items-center gap-2">
+            <FiLayers className="w-4 h-4 text-blue-600" />
+            <span>
+              Showing sub-districts for{' '}
+              <strong>{selectedDistrict ? selectedDistrict.name : 'all districts'}</strong>
+              {selectedState && <span> in <strong>{selectedState.name}</strong></span>}
+              {' '}({filterBySearch(subDistricts).length} found).
+            </span>
+          </div>
+          <button
+            onClick={() => {
+              setSearchParams({ tab: 'subdistricts' });
+            }}
+            className="text-xs font-semibold text-blue-700 hover:text-blue-900 underline flex-shrink-0 ml-2"
+          >
+            Clear Filters
+          </button>
+        </div>
+      )}
+
+      {/* ── Table ───────────────────────────────────────────────────────────── */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center py-16 text-gray-400 text-sm">Loading...</div>
+          <div className="flex items-center justify-center py-20 text-gray-400 text-sm gap-2">
+            <div className="w-5 h-5 border-2 border-teal-600 border-t-transparent rounded-full animate-spin" />
+            <span>Loading geographic data...</span>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
+                  {/* States Table Headers */}
                   {activeTab === 'states' && (
                     <>
                       <th className="py-3.5 px-5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">State Name</th>
                       <th className="py-3.5 px-5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Code</th>
+                      <th className="py-3.5 px-5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Districts</th>
                       <th className="py-3.5 px-5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                      <th className="py-3.5 px-5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+                      <th className="py-3.5 px-5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                     </>
                   )}
+
+                  {/* Districts Table Headers */}
                   {activeTab === 'districts' && (
                     <>
                       <th className="py-3.5 px-5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">District Name</th>
                       <th className="py-3.5 px-5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">State</th>
+                      <th className="py-3.5 px-5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Sub-Districts</th>
                       <th className="py-3.5 px-5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                      <th className="py-3.5 px-5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+                      <th className="py-3.5 px-5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                     </>
                   )}
+
+                  {/* Sub-Districts Table Headers */}
                   {activeTab === 'subdistricts' && (
                     <>
                       <th className="py-3.5 px-5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Sub-District Name</th>
                       <th className="py-3.5 px-5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">District</th>
                       <th className="py-3.5 px-5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">State</th>
                       <th className="py-3.5 px-5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                      <th className="py-3.5 px-5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+                      <th className="py-3.5 px-5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                     </>
                   )}
                 </tr>
               </thead>
-              <tbody>
-                {activeTab === 'states' && filterBySearch(states).map(s =>
-                  renderRow(s, openStateModal, handleDeleteState, handleToggleState,
-                    <td className="py-3.5 px-5 text-gray-500 text-sm">{s.code || '—'}</td>
-                  )
-                )}
-                {activeTab === 'districts' && filterBySearch(districts).map(d =>
-                  renderRow(d, openDistrictModal, handleDeleteDistrict, handleToggleDistrict,
-                    <td className="py-3.5 px-5 text-gray-500 text-sm">
+              <tbody className="divide-y divide-gray-100">
+                {/* ── States Rows ─────────────────────────────────────────── */}
+                {activeTab === 'states' && filterBySearch(states).map(s => (
+                  <tr
+                    key={s._id}
+                    className="hover:bg-slate-50/70 transition-colors group"
+                  >
+                    {/* Name: clickable to drill down */}
+                    <td className="py-3.5 px-5 font-semibold text-gray-900">
+                      <button
+                        onClick={() => handleDrillDownToDistricts(s)}
+                        className="text-left font-semibold text-gray-900 hover:text-teal-600 transition-colors flex items-center gap-2 group-hover:translate-x-0.5 duration-150"
+                      >
+                        <span className="w-2 h-2 rounded-full bg-teal-500/70" />
+                        <span>{s.name}</span>
+                      </button>
+                    </td>
+
+                    <td className="py-3.5 px-5 text-gray-500 text-sm font-mono">{s.code || '—'}</td>
+
+                    {/* Districts Pill */}
+                    <td className="py-3.5 px-5">
+                      <button
+                        onClick={() => handleDrillDownToDistricts(s)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200 transition-all shadow-2xs group/btn"
+                        title="Click to view all districts of this state"
+                      >
+                        <span>{s.districtCount ?? 0} Districts</span>
+                        <FiChevronRight className="w-3.5 h-3.5 text-teal-500 group-hover/btn:translate-x-0.5 transition-transform" />
+                      </button>
+                    </td>
+
+                    <td className="py-3.5 px-5">
+                      <Badge active={s.isActive} />
+                    </td>
+
+                    {/* Actions */}
+                    <td className="py-3.5 px-5 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => handleDrillDownToDistricts(s)}
+                          className="px-2.5 py-1 text-xs font-semibold rounded-lg text-teal-700 bg-teal-50 hover:bg-teal-100 transition-colors mr-1 flex items-center gap-1"
+                          title="Open Districts"
+                        >
+                          <span>Open</span>
+                          <FiChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => openStateModal(s)}
+                          className="p-1.5 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                          title="Edit"
+                        >
+                          <FiEdit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleToggleState(s)}
+                          className="p-1.5 rounded-lg text-gray-500 hover:text-amber-600 hover:bg-amber-50 transition-colors"
+                          title={s.isActive ? 'Deactivate' : 'Activate'}
+                        >
+                          {s.isActive ? (
+                            <FiToggleRight className="w-5 h-5 text-emerald-500" />
+                          ) : (
+                            <FiToggleLeft className="w-5 h-5 text-gray-400" />
+                          )}
+                        </button>
+                        <button
+                          onClick={() => handleDeleteState(s)}
+                          className="p-1.5 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors"
+                          title="Delete"
+                        >
+                          <FiTrash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+
+                {/* ── Districts Rows ──────────────────────────────────────── */}
+                {activeTab === 'districts' && filterBySearch(districts).map(d => (
+                  <tr
+                    key={d._id}
+                    className="hover:bg-slate-50/70 transition-colors group"
+                  >
+                    {/* Name: clickable to drill down to Sub-Districts */}
+                    <td className="py-3.5 px-5 font-semibold text-gray-900">
+                      <button
+                        onClick={() => handleDrillDownToSubDistricts(d)}
+                        className="text-left font-semibold text-gray-900 hover:text-teal-600 transition-colors flex items-center gap-2 group-hover:translate-x-0.5 duration-150"
+                      >
+                        <span className="w-2 h-2 rounded-full bg-blue-500/70" />
+                        <span>{d.name}</span>
+                      </button>
+                    </td>
+
+                    <td className="py-3.5 px-5 text-gray-600 text-sm">
                       {d.stateId?.name || d.stateName || '—'}
                     </td>
-                  )
-                )}
-                {activeTab === 'subdistricts' && filterBySearch(subDistricts).map(sd =>
-                  renderRow(sd, openSubDistrictModal, handleDeleteSubDistrict, handleToggleSubDistrict,
-                    <>
-                      <td className="py-3.5 px-5 text-gray-500 text-sm">
-                        {sd.districtId?.name || sd.districtName || '—'}
-                      </td>
-                      <td className="py-3.5 px-5 text-gray-500 text-sm">
-                        {sd.stateId?.name || sd.stateName || '—'}
-                      </td>
-                    </>
-                  )
+
+                    {/* Sub-Districts Pill */}
+                    <td className="py-3.5 px-5">
+                      <button
+                        onClick={() => handleDrillDownToSubDistricts(d)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition-all shadow-2xs group/btn"
+                        title="Click to view all sub-districts (tehsils) of this district"
+                      >
+                        <span>{d.subDistrictCount ?? 0} Sub-Districts</span>
+                        <FiChevronRight className="w-3.5 h-3.5 text-blue-500 group-hover/btn:translate-x-0.5 transition-transform" />
+                      </button>
+                    </td>
+
+                    <td className="py-3.5 px-5">
+                      <Badge active={d.isActive} />
+                    </td>
+
+                    {/* Actions */}
+                    <td className="py-3.5 px-5 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => handleDrillDownToSubDistricts(d)}
+                          className="px-2.5 py-1 text-xs font-semibold rounded-lg text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors mr-1 flex items-center gap-1"
+                          title="Open Sub-Districts"
+                        >
+                          <span>Open</span>
+                          <FiChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => openDistrictModal(d)}
+                          className="p-1.5 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                          title="Edit"
+                        >
+                          <FiEdit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleToggleDistrict(d)}
+                          className="p-1.5 rounded-lg text-gray-500 hover:text-amber-600 hover:bg-amber-50 transition-colors"
+                          title={d.isActive ? 'Deactivate' : 'Activate'}
+                        >
+                          {d.isActive ? (
+                            <FiToggleRight className="w-5 h-5 text-emerald-500" />
+                          ) : (
+                            <FiToggleLeft className="w-5 h-5 text-gray-400" />
+                          )}
+                        </button>
+                        <button
+                          onClick={() => handleDeleteDistrict(d)}
+                          className="p-1.5 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors"
+                          title="Delete"
+                        >
+                          <FiTrash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+
+                {/* ── Sub-Districts Rows ───────────────────────────────────── */}
+                {activeTab === 'subdistricts' && filterBySearch(subDistricts).map(sd => (
+                  <tr
+                    key={sd._id}
+                    className="hover:bg-slate-50/70 transition-colors"
+                  >
+                    <td className="py-3.5 px-5 font-semibold text-gray-900 flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500/70" />
+                      <span>{sd.name}</span>
+                    </td>
+
+                    <td className="py-3.5 px-5 text-gray-600 text-sm">
+                      {sd.districtId?.name || sd.districtName || '—'}
+                    </td>
+
+                    <td className="py-3.5 px-5 text-gray-600 text-sm">
+                      {sd.stateId?.name || sd.stateName || '—'}
+                    </td>
+
+                    <td className="py-3.5 px-5">
+                      <Badge active={sd.isActive} />
+                    </td>
+
+                    {/* Actions */}
+                    <td className="py-3.5 px-5 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => openSubDistrictModal(sd)}
+                          className="p-1.5 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                          title="Edit"
+                        >
+                          <FiEdit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleToggleSubDistrict(sd)}
+                          className="p-1.5 rounded-lg text-gray-500 hover:text-amber-600 hover:bg-amber-50 transition-colors"
+                          title={sd.isActive ? 'Deactivate' : 'Activate'}
+                        >
+                          {sd.isActive ? (
+                            <FiToggleRight className="w-5 h-5 text-emerald-500" />
+                          ) : (
+                            <FiToggleLeft className="w-5 h-5 text-gray-400" />
+                          )}
+                        </button>
+                        <button
+                          onClick={() => handleDeleteSubDistrict(sd)}
+                          className="p-1.5 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors"
+                          title="Delete"
+                        >
+                          <FiTrash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+
+                {/* ── Empty States ────────────────────────────────────────── */}
+                {activeTab === 'states' && !statesLoading && filterBySearch(states).length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="py-16 text-center text-gray-500">
+                      <FiGlobe className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                      <p className="font-medium text-gray-700">No states found.</p>
+                      <p className="text-xs text-gray-400 mt-1">Get started by adding your first state or union territory.</p>
+                      <button
+                        onClick={() => openStateModal()}
+                        className="mt-4 px-4 py-2 bg-teal-600 text-white rounded-xl text-xs font-semibold hover:bg-teal-700 transition-colors"
+                      >
+                        + Add State
+                      </button>
+                    </td>
+                  </tr>
                 )}
 
-                {/* Empty state */}
-                {activeTab === 'states' && !statesLoading && filterBySearch(states).length === 0 && (
-                  <tr><td colSpan={4} className="py-12 text-center text-gray-400 text-sm">No states found. Add your first state!</td></tr>
-                )}
                 {activeTab === 'districts' && !districtsLoading && filterBySearch(districts).length === 0 && (
-                  <tr><td colSpan={4} className="py-12 text-center text-gray-400 text-sm">No districts found. Add a district under a state!</td></tr>
+                  <tr>
+                    <td colSpan={5} className="py-16 text-center text-gray-500">
+                      <FiMapPin className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                      <p className="font-medium text-gray-700">
+                        {selectedState ? `No districts found in ${selectedState.name}.` : 'No districts found.'}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Add a district to define local regional boundaries.
+                      </p>
+                      <button
+                        onClick={() => openDistrictModal()}
+                        className="mt-4 px-4 py-2 bg-teal-600 text-white rounded-xl text-xs font-semibold hover:bg-teal-700 transition-colors"
+                      >
+                        + Add District {selectedState ? `to ${selectedState.name}` : ''}
+                      </button>
+                    </td>
+                  </tr>
                 )}
+
                 {activeTab === 'subdistricts' && !subDistrictsLoading && filterBySearch(subDistricts).length === 0 && (
-                  <tr><td colSpan={5} className="py-12 text-center text-gray-400 text-sm">No sub-districts found. Add one under a district!</td></tr>
+                  <tr>
+                    <td colSpan={5} className="py-16 text-center text-gray-500">
+                      <FiLayers className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                      <p className="font-medium text-gray-700">
+                        {selectedDistrict ? `No sub-districts found in ${selectedDistrict.name}.` : 'No sub-districts found.'}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Add tehsils, blocks, or mandals under this district.
+                      </p>
+                      <button
+                        onClick={() => openSubDistrictModal()}
+                        className="mt-4 px-4 py-2 bg-teal-600 text-white rounded-xl text-xs font-semibold hover:bg-teal-700 transition-colors"
+                      >
+                        + Add Sub-District {selectedDistrict ? `to ${selectedDistrict.name}` : ''}
+                      </button>
+                    </td>
+                  </tr>
                 )}
               </tbody>
             </table>
@@ -509,7 +1001,11 @@ const GeographicManagement = () => {
                 required
                 value={stateForm.name}
                 onChange={e => {
-                  if (e.target.value === '__other__') { setStateCustom(true); setStateForm(p => ({ ...p, name: '', code: '' })); return; }
+                  if (e.target.value === '__other__') {
+                    setStateCustom(true);
+                    setStateForm(p => ({ ...p, name: '', code: '' }));
+                    return;
+                  }
                   const picked = INDIAN_STATES.find(s => s.name === e.target.value);
                   setStateForm(p => ({ ...p, name: picked?.name || '', code: picked?.code || '' }));
                 }}
@@ -545,12 +1041,17 @@ const GeographicManagement = () => {
             <span className="text-sm text-gray-700">Active</span>
           </label>
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={() => setStateModal(false)}
-              className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors">
+            <button
+              type="button"
+              onClick={() => setStateModal(false)}
+              className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors"
+            >
               Cancel
             </button>
-            <button type="submit"
-              className="flex-1 px-4 py-2.5 bg-teal-600 text-white rounded-lg text-sm font-semibold hover:bg-teal-700 transition-colors">
+            <button
+              type="submit"
+              className="flex-1 px-4 py-2.5 bg-teal-600 text-white rounded-lg text-sm font-semibold hover:bg-teal-700 transition-colors"
+            >
               {editingState ? 'Update' : 'Create'}
             </button>
           </div>
@@ -601,12 +1102,17 @@ const GeographicManagement = () => {
             <span className="text-sm text-gray-700">Active</span>
           </label>
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={() => setDistrictModal(false)}
-              className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors">
+            <button
+              type="button"
+              onClick={() => setDistrictModal(false)}
+              className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors"
+            >
               Cancel
             </button>
-            <button type="submit"
-              className="flex-1 px-4 py-2.5 bg-teal-600 text-white rounded-lg text-sm font-semibold hover:bg-teal-700 transition-colors">
+            <button
+              type="submit"
+              className="flex-1 px-4 py-2.5 bg-teal-600 text-white rounded-lg text-sm font-semibold hover:bg-teal-700 transition-colors"
+            >
               {editingDistrict ? 'Update' : 'Create'}
             </button>
           </div>
@@ -665,7 +1171,10 @@ const GeographicManagement = () => {
               value={subDistrictForm.name}
               onChange={name => setSubDistrictForm(p => ({ ...p, name }))}
               districtName={districts.find(d => d._id === subDistrictForm.districtId)?.name || ''}
-              stateName={districts.find(d => d._id === subDistrictForm.districtId)?.stateName || states.find(s => s._id === stateFilterForSubDist)?.name || ''}
+              stateName={
+                districts.find(d => d._id === subDistrictForm.districtId)?.stateName ||
+                states.find(s => s._id === stateFilterForSubDist)?.name || ''
+              }
               existingNames={subDistricts.filter(sd => (sd.districtId?._id || sd.districtId) === subDistrictForm.districtId).map(sd => sd.name)}
               placeholder="e.g. Depalpur"
             />
@@ -680,12 +1189,17 @@ const GeographicManagement = () => {
             <span className="text-sm text-gray-700">Active</span>
           </label>
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={() => setSubDistrictModal(false)}
-              className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors">
+            <button
+              type="button"
+              onClick={() => setSubDistrictModal(false)}
+              className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors"
+            >
               Cancel
             </button>
-            <button type="submit"
-              className="flex-1 px-4 py-2.5 bg-teal-600 text-white rounded-lg text-sm font-semibold hover:bg-teal-700 transition-colors">
+            <button
+              type="submit"
+              className="flex-1 px-4 py-2.5 bg-teal-600 text-white rounded-lg text-sm font-semibold hover:bg-teal-700 transition-colors"
+            >
               {editingSubDistrict ? 'Update' : 'Create'}
             </button>
           </div>
