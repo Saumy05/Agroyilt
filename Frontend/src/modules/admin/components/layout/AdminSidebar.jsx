@@ -169,15 +169,39 @@ const AdminSidebar = ({ isOpen, onClose }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]); // Remove onClose to prevent re-triggering when parent re-renders
 
+  // Helper to determine if a specific child menu item is active
+  const isChildItemActive = (item, child) => {
+    const childRoute = getChildRoute(item.route, child);
+
+    // 1. Exact match
+    if (location.pathname === childRoute) return true;
+
+    // 2. Child has a distinct sub-route (e.g. /admin/bookings/tracking)
+    if (childRoute !== item.route) {
+      return location.pathname.startsWith(childRoute + '/') || location.pathname === childRoute;
+    }
+
+    // 3. Child shares the parent's base route (e.g. "All Bookings" with route "/admin/bookings").
+    // It should be active for detail subpaths (like /admin/bookings/:id),
+    // UNLESS another sibling child explicitly matches (e.g. /admin/bookings/tracking).
+    if (childRoute === item.route && location.pathname.startsWith(item.route + '/')) {
+      const anyOtherSiblingMatches = item.children.some((sibling) => {
+        if (sibling === child) return false;
+        const siblingRoute = getChildRoute(item.route, sibling);
+        return location.pathname === siblingRoute ||
+               (siblingRoute !== item.route && (location.pathname.startsWith(siblingRoute + '/') || location.pathname === siblingRoute));
+      });
+      return !anyOtherSiblingMatches;
+    }
+
+    return false;
+  };
+
   // Auto-expand menu items when their route is active
   useEffect(() => {
     // 1. Try to find parent by explicit child route match first
     let activeItem = filteredMenu.find((item) => {
-      return item.children?.some(child => {
-        const childRoute = getChildRoute(item.route, child);
-        return location.pathname === childRoute || 
-               (childRoute !== item.route && location.pathname.startsWith(childRoute + '/'));
-      });
+      return item.children?.some(child => isChildItemActive(item, child));
     });
 
     // 2. Fall back to prefix matching if no explicit child route matched
@@ -186,10 +210,7 @@ const AdminSidebar = ({ isOpen, onClose }) => {
         if (item.route === "/admin/dashboard") {
           return location.pathname === "/admin/dashboard";
         }
-        const isChildRoute =
-          location.pathname.startsWith(item.route) &&
-          location.pathname !== item.route;
-        return isChildRoute;
+        return location.pathname.startsWith(item.route + '/') || location.pathname === item.route;
       });
     }
 
@@ -212,20 +233,16 @@ const AdminSidebar = ({ isOpen, onClose }) => {
       return location.pathname === "/admin/dashboard";
     }
 
-    // If item has children, check if any child is active
-    if (item.children && item.children.length > 0) {
-      return item.children.some(child => {
-        const childRoute = getChildRoute(item.route, child);
-        return location.pathname === childRoute || 
-               (childRoute !== item.route && location.pathname.startsWith(childRoute + '/'));
-      });
-    }
-
     // Special case for Catalog Setup to prevent false active state on sub-routes
     if (route === "/admin/equipment-catalog") {
       if (location.pathname.startsWith("/admin/equipment-catalog/vendor-")) {
         return false;
       }
+    }
+
+    // If item has children, check if any child is active
+    if (item.children && item.children.length > 0) {
+      return item.children.some(child => isChildItemActive(item, child));
     }
 
     // Strict prefix check: either exact match OR followed by a slash
@@ -326,10 +343,7 @@ const AdminSidebar = ({ isOpen, onClose }) => {
               <div className="ml-4 mt-1 pl-3.5 border-l-2 border-slate-700 space-y-0.5">
                 {item.children.map((child, index) => {
                   const childRoute = getChildRoute(item.route, child);
-                  const isChildActive =
-                    location.pathname === childRoute ||
-                    (childRoute !== item.route &&
-                      location.pathname.startsWith(childRoute));
+                  const isChildActive = isChildItemActive(item, child);
 
                   return (
                     <div

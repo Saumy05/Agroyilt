@@ -85,17 +85,36 @@ const formatDate = (dateStr) => {
   });
 };
 
+// In-memory cache for instant back navigation
+let farmerBookingsCache = {
+  data: {},
+};
+
 const FarmerBookings = () => {
-  const [bookings, setBookings] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, pages: 1 });
+  const [bookings, setBookings] = useState(() => {
+    return farmerBookingsCache.data['all__1']?.bookings || [];
+  });
+  const [loading, setLoading] = useState(() => !farmerBookingsCache.data['all__1']);
+  const [pagination, setPagination] = useState(() => {
+    return farmerBookingsCache.data['all__1']?.pagination || { page: 1, limit: 20, total: 0, pages: 1 };
+  });
   const navigate = useNavigate();
 
   const loadBookings = async (page = 1) => {
-    try {
+    const cacheKey = `${filterStatus}_${searchQuery.trim()}_${page}`;
+    const cached = farmerBookingsCache.data[cacheKey];
+
+    if (cached) {
+      setBookings(cached.bookings || []);
+      setPagination(cached.pagination || pagination);
+      setLoading(false);
+    } else {
       setLoading(true);
+    }
+
+    try {
       const params = {
         page,
         limit: pagination.limit,
@@ -104,8 +123,11 @@ const FarmerBookings = () => {
       };
       const response = await adminUserService.getAllUserBookings(params);
       if (response.success) {
-        setBookings(response.data || []);
-        setPagination(response.pagination || { page: 1, limit: 20, total: (response.data || []).length, pages: 1 });
+        const data = response.data || [];
+        const pag = response.pagination || { page: 1, limit: 20, total: data.length, pages: 1 };
+        setBookings(data);
+        setPagination(pag);
+        farmerBookingsCache.data[cacheKey] = { bookings: data, pagination: pag };
       }
     } catch (error) {
       console.error('Error loading farmer bookings:', error);

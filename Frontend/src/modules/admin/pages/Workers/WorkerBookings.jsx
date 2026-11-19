@@ -44,17 +44,44 @@ const REQUEST_TABS = ['open_requests', 'cancelled_requests'];
 
 const formatDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : null);
 
+const cleanPersonName = (name) => {
+  if (!name) return '';
+  const trimmed = String(name).trim();
+  const words = trimmed.split(/\s+/);
+  if (words.length >= 2 && words.length % 2 === 0) {
+    const half = words.length / 2;
+    const firstHalf = words.slice(0, half).join(' ');
+    const secondHalf = words.slice(half).join(' ');
+    if (firstHalf.toLowerCase() === secondHalf.toLowerCase()) {
+      return firstHalf;
+    }
+  }
+  return trimmed;
+};
+
+// In-memory cache to make back navigation instant without flashing 0 stats or showing logo loader
+let workerBookingsCache = {
+  data: {},
+  lastStats: null,
+};
+
 const WorkerBookings = () => {
   const navigate = useNavigate();
-  const [bookings, setBookings] = useState([]);
-  const [requests, setRequests] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [searchParams] = useSearchParams();
-  const [filterStatus, setFilterStatus] = useState(searchParams.get('status') || 'all'); // e.g. opened from an Analytics card
+  const [filterStatus, setFilterStatus] = useState(searchParams.get('status') || 'all');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [pagination, setPagination] = useState({ page: 1, limit: 12, total: 0, pages: 1 });
-  const [stats, setStats] = useState({ total: 0, completed: 0, inProgress: 0, pending: 0, cancelled: 0, openRequests: 0 });
+  const [bookings, setBookings] = useState(() => {
+    return workerBookingsCache.data['all__1']?.bookings || [];
+  });
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(() => !workerBookingsCache.lastStats);
+  const [pagination, setPagination] = useState(() => {
+    return workerBookingsCache.data['all__1']?.pagination || { page: 1, limit: 12, total: 0, pages: 1 };
+  });
+  const [stats, setStats] = useState(
+    () => workerBookingsCache.lastStats || { total: 0, completed: 0, inProgress: 0, pending: 0, cancelled: 0, openRequests: 0 }
+  );
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [copiedId, setCopiedId] = useState(null);
 
@@ -67,9 +94,24 @@ const WorkerBookings = () => {
   }, [searchQuery]);
 
   const fetchBookings = async (page = 1) => {
-    try {
-      setLoading(true);
+    const cacheKey = `${filterStatus}_${debouncedSearch}_${page}`;
+    const cached = workerBookingsCache.data[cacheKey];
 
+    // If cached data is available, populate it immediately so the user sees 0ms delay
+    if (cached) {
+      if (REQUEST_TABS.includes(filterStatus)) {
+        setRequests(cached.requests || []);
+      } else {
+        setBookings(cached.bookings || []);
+      }
+      if (cached.pagination) setPagination(cached.pagination);
+      if (workerBookingsCache.lastStats) setStats(workerBookingsCache.lastStats);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+
+    try {
       if (REQUEST_TABS.includes(filterStatus)) {
         const reqRes = await workerService.getOpenWorkerRequests({
           page,
@@ -78,12 +120,18 @@ const WorkerBookings = () => {
           scope: filterStatus === 'cancelled_requests' ? 'closed' : undefined
         });
         if (reqRes.success) {
-          setRequests(reqRes.data || []);
-          if (reqRes.pagination) setPagination(reqRes.pagination);
+          const newRequests = reqRes.data || [];
+          setRequests(newRequests);
+          const newPagination = reqRes.pagination || pagination;
+          if (reqRes.pagination) setPagination(newPagination);
+          workerBookingsCache.data[cacheKey] = { requests: newRequests, pagination: newPagination };
         }
         // Keep the tab counts fresh too (cheap: limit 1)
         const statRes = await workerService.getAllWorkerJobs({ page: 1, limit: 1 });
-        if (statRes.success && statRes.stats) setStats(statRes.stats);
+        if (statRes.success && statRes.stats) {
+          setStats(statRes.stats);
+          workerBookingsCache.lastStats = statRes.stats;
+        }
         return;
       }
 
@@ -95,13 +143,17 @@ const WorkerBookings = () => {
       });
 
       if (res.success) {
-        setBookings(res.data || []);
+        const newBookings = res.data || [];
+        setBookings(newBookings);
+        const newPagination = res.pagination || pagination;
         if (res.pagination) {
-          setPagination(res.pagination);
+          setPagination(newPagination);
         }
         if (res.stats) {
           setStats(res.stats);
+          workerBookingsCache.lastStats = res.stats;
         }
+        workerBookingsCache.data[cacheKey] = { bookings: newBookings, pagination: newPagination };
       }
     } catch (error) {
       console.error('Failed to fetch worker bookings:', error);
@@ -710,7 +762,7 @@ const WorkerBookings = () => {
                       </span>
                     </div>
                     <div>
-                      <h5 className="font-bold text-slate-900">{selectedBooking.workerId?.name || 'Unassigned'}</h5>
+                      <h5 className="font-bold text-slate-900">{cleanPersonName(selectedBooking.workerId?.name) || 'Unassigned'}</h5>
                       <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
                         <FiPhone size={12} className="text-slate-400" /> {selectedBooking.workerId?.phone || 'N/A'}
                       </p>
@@ -877,10 +929,15 @@ const WorkerBookings = () => {
                 <button
                   onClick={() => {
                     const id = selectedBooking._id;
-                    setSelectedBooking(null);
-                    navigate(`/admin/bookings/${id}`);
+                    const url = `/admin/bookings/${id}`;
+                    const win = window.open(url, '_blank');
+                    if (!win) {
+                      setSelectedBooking(null);
+                      navigate(url);
+                    }
                   }}
-                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md shadow-blue-500/20 transition-colors flex items-center gap-1.5"
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md shadow-blue-500/20 transition-colors flex items-center gap-1.5 cursor-pointer"
+                  title="Opens full booking details in a new tab"
                 >
                   Open Full Admin Page <FiExternalLink />
                 </button>
