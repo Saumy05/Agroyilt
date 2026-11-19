@@ -536,6 +536,16 @@ const getFinancialOverview = async ({
   // Recognized Refunds (Never includes withdrawals)
   const totalRefundsPaise = txData.recognizedRefundsPaise || 0;
 
+  // 6. Vendor Wallet Balances & Pending Payouts for Net Due
+  let vendorPendingPayoutsPaise = 0;
+  if (role === 'vendor' || role === 'all') {
+    const vendors = await Vendor.find({}, 'walletBalance').lean();
+    vendors.forEach(v => {
+      const bal = Number(v.walletBalance || 0);
+      if (bal > 0) vendorPendingPayoutsPaise += Math.round(bal * 100);
+    });
+  }
+
   // Net Revenue = Total Recognized Revenue - Recognized Refunds
   const netRevenuePaise = totalRecognizedRevenuePaise - totalRefundsPaise;
 
@@ -549,6 +559,11 @@ const getFinancialOverview = async ({
       totalRevenue: toINR(totalRecognizedRevenuePaise),
       totalRefunds: toINR(totalRefundsPaise),
       netRevenue: toINR(netRevenuePaise),
+
+      // Payouts & Dues
+      totalPayouts: toINR(txData.totalWithdrawalsPaise || 0),
+      netDue: role === 'vendor' ? toINR(vendorPendingPayoutsPaise) : toINR(netRevenuePaise),
+      pendingPayouts: toINR(vendorPendingPayoutsPaise),
 
       // Row 2: Breakdown & Gross Payments
       grossCustomerPayments: toINR(grossCustomerPaymentsPaise),
@@ -661,17 +676,108 @@ const getFinancialTransactions = async ({
     query.$or = orConditions;
   }
 
-  const [rawTransactions, total] = await Promise.all([
+  // Determine if filters allow Registration Fee Payments (platform fees collected for onboarding)
+  const canIncludeRegistrationFees =
+    (type === 'all' || type === 'platform_fee') &&
+    (category === 'all' || [
+      FINANCIAL_CATEGORIES.PLATFORM_FEE,
+      FINANCIAL_CATEGORIES.USER_FARMER_FEE,
+      FINANCIAL_CATEGORIES.VENDOR_PLATFORM_FEE,
+      FINANCIAL_CATEGORIES.WORKER_PLATFORM_FEE
+    ].includes(category));
+
+  let regFeeQuery = null;
+  if (canIncludeRegistrationFees) {
+    regFeeQuery = {};
+
+    // Date filtering
+    if (dateQuery) {
+      regFeeQuery.$or = [
+        { paidAt: dateQuery },
+        { createdAt: dateQuery }
+      ];
+    }
+
+    // Status filtering
+    if (status && status !== 'all') {
+      if (status === 'completed') regFeeQuery.status = 'PAID';
+      else if (status === 'pending') regFeeQuery.status = 'PENDING';
+      else if (status === 'failed') regFeeQuery.status = 'FAILED';
+      else regFeeQuery.status = status.toUpperCase();
+    }
+
+    // Role filtering
+    if (role && role !== 'all') {
+      const roleUpper = role.toUpperCase();
+      if (roleUpper === 'FARMER' || roleUpper === 'USER') regFeeQuery.role = 'USER';
+      else if (roleUpper === 'VENDOR') regFeeQuery.role = 'VENDOR';
+      else if (roleUpper === 'WORKER') regFeeQuery.role = 'WORKER';
+      // role === 'admin': keep all roles since admin revenue includes all onboarding fees
+    }
+
+    // Search filtering
+    if (search && search.trim()) {
+      const searchRegex = new RegExp(search.trim(), 'i');
+      regFeeQuery.$and = regFeeQuery.$and || [];
+      regFeeQuery.$and.push({
+        $or: [
+          { payerName: searchRegex },
+          { businessName: searchRegex },
+          { payerPhone: searchRegex },
+          { mobileNumberNormalized: searchRegex },
+          { payerEmail: searchRegex },
+          { gatewayPaymentId: searchRegex },
+          { gatewayOrderId: searchRegex }
+        ]
+      });
+    }
+  }
+
+  const mapRegFeeToTransaction = (fee) => {
+    const roleLower = (fee.role || 'user').toLowerCase();
+    const partyName = fee.payerName || fee.businessName || 'Member';
+    const partyPhone = fee.payerPhone || fee.mobileNumberNormalized || '';
+    const partyEmail = fee.payerEmail || '';
+
+    const userObj = (roleLower === 'user' || roleLower === 'farmer') ? { _id: fee.accountId, name: partyName, phone: partyPhone, email: partyEmail } : null;
+    const vendorObj = roleLower === 'vendor' ? { _id: fee.accountId, name: partyName, businessName: fee.businessName || partyName, phone: partyPhone, email: partyEmail } : null;
+    const workerObj = roleLower === 'worker' ? { _id: fee.accountId, name: partyName, phone: partyPhone, email: partyEmail } : null;
+
+    const financialCat = roleLower === 'vendor' ? FINANCIAL_CATEGORIES.VENDOR_PLATFORM_FEE :
+                         roleLower === 'worker' ? FINANCIAL_CATEGORIES.WORKER_PLATFORM_FEE :
+                         FINANCIAL_CATEGORIES.USER_FARMER_FEE;
+
+    return {
+      _id: fee._id.toString(),
+      referenceId: fee.gatewayPaymentId || fee.gatewayOrderId || fee._id.toString(),
+      type: 'platform_fee',
+      amount: fee.amount,
+      status: fee.status === 'PAID' ? 'completed' : fee.status.toLowerCase(),
+      paymentMethod: fee.paymentMethod || 'razorpay',
+      description: `${fee.role ? fee.role.charAt(0) + fee.role.slice(1).toLowerCase() : ''} Registration Fee - ${partyName}`.trim(),
+      createdAt: fee.paidAt || fee.createdAt,
+      userId: userObj,
+      vendorId: vendorObj,
+      workerId: workerObj,
+      bookingId: null,
+      financialCategory: financialCat,
+      financialRole: roleLower,
+      isRevenue: fee.status === 'PAID',
+      isRefund: false,
+      isGrossPayment: fee.status === 'PAID',
+      revenueImpact: fee.status === 'PAID' ? fee.amount : 0
+    };
+  };
+
+  const [rawTransactions, rawFees] = await Promise.all([
     Transaction.find(query)
       .populate('userId', 'name email phone')
       .populate('vendorId', 'name email phone businessName address')
       .populate('workerId', 'name email phone workerType skills address')
       .populate('bookingId', 'bookingNumber serviceName finalAmount status scheduledDate')
       .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limitNum)
       .lean(),
-    Transaction.countDocuments(query)
+    regFeeQuery ? RegistrationFeePayment.find(regFeeQuery).sort({ createdAt: -1 }).lean() : []
   ]);
 
   // Enrich with Financial Classification
@@ -688,18 +794,28 @@ const getFinancialTransactions = async ({
     };
   });
 
-  const filteredData = (category && category !== 'all')
-    ? enriched.filter(item => item.financialCategory === category)
-    : enriched;
+  const enrichedFees = (rawFees || []).map(mapRegFeeToTransaction);
+
+  let combined = [...enriched, ...enrichedFees];
+
+  if (category && category !== 'all') {
+    combined = combined.filter(item => item.financialCategory === category);
+  }
+
+  // Sort unified list chronologically descending
+  combined.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  const total = combined.length;
+  const paginatedData = combined.slice(skip, skip + limitNum);
 
   return {
     success: true,
-    data: filteredData,
+    data: paginatedData,
     pagination: {
       page: pageNum,
       limit: limitNum,
       total,
-      pages: Math.ceil(total / limitNum)
+      pages: Math.ceil(total / limitNum) || 1
     }
   };
 };

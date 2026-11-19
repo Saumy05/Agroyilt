@@ -486,24 +486,40 @@ const getAllVendorBookings = async (req, res) => {
     // Pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    // If search is provided, we need to find vendors by business name or name first
+    // If search is provided, match by vendor, farmer, booking number, or service
     if (search) {
-      const vendors = await Vendor.find({
-        $or: [
-          { businessName: { $regex: search, $options: 'i' } },
-          { name: { $regex: search, $options: 'i' } },
-          { phone: { $regex: search, $options: 'i' } }
-        ]
-      }).select('_id');
+      const trimmedSearch = search.trim();
+      const [vendors, users] = await Promise.all([
+        Vendor.find({
+          $or: [
+            { businessName: { $regex: trimmedSearch, $options: 'i' } },
+            { name: { $regex: trimmedSearch, $options: 'i' } },
+            { phone: { $regex: trimmedSearch, $options: 'i' } }
+          ]
+        }).select('_id'),
+        User.find({
+          $or: [
+            { name: { $regex: trimmedSearch, $options: 'i' } },
+            { phone: { $regex: trimmedSearch, $options: 'i' } }
+          ]
+        }).select('_id')
+      ]);
 
       const vendorIds = vendors.map(v => v._id);
-      query.vendorId = { $in: vendorIds };
+      const userIds = users.map(u => u._id);
+      query.$or = [
+        { vendorId: { $in: vendorIds } },
+        { userId: { $in: userIds } },
+        { bookingNumber: { $regex: trimmedSearch, $options: 'i' } },
+        { serviceName: { $regex: trimmedSearch, $options: 'i' } }
+      ];
     }
 
     const bookings = await Booking.find(query)
       .populate('vendorId', 'name businessName phone profileImage')
       .populate('userId', 'name phone')
       .populate('serviceId', 'title iconUrl')
+      .populate('equipmentId', 'name modelNumber')
       .populate('workerId', 'name phone')
       .sort({ createdAt: -1 })
       .skip(skip)

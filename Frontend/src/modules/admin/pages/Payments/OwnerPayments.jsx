@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   FiSearch,
@@ -230,7 +230,7 @@ const OwnerPayments = () => {
             {loading ? (
               <div className="h-8 w-24 bg-gray-100 animate-pulse rounded"></div>
             ) : (
-              formatCurrency(stats.netDue || stats.netRevenue)
+              formatCurrency(stats.netDue ?? 0)
             )}
           </h3>
         </motion.div>

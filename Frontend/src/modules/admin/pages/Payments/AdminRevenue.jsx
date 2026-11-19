@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   FiSearch,
@@ -177,7 +177,7 @@ const AdminRevenue = () => {
             {loading ? (
               <div className="h-8 w-24 bg-gray-100 animate-pulse rounded"></div>
             ) : (
-              formatCurrency(stats.totalCommission || stats.totalRevenue) // Fallback if API keys differ
+              formatCurrency(stats.totalCommission ?? 0)
             )}
           </h3>
         </motion.div>

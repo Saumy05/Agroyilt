@@ -29,7 +29,36 @@ const Vendors = () => {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3.5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+        <div>
+          <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">Vendor Management</h1>
+          <p className="text-xs text-slate-500 font-normal">Manage machinery owners, vendors, equipment bookings, and dues.</p>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex overflow-x-auto gap-1.5 pb-0.5 scrollbar-hide">
+        {navTabs.map(tab => {
+          const isActive = location.pathname.includes(tab.path);
+          const Icon = tab.icon;
+          return (
+            <Link
+              key={tab.path}
+              to={tab.path}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold text-xs whitespace-nowrap transition-all ${
+                isActive
+                  ? 'bg-blue-600 text-white shadow-2xs'
+                  : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
+              }`}
+            >
+              <Icon size={14} />
+              {tab.name}
+            </Link>
+          );
+        })}
+      </div>
+
       {/* Page Content */}
       <motion.div
         key={location.pathname}

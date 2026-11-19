@@ -6,6 +6,8 @@ const VendorEquipment = require('../../models/VendorEquipment');
 const User = require('../../models/User');
 const Settings = require('../../models/Settings');
 const PlatformEarning = require('../../models/PlatformEarning');
+const RegistrationFeePayment = require('../../models/RegistrationFeePayment');
+const Withdrawal = require('../../models/Withdrawal');
 const { BOOKING_STATUS, PAYMENT_STATUS } = require('../../utils/constants');
 const { getPlatformEarning, getVendorEarning } = require('../../utils/vendorPayout');
 
@@ -17,53 +19,81 @@ const getFinanceOverview = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
 
-    // Build date filter string for PlatformEarning Model (YYYY-MM-DD)
-    const dateFilter = {};
+    const bookingDateFilter = {};
+    const regFeeDateFilter = {};
     if (startDate && endDate) {
-      // Create strings like '2026-03-01' from the ISO formats
-      const startStr = new Date(startDate).toISOString().split('T')[0];
-      const endStr = new Date(endDate).toISOString().split('T')[0];
-      dateFilter.date = { $gte: startStr, $lte: endStr };
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      bookingDateFilter.createdAt = { $gte: start, $lte: end };
+      regFeeDateFilter.paidAt = { $gte: start, $lte: end };
     }
 
-    // 1. Fetch Aggregated Revenue Data INSTANTLY from the new Model
-    const revenueDocs = await PlatformEarning.aggregate([
-      { $match: dateFilter },
-      {
-        $group: {
-          _id: null,
-          totalTransactionValue: { $sum: '$totalRevenue' },
-          totalPlatformRevenue: { $sum: '$platformCommission' },
-          totalVendorEarnings: { $sum: '$vendorEarnings' },
-          totalTaxCollected: { $sum: '$totalGST' },
-          totalTDSCollected: { $sum: '$totalTDS' },
-          count: { $sum: '$totalBookings' },
-          totalSettlementReceived: { $sum: '$totalSettlementReceived' },
-          totalAmountPaidToVendors: { $sum: '$totalAmountPaidToVendors' }
-        }
-      }
+    // 1. Fetch live metrics directly from Primary Source of Truth Models
+    const [completedBookings, paidRegFees, settlements, withdrawals, vendors] = await Promise.all([
+      Booking.find({
+        ...bookingDateFilter,
+        status: { $in: ['completed', 'COMPLETED'] }
+      }).lean(),
+      RegistrationFeePayment.find({
+        ...regFeeDateFilter,
+        status: 'PAID'
+      }).lean(),
+      Settlement.find({}).lean(),
+      Withdrawal.find({}).lean(),
+      Vendor.find({}, 'walletBalance').lean()
     ]);
 
-    let revenueStats = revenueDocs[0] || {
-      totalTransactionValue: 0,
-      totalPlatformRevenue: 0,
-      totalVendorEarnings: 0,
-      totalTaxCollected: 0,
-      totalTDSCollected: 0,
-      count: 0,
-      totalSettlementReceived: 0,
-      totalAmountPaidToVendors: 0
+    let totalBookingGMV = 0;
+    let totalPlatformCommission = 0;
+    let totalVendorEarnings = 0;
+    let totalGST = 0;
+    let totalTDS = 0;
+
+    completedBookings.forEach(b => {
+      const amount = Number(b.finalAmount || b.totalAmount || 0);
+      totalBookingGMV += amount;
+      totalPlatformCommission += Number(b.commissionAmount || b.platformFee || 0);
+      totalVendorEarnings += Number(b.vendorEarnings || (amount - (b.platformFee || 0)));
+    });
+
+    const totalRegFeeRevenue = paidRegFees.reduce((sum, r) => sum + (r.amount || 0), 0);
+    const regFeeGST = paidRegFees.reduce((sum, r) => sum + (r.gstAmount || 0), 0);
+    totalGST += regFeeGST;
+
+    let vendorNegativeBalances = 0;
+    let vendorPositiveBalances = 0;
+    vendors.forEach(v => {
+      const bal = Number(v.walletBalance || 0);
+      if (bal < 0) vendorNegativeBalances += Math.abs(bal);
+      else if (bal > 0) vendorPositiveBalances += bal;
+    });
+
+    const completedSettlements = settlements.filter(s => s.status === 'COMPLETED' || s.status === 'completed');
+    const pendingSettlementsDocs = settlements.filter(s => s.status === 'PENDING' || s.status === 'pending');
+    const totalSettlementReceived = completedSettlements.reduce((sum, s) => sum + (s.amount || 0), 0);
+    const totalPendingSettlement = vendorNegativeBalances + pendingSettlementsDocs.reduce((sum, s) => sum + (s.amount || 0), 0);
+
+    const completedWithdrawals = withdrawals.filter(w => w.status === 'COMPLETED' || w.status === 'completed');
+    const pendingWithdrawals = withdrawals.filter(w => w.status === 'PENDING' || w.status === 'pending');
+    const totalAmountPaidToVendors = completedWithdrawals.reduce((sum, w) => sum + (w.amount || 0), 0);
+    const totalPendingPayout = vendorPositiveBalances + pendingWithdrawals.reduce((sum, w) => sum + (w.amount || 0), 0);
+
+    const revenueStats = {
+      totalTransactionValue: totalBookingGMV + totalRegFeeRevenue,
+      totalPlatformRevenue: totalPlatformCommission + totalRegFeeRevenue,
+      totalVendorEarnings,
+      totalTaxCollected: totalGST,
+      totalTDSCollected: totalTDS,
+      count: completedBookings.length + paidRegFees.length,
+      totalSettlementReceived,
+      totalPendingSettlement,
+      totalAmountPaidToVendors,
+      totalPendingPayout
     };
 
-    // Grab the live "Pending" snapshot from the latest today record to avoid manual calc
-    const todayStr = new Date().toISOString().split('T')[0];
-    const latestSnapshot = await PlatformEarning.findOne({ date: todayStr });
-
-    // Mount the extra stats securely
-    revenueStats.totalPendingSettlement = latestSnapshot?.totalPendingSettlement || 0;
-    revenueStats.totalPendingPayout = latestSnapshot?.totalPendingAmountToVendors || 0;
-
-    // 2. Pending Settlements (What we owe vendors)
+    // 2. Pending Settlements
     const pendingSettlements = await Settlement.aggregate([
       {
         $match: {
@@ -95,20 +125,40 @@ const getFinanceOverview = async (req, res) => {
       }
     ]);
 
-    // 4. Daily Revenue Trend (last 30 days) from optimized model
+    // 4. Daily Revenue Trend (last 30 days) computed directly from source records
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const thirtyDaysStr = thirtyDaysAgo.toISOString().split('T')[0];
 
-    const dailyRevenue = await PlatformEarning.find({ date: { $gte: thirtyDaysStr } })
-      .select('date totalRevenue platformCommission')
-      .sort({ date: 1 })
-      .lean();
+    const [recentFees, recentBookings] = await Promise.all([
+      RegistrationFeePayment.find({
+        status: 'PAID',
+        paidAt: { $gte: thirtyDaysAgo }
+      }).select('paidAt amount').lean(),
+      Booking.find({
+        status: { $in: ['completed', 'COMPLETED'] },
+        createdAt: { $gte: thirtyDaysAgo }
+      }).select('createdAt finalAmount platformFee commissionAmount').lean()
+    ]);
 
-    const formattedDaily = dailyRevenue.map(d => ({
-      _id: d.date,
-      revenue: d.totalRevenue,
-      commission: d.platformCommission
+    const dayMap = {};
+    recentFees.forEach(f => {
+      const dStr = (f.paidAt || f.createdAt).toISOString().split('T')[0];
+      if (!dayMap[dStr]) dayMap[dStr] = { revenue: 0, commission: 0 };
+      dayMap[dStr].revenue += (f.amount || 0);
+      dayMap[dStr].commission += (f.amount || 0);
+    });
+
+    recentBookings.forEach(b => {
+      const dStr = b.createdAt.toISOString().split('T')[0];
+      if (!dayMap[dStr]) dayMap[dStr] = { revenue: 0, commission: 0 };
+      dayMap[dStr].revenue += (b.finalAmount || 0);
+      dayMap[dStr].commission += (b.commissionAmount || b.platformFee || 0);
+    });
+
+    const formattedDaily = Object.keys(dayMap).sort().map(d => ({
+      _id: d,
+      revenue: dayMap[d].revenue,
+      commission: dayMap[d].commission
     }));
 
     res.status(200).json({
