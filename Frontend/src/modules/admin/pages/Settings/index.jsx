@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiSettings, FiGrid, FiDollarSign, FiSave, FiUser, FiMail, FiTrash2, FiPlus, FiUsers, FiShield, FiFileText, FiMapPin, FiPhone, FiHeadphones, FiMessageCircle, FiEdit, FiLock, FiUnlock, FiX, FiGlobe, FiUpload, FiCamera, FiCreditCard, FiEye, FiEyeOff, FiTag } from 'react-icons/fi';
+import { FiSettings, FiGrid, FiDollarSign, FiSave, FiUser, FiMail, FiTrash2, FiPlus, FiUsers, FiShield, FiFileText, FiMapPin, FiPhone, FiHeadphones, FiMessageCircle, FiEdit, FiLock, FiUnlock, FiX, FiGlobe, FiUpload, FiCamera, FiCreditCard, FiEye, FiEyeOff, FiTag, FiChevronRight } from 'react-icons/fi';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { getSettings, updateSettings, updateAdminProfile, getAdminProfile, getAllAdmins, createAdmin, deleteAdmin, updateAdminDetails, toggleAdminStatus, getRegistrationFees, updateRegistrationFee } from '../../services/settingsService';
 import { toastManager } from '../../../../utils/toastManager';
@@ -837,136 +837,149 @@ const AdminSettings = () => {
   };
 
   // Render Function for Main Settings Menu
-  const renderMainMenu = () => (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {/* Profile Settings Card */}
-      <div onClick={() => setActiveView('profile')}
-        className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer group">
-        <div className="w-12 h-12 bg-blue-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-blue-100 transition-colors">
-          <FiUser className="w-6 h-6 text-blue-600" />
-        </div>
-        <h3 className="text-lg font-bold text-gray-800 mb-2">Profile Settings</h3>
-        <p className="text-sm text-gray-500">Manage your personal account details and password</p>
+  const renderMainMenu = () => {
+    const menuItems = [
+      {
+        id: 'profile',
+        title: 'Profile Settings',
+        description: 'Manage personal account details and password',
+        icon: FiUser,
+        iconColor: 'text-blue-600',
+        bgColor: 'bg-blue-50 group-hover:bg-blue-100',
+        onClick: () => setActiveView('profile')
+      },
+      {
+        id: 'financial',
+        title: 'Financial Info',
+        description: 'Configure charges, commissions, and billing details',
+        icon: FiDollarSign,
+        iconColor: 'text-emerald-600',
+        bgColor: 'bg-emerald-50 group-hover:bg-emerald-100',
+        superAdminOnly: true,
+        onClick: () => setActiveView('financial')
+      },
+      {
+        id: 'system',
+        title: 'System & Support',
+        description: 'Manage auto-assignment and help contact info',
+        icon: FiSettings,
+        iconColor: 'text-purple-600',
+        bgColor: 'bg-purple-50 group-hover:bg-purple-100',
+        superAdminOnly: true,
+        onClick: () => setActiveView('system')
+      },
+      {
+        id: 'branding',
+        title: 'Branding & App Identity',
+        description: 'Change App Name, Logo, Tagline & Browser Favicon',
+        icon: FiGlobe,
+        iconColor: 'text-amber-600',
+        bgColor: 'bg-amber-50 group-hover:bg-amber-100',
+        superAdminOnly: true,
+        onClick: () => setActiveView('branding')
+      },
+      {
+        id: 'travel',
+        title: 'Travel Charges',
+        description: 'Per-km charge for vendors and workers with return trip',
+        icon: FiMapPin,
+        iconColor: 'text-sky-600',
+        bgColor: 'bg-sky-50 group-hover:bg-sky-100',
+        superAdminOnly: true,
+        onClick: () => setActiveView('travel')
+      },
+      {
+        id: 'paymentMethods',
+        title: 'Payment Methods',
+        description: 'Switch cash or online payment by state, district & area',
+        icon: FiCreditCard,
+        iconColor: 'text-indigo-600',
+        bgColor: 'bg-indigo-50 group-hover:bg-indigo-100',
+        superAdminOnly: true,
+        onClick: () => setActiveView('paymentMethods')
+      },
+      {
+        id: 'policies',
+        title: 'Policies & Terms',
+        description: 'Terms & Conditions and Privacy Policy for all users',
+        icon: FiFileText,
+        iconColor: 'text-rose-600',
+        bgColor: 'bg-rose-50 group-hover:bg-rose-100',
+        superAdminOnly: true,
+        onClick: () => setActiveView('policies')
+      },
+      {
+        id: 'agreementTemplates',
+        title: 'Lease Agreement Templates',
+        description: 'Wording of land lease agreements farmers sign',
+        icon: FiFileText,
+        iconColor: 'text-teal-600',
+        bgColor: 'bg-teal-50 group-hover:bg-teal-100',
+        superAdminOnly: true,
+        onClick: () => setActiveView('agreementTemplates')
+      },
+      {
+        id: 'languages',
+        title: 'Languages & Localization',
+        description: 'Enable, disable, or add languages for user apps',
+        icon: FiGlobe,
+        iconColor: 'text-cyan-600',
+        bgColor: 'bg-cyan-50 group-hover:bg-cyan-100',
+        onClick: () => setActiveView('languages')
+      },
+      {
+        id: 'coupons',
+        title: 'Coupons & Festival Offers',
+        description: 'Create & manage promotional discount codes',
+        icon: FiTag,
+        iconColor: 'text-orange-600',
+        bgColor: 'bg-orange-50 group-hover:bg-orange-100',
+        onClick: () => setActiveView('coupons')
+      },
+      {
+        id: 'admins',
+        title: 'Manage Admins',
+        description: 'Add, remove, and view all system administrators',
+        icon: FiUsers,
+        iconColor: 'text-violet-600',
+        bgColor: 'bg-violet-50 group-hover:bg-violet-100',
+        superAdminOnly: true,
+        onClick: () => navigate('/admin/admin-management')
+      }
+    ];
+
+    const visibleItems = menuItems.filter(item => !item.superAdminOnly || isSuperAdmin);
+
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-3.5">
+        {visibleItems.map(item => {
+          const Icon = item.icon;
+          return (
+            <div
+              key={item.id}
+              onClick={item.onClick}
+              className="bg-white p-3.5 sm:p-4 rounded-xl border border-gray-200/80 hover:border-blue-400 hover:shadow-xs transition-all cursor-pointer group flex items-center gap-3.5"
+            >
+              <div className={`w-10 h-10 rounded-xl ${item.bgColor} flex items-center justify-center shrink-0 transition-colors`}>
+                <Icon className={`w-5 h-5 ${item.iconColor}`} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-1.5">
+                  <h3 className="text-sm font-semibold text-gray-900 group-hover:text-blue-600 transition-colors truncate">
+                    {item.title}
+                  </h3>
+                  <FiChevronRight className="w-4 h-4 text-gray-300 group-hover:text-blue-500 group-hover:translate-x-0.5 transition-all shrink-0" />
+                </div>
+                <p className="text-xs text-gray-500 mt-0.5 line-clamp-1 leading-normal">
+                  {item.description}
+                </p>
+              </div>
+            </div>
+          );
+        })}
       </div>
-
-      {/* Financial Settings Card - Super Admin Only */}
-      {isSuperAdmin && (
-        <div onClick={() => setActiveView('financial')}
-          className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer group">
-          <div className="w-12 h-12 bg-green-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-green-100 transition-colors">
-            <FiDollarSign className="w-6 h-6 text-green-600" />
-          </div>
-          <h3 className="text-lg font-bold text-gray-800 mb-2">Financial Info</h3>
-          <p className="text-sm text-gray-500">Configure charges, commissions, and billing details</p>
-        </div>
-      )}
-
-      {/* System Settings Card - Super Admin Only */}
-      {isSuperAdmin && (
-        <div onClick={() => setActiveView('system')}
-          className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer group">
-          <div className="w-12 h-12 bg-purple-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-purple-100 transition-colors">
-            <FiSettings className="w-6 h-6 text-purple-600" />
-          </div>
-          <h3 className="text-lg font-bold text-gray-800 mb-2">System & Support</h3>
-          <p className="text-sm text-gray-500">Manage auto-assignment and help contact info</p>
-        </div>
-      )}
-
-      {/* Branding & App Identity Card - Super Admin Only */}
-      {isSuperAdmin && (
-        <div onClick={() => setActiveView('branding')}
-          className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer group">
-          <div className="w-12 h-12 bg-amber-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-amber-100 transition-colors">
-            <FiGlobe className="w-6 h-6 text-amber-600" />
-          </div>
-          <h3 className="text-lg font-bold text-gray-800 mb-2">Branding & App Identity</h3>
-          <p className="text-sm text-gray-500">Change App Name, Logo, Tagline & Browser Favicon</p>
-        </div>
-      )}
-
-      {/* Travel Charges Card - Super Admin Only */}
-      {isSuperAdmin && (
-        <div onClick={() => setActiveView('travel')}
-          className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer group">
-          <div className="w-12 h-12 bg-sky-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-sky-100 transition-colors">
-            <FiMapPin className="w-6 h-6 text-sky-600" />
-          </div>
-          <h3 className="text-lg font-bold text-gray-800 mb-2">Travel Charges</h3>
-          <p className="text-sm text-gray-500">Per-km charge for vendors and workers travelling to the farm, with return trip</p>
-        </div>
-      )}
-
-      {/* Payment Methods by area Card - Super Admin Only */}
-      {isSuperAdmin && (
-        <div onClick={() => setActiveView('paymentMethods')}
-          className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer group">
-          <div className="w-12 h-12 bg-indigo-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-indigo-100 transition-colors">
-            <FiCreditCard className="w-6 h-6 text-indigo-600" />
-          </div>
-          <h3 className="text-lg font-bold text-gray-800 mb-2">Payment Methods</h3>
-          <p className="text-sm text-gray-500">Switch cash or online payment on or off by state, district and sub-district</p>
-        </div>
-      )}
-
-      {/* Policies Card - Super Admin Only */}
-      {isSuperAdmin && (
-        <div onClick={() => setActiveView('policies')}
-          className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer group">
-          <div className="w-12 h-12 bg-rose-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-rose-100 transition-colors">
-            <FiFileText className="w-6 h-6 text-rose-600" />
-          </div>
-          <h3 className="text-lg font-bold text-gray-800 mb-2">Policies & Terms</h3>
-          <p className="text-sm text-gray-500">Terms & Conditions and Privacy Policy for farmers, vendors and workers</p>
-        </div>
-      )}
-
-      {/* Lease Agreement Templates Card - Super Admin Only */}
-      {isSuperAdmin && (
-        <div onClick={() => setActiveView('agreementTemplates')}
-          className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer group">
-          <div className="w-12 h-12 bg-emerald-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-emerald-100 transition-colors">
-            <FiFileText className="w-6 h-6 text-emerald-600" />
-          </div>
-          <h3 className="text-lg font-bold text-gray-800 mb-2">Lease Agreement Templates</h3>
-          <p className="text-sm text-gray-500">Wording of the land lease agreements farmers sign. Only a Super Admin can change it</p>
-        </div>
-      )}
-
-      {/* Languages & Localization Card */}
-      <div onClick={() => setActiveView('languages')}
-        className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer group">
-        <div className="w-12 h-12 bg-teal-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-teal-100 transition-colors">
-          <FiGlobe className="w-6 h-6 text-teal-600" />
-        </div>
-        <h3 className="text-lg font-bold text-gray-800 mb-2">Languages & Localization</h3>
-        <p className="text-sm text-gray-500">Enable, disable, or add languages for the Worker and User apps</p>
-      </div>
-
-      {/* Coupons & Festival Offers Card */}
-      <div onClick={() => setActiveView('coupons')}
-        className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer group">
-        <div className="w-12 h-12 bg-orange-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-orange-100 transition-colors">
-          <FiTag className="w-6 h-6 text-orange-600" />
-        </div>
-        <h3 className="text-lg font-bold text-gray-800 mb-2">Coupons & Festival Offers</h3>
-        <p className="text-sm text-gray-500">Create & manage promotional discount codes for Diwali, Dussehra & seasonal campaigns</p>
-      </div>
-
-      {/* Admin Management Card - Super Admin Only */}
-      {isSuperAdmin && (
-        <div onClick={() => navigate('/admin/admin-management')}
-          className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer group">
-          <div className="w-12 h-12 bg-amber-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-amber-100 transition-colors">
-            <FiUsers className="w-6 h-6 text-amber-600" />
-          </div>
-          <h3 className="text-lg font-bold text-gray-800 mb-2">Manage Admins</h3>
-          <p className="text-sm text-gray-500">Add, remove, and view all system administrators</p>
-        </div>
-      )}
-
-    </div>
-  );
+    );
+  };
 
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">

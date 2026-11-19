@@ -93,16 +93,21 @@ const AdminHeader = ({ onMenuClick }) => {
       { path: '/admin/soil-tests', title: 'Soil Testing', description: 'Manage and monitor soil testing requests' },
       { path: '/admin/roles', title: 'Roles', description: 'Save sets of permissions (Support Agent, Site Manager…) and reuse them when creating admins' },
       { path: '/admin/admin-management', title: 'Admin Management', description: 'Configure admins, track lead attribution & record monthly salary' },
+      { path: '/admin/equipment-approvals', title: 'Machinery Approvals', description: 'Review and approve machinery listings submitted by vendors' },
     ];
 
     const match = mappings.find(m => pathname === m.path || pathname.startsWith(m.path + '/'));
 
     if (match) return match;
 
-    const path = pathname.split('/').pop() || 'dashboard';
+    const rawPath = pathname.split('/').filter(Boolean).pop() || 'dashboard';
+    const formattedTitle = rawPath
+      .split('-')
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ');
     return {
-      title: path.charAt(0).toUpperCase() + path.slice(1),
-      description: `Manage your ${path} here.`
+      title: formattedTitle,
+      description: `Manage your ${formattedTitle.toLowerCase()} here.`
     };
   };
 
