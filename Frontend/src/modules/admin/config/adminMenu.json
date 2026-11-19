@@ -25,7 +25,8 @@
       "All Farmers",
       "Farmer Bookings",
       "Farmer Analytics",
-      "Registration Fees"
+      "Registration Fees",
+      "Farmer Wallets"
     ]
   },
   {
@@ -44,7 +45,9 @@
       "All Workers",
       "Worker Bookings",
       "Analytics",
-      "Registration Fees"
+      "Registration Fees",
+      "Worker Wallets",
+      "Incentives"
     ]
   },
   {

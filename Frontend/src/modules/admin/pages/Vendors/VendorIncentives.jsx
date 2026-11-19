@@ -21,6 +21,12 @@ const VendorIncentives = ({ initialRole = 'vendor' }) => {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
+  // Update role if initialRole prop changes via route navigation
+  useEffect(() => {
+    setRole(initialRole);
+    setPage(1);
+  }, [initialRole]);
+
   // Modal State
   const [selectedEntity, setSelectedEntity] = useState(null);
   const [showIncentiveModal, setShowIncentiveModal] = useState(false);

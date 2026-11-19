@@ -26,6 +26,12 @@ const VendorWallets = ({ initialRole = 'vendor' }) => {
   const [totalPages, setTotalPages] = useState(1);
   const [summary, setSummary] = useState({ totalDuesSum: 0, totalBalancesSum: 0, totalCount: 0 });
 
+  // Update role if initialRole changes via route navigation
+  useEffect(() => {
+    setRole(initialRole);
+    setPage(1);
+  }, [initialRole]);
+
   // Modal states
   const [selectedEntity, setSelectedEntity] = useState(null);
   const [showAdjustModal, setShowAdjustModal] = useState(false);
@@ -207,7 +213,7 @@ const VendorWallets = ({ initialRole = 'vendor' }) => {
                 <th className="py-3.5 px-4 font-semibold">WALLET BALANCE</th>
                 <th className="py-3.5 px-4 font-semibold">CREDITS</th>
                 <th className="py-3.5 px-4 font-semibold">{role === 'vendor' ? 'COD DUES' : 'DUES'}</th>
-                <th className="py-3.5 px-4 font-semibold">INCENTIVES EARNED</th>
+                <th className="py-3.5 px-4 font-semibold">{role === 'user' ? 'STATUS' : 'INCENTIVES EARNED'}</th>
                 <th className="py-3.5 px-5 font-semibold text-right">ACTION</th>
               </tr>
             </thead>
@@ -261,9 +267,15 @@ const VendorWallets = ({ initialRole = 'vendor' }) => {
                       ₹{Number(item.dues || 0).toFixed(2)}
                     </td>
 
-                    {/* Total Incentives Earned */}
+                    {/* Status or Incentives Earned */}
                     <td className="py-4 px-4 text-gray-700">
-                      ₹{Number(item.totalIncentivesEarned || 0).toFixed(2)}
+                      {role === 'user' ? (
+                        <span className={`inline-flex px-2 py-0.5 rounded-md text-xs font-semibold ${item.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                          {item.isActive ? 'Active' : 'Suspended'}
+                        </span>
+                      ) : (
+                        `₹${Number(item.totalIncentivesEarned || 0).toFixed(2)}`
+                      )}
                     </td>
 
                     {/* Actions */}
@@ -275,12 +287,14 @@ const VendorWallets = ({ initialRole = 'vendor' }) => {
                         >
                           Adjust Wallet
                         </button>
-                        <button
-                          onClick={() => openIncentive(item)}
-                          className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold rounded-lg text-xs border border-rose-200 transition-colors"
-                        >
-                          + Incentive
-                        </button>
+                        {role !== 'user' && (
+                          <button
+                            onClick={() => openIncentive(item)}
+                            className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold rounded-lg text-xs border border-rose-200 transition-colors"
+                          >
+                            + Incentive
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

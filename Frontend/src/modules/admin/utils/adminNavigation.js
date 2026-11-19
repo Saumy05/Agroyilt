@@ -6,12 +6,15 @@ export const getChildRoute = (parentRoute, childName) => {
       "Farmer Bookings": "/admin/users/bookings",
       "Farmer Analytics": "/admin/users/analytics",
       "Registration Fees": "/admin/users/registration-fees",
+      "Farmer Wallets": "/admin/users/wallets",
     },
     "/admin/workers": {
       "All Workers": "/admin/workers/all",
       "Worker Bookings": "/admin/workers/bookings",
       "Analytics": "/admin/workers/analytics",
       "Registration Fees": "/admin/workers/registration-fees",
+      "Worker Wallets": "/admin/workers/wallets",
+      "Incentives": "/admin/workers/incentives",
     },
     "/admin/vendors": {
       "All Vendors": "/admin/vendors/all",

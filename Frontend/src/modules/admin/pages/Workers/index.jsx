@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { Routes, Route, Navigate, useLocation, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { FiUsers, FiBriefcase, FiActivity, FiDollarSign, FiTag } from 'react-icons/fi';
@@ -8,6 +8,8 @@ import WorkerBookings from './WorkerBookings';
 import WorkerAnalytics from './WorkerAnalytics';
 import WorkerRegistrationFees from './WorkerRegistrationFees';
 import WorkCategories from './WorkCategories';
+import VendorWallets from '../Vendors/VendorWallets';
+import VendorIncentives from '../Vendors/VendorIncentives';
 
 const Workers = () => {
   const location = useLocation();
@@ -18,6 +20,8 @@ const Workers = () => {
     { name: 'Analytics', path: '/admin/workers/analytics', icon: FiActivity },
     { name: 'Registration Fees', path: '/admin/workers/registration-fees', icon: FiDollarSign },
     { name: 'Work Categories', path: '/admin/workers/categories', icon: FiTag },
+    { name: 'Worker Wallets', path: '/admin/workers/wallets', icon: FiDollarSign },
+    { name: 'Incentives', path: '/admin/workers/incentives', icon: FiActivity },
   ];
 
   return (
@@ -25,7 +29,7 @@ const Workers = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black text-slate-800 tracking-tight">Worker Management</h1>
-          <p className="text-sm text-slate-500 font-medium mt-1">Manage farm workers, team leaders, and their bookings.</p>
+          <p className="text-sm text-slate-500 font-medium mt-1">Manage farm workers, team leaders, wallets, and performance incentives.</p>
         </div>
       </div>
 
@@ -65,6 +69,8 @@ const Workers = () => {
           <Route path="analytics" element={<WorkerAnalytics />} />
           <Route path="registration-fees" element={<WorkerRegistrationFees />} />
           <Route path="categories" element={<WorkCategories />} />
+          <Route path="wallets" element={<VendorWallets initialRole="worker" />} />
+          <Route path="incentives" element={<VendorIncentives initialRole="worker" />} />
           <Route path="*" element={<Navigate to="all" replace />} />
         </Routes>
       </motion.div>
