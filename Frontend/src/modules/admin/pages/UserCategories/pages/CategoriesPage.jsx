@@ -20,7 +20,7 @@ const categorySchema = z.object({
   parentCategory: z.string().nullable().optional(),
   parentCategories: z.array(z.string()).optional(),
   isAlwaysMain: z.boolean().default(false),
-  requiresDriver: z.boolean().default(false),
+  requiresDriver: z.boolean().default(true),
   adminBaseCharge: z.coerce.number().default(0),
   sectionType: z.string().default('General'),
   trackingType: z.string().default('none'),
@@ -120,7 +120,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
     parentCategories: [],
     isAlwaysMain: false,
     trackingType: "none",
-    requiresDriver: false,
+    requiresDriver: true,
     adminBaseCharge: 0,
     sectionType: "General",
     bookingType: "VENDOR",
@@ -403,7 +403,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
             : [],
           isAlwaysMain: !!cat.isAlwaysMain,
           trackingType: cat.trackingType || 'none',
-          requiresDriver: cat.requiresDriver || false,
+          requiresDriver: cat.fulfillmentMode === 'rental' ? false : (cat.requiresDriver !== undefined ? Boolean(cat.requiresDriver) : true),
           adminBaseCharge: cat.adminBaseCharge || 0,
           sectionType: cat.sectionType || 'General',
           bookingType: cat.bookingType || 'VENDOR',
@@ -467,7 +467,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
           title: "", slug: "", homeIconUrl: "", homeBadge: "",
           hasSaleBadge: false, showOnHome: true, parentCategory: "",
           parentCategories: [], isAlwaysMain: false,
-          trackingType: "none", requiresDriver: false,
+          trackingType: "none", requiresDriver: true,
           adminBaseCharge: 0,
           sectionType: "General", bookingType: "VENDOR", fulfillmentMode: "service", rentByUnit: false, unitLabel: "", chargedPerKm: false,
           scope: "GLOBAL_INDIA", stateId: "", districtId: "", subDistrictId: ""
@@ -495,7 +495,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
           : [],
         isAlwaysMain: !!editing.isAlwaysMain,
         trackingType: editing.trackingType || "none",
-        requiresDriver: Boolean(editing.requiresDriver),
+        requiresDriver: editing.fulfillmentMode === 'rental' ? false : (editing.requiresDriver !== undefined ? Boolean(editing.requiresDriver) : true),
         adminBaseCharge: editing.adminBaseCharge || 0,
         sectionType: editing.sectionType || "General",
         bookingType: editing.bookingType || "VENDOR",
@@ -529,7 +529,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
       title: "", slug: "", homeIconUrl: "", homeBadge: "",
       hasSaleBadge: false, showOnHome: true, parentCategory: "",
       parentCategories: [], isAlwaysMain: false,
-      trackingType: "none", requiresDriver: false,
+      trackingType: "none", requiresDriver: true,
       adminBaseCharge: 0,
       sectionType: "General", bookingType: "VENDOR", fulfillmentMode: "service", rentByUnit: false, unitLabel: "", chargedPerKm: false,
       scope: "GLOBAL_INDIA", stateId: "", districtId: "", subDistrictId: ""
@@ -559,7 +559,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
       : [],
     isAlwaysMain: !!cat.isAlwaysMain,
     trackingType: cat.trackingType || 'none',
-    requiresDriver: cat.requiresDriver || false,
+    requiresDriver: cat.fulfillmentMode === 'rental' ? false : (cat.requiresDriver !== undefined ? Boolean(cat.requiresDriver) : true),
     sectionType: cat.sectionType || 'General',
     bookingType: cat.bookingType || 'VENDOR',
     fulfillmentMode: cat.fulfillmentMode || 'service',
@@ -607,6 +607,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
       setLoading(true);
       const data = {
         ...val.data,
+        requiresDriver: val.data.fulfillmentMode === 'service',
         parentCategories: form.parentCategories || [],
         homeOrder: editing?.homeOrder || 0,
         scope: form.scope || 'GLOBAL_INDIA',
@@ -1044,9 +1045,8 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
                     <td className="py-4 px-4">
                       <div className="flex flex-col gap-1">
                         <span className={`text-[10px] font-black px-2 py-0.5 rounded w-fit ${c.trackingType === 'timestamp' ? 'bg-indigo-100 text-indigo-700' : c.trackingType === 'odometer' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-500'}`}>
-                          {c.trackingType?.toUpperCase() || 'NONE'}
+                          {c.trackingType === 'odometer' ? 'ODOMETER (KM)' : c.trackingType === 'timestamp' ? 'LIVE TIMER' : 'NO METER'}
                         </span>
-                        {c.requiresDriver && <span className="text-[9px] text-rose-600 font-black uppercase" title="Operator-led job flow: vendor assigns an operator, reaches the farm, then starts the work with the farmer's OTP">● Operator-led job</span>}
                         {c.adminBaseCharge > 0 && <span className="text-[9px] text-emerald-700 font-black bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">Base: ₹{c.adminBaseCharge}</span>}
                       </div>
                     </td>
@@ -1455,7 +1455,7 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
                 <button
                   type="button"
                   key={opt.value}
-                  onClick={() => setForm({ ...form, fulfillmentMode: opt.value })}
+                  onClick={() => setForm({ ...form, fulfillmentMode: opt.value, requiresDriver: opt.value === 'service' })}
                   className={`flex-1 p-3 rounded-xl border-2 text-left transition-all ${form.fulfillmentMode === opt.value
                     ? 'border-primary-600 bg-primary-50 text-primary-700 shadow-sm'
                     : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'}`}
@@ -1559,42 +1559,32 @@ const CategoriesPage = ({ catalog, setCatalog }) => {
 
           <div className="bg-orange-50/50 p-5 rounded-2xl border border-orange-100 space-y-4">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-black text-orange-700 uppercase tracking-wider">⚙ Machinery Classification</span>
+              <span className="text-sm font-black text-orange-700 uppercase tracking-wider">⚙ Equipment Tracking & Mobilization</span>
             </div>
-            <p className="text-xs text-orange-600 font-medium">Only set this for machinery categories (Catalog Setup). Leave as "None" for Soil Testing or E-commerce.</p>
-            <div className="flex flex-col sm:flex-row gap-4 items-center">
-              <div className="flex-1 w-full">
-                <label className="block text-xs font-bold text-orange-700 mb-1 uppercase tracking-tighter">Tracking Type</label>
+            <p className="text-xs text-orange-600 font-medium">Configure usage tracking method and minimum transit callout fee for this category.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-orange-700 mb-1 uppercase tracking-tighter">Usage Tracking Method</label>
                 <select
                   value={form.trackingType}
                   onChange={e => setForm({ ...form, trackingType: e.target.value })}
                   className="w-full text-sm font-bold p-3 rounded-xl border border-orange-200 bg-white focus:outline-none focus:ring-2 focus:ring-orange-300"
                 >
-                  <option value="none">None (Default - Not a Machine)</option>
-                  <option value="odometer">Odometer (Moving Machine - Tractor/Harvester)</option>
-                  <option value="timestamp">Timestamp (Static Tool - Pump/Sprayer)</option>
+                  <option value="none">No Meter / Fixed (Implements, Attachments, or Standard)</option>
+                  <option value="odometer">Odometer (Tractor, Harvester - Requires KM Photos)</option>
+                  <option value="timestamp">Live Timer (Pump, Sprayer - Runtime Billing)</option>
                 </select>
               </div>
-              <div className="flex-1 w-full">
-                <label className="block text-xs font-bold text-orange-700 mb-1 uppercase tracking-tighter">Base Mobilization / Callout Charge (₹)</label>
+              <div>
+                <label className="block text-xs font-bold text-orange-700 mb-1 uppercase tracking-tighter">Base Mobilization Fee (₹)</label>
                 <input
                   type="number"
                   min="0"
                   value={form.adminBaseCharge || ''}
                   onChange={e => setForm({ ...form, adminBaseCharge: parseFloat(e.target.value) || 0 })}
-                  placeholder="e.g. 200 (Admin minimum fee)"
+                  placeholder="e.g. 200 (Min transit fee)"
                   className="w-full text-sm font-bold p-3 rounded-xl border border-orange-200 bg-white focus:outline-none focus:ring-2 focus:ring-orange-300"
                 />
-              </div>
-              <div className="flex items-center gap-3 pt-5">
-                <input
-                  id="reqDriver"
-                  type="checkbox"
-                  checked={form.requiresDriver}
-                  onChange={e => setForm({ ...form, requiresDriver: e.target.checked })}
-                  className="h-5 w-5 accent-orange-500"
-                />
-                <label htmlFor="reqDriver" className="text-sm font-bold text-orange-800 uppercase cursor-pointer" title="Tick for service jobs where the vendor sends an operator with the machine (assign operator, reach the farm, start with OTP). Leave off for hand-over rentals.">Operator-led job (vendor sends an operator)</label>
               </div>
             </div>
           </div>

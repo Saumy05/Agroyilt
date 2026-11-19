@@ -478,7 +478,7 @@ const createCategory = async (req, res) => {
       districtId: geoConfig.districtId,
       subDistrictId: geoConfig.subDistrictId,
       trackingType: trackingType || 'none',
-      requiresDriver: Boolean(requiresDriver),
+      requiresDriver: requiresDriver !== undefined ? Boolean(requiresDriver) : (fulfillmentMode !== 'rental'),
       adminBaseCharge: Number(adminBaseCharge) || 0,
       sectionType: sectionType || 'General',
       bookingType: bookingType || 'VENDOR',
@@ -712,7 +712,11 @@ const updateCategory = async (req, res) => {
 
     if (isAlwaysMain !== undefined) category.isAlwaysMain = Boolean(isAlwaysMain);
     if (trackingType !== undefined) category.trackingType = trackingType;
-    if (requiresDriver !== undefined) category.requiresDriver = Boolean(requiresDriver);
+    if (requiresDriver !== undefined) {
+      category.requiresDriver = Boolean(requiresDriver);
+    } else if (fulfillmentMode !== undefined) {
+      category.requiresDriver = fulfillmentMode !== 'rental';
+    }
     if (adminBaseCharge !== undefined) category.adminBaseCharge = Number(adminBaseCharge) || 0;
     if (sectionType !== undefined) category.sectionType = sectionType;
     if (bookingType !== undefined) category.bookingType = bookingType;

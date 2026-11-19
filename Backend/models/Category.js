@@ -140,13 +140,12 @@ const categorySchema = new mongoose.Schema({
     default: false
   },
   // ==========================================
-  // MACHINERY CLASSIFICATION (New)
-  // Controls tracking & driver logic for Equipment Rental flow
-  // Does NOT affect Soil Testing or E-commerce
+  // EQUIPMENT OPERATIONS & TRACKING
+  // Controls tracking & driver logic for Equipment Rental & Field Service flows
   // ==========================================
   // 'odometer' = Moving machine (Tractor/Harvester) - KM photo required
-  // 'timestamp' = Static tool (Pump/Sprayer) - only time-based billing
-  // 'none' = Non-machinery (default - Soil Testing, E-commerce, etc.)
+  // 'timestamp' = Static tool (Pump/Sprayer) - runtime/duration-based billing
+  // 'none' = No live meter (Implements, attachments, flat/acre rentals)
   trackingType: {
     type: String,
     enum: ['odometer', 'timestamp', 'none'],

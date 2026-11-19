@@ -227,7 +227,7 @@ const ManageProducts = () => {
             sectionType: "General",
             homeIconUrl: vendorEq.images?.[0] || "",
             trackingType: "none",
-            requiresDriver: false,
+            requiresDriver: true,
             cityId: cityId,
             vendorEqId: vendorEq._id
         });
@@ -259,7 +259,7 @@ const ManageProducts = () => {
                         showOnHome: catalogFormData.isAlwaysMain || false,
                         isPopular: false,
                         trackingType: catalogFormData.trackingType || 'none',
-                        requiresDriver: catalogFormData.requiresDriver || false,
+                        requiresDriver: true,
                         type: 'service', // Machinery categories are 'service'
                         homeIconUrl: catalogFormData.homeIconUrl || viewEquipment.images?.[0] || null,
                         cityIds: catalogFormData.cityId ? [catalogFormData.cityId] : [],
@@ -295,7 +295,7 @@ const ManageProducts = () => {
                 sectionType: catalogFormData.sectionType,
                 homeIconUrl: catalogFormData.homeIconUrl,
                 trackingType: catalogFormData.trackingType,
-                requiresDriver: catalogFormData.requiresDriver,
+                requiresDriver: true,
                 cityIds: catalogFormData.cityId ? [catalogFormData.cityId] : []
             };
             const res = await serviceService.create(payload);
@@ -1001,32 +1001,20 @@ const ManageProducts = () => {
 
                                 <div className="bg-orange-50/50 p-5 rounded-3xl border border-orange-100 space-y-4 mt-6">
                                     <div className="flex items-center gap-2">
-                                        <span className="text-xs font-black text-orange-700 uppercase tracking-wider">⚙ Machinery Classification</span>
+                                        <span className="text-xs font-black text-orange-700 uppercase tracking-wider">⚙ Equipment Tracking & Operations</span>
                                     </div>
-                                    <p className="text-[10px] text-orange-600 font-medium leading-tight">Only set this for machinery categories (Catalog Setup). Leave as "None" for Soil Testing or E-commerce.</p>
-                                    <div className="flex flex-col sm:flex-row gap-4 items-center">
-                                        <div className="flex-1 w-full space-y-1">
-                                            <label className="text-[10px] font-black text-orange-700 uppercase">Tracking Type</label>
-                                            <select
-                                                value={catalogFormData.trackingType || "none"}
-                                                onChange={e => setCatalogFormData({ ...catalogFormData, trackingType: e.target.value })}
-                                                className="w-full text-sm font-bold p-4 rounded-2xl border border-orange-200 bg-white outline-none"
-                                            >
-                                                <option value="none">None (Default - Not a Machine)</option>
-                                                <option value="odometer">Odometer (Moving Machine)</option>
-                                                <option value="timestamp">Timestamp (Static Tool)</option>
-                                            </select>
-                                        </div>
-                                        <div className="flex items-center gap-2 pt-5">
-                                            <input
-                                                id="reqDriver"
-                                                type="checkbox"
-                                                checked={catalogFormData.requiresDriver || false}
-                                                onChange={e => setCatalogFormData({ ...catalogFormData, requiresDriver: e.target.checked })}
-                                                className="h-4 w-4 accent-orange-600"
-                                            />
-                                            <label htmlFor="reqDriver" className="text-[10px] font-black text-orange-800 uppercase cursor-pointer">Requires Driver/Operator</label>
-                                        </div>
+                                    <p className="text-[10px] text-orange-600 font-medium leading-tight">Configure usage tracking method for equipment in this category.</p>
+                                    <div className="w-full space-y-1">
+                                        <label className="text-[10px] font-black text-orange-700 uppercase">Usage Tracking Method</label>
+                                        <select
+                                            value={catalogFormData.trackingType || "none"}
+                                            onChange={e => setCatalogFormData({ ...catalogFormData, trackingType: e.target.value })}
+                                            className="w-full text-sm font-bold p-4 rounded-2xl border border-orange-200 bg-white outline-none"
+                                        >
+                                            <option value="none">No Meter / Fixed (Implements, Attachments, or Standard)</option>
+                                            <option value="odometer">Odometer (Tractor, Harvester - Requires KM Photos)</option>
+                                            <option value="timestamp">Live Timer (Pump, Sprayer - Runtime Billing)</option>
+                                        </select>
                                     </div>
                                 </div>
 
