@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { motion } from 'framer-motion';
 import Logo from './Logo';
 
@@ -20,8 +20,17 @@ function isIOS() {
   return /iP(hone|od|ad)/i.test(navigator.userAgent);
 }
 
+const SIZE_PRESETS = {
+  xs: "w-8 h-8",
+  sm: "w-12 h-12",
+  md: "w-16 h-16",
+  lg: "w-20 h-20",
+  xl: "w-28 h-28"
+};
+
 const LogoLoader = ({ fullScreen, overlay = false, inline = false, size = "w-20 h-20", delay = 0 }) => {
   const [isVisible, setIsVisible] = React.useState(delay === 0);
+  const finalSize = SIZE_PRESETS[size] || size || "w-20 h-20";
 
   React.useEffect(() => {
     if (delay > 0) {
@@ -74,7 +83,7 @@ const LogoLoader = ({ fullScreen, overlay = false, inline = false, size = "w-20 
           repeat: Infinity,
           ease: "easeInOut"
         }}
-        className={`relative ${size} flex items-center justify-center`}
+        className={`relative ${finalSize} flex items-center justify-center`}
       >
         <Logo className="w-full h-full" />
         {/* Subtle ripple effect */}

@@ -13,7 +13,6 @@ import {
   restoreCoupon
 } from '../../../../services/couponService';
 import { toastManager } from '../../../../utils/toastManager';
-import LogoLoader from '../../../../components/common/LogoLoader';
 
 const Switch = ({ checked, onChange, disabled, title }) => (
   <button
@@ -382,8 +381,9 @@ const Coupons = () => {
         </div>
 
         {loading ? (
-          <div className="p-12 flex justify-center">
-            <LogoLoader size="md" />
+          <div className="py-20 flex flex-col items-center justify-center text-center">
+            <div className="w-8 h-8 border-3 border-emerald-500/20 border-t-emerald-600 rounded-full animate-spin mb-3" />
+            <p className="text-xs font-semibold text-gray-500">Loading promo coupons & festival offers...</p>
           </div>
         ) : coupons.length === 0 ? (
           <div className="p-12 text-center text-gray-400">
