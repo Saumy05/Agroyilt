@@ -1,18 +1,96 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { FiSearch, FiLoader, FiCalendar, FiClock, FiUser, FiShoppingBag, FiArrowRight } from 'react-icons/fi';
+import { 
+  FiSearch, FiCalendar, FiClock, FiUser, FiTruck, 
+  FiArrowRight, FiCheckCircle, FiXCircle, FiActivity,
+  FiX, FiChevronLeft, FiChevronRight, FiShoppingBag
+} from 'react-icons/fi';
 import { toastManager } from '../../../../utils/toastManager';
 import { useNavigate } from 'react-router-dom';
-import CardShell from '../UserCategories/components/CardShell';
 import { adminUserService } from '../../../../services/adminUserService';
 import { formatRentalReturn } from '../../../../utils/rentalReturn';
+
+const STATUS_FILTERS = [
+  { id: 'all', label: 'All Status' },
+  { id: 'pending', label: 'Pending' },
+  { id: 'confirmed', label: 'Confirmed' },
+  { id: 'ongoing', label: 'Ongoing' },
+  { id: 'completed', label: 'Completed' },
+  { id: 'cancelled', label: 'Cancelled' }
+];
+
+const getStatusConfig = (status) => {
+  const configs = {
+    pending: {
+      label: 'Pending',
+      icon: FiClock,
+      className: 'bg-amber-50 text-amber-700 border border-amber-200/80',
+    },
+    confirmed: {
+      label: 'Confirmed',
+      icon: FiCheckCircle,
+      className: 'bg-blue-50 text-blue-700 border border-blue-200/80',
+    },
+    ongoing: {
+      label: 'Ongoing',
+      icon: FiActivity,
+      className: 'bg-purple-50 text-purple-700 border border-purple-200/80',
+    },
+    completed: {
+      label: 'Completed',
+      icon: FiCheckCircle,
+      className: 'bg-emerald-50 text-emerald-700 border border-emerald-200/80',
+    },
+    cancelled: {
+      label: 'Cancelled',
+      icon: FiXCircle,
+      className: 'bg-rose-50 text-rose-700 border border-rose-200/80',
+    },
+    rejected: {
+      label: 'Rejected',
+      icon: FiXCircle,
+      className: 'bg-rose-50 text-rose-700 border border-rose-200/80',
+    }
+  };
+  return configs[status] || {
+    label: status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Unknown',
+    icon: FiClock,
+    className: 'bg-gray-50 text-gray-700 border border-gray-200/80',
+  };
+};
+
+const cleanPersonName = (name) => {
+  if (!name) return '';
+  const trimmed = String(name).trim();
+  const words = trimmed.split(/\s+/);
+  if (words.length >= 2 && words.length % 2 === 0) {
+    const half = words.length / 2;
+    const firstHalf = words.slice(0, half).join(' ');
+    const secondHalf = words.slice(half).join(' ');
+    if (firstHalf.toLowerCase() === secondHalf.toLowerCase()) {
+      return firstHalf;
+    }
+  }
+  return trimmed;
+};
+
+const formatDate = (dateStr) => {
+  if (!dateStr) return 'N/A';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  });
+};
 
 const FarmerBookings = () => {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0 });
+  const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, pages: 1 });
   const navigate = useNavigate();
 
   const loadBookings = async (page = 1) => {
@@ -24,11 +102,10 @@ const FarmerBookings = () => {
         status: filterStatus === 'all' ? undefined : filterStatus,
         search: searchQuery.trim() || undefined
       };
-      // Note: We'll need to implement getAllUserBookings in adminUserService
       const response = await adminUserService.getAllUserBookings(params);
       if (response.success) {
-        setBookings(response.data);
-        setPagination(response.pagination);
+        setBookings(response.data || []);
+        setPagination(response.pagination || { page: 1, limit: 20, total: (response.data || []).length, pages: 1 });
       }
     } catch (error) {
       console.error('Error loading farmer bookings:', error);
@@ -39,139 +116,248 @@ const FarmerBookings = () => {
   };
 
   useEffect(() => {
-    loadBookings();
+    loadBookings(1);
   }, [filterStatus, searchQuery]);
 
-  const getStatusStyle = (status) => {
-    const styles = {
-      pending: 'bg-yellow-100 text-yellow-800',
-      confirmed: 'bg-blue-100 text-blue-800',
-      ongoing: 'bg-purple-100 text-purple-800',
-      completed: 'bg-green-100 text-green-800',
-      cancelled: 'bg-red-100 text-red-800',
-      rejected: 'bg-rose-100 text-rose-800'
-    };
-    return styles[status] || 'bg-gray-100 text-gray-800';
-  };
-
   return (
-    <div className="space-y-6">
-      <CardShell
-        icon={FiShoppingBag}
-      >
-        {/* Search and Filter */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-6">
-          <div className="flex-1 relative">
-            <div className="absolute left-4 top-1/2 transform -translate-y-1/2">
-              <FiSearch className="w-5 h-5 text-gray-400" />
-            </div>
+    <div className="space-y-3.5">
+      {/* Compact Search & Status Filter Bar */}
+      <div className="bg-white rounded-xl border border-gray-200/80 p-2.5 sm:p-3 shadow-2xs flex flex-wrap items-center justify-between gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-0">
+          {/* Search Box */}
+          <div className="relative w-full sm:w-64 md:w-72 shrink-0">
+            <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-3.5 h-3.5 pointer-events-none" />
             <input
               type="text"
-            placeholder="Search by farmer name, phone or email..."
+              placeholder="Search farmer, phone, booking ID..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-8 pr-7 py-1.5 bg-gray-50/80 border border-gray-200 rounded-lg text-xs text-gray-800 placeholder-gray-400 outline-none focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 transition-all font-normal"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-600 rounded"
+              >
+                <FiX className="w-3 h-3" />
+              </button>
+            )}
           </div>
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-          >
-            <option value="all">All Status</option>
-            <option value="pending">Pending</option>
-            <option value="confirmed">Confirmed</option>
-            <option value="ongoing">Ongoing</option>
-            <option value="completed">Completed</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
+
+          {/* Status Filter Pills */}
+          <div className="flex items-center gap-1 overflow-x-auto scrollbar-none">
+            {STATUS_FILTERS.map((tab) => {
+              const isActive = filterStatus === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setFilterStatus(tab.id)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                    isActive
+                      ? 'bg-emerald-600 text-white shadow-2xs'
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100/80'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
-        {/* Bookings List */}
-        <div className="space-y-4">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <FiLoader className="w-8 h-8 text-gray-400 animate-spin mr-3" />
-              <span className="text-gray-600">Loading bookings...</span>
+        {/* Total Bookings Count */}
+        <span className="text-xs text-gray-500 font-medium whitespace-nowrap self-center ml-auto">
+          {pagination.total} {pagination.total === 1 ? 'booking' : 'bookings'}
+        </span>
+      </div>
+
+      {/* Bookings List */}
+      <div>
+        {loading ? (
+          <div className="bg-white rounded-xl border border-gray-200/80 py-16 text-center shadow-2xs">
+            <div className="w-7 h-7 border-3 border-emerald-500/20 border-t-emerald-600 rounded-full animate-spin mx-auto mb-2.5" />
+            <p className="text-xs font-semibold text-gray-500">Loading farmer bookings...</p>
+          </div>
+        ) : bookings.length === 0 ? (
+          <div className="bg-white rounded-xl border border-gray-200/80 py-14 px-4 text-center shadow-2xs space-y-2.5">
+            <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mx-auto border border-gray-100">
+              <FiShoppingBag className="text-gray-300 text-xl" />
             </div>
-          ) : bookings.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">No bookings found</div>
-          ) : (
-            <div className="grid grid-cols-1 gap-4">
-              {bookings.map((booking) => (
+            <p className="text-gray-800 font-bold text-sm">No bookings found</p>
+            <p className="text-gray-400 text-xs max-w-sm mx-auto">
+              {searchQuery || filterStatus !== 'all'
+                ? 'No farmer bookings matched your search query or status filter.'
+                : 'There are currently no farmer bookings recorded in the system.'}
+            </p>
+            {(searchQuery || filterStatus !== 'all') && (
+              <button
+                type="button"
+                onClick={() => { setSearchQuery(''); setFilterStatus('all'); }}
+                className="mt-1 px-3.5 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg text-xs font-semibold border border-emerald-200 transition-colors cursor-pointer"
+              >
+                Reset Filters
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-2.5">
+            {bookings.map((booking) => {
+              const statusCfg = getStatusConfig(booking.status);
+              const StatusIcon = statusCfg.icon;
+              const title = booking.serviceName || booking.serviceId?.title || booking.equipmentId?.name || booking.bookedItems?.[0]?.card?.title || booking.serviceCategory || 'General Equipment';
+              const farmerName = booking.userId?.name || 'Unknown Farmer';
+              const hasOperator = Boolean(booking.workerId?.name);
+              const operatorName = hasOperator ? cleanPersonName(booking.workerId.name) : null;
+              const bookingNumber = booking.bookingNumber || booking._id?.slice(-6).toUpperCase();
+              const rentalReturnText = formatRentalReturn(booking);
+
+              return (
                 <motion.div
                   key={booking._id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="border border-gray-200 rounded-xl p-4 hover:shadow-md transition-shadow bg-white"
+                  initial={{ opacity: 0, y: 3 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-white rounded-xl border border-gray-200/80 p-3 sm:p-3.5 shadow-2xs hover:border-emerald-300 hover:shadow-xs transition-all group"
                 >
-                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                    <div className="flex items-start gap-4">
-                      <div className="bg-blue-50 p-3 rounded-lg">
-                        <FiShoppingBag className="text-blue-600 w-6 h-6" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <h4 className="font-bold text-gray-900">{booking.serviceId?.title || 'General Equipment'}</h4>
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusStyle(booking.status)}`}>
-                            {booking.status.toUpperCase()}
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-sm text-gray-600">
-                          <div className="flex items-center gap-2">
-                            <FiUser className="w-4 h-4 text-blue-500" />
-                            <span>Farmer: <span className="font-medium text-gray-800">{booking.userId?.name}</span></span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <FiCalendar className="w-4 h-4 text-orange-500" />
-                            <span>Date: <span className="font-medium text-gray-800">{booking.scheduledDate ? new Date(booking.scheduledDate).toLocaleDateString() : 'N/A'}</span></span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                             <FiUser className="w-4 h-4 text-green-500" />
-                            <span>Operator: <span className="font-medium text-gray-800">{booking.workerId?.name || 'Manual Assignment'}</span></span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <FiClock className="w-4 h-4 text-purple-500" />
-                            <span>Slot: <span className="font-medium text-gray-800">{booking.scheduledTime || 'N/A'}{formatRentalReturn(booking) ? ` • ${formatRentalReturn(booking)}` : ''}</span></span>
-                          </div>
-                        </div>
-                      </div>
+                  {/* Top Line: Booking ID, Title, Status Badge & Price/Action */}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 flex-wrap min-w-0">
+                      <span className="font-mono text-[11px] font-bold px-2 py-0.5 bg-gray-100 text-gray-700 rounded-md border border-gray-200/60 shrink-0">
+                        #{bookingNumber}
+                      </span>
+                      <h3 className="font-bold text-gray-900 text-sm group-hover:text-emerald-700 transition-colors truncate">
+                        {title}
+                      </h3>
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium capitalize shrink-0 ${statusCfg.className}`}>
+                        <StatusIcon className="w-3 h-3" />
+                        <span>{statusCfg.label}</span>
+                      </span>
                     </div>
-                    <div className="flex flex-col items-end gap-2">
-                      <div className="text-lg font-bold text-gray-900">₹{booking.finalAmount}</div>
-                      <button 
+
+                    <div className="flex items-center gap-2.5 shrink-0">
+                      <span className="text-sm sm:text-base font-extrabold text-gray-900">
+                        ₹{Number(booking.finalAmount || 0).toLocaleString('en-IN')}
+                      </span>
+                      <button
+                        type="button"
                         onClick={() => navigate(`/admin/bookings/${booking._id}`)}
-                        className="text-sm text-blue-600 font-semibold hover:underline flex items-center gap-1 group"
+                        className="px-2.5 py-1 bg-gray-50 hover:bg-emerald-600 text-gray-700 hover:text-white rounded-lg text-xs font-medium border border-gray-200 hover:border-emerald-600 transition-colors flex items-center gap-1 cursor-pointer"
                       >
-                        View Details
-                        <FiArrowRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" />
+                        <span>Details</span>
+                        <FiArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
                       </button>
                     </div>
                   </div>
-                </motion.div>
-              ))}
-            </div>
-          )}
-        </div>
 
-        {/* Pagination */}
-        {!loading && pagination.pages > 1 && (
-          <div className="flex justify-center mt-8 gap-2">
-            {[...Array(pagination.pages)].map((_, i) => (
-              <button
-                key={i}
-                onClick={() => loadBookings(i + 1)}
-                className={`w-10 h-10 rounded-lg font-semibold transition-all ${pagination.page === i + 1
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-              >
-                {i + 1}
-              </button>
-            ))}
+                  {/* Bottom Line: Clean horizontal metadata strip */}
+                  <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-xs text-gray-600 mt-2 pt-2 border-t border-gray-100/80">
+                    {/* Farmer */}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <FiUser className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                      <span className="text-gray-400 font-medium">Farmer:</span>
+                      <span className="font-medium text-gray-800">{farmerName}</span>
+                      {booking.userId?.phone && (
+                        <span className="text-gray-400 text-[11px]">({booking.userId.phone})</span>
+                      )}
+                    </div>
+
+                    <span className="text-gray-200 hidden sm:inline">•</span>
+
+                    {/* Operator */}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <FiTruck className="w-3.5 h-3.5 text-teal-500 shrink-0" />
+                      <span className="text-gray-400 font-medium">Operator:</span>
+                      {hasOperator ? (
+                        <>
+                          <span className="font-medium text-gray-800">{operatorName}</span>
+                          {booking.workerId?.phone && (
+                            <span className="text-gray-400 text-[11px]">({booking.workerId.phone})</span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-gray-400 italic font-normal text-[11px]">Not assigned</span>
+                      )}
+                    </div>
+
+                    <span className="text-gray-200 hidden sm:inline">•</span>
+
+                    {/* Schedule Date & Slot */}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <FiCalendar className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+                      <span className="text-gray-400 font-medium">Date:</span>
+                      <span className="font-medium text-gray-800">{formatDate(booking.scheduledDate)}</span>
+                      {booking.scheduledTime && (
+                        <span className="text-gray-500 text-[11px]">({booking.scheduledTime})</span>
+                      )}
+                    </div>
+
+                    {/* Rental Return / Duration */}
+                    {rentalReturnText && (
+                      <>
+                        <span className="text-gray-200 hidden md:inline">•</span>
+                        <div className="flex items-center gap-1.5 text-purple-700 font-medium shrink-0">
+                          <FiClock className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+                          <span>{rentalReturnText}</span>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Booked Timestamp */}
+                    {booking.createdAt && (
+                      <span className="text-[11px] text-gray-400 ml-auto hidden lg:inline">
+                        Booked {new Date(booking.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                      </span>
+                    )}
+                  </div>
+                </motion.div>
+              );
+            })}
           </div>
         )}
-      </CardShell>
+      </div>
+
+      {/* Compact Pagination */}
+      {!loading && pagination.pages > 1 && (
+        <div className="flex items-center justify-center gap-1.5 pt-2">
+          <button
+            type="button"
+            disabled={pagination.page <= 1}
+            onClick={() => loadBookings(pagination.page - 1)}
+            className="p-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+          >
+            <FiChevronLeft className="w-3.5 h-3.5" />
+          </button>
+          
+          {[...Array(pagination.pages)].map((_, i) => {
+            const pageNum = i + 1;
+            const isCurrent = pagination.page === pageNum;
+            return (
+              <button
+                key={pageNum}
+                type="button"
+                onClick={() => loadBookings(pageNum)}
+                className={`w-8 h-8 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  isCurrent
+                    ? 'bg-emerald-600 text-white shadow-2xs'
+                    : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                {pageNum}
+              </button>
+            );
+          })}
+
+          <button
+            type="button"
+            disabled={pagination.page >= pagination.pages}
+            onClick={() => loadBookings(pagination.page + 1)}
+            className="p-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+          >
+            <FiChevronRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 };

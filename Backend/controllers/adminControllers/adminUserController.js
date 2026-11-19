@@ -451,6 +451,7 @@ const getAllUserBookings = async (req, res) => {
       .populate('userId', 'name phone email')
       .populate('workerId', 'name phone')
       .populate('serviceId', 'title')
+      .populate('equipmentId', 'name modelNumber')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
