@@ -3,11 +3,30 @@ import { useJsApiLoader } from '@react-google-maps/api';
 import { GOOGLE_MAPS_LOADER_ID, GOOGLE_MAPS_LIBRARIES } from '../../../../utils/googleMapsLoader';
 import PlaceNameSuggest from './PlaceNameSuggest';
 import { DISTRICTS_BY_STATE } from './districtsByState';
+import CustomSelect from './CustomSelect';
 
 const MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
 const OTHER = '__other__';
 
-const cleanName = (s) => String(s || '').replace(/\s+(district|tahsil|tehsil|taluka|taluk|block)$/i, '').trim();
+const JUNK_TYPES = new Set([
+  'transit_station', 'bus_station', 'train_station', 'route', 'premise', 'subpremise',
+  'school', 'hospital', 'bank', 'atm', 'store', 'restaurant', 'food', 'lodging'
+]);
+
+const JUNK_WORDS = /\b(bus stand|bus stop|railway|station|office|karyalaya|road|marg|path|lane|colony|hospital|school|college|police|thana|chowki|temple|mandir|masjid|church|bazaar|market|park|resort|hotel)\b/i;
+
+const cleanName = (s) => {
+  let str = String(s || '').trim();
+  // Strip leading and trailing administrative labels
+  str = str.replace(/^(tahsil|tehsil|taluka|taluk|block|mandal)\s+/i, '');
+  str = str.replace(/\s+(district|tahsil|tehsil|taluka|taluk|block|mandal)$/i, '');
+  // Format casing nicely if all uppercase or all lowercase
+  if (str === str.toUpperCase() || str === str.toLowerCase()) {
+    str = str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+  }
+  return str.trim();
+};
+
 const key = (s) => cleanName(String(s || '').replace(/\(.*$/, ' ')).toLowerCase();
 
 const SUB_WORDS = /\b(tahsil|tehsil|taluka|taluk|block|mandal)\b/i;
@@ -30,7 +49,7 @@ const searchAll = (service, query) => new Promise((resolve) => {
 });
 
 /**
- * Dropdown of a state's districts, or a district's sub-districts, fetched from Google.
+ * Custom Dropdown of a state's districts, or a district's sub-districts, fetched from Google.
  * Names already added are left out. "Other…" switches to a type-ahead for anything Google does not list.
  */
 const GooglePlaceList = ({ level, stateName, districtName, existingNames = [], value, onChange, editing = false, required = false, placeholder }) => {
@@ -80,8 +99,17 @@ const GooglePlaceList = ({ level, stateName, districtName, existingNames = [], v
       const districtLower = String(districtName).toLowerCase();
       const typesOf = (r) => r.types || [];
       const inArea = all.filter((r) => {
+        const types = typesOf(r);
+        if (types.some(t => JUNK_TYPES.has(t))) return false;
+        if (JUNK_WORDS.test(r.name || '')) return false;
+
         const address = (r.formatted_address || '').toLowerCase();
-        return address.includes(stateLower) && (level === 'district' || address.includes(districtLower) || SUB_WORDS.test(r.name || ''));
+        if (!address.includes(stateLower)) return false;
+
+        if (level === 'district') return true;
+
+        // For subdistrict: should match district name or sub-district words, and avoid matching other districts
+        return address.includes(districtLower) || SUB_WORDS.test(r.name || '');
       });
 
       // Google files many district seats under "town", so prefer true districts / tehsils, else accept towns in that area
@@ -147,25 +175,34 @@ const GooglePlaceList = ({ level, stateName, districtName, existingNames = [], v
 
   return (
     <div>
-      <select
+      <CustomSelect
         required={required}
         value={value}
-        disabled={!context || loading}
-        onChange={(e) => {
-          if (e.target.value === OTHER) { setCustomKey(cacheKey); onChange(''); return; }
-          onChange(e.target.value);
+        onChange={(val) => {
+          onChange(val);
         }}
-        className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400 disabled:bg-gray-50 disabled:text-gray-400"
-      >
-        <option value="">
-          {!context ? (level === 'district' ? 'Select a state first' : 'Select a district first')
-            : loading ? `Loading ${noun}s from Google…` : `Select a ${noun}`}
-        </option>
-        {available.map(n => <option key={n} value={n}>{n}</option>)}
-        {context && !loading && <option value={OTHER}>Other (type a name)…</option>}
-      </select>
+        options={available}
+        placeholder={
+          !context ? (level === 'district' ? 'Select a state first' : 'Select a district first')
+            : loading ? `Loading ${noun}s from Google…` : `Select a ${noun}`
+        }
+        searchPlaceholder={`Search or filter ${noun}s...`}
+        disabled={!context || loading}
+        isLoading={loading}
+        footerOption={
+          context && !loading ? {
+            label: 'Other (type a custom name)...',
+            onClick: () => {
+              setCustomKey(cacheKey);
+              onChange('');
+            }
+          } : null
+        }
+      />
       {context && !loading && available.length > 0 && (
-        <p className="text-[11px] text-gray-400 mt-1">{available.length} {noun}{available.length === 1 ? '' : 's'} not added yet for {context}{builtIn ? '' : ' (from Google)'}. Not listed? Choose “Other”.</p>
+        <p className="text-[11px] text-gray-400 mt-1">
+          {available.length} {noun}{available.length === 1 ? '' : 's'} available for {context}{builtIn ? '' : ' (from Google)'}. Not listed? Choose “Other”.
+        </p>
       )}
     </div>
   );

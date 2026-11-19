@@ -12,6 +12,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { INDIAN_STATES } from './indianStates';
 import GooglePlaceList from './GooglePlaceList';
+import CustomSelect from './CustomSelect';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toastManager } from '../../../../utils/toastManager';
 import { stateService, districtService, subDistrictService } from '../../services/geoService';
@@ -42,18 +43,18 @@ const Modal = ({ isOpen, onClose, title, children }) => {
   return (
     <AnimatePresence>
       <motion.div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
       >
         <motion.div
-          className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+          className="bg-white rounded-2xl shadow-2xl w-full max-w-md my-auto relative"
           initial={{ scale: 0.95, y: 0, opacity: 0 }}
           animate={{ scale: 1, y: 0, opacity: 1 }}
           exit={{ scale: 0.95, y: 20, opacity: 0 }}
         >
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 rounded-t-2xl bg-white">
             <h2 className="text-lg font-bold text-gray-800">{title}</h2>
             <button
               onClick={onClose}
@@ -994,27 +995,27 @@ const GeographicManagement = () => {
                 value={stateForm.name}
                 onChange={e => setStateForm(p => ({ ...p, name: e.target.value }))}
                 placeholder="e.g. Madhya Pradesh"
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400"
+                className="w-full px-3.5 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
               />
             ) : (
-              <select
+              <CustomSelect
                 required
                 value={stateForm.name}
-                onChange={e => {
-                  if (e.target.value === '__other__') {
-                    setStateCustom(true);
-                    setStateForm(p => ({ ...p, name: '', code: '' }));
-                    return;
-                  }
-                  const picked = INDIAN_STATES.find(s => s.name === e.target.value);
+                onChange={val => {
+                  const picked = INDIAN_STATES.find(s => s.name === val);
                   setStateForm(p => ({ ...p, name: picked?.name || '', code: picked?.code || '' }));
                 }}
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400"
-              >
-                <option value="">Select a state or union territory</option>
-                {addableStates.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
-                <option value="__other__">Other (type a name)…</option>
-              </select>
+                options={addableStates.map(s => ({ value: s.name, label: s.name }))}
+                placeholder="Select a state or union territory"
+                searchPlaceholder="Search states..."
+                footerOption={{
+                  label: 'Other (type a name)...',
+                  onClick: () => {
+                    setStateCustom(true);
+                    setStateForm(p => ({ ...p, name: '', code: '' }));
+                  }
+                }}
+              />
             )}
             {!editingState && !stateCustom && addableStates.length === 0 && (
               <p className="text-xs text-gray-500 mt-1">Every state and union territory is already added.</p>
@@ -1067,17 +1068,14 @@ const GeographicManagement = () => {
         <form onSubmit={handleDistrictSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">State *</label>
-            <select
+            <CustomSelect
               required
               value={districtForm.stateId}
-              onChange={e => setDistrictForm(p => ({ ...p, stateId: e.target.value }))}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400 bg-white"
-            >
-              <option value="">Select a state</option>
-              {states.filter(s => s.isActive).map(s => (
-                <option key={s._id} value={s._id}>{s.name}</option>
-              ))}
-            </select>
+              onChange={sId => setDistrictForm(p => ({ ...p, stateId: sId }))}
+              options={states.filter(s => s.isActive).map(s => ({ value: s._id, label: s.name }))}
+              placeholder="Select a state"
+              searchPlaceholder="Search states..."
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">District Name *</label>
@@ -1128,10 +1126,9 @@ const GeographicManagement = () => {
         <form onSubmit={handleSubDistrictSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Filter by State (Optional)</label>
-            <select
+            <CustomSelect
               value={stateFilterForSubDist}
-              onChange={e => {
-                const sId = e.target.value;
+              onChange={sId => {
                 setStateFilterForSubDist(sId);
                 if (sId) {
                   setFilteredDistricts(districts.filter(d => (d.stateId?._id || d.stateId) === sId));
@@ -1139,28 +1136,31 @@ const GeographicManagement = () => {
                   setFilteredDistricts(districts);
                 }
               }}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400 bg-white mb-2"
-            >
-              <option value="">All States</option>
-              {states.map(s => (
-                <option key={s._id} value={s._id}>{s.name}</option>
-              ))}
-            </select>
+              options={[
+                { value: '', label: 'All States' },
+                ...states.map(s => ({ value: s._id, label: s.name }))
+              ]}
+              placeholder="All States"
+              searchPlaceholder="Search states..."
+              className="mb-3"
+            />
 
             <label className="block text-sm font-medium text-gray-700 mb-1">District *</label>
-            <select
+            <CustomSelect
               required
               value={subDistrictForm.districtId}
-              onChange={e => setSubDistrictForm(p => ({ ...p, districtId: e.target.value }))}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400 bg-white"
-            >
-              <option value="">Select a district</option>
-              {(stateFilterForSubDist ? filteredDistricts : districts).filter(d => d.isActive).map(d => (
-                <option key={d._id} value={d._id}>
-                  {d.name} {d.stateName ? `(${d.stateName})` : ''}
-                </option>
-              ))}
-            </select>
+              onChange={dId => setSubDistrictForm(p => ({ ...p, districtId: dId }))}
+              options={(stateFilterForSubDist ? filteredDistricts : districts)
+                .filter(d => d.isActive)
+                .map(d => ({
+                  value: d._id,
+                  label: d.name,
+                  subtext: d.stateName || ''
+                }))
+              }
+              placeholder="Select a district"
+              searchPlaceholder="Search districts..."
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Sub-District Name *</label>
