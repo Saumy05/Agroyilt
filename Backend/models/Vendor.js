@@ -254,6 +254,14 @@ const vendorSchema = new mongoose.Schema({
       type: Number,
       default: 0 // Amount owed BY admin (net income from jobs)
     },
+    credits: {
+      type: Number,
+      default: 0 // Platform / promotional credits
+    },
+    totalIncentivesEarned: {
+      type: Number,
+      default: 0 // Cumulative performance incentives awarded
+    },
     totalCashCollected: {
       type: Number,
       default: 0

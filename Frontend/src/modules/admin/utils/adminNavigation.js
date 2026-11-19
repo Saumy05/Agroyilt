@@ -18,6 +18,8 @@ export const getChildRoute = (parentRoute, childName) => {
       "Vendor Bookings": "/admin/vendors/bookings",
       "Vendor Analytics": "/admin/vendors/analytics",
       "Registration Fees": "/admin/vendors/registration-fees",
+      "Vendor Wallets": "/admin/vendors/wallets",
+      "Incentives": "/admin/vendors/incentives",
     },
     "/admin/bookings": {
       "All Bookings": "/admin/bookings",

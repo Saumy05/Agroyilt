@@ -295,6 +295,7 @@ app.use('/api/admin', require('./routes/admin-routes/reportManagement.routes'));
 app.use('/api/admin/payment-rules', require('./routes/admin-routes/paymentRules.routes'));
 app.use('/api/admin/disputes', require('./routes/admin-routes/disputeManagement.routes'));
 app.use('/api/admin/settlements', require('./routes/admin-routes/settlementManagement.routes'));
+app.use('/api/admin', require('./routes/admin-routes/walletManagement.routes'));
 app.use('/api/admin/website', require('./routes/admin-routes/websiteManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/languageManagement.routes'));
 app.use('/api/admin/coupons', require('./routes/admin-routes/couponManagement.routes'));

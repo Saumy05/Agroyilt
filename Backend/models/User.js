@@ -74,6 +74,14 @@ const userSchema = new mongoose.Schema({
       type: Number,
       default: 0
     },
+    credits: {
+      type: Number,
+      default: 0 // Platform / promotional credits
+    },
+    totalIncentivesEarned: {
+      type: Number,
+      default: 0 // Cumulative loyalty / incentive bonuses awarded
+    },
     penalty: {
       type: Number,
       default: 0
