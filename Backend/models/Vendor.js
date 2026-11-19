@@ -338,7 +338,7 @@ const vendorSchema = new mongoose.Schema({
     },
     language: {
       type: String,
-      default: 'en'
+      default: null
     }
   },
   // Real-time Location

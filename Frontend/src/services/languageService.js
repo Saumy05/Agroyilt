@@ -7,9 +7,27 @@ import api from './api';
  */
 
 // Fallback defaults in case backend is loading or offline
+const cachedDefaultCode = typeof localStorage !== 'undefined' ? localStorage.getItem('systemDefaultLanguageCode') : null;
+
 export const FALLBACK_LANGUAGES = {
-  English: { label: 'English', code: 'en', nativeName: 'English', flag: '🇬🇧', isDefault: true, isActive: true },
-  Hindi: { label: 'Hindi', code: 'hi', nativeName: 'हिन्दी', flag: '🇮🇳', isDefault: false, isActive: true }
+  English: {
+    label: 'English',
+    name: 'English',
+    code: 'en',
+    nativeName: 'English',
+    flag: '🇬🇧',
+    isDefault: cachedDefaultCode ? cachedDefaultCode === 'en' : true,
+    isActive: true
+  },
+  Hindi: {
+    label: 'Hindi',
+    name: 'Hindi',
+    code: 'hi',
+    nativeName: 'हिन्दी',
+    flag: '🇮🇳',
+    isDefault: cachedDefaultCode === 'hi',
+    isActive: true
+  }
 };
 
 /**

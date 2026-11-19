@@ -95,8 +95,13 @@ const Languages = () => {
       const res = await setDefaultLanguage(lang._id);
       if (res.success) {
         toastManager.success(`${lang.name} is now the default language`);
+        // Sync local storage cache to reflect the new system default immediately
+        localStorage.setItem('systemDefaultLanguage', lang.name);
+        localStorage.setItem('systemDefaultLanguageCode', lang.code);
+        // Clear any explicit lock on this browser so admin testing immediately sees the new default
+        localStorage.removeItem('userLanguageExplicit');
         await loadLanguages();
-        refreshLanguages();
+        await refreshLanguages();
       }
     } catch (err) {
       toastManager.error(err.response?.data?.message || 'Failed to set default language');

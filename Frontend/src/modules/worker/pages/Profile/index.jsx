@@ -72,7 +72,7 @@ const Profile = () => {
 
     try {
       setIsUpdatingLanguage(true);
-      changeLanguage(langCode);
+      changeLanguage(langCode, { isExplicit: true });
 
       // Persist in worker profile settings on backend
       const storedSettings = authStorage.getUserData('worker')?.settings || {};

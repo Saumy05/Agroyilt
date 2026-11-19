@@ -124,7 +124,7 @@ const Settings = () => {
     const updated = { ...settings, language: lang };
     setSettings(updated);
     localStorage.setItem('vendorSettings', JSON.stringify(updated));
-    changeLanguage(lang);
+    changeLanguage(lang, { isExplicit: true });
     try {
       await vendorAuthService.updateProfile({
         settings: { language: lang }

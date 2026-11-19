@@ -50,7 +50,7 @@ const Settings = () => {
 
   const handleLanguageChange = async (langCode) => {
     try {
-      changeLanguage(langCode);
+      changeLanguage(langCode, { isExplicit: true });
       await userAuthService.updateProfile({
         settings: { language: langCode }
       });

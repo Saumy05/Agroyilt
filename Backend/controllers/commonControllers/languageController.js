@@ -7,9 +7,11 @@ const languageService = require('../../services/languageService');
 exports.getActiveLanguages = async (req, res) => {
   try {
     const languages = await languageService.getActiveLanguages();
+    const defaultLanguage = languages.find(l => l.isDefault) || languages[0] || null;
     return res.status(200).json({
       success: true,
-      languages
+      languages,
+      defaultLanguage
     });
   } catch (error) {
     console.error('Error fetching active languages:', error);

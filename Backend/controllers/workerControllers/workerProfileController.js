@@ -47,7 +47,7 @@ const getProfile = async (req, res) => {
         hasBike: Boolean(worker.hasBike),
         drivingLicense: worker.drivingLicense || null,
         teamId: worker.teamId || null,
-        settings: worker.settings || { notifications: true, language: 'en' },
+        settings: worker.settings || { notifications: true, language: null },
         isPhoneVerified: worker.isPhoneVerified || false,
         isEmailVerified: worker.isEmailVerified || false,
         createdAt: worker.createdAt,
@@ -150,7 +150,7 @@ const updateProfile = async (req, res) => {
       worker.settings = {
         notifications: req.body.settings.notifications !== undefined ? req.body.settings.notifications : (worker.settings?.notifications ?? true),
         soundAlerts: req.body.settings.soundAlerts !== undefined ? req.body.settings.soundAlerts : (worker.settings?.soundAlerts ?? true),
-        language: req.body.settings.language || worker.settings?.language || 'en'
+        language: req.body.settings.language !== undefined ? req.body.settings.language : (worker.settings?.language || null)
       };
     }
 

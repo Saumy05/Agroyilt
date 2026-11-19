@@ -83,11 +83,15 @@ const toggleLanguage = async (id, isActive) => {
 /**
  * Set default language
  */
-const setDefaultLanguage = async (id) => {
+const setDefaultLanguage = async (id, { syncToUsers = true } = {}) => {
   const target = await Language.findById(id);
   if (!target) {
     throw new Error('Language not found');
   }
+
+  // Find the previous default language
+  const prevDefault = await Language.findOne({ isDefault: true });
+  const prevCode = prevDefault?.code || 'en';
 
   // Remove default from all other languages
   await Language.updateMany({ _id: { $ne: target._id } }, { $set: { isDefault: false } });
@@ -97,7 +101,42 @@ const setDefaultLanguage = async (id) => {
   target.isActive = true;
   await target.save();
 
+  // Sync to all users/workers/vendors who were on the previous default or had no preference set
+  if (syncToUsers) {
+    try {
+      const User = require('../models/User');
+      const Worker = require('../models/Worker');
+      const Vendor = require('../models/Vendor');
+
+      const filter = {
+        $or: [
+          { 'settings.language': { $exists: false } },
+          { 'settings.language': null },
+          { 'settings.language': prevCode }
+        ]
+      };
+
+      await Promise.all([
+        User.updateMany(filter, { $set: { 'settings.language': target.code } }),
+        Worker.updateMany(filter, { $set: { 'settings.language': target.code } }),
+        Vendor.updateMany(filter, { $set: { 'settings.language': target.code } })
+      ]);
+    } catch (syncErr) {
+      console.error('Error syncing default language to users:', syncErr);
+    }
+  }
+
   return target;
+};
+
+/**
+ * Get the current system default language
+ */
+const getDefaultLanguage = async () => {
+  await ensureDefaultLanguages();
+  const defaultLang = await Language.findOne({ isDefault: true });
+  if (defaultLang) return defaultLang;
+  return Language.findOne({ code: 'en' }) || DEFAULT_LANGUAGES[0];
 };
 
 /**
@@ -154,6 +193,7 @@ module.exports = {
   ensureDefaultLanguages,
   getActiveLanguages,
   getAllLanguages,
+  getDefaultLanguage,
   toggleLanguage,
   setDefaultLanguage,
   addLanguage,

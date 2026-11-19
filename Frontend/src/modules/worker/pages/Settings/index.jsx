@@ -119,7 +119,7 @@ const Settings = () => {
   const handleLanguageChange = async (lang) => {
     const updated = { ...settings, language: lang };
     setSettings(updated);
-    changeLanguage(lang);
+    changeLanguage(lang, { isExplicit: true });
     await updateDBSettings(updated);
   };
 
