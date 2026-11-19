@@ -3,6 +3,7 @@ import { FiX, FiCheckCircle, FiAlertCircle } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toastManager } from '../../../utils/toastManager';
 import adminWalletService from '../../../services/adminWalletService';
+import useBodyScrollLock from '../../../hooks/useBodyScrollLock';
 
 const AdjustWalletModal = ({
   isOpen,
@@ -11,6 +12,8 @@ const AdjustWalletModal = ({
   role = 'vendor', // 'vendor' | 'worker' | 'user'
   onSuccess
 }) => {
+  useBodyScrollLock(isOpen);
+
   const [walletTarget, setWalletTarget] = useState('wallet_balance'); // 'wallet_balance' | 'cod_dues'
   const [actionType, setActionType] = useState('credit');             // 'credit' | 'debit'
   const [amount, setAmount] = useState('');

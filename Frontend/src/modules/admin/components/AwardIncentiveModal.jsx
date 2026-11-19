@@ -3,6 +3,7 @@ import { FiX, FiAward } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toastManager } from '../../../utils/toastManager';
 import adminWalletService from '../../../services/adminWalletService';
+import useBodyScrollLock from '../../../hooks/useBodyScrollLock';
 
 const AwardIncentiveModal = ({
   isOpen,
@@ -12,6 +13,8 @@ const AwardIncentiveModal = ({
   period = 'All Time',
   onSuccess
 }) => {
+  useBodyScrollLock(isOpen);
+
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
