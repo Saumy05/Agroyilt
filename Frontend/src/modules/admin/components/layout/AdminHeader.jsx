@@ -8,6 +8,7 @@ import AdminSearch from './AdminSearch';
 import { adminAuthService } from '../../../../services/authService';
 import authStorage from '../../../../utils/authStorage';
 import LogoutModal from '../../../../components/common/LogoutModal';
+import LanguageSelector from '../../../../components/common/LanguageSelector';
 import { refreshAdminCounts } from '../../utils/adminCounts';
 
 const AdminHeader = ({ onMenuClick }) => {
@@ -213,6 +214,7 @@ const AdminHeader = ({ onMenuClick }) => {
 
         {/* Right: Notifications & Logout */}
         <div className="flex items-center gap-3 md:gap-4">
+          <LanguageSelector variant="subtle" className="hidden sm:inline-block" />
           {/* Notifications */}
           <div className="relative">
             <button

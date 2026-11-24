@@ -23,6 +23,7 @@ import { themeColors } from '../../../../theme';
 import { userAuthService } from '../../../../services/authService';
 import authStorage from '../../../../utils/authStorage';
 import { LogoutModal } from '../../../../components/common';
+import LanguageSelector from '../../../../components/common/LanguageSelector';
 import { useCart } from '../../../../context/CartContext';
 import SidebarWeatherPill from './SidebarWeatherPill';
 
@@ -370,6 +371,11 @@ const Sidebar = ({ isOpen, onClose }) => {
 
             {/* Compact Footer / Logout */}
             <div className="p-3 pt-2 bg-white border-t border-slate-100">
+              <div className="flex items-center justify-between px-3 py-2 bg-emerald-50/50 rounded-xl mb-2.5 border border-emerald-100/60">
+                <span className="text-xs font-bold text-emerald-900">Language / भाषा</span>
+                <LanguageSelector />
+              </div>
+
               {user ? (
                 <button
                   onClick={() => setShowLogoutModal(true)}

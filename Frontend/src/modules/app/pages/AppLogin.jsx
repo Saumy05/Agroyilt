@@ -11,6 +11,7 @@ import authStorage from '../../../utils/authStorage';
 import { findVerifiedRole } from '../../../utils/verifySession';
 import { isFlutterWebView } from '../../../utils/platformUtils';
 import SupportContact from '../../../components/common/SupportContact';
+import LanguageSelector from '../../../components/common/LanguageSelector';
 
 // Phone validation
 const phoneSchema = z.object({
@@ -590,6 +591,10 @@ const AppLogin = () => {
           <p style={{ margin: 0, fontSize: '0.72rem', color: '#78909C' }}>
             {appName || 'AgroYilt'}
           </p>
+        </div>
+
+        <div style={{ marginLeft: 'auto' }}>
+          <LanguageSelector />
         </div>
       </div>
 

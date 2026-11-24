@@ -10,12 +10,13 @@ import BottomNav from '../../components/layout/BottomNav';
 import workerService from '../../../../services/workerService';
 import { registerFCMToken, removeFCMToken } from '../../../../services/pushNotificationService';
 import BankDetailsSection from '../../../../components/common/BankDetailsSection';
-import LogoutModal from '../../../../components/common/LogoutModal';
+import { LogoutModal, LanguageModal, LanguageSettingRow } from '../../../../components/common';
 import { useLanguage } from '../../../../context/LanguageContext';
 
 const Settings = () => {
   const navigate = useNavigate();
   const { currentCode, changeLanguage, activeLanguagesList } = useLanguage();
+  const [showLanguageModal, setShowLanguageModal] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [settings, setSettings] = useState({
@@ -119,7 +120,6 @@ const Settings = () => {
   const handleLanguageChange = async (lang) => {
     const updated = { ...settings, language: lang };
     setSettings(updated);
-    changeLanguage(lang, { isExplicit: true });
     await updateDBSettings(updated);
   };
 
@@ -238,55 +238,11 @@ const Settings = () => {
         </div>
 
         {/* Language Settings */}
-        <div
-          className="bg-white rounded-xl p-4 mb-6 shadow-md"
-          style={{
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-          }}
-        >
-          <div className="flex items-center gap-3 mb-4">
-            <FiGlobe className="w-5 h-5" style={{ color: themeColors.icon }} />
-            <h3 className="font-bold text-gray-800">Language</h3>
-          </div>
-
-          <div className="space-y-2" translate="no">
-            {(activeLanguagesList && activeLanguagesList.length > 0 ? activeLanguagesList : [
-              { code: 'en', name: 'English', nativeName: 'English', flag: '🇬🇧' },
-              { code: 'hi', name: 'Hindi', nativeName: 'हिंदी', flag: '🇮🇳' },
-            ]).map((lang) => (
-              <button
-                key={lang.code}
-                onClick={() => handleLanguageChange(lang.code)}
-                className={`w-full py-3 px-4 rounded-lg text-left transition-all flex items-center justify-between ${currentCode === lang.code
-                  ? 'text-white'
-                  : 'bg-gray-50 text-gray-700'
-                  }`}
-                style={
-                  currentCode === lang.code
-                    ? {
-                      background: themeColors.button,
-                      boxShadow: `0 2px 8px ${themeColors.button}40`,
-                    }
-                    : {}
-                }
-              >
-                <div className="flex items-center gap-2.5">
-                  <span className="text-base">{lang.flag || '🌐'}</span>
-                  <span className="font-medium">{lang.nativeName || lang.name}</span>
-                  {lang.nativeName && lang.nativeName !== lang.name && (
-                    <span className={`text-xs ${currentCode === lang.code ? 'text-white/80' : 'text-gray-400'}`}>
-                      ({lang.name})
-                    </span>
-                  )}
-                </div>
-                {currentCode === lang.code && (
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-white/20">
-                    Active
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
+        <div className="mb-6">
+          <LanguageSettingRow
+            onClick={() => setShowLanguageModal(true)}
+            iconColor={themeColors.icon}
+          />
         </div>
 
         {/* Logout */}
@@ -309,6 +265,13 @@ const Settings = () => {
         onConfirm={handleLogout}
         isLoading={isLoggingOut}
         role="Worker"
+      />
+
+      {/* Language Selection Modal */}
+      <LanguageModal
+        isOpen={showLanguageModal}
+        onClose={() => setShowLanguageModal(false)}
+        onSelectLanguage={handleLanguageChange}
       />
 
       <BottomNav />

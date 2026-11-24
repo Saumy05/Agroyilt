@@ -13,6 +13,18 @@ const getApiKey = () => GOOGLE_TRANSLATE_API_KEY || process.env.GOOGLE_TRANSLATE
 const translationCache = new Map();
 const TTL = 24 * 60 * 60 * 1000; // 24 Hours
 
+// Helper to decode HTML entities returned by Google Translate
+const decodeHtmlEntities = (str) => {
+    if (!str || typeof str !== 'string') return str;
+    return str
+        .replace(/&#39;/g, "'")
+        .replace(/&quot;/g, '"')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&#x2F;/g, '/');
+};
+
 /**
  * Cleanup expired cache entries
  */
@@ -62,7 +74,8 @@ const translateText = async (text, targetLang, sourceLang = 'en') => {
                 format: 'text'
             });
 
-            const translation = response.data.data.translations[0].translatedText;
+            const rawTranslation = response.data.data.translations[0].translatedText;
+            const translation = decodeHtmlEntities(rawTranslation);
 
             // Never cache if translation is the same as original
             if (translation !== text) {
@@ -132,7 +145,7 @@ const translateBatch = async (texts, targetLang, sourceLang = 'en') => {
             if (response.data?.data?.translations) {
                 response.data.data.translations.forEach((item, idx) => {
                     const original = chunk[idx];
-                    const trans = item.translatedText;
+                    const trans = decodeHtmlEntities(item.translatedText);
                     translationMap[original] = trans;
                     if (trans !== original) {
                         const cacheKey = `${sourceLang}_${targetLang}_${Buffer.from(original).toString('base64')}`;

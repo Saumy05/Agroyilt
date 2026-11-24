@@ -9,12 +9,13 @@ import { registerFCMToken, removeFCMToken } from '../../../../services/pushNotif
 import authStorage from '../../../../utils/authStorage';
 import BottomNav from '../../components/layout/BottomNav';
 import BankDetailsSection from '../../../../components/common/BankDetailsSection';
-import { LogoutModal } from '../../../../components/common';
+import { LogoutModal, LanguageModal, LanguageSettingRow } from '../../../../components/common';
 import { useLanguage } from '../../../../context/LanguageContext';
 
 const Settings = () => {
   const navigate = useNavigate();
   const { currentCode, changeLanguage, activeLanguagesList } = useLanguage();
+  const [showLanguageModal, setShowLanguageModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -50,13 +51,11 @@ const Settings = () => {
 
   const handleLanguageChange = async (langCode) => {
     try {
-      changeLanguage(langCode, { isExplicit: true });
       await userAuthService.updateProfile({
         settings: { language: langCode }
       });
-      toastManager.success('Language preference saved');
     } catch (err) {
-      console.error('Failed to update language:', err);
+      console.error('Failed to persist language on backend:', err);
     }
   };
 
@@ -189,45 +188,11 @@ const Settings = () => {
 
         {/* Language Selection */}
         <div className="mb-6">
-          <div className="flex items-center gap-2 mb-3">
-            <FiGlobe className="w-5 h-5 text-green-700" />
-            <h2 className="text-base font-bold text-black">Language / भाषा</h2>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-3 space-y-2" translate="no">
-            {(activeLanguagesList && activeLanguagesList.length > 0 ? activeLanguagesList : [
-              { code: 'en', name: 'English', nativeName: 'English', flag: '🇬🇧' },
-              { code: 'hi', name: 'Hindi', nativeName: 'हिंदी', flag: '🇮🇳' },
-            ]).map((lang) => {
-              const isSelected = currentCode === lang.code;
-              return (
-                <button
-                  key={lang.code}
-                  type="button"
-                  onClick={() => handleLanguageChange(lang.code)}
-                  className={`w-full py-2.5 px-3 rounded-lg text-left transition-all flex items-center justify-between cursor-pointer ${
-                    isSelected
-                      ? 'bg-green-600 text-white shadow-sm font-semibold'
-                      : 'bg-gray-50 text-gray-800 hover:bg-gray-100'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-base">{lang.flag || '🌐'}</span>
-                    <span className="text-sm">{lang.nativeName || lang.name}</span>
-                    {lang.nativeName && lang.nativeName !== lang.name && (
-                      <span className={`text-xs ${isSelected ? 'text-white/80' : 'text-gray-400'}`}>
-                        ({lang.name})
-                      </span>
-                    )}
-                  </div>
-                  {isSelected && (
-                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-white/20 text-white">
-                      Selected
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+          <h2 className="text-base font-bold text-black mb-3">Language / भाषा</h2>
+          <LanguageSettingRow
+            onClick={() => setShowLanguageModal(true)}
+            iconColor={themeColors.button}
+          />
         </div>
 
         {/* Banking Details Section */}
@@ -425,6 +390,13 @@ const Settings = () => {
         }}
         isLoading={isLoggingOut}
         role="Farmer"
+      />
+
+      {/* Language Selection Modal */}
+      <LanguageModal
+        isOpen={showLanguageModal}
+        onClose={() => setShowLanguageModal(false)}
+        onSelectLanguage={handleLanguageChange}
       />
 
       {/* BottomNav hidden on this page */}

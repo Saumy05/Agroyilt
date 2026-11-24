@@ -6,6 +6,7 @@ import { useBrand } from '../../../context/BrandContext';
 import useReferralEnabled from '../../../hooks/useReferralEnabled';
 import { extractReferralCode } from '../../../utils/referralStorage';
 import { isFlutterWebView } from '../../../utils/platformUtils';
+import LanguageSelector from '../../../components/common/LanguageSelector';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const roles = [
@@ -129,6 +130,10 @@ const AppRegister = () => {
           <p style={{ margin: 0, fontSize: '0.72rem', color: '#78909C' }}>
             {appName || 'AgroYilt'}
           </p>
+        </div>
+
+        <div style={{ marginLeft: 'auto' }}>
+          <LanguageSelector />
         </div>
       </div>
 

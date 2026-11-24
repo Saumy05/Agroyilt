@@ -363,6 +363,16 @@ export const setAuthSession = (role, sessionData) => {
       }
     } catch (e) {}
 
+    // 4. Synchronize profile language preference if present
+    try {
+      const profileLang = profile?.settings?.language || profile?.language;
+      if (profileLang && typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('agroyilt-sync-language', {
+          detail: { language: profileLang }
+        }));
+      }
+    } catch (e) {}
+
   } catch (err) {
     console.error(`[authStorage] Error saving session for ${canonicalRole}:`, err);
   }

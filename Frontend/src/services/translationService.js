@@ -1,19 +1,16 @@
-﻿/**
+/**
  * Frontend Translation Service
- * Implements request batching and queuing to minimize API calls.
+ * Implements instant core dictionary lookups, request batching, and caching.
  */
 
-import axios from 'axios';
+import api from './api';
 import { getFromCache, saveToCache } from '../utils/translationCache';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : '/api');
-const TRANSLATE_URL = `${API_BASE_URL}/v1/translate`;
+import { getFromCoreDictionary } from '../utils/coreDictionary';
 
 // Batching & Queue Management
 let requestQueue = [];
 let batchTimeout = null;
-const BATCH_WAIT_MS = 100; // 100ms window to collect requests
-const MIN_REQUEST_INTERVAL_MS = 200; // Min 200ms between requests
+const BATCH_WAIT_MS = 80; // 80ms debounce window to collect requests
 
 /**
  * Process the current queue of translation requests
@@ -28,49 +25,56 @@ const processQueue = async (targetLang, sourceLang = 'en') => {
     const uniqueTexts = [...new Set(texts)];
 
     try {
-        const res = await axios.post(`${TRANSLATE_URL}/batch`, {
+        const res = await api.post('/v1/translate/batch', {
             texts: uniqueTexts,
             targetLang,
             sourceLang
         });
 
-        if (res.data.success) {
+        if (res.data?.success && Array.isArray(res.data?.data?.translations)) {
             const translationMap = uniqueTexts.reduce((acc, text, index) => {
-                acc[text] = res.data.data.translations[index];
+                acc[text] = res.data.data.translations[index] || text;
                 return acc;
             }, {});
 
             // Resolve all requests in the queue
             currentQueue.forEach(q => {
-                const translation = translationMap[q.text];
+                const translation = translationMap[q.text] || q.text;
                 saveToCache(sourceLang, targetLang, q.text, translation);
                 q.resolve(translation);
             });
         } else {
-            throw new Error('Batch translation failed');
+            throw new Error('Batch translation failed or invalid response');
         }
     } catch (err) {
-        console.error('Batch translation error:', err);
+        console.error('Batch translation error:', err?.response?.data || err.message);
         currentQueue.forEach(q => q.resolve(q.text)); // Fallback to original text
     }
 };
 
 /**
  * Core Translation Function
+ * Priority: Core Dictionary -> IndexedDB/LocalStorage Cache -> Google Cloud API Batch
  */
 export const translateText = (text, targetLang, sourceLang = 'en') => {
-    if (!text || text.trim() === '') return Promise.resolve(text);
-    if (targetLang === sourceLang) return Promise.resolve(text);
+    if (!text || typeof text !== 'string' || text.trim() === '') return Promise.resolve(text);
+    if (!targetLang || targetLang === sourceLang) return Promise.resolve(text);
 
-    // A cache failure must never block the translation itself
+    // 1. Instant Core Dictionary Check (0ms latency)
+    const instant = getFromCoreDictionary(text, targetLang);
+    if (instant) {
+        return Promise.resolve(instant);
+    }
+
+    // 2. Cache Check (IndexedDB / LocalStorage)
     return getFromCache(sourceLang, targetLang, text).catch(() => null).then((cached) => {
         if (cached) return cached;
 
+        // 3. Queue for Batch Translation
         return new Promise((resolve) => {
-            // Add to batching queue
             requestQueue.push({ text, resolve });
 
-            // Wait for other requests before processing
+            // Reset debounce timer
             if (batchTimeout) clearTimeout(batchTimeout);
             batchTimeout = setTimeout(() => {
                 processQueue(targetLang, sourceLang);

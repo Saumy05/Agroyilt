@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import Logo from '../../../../components/common/Logo';
 import api from '../../../../services/api';
 import authStorage from '../../../../utils/authStorage';
+import LanguageSelector from '../../../../components/common/LanguageSelector';
 
 const Header = memo(({
   title,
@@ -141,6 +142,7 @@ const Header = memo(({
 
         {/* Right: Help Support & Notifications */}
         <div className="flex items-center gap-1.5">
+          {!showBack && <LanguageSelector className="shrink-0" />}
           {rightAction}
           {!showBack && (
             <button

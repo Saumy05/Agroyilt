@@ -3,17 +3,15 @@ import { useLanguage } from '../context/LanguageContext';
 import { translateText } from '../services/translationService';
 
 /**
- * Translates every visible text on the page into the chosen language while it is mounted, so screens that are written
- * in English only still follow the language setting. Only the text of existing text nodes (and placeholders) is replaced,
- * never the page structure, so React keeps working. English is put back when the language is English or this unmounts.
- *
- * Skip a part of the page with translate="no" or data-no-translate.
- * Translations come from the /v1/translate API (cached on the server and in the browser).
+ * Translates visible text on the page into the chosen language while mounted.
+ * Core UI elements translate with 0ms latency from the instant dictionary;
+ * other texts are batched and fetched from cache/Google Cloud API.
+ * Skips regions marked with translate="no" or data-no-translate.
  */
 
-const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEXTAREA']);
+const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEXTAREA', 'INPUT', 'CODE', 'PRE']);
 const HAS_LETTERS = /[A-Za-z]{2,}/;
-const SCAN_DELAY_MS = 150;
+const SCAN_DELAY_MS = 100;
 
 const isSkipped = (node) => {
   const parent = node.parentElement;
@@ -25,26 +23,31 @@ const AutoTranslate = () => {
   const { currentCode } = useLanguage();
 
   useEffect(() => {
-    if (currentCode === 'en' || typeof document === 'undefined') return undefined;
+    if (!currentCode || currentCode === 'en' || typeof document === 'undefined') return undefined;
     // Don't auto-translate the admin management portal
     if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')) return undefined;
 
     const target = currentCode;
-    const originals = new WeakMap(); // text node -> the English text it had
-    const applied = new WeakMap(); // text node -> the translated text we put in it
-    const inflight = new WeakMap(); // text node -> the English text being translated right now
-    const attrOriginals = new WeakMap(); // element -> its English placeholder
-    const attrApplied = new WeakMap(); // element -> the translated placeholder we put in it
+    const originals = new WeakMap(); // text node -> original English text
+    const applied = new WeakMap(); // text node -> translated text
+    const inflight = new WeakMap(); // text node -> English text currently translating
+    const attrOriginals = new WeakMap(); // element -> original English placeholder
+    const attrApplied = new WeakMap(); // element -> translated placeholder
     const attrInflight = new WeakMap();
     let cancelled = false;
     let timer = null;
+    let isInternalMutating = false;
 
     // Keep the spaces around a text, translate only the words
     const translateInto = (value, apply) => {
       const lead = value.match(/^\s*/)[0];
       const trail = value.match(/\s*$/)[0];
       const core = value.trim();
-      translateText(core, target).then((t) => apply(t && t !== core ? lead + t + trail : null));
+      translateText(core, target).then((t) => {
+        if (!cancelled) {
+          apply(t && t !== core ? lead + t + trail : null);
+        }
+      });
     };
 
     const scan = () => {
@@ -64,12 +67,17 @@ const AutoTranslate = () => {
         translateInto(value, (out) => {
           if (cancelled || inflight.get(current) !== value) return;
           inflight.delete(current);
-          if (current.nodeValue !== value) return; // React changed it meanwhile; the next scan picks it up
+          if (current.nodeValue !== value) return; // React changed text meanwhile
           if (out) {
             applied.set(current, out);
-            current.nodeValue = out;
+            isInternalMutating = true;
+            try {
+              current.nodeValue = out;
+            } finally {
+              isInternalMutating = false;
+            }
           } else {
-            applied.set(current, value); // already the same in this language: do not ask again
+            applied.set(current, value); // already same or not translatable
           }
         });
       }
@@ -92,6 +100,7 @@ const AutoTranslate = () => {
     };
 
     const schedule = () => {
+      if (isInternalMutating) return;
       if (!timer) timer = setTimeout(scan, SCAN_DELAY_MS);
     };
 
@@ -110,11 +119,13 @@ const AutoTranslate = () => {
       observer.disconnect();
       if (timer) clearTimeout(timer);
 
-      // Put the English back
+      // Restore original English when unmounting or switching to English
       const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
       let node;
       while ((node = walker.nextNode())) {
-        if (originals.has(node) && applied.get(node) === node.nodeValue) node.nodeValue = originals.get(node);
+        if (originals.has(node) && applied.get(node) === node.nodeValue) {
+          node.nodeValue = originals.get(node);
+        }
       }
       document.querySelectorAll('[placeholder]').forEach((el) => {
         if (attrOriginals.has(el) && attrApplied.get(el) === el.getAttribute('placeholder')) {

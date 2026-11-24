@@ -263,6 +263,14 @@ const updateProfile = async (req, res) => {
       }
     }
 
+    // Update settings if passed
+    if (req.body.settings && typeof req.body.settings === 'object') {
+      if (!vendor.settings) vendor.settings = {};
+      if (req.body.settings.language !== undefined) vendor.settings.language = req.body.settings.language;
+      if (req.body.settings.notifications !== undefined) vendor.settings.notifications = req.body.settings.notifications;
+      if (req.body.settings.soundAlerts !== undefined) vendor.settings.soundAlerts = req.body.settings.soundAlerts;
+    }
+
     await vendor.save();
 
     // Sync equipment cityIds if vendor updated city

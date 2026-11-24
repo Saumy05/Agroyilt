@@ -14,9 +14,19 @@ const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const location = useLocation();
   const isLightPage = location.pathname !== '/';
-  const { language, languages, changeLanguage, isChangingLanguage } = useLanguage();
+  const { language, currentLang, activeLanguagesList, changeLanguage, isChangingLanguage } = useLanguage();
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
   const dropdownRef = React.useRef(null);
+
+  const displayLanguages = useMemo(() => {
+    if (Array.isArray(activeLanguagesList) && activeLanguagesList.length > 0) {
+      return activeLanguagesList;
+    }
+    return [
+      { code: 'en', name: 'English', nativeName: 'English', flag: '🇬🇧' },
+      { code: 'hi', name: 'Hindi', nativeName: 'हिन्दी', flag: '🇮🇳' },
+    ];
+  }, [activeLanguagesList]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -131,7 +141,7 @@ const Navbar = () => {
                     } ${showLanguageDropdown ? 'bg-green-50/10' : ''}`}
                 >
                   <HiTranslate size={16} className={isChangingLanguage ? 'animate-spin' : ''} />
-                  <span>{languages[language]?.flag} {language}</span>
+                  <span>{currentLang?.flag || '🌐'} {currentLang?.nativeName || language}</span>
                 </button>
                 
                 <AnimatePresence>
@@ -145,21 +155,21 @@ const Navbar = () => {
                       <div className="px-4 py-2 text-[10px] uppercase tracking-wider text-gray-400 font-bold border-b border-gray-50 mb-1">
                         Select Language
                       </div>
-                      {Object.keys(languages).map((lang) => (
+                      {displayLanguages.map((l) => (
                         <button
-                          key={lang}
+                          key={l.code}
                           onClick={() => {
-                            changeLanguage(lang);
+                            changeLanguage(l.code, { isExplicit: true });
                             setShowLanguageDropdown(false);
                           }}
-                          className={`w-full text-left px-4 py-2.5 text-xs hover:bg-green-50 transition-colors flex items-center justify-between ${language === lang ? 'text-green-700 font-bold bg-green-50/50' : 'text-gray-700'
+                          className={`w-full text-left px-4 py-2.5 text-xs hover:bg-green-50 transition-colors flex items-center justify-between ${currentLang?.code === l.code ? 'text-green-700 font-bold bg-green-50/50' : 'text-gray-700'
                             }`}
                         >
                           <div className="flex items-center space-x-2">
-                             <span className="text-base">{languages[lang].flag}</span>
-                             <span>{lang}</span>
+                             <span className="text-base">{l.flag || '🌐'}</span>
+                             <span>{l.nativeName || l.name}</span>
                           </div>
-                          {language === lang && <div className="w-1.5 h-1.5 rounded-full bg-green-600"></div>}
+                          {currentLang?.code === l.code && <div className="w-1.5 h-1.5 rounded-full bg-green-600"></div>}
                         </button>
                       ))}
                     </motion.div>
@@ -224,19 +234,19 @@ const Navbar = () => {
                     <div className="px-3 py-1.5 text-[9px] uppercase tracking-wider text-gray-400 font-bold border-b border-gray-50">
                       Select Language
                     </div>
-                    {Object.keys(languages).map((lang) => (
+                    {displayLanguages.map((l) => (
                       <button
-                        key={lang}
+                        key={l.code}
                         onClick={() => {
-                          changeLanguage(lang);
+                          changeLanguage(l.code, { isExplicit: true });
                           setShowLanguageDropdown(false);
                         }}
                         className={`w-full text-left px-3.5 py-2 text-xs flex items-center space-x-2.5 transition-colors ${
-                          language === lang ? 'text-green-700 font-bold bg-green-50' : 'text-gray-700 active:bg-gray-50'
+                          currentLang?.code === l.code ? 'text-green-700 font-bold bg-green-50' : 'text-gray-700 active:bg-gray-50'
                         }`}
                       >
-                        <span className="text-base">{languages[lang].flag}</span>
-                        <span>{lang}</span>
+                        <span className="text-base">{l.flag || '🌐'}</span>
+                        <span>{l.nativeName || l.name}</span>
                       </button>
                     ))}
                   </motion.div>
@@ -282,13 +292,13 @@ const Navbar = () => {
               ))}
 
               <div className="flex flex-wrap gap-1.5 px-3 py-3 border-y border-gray-100">
-                {Object.keys(languages).slice(0, 5).map((lang) => (
+                {displayLanguages.slice(0, 5).map((l) => (
                   <button
-                    key={lang}
-                    onClick={() => changeLanguage(lang)}
-                    className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${language === lang ? 'bg-green-700 text-white border-green-700 font-bold' : 'border-gray-200 text-gray-600 active:bg-gray-100'}`}
+                    key={l.code}
+                    onClick={() => changeLanguage(l.code, { isExplicit: true })}
+                    className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${currentLang?.code === l.code ? 'bg-green-700 text-white border-green-700 font-bold' : 'border-gray-200 text-gray-600 active:bg-gray-100'}`}
                   >
-                    {languages[lang].flag} {lang}
+                    {l.flag || '🌐'} {l.nativeName || l.name}
                   </button>
                 ))}
                 <button 

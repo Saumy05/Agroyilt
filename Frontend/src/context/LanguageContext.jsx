@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { normalizeLanguageCode, isRTLLanguage } from '../utils/languageUtils';
 import { getActiveLanguages, FALLBACK_LANGUAGES } from '../services/languageService';
+import authStorage from '../utils/authStorage';
 
 const LanguageContext = createContext();
 
@@ -11,18 +12,25 @@ export const useLanguage = () => {
 };
 
 export const LanguageProvider = ({ children }) => {
-    // Languages map (by name for backwards compatibility)
+    // Languages map (by name and code for backwards compatibility)
     const [languages, setLanguages] = useState(FALLBACK_LANGUAGES);
     // Active languages list from DB/API
     const [activeLanguagesList, setActiveLanguagesList] = useState(Object.values(FALLBACK_LANGUAGES));
 
     // Initial language detection
     const getInitialLanguage = () => {
+        if (typeof window === 'undefined') return 'English';
         const hasExplicitChoice = localStorage.getItem('userLanguageExplicit') === 'true';
         if (hasExplicitChoice) {
             return localStorage.getItem('userLanguage') || 'English';
         }
-        // If not explicit, prioritize the cached system default, then stored language, then English
+        // Check if an authenticated user profile has a saved preference
+        try {
+            const role = authStorage.getCurrentPortalRole();
+            const session = authStorage.getAuthSession(role);
+            const userLang = session?.user?.settings?.language || session?.user?.language;
+            if (userLang) return userLang;
+        } catch (e) {}
         return localStorage.getItem('systemDefaultLanguage') || localStorage.getItem('userLanguage') || 'English';
     };
 
@@ -31,27 +39,37 @@ export const LanguageProvider = ({ children }) => {
     const languageRef = useRef(language);
     languageRef.current = language;
 
+    const currentCode = useMemo(() => {
+        return normalizeLanguageCode(language);
+    }, [language]);
+
     /**
      * Internal helper to apply a language
      */
     const applyLanguage = useCallback((matched, isExplicit = false) => {
         if (!matched) return;
         const langName = matched.name || matched.label;
-        const langCode = matched.code;
+        const langCode = matched.code || normalizeLanguageCode(langName);
 
         setIsChangingLanguage(true);
         setLanguage(langName);
 
-        if (isExplicit) {
-            localStorage.setItem('userLanguageExplicit', 'true');
-        }
-        localStorage.setItem('userLanguage', langName);
-        localStorage.setItem('userLanguageCode', langCode);
+        if (typeof window !== 'undefined') {
+            if (isExplicit) {
+                localStorage.setItem('userLanguageExplicit', 'true');
+            }
+            localStorage.setItem('userLanguage', langName);
+            localStorage.setItem('userLanguageCode', langCode);
 
-        // Notify any window listeners (such as Google Maps or external scripts)
-        window.dispatchEvent(new CustomEvent('agroyilt-language-changed', {
-            detail: { code: langCode, name: langName, isExplicit }
-        }));
+            // Update document language & direction
+            document.documentElement.lang = langCode;
+            document.documentElement.dir = isRTLLanguage(langCode) ? 'rtl' : 'ltr';
+
+            // Notify external listeners (Google Maps, flutterBridge, etc.)
+            window.dispatchEvent(new CustomEvent('agroyilt-language-changed', {
+                detail: { code: langCode, name: langName, isExplicit }
+            }));
+        }
 
         setTimeout(() => setIsChangingLanguage(false), 200);
     }, []);
@@ -66,7 +84,7 @@ export const LanguageProvider = ({ children }) => {
                 setActiveLanguagesList(list);
                 const map = {};
                 list.forEach(item => {
-                    map[item.name] = {
+                    const langObj = {
                         label: item.name,
                         name: item.name,
                         nativeName: item.nativeName || item.name,
@@ -75,21 +93,23 @@ export const LanguageProvider = ({ children }) => {
                         isDefault: item.isDefault,
                         isRTL: item.isRTL
                     };
+                    map[item.name] = langObj;
+                    map[item.code] = langObj; // Also map by code
                 });
                 setLanguages(map);
 
                 // Identify the active system default language
                 const defaultLang = list.find(l => l.isDefault) || list[0];
-                const prevDefaultCode = localStorage.getItem('systemDefaultLanguageCode');
+                const prevDefaultCode = typeof localStorage !== 'undefined' ? localStorage.getItem('systemDefaultLanguageCode') : null;
 
-                if (defaultLang) {
+                if (defaultLang && typeof localStorage !== 'undefined') {
                     localStorage.setItem('systemDefaultLanguage', defaultLang.name);
                     localStorage.setItem('systemDefaultLanguageCode', defaultLang.code);
                 }
 
-                const hasExplicitChoice = localStorage.getItem('userLanguageExplicit') === 'true';
-                const currentSaved = localStorage.getItem('userLanguage') || languageRef.current || 'English';
-                const currentSavedCode = localStorage.getItem('userLanguageCode');
+                const hasExplicitChoice = typeof localStorage !== 'undefined' && localStorage.getItem('userLanguageExplicit') === 'true';
+                const currentSaved = (typeof localStorage !== 'undefined' ? localStorage.getItem('userLanguage') : null) || languageRef.current || 'English';
+                const currentSavedCode = typeof localStorage !== 'undefined' ? localStorage.getItem('userLanguageCode') : null;
 
                 // Check if current language still exists in active list
                 const exists = list.some(
@@ -99,15 +119,11 @@ export const LanguageProvider = ({ children }) => {
                 if (defaultLang) {
                     // Scenario 1: User never explicitly chose a language -> Always follow system default
                     if (!hasExplicitChoice) {
-                        if (currentSaved.toLowerCase() !== defaultLang.name.toLowerCase()) {
+                        if (currentSaved.toLowerCase() !== defaultLang.name.toLowerCase() && currentSavedCode !== defaultLang.code) {
                             applyLanguage(defaultLang, false);
                         }
                     } 
-                    // Scenario 2: Admin changed default language AND user was on the old default -> Transition to new default
-                    else if (prevDefaultCode && prevDefaultCode !== defaultLang.code && (currentSavedCode === prevDefaultCode || currentSaved.toLowerCase() === prevDefaultCode.toLowerCase())) {
-                        applyLanguage(defaultLang, false);
-                    }
-                    // Scenario 3: Currently chosen language was deleted / deactivated
+                    // Scenario 2: User explicitly chose a language, but that language was deleted / deactivated by admin
                     else if (!exists) {
                         applyLanguage(defaultLang, false);
                     }
@@ -127,7 +143,7 @@ export const LanguageProvider = ({ children }) => {
      * @param {string} newLang
      * @param {object|boolean} options - { isExplicit: true/false } or boolean for isExplicit
      */
-    const changeLanguage = (newLang, options = {}) => {
+    const changeLanguage = useCallback((newLang, options = {}) => {
         if (!newLang) return;
 
         const isExplicit = typeof options === 'boolean' ? options : (options?.isExplicit ?? true);
@@ -144,28 +160,58 @@ export const LanguageProvider = ({ children }) => {
 
         if (!matched) return;
         applyLanguage(matched, isExplicit);
-    };
+    }, [languages, activeLanguagesList, applyLanguage]);
+
+    /**
+     * Synchronize language preference from an authenticated user/worker/vendor profile
+     */
+    const syncProfileLanguage = useCallback((profileLangCode) => {
+        if (!profileLangCode) return;
+        changeLanguage(profileLangCode, { isExplicit: true });
+    }, [changeLanguage]);
+
+    /**
+     * Listen for external sync events (e.g. login, profile updates)
+     */
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const handleSyncEvent = (e) => {
+            if (e?.detail?.language) {
+                changeLanguage(e.detail.language, { isExplicit: true });
+            }
+        };
+        window.addEventListener('agroyilt-sync-language', handleSyncEvent);
+        return () => window.removeEventListener('agroyilt-sync-language', handleSyncEvent);
+    }, [changeLanguage]);
 
     /**
      * Set HTML lang and dir attribute on language change
      */
     useEffect(() => {
-        const code = normalizeLanguageCode(language);
-        localStorage.setItem('userLanguageCode', code);
-        document.documentElement.lang = code;
-        document.documentElement.dir = isRTLLanguage(code) ? 'rtl' : 'ltr';
-    }, [language]);
+        if (typeof document !== 'undefined') {
+            document.documentElement.lang = currentCode;
+            document.documentElement.dir = isRTLLanguage(currentCode) ? 'rtl' : 'ltr';
+        }
+    }, [currentCode]);
 
     const defaultLanguageObj = activeLanguagesList.find(l => l.isDefault) || null;
+    const currentLangObj = activeLanguagesList.find(l => l.code === currentCode || l.name === language) || {
+        name: language,
+        code: currentCode,
+        nativeName: language,
+        flag: '🌐'
+    };
 
     const value = {
         language,
         languages,
+        currentLang: currentLangObj,
         activeLanguagesList,
         defaultLanguage: defaultLanguageObj,
         changeLanguage,
+        syncProfileLanguage,
         isChangingLanguage,
-        currentCode: normalizeLanguageCode(language),
+        currentCode,
         refreshLanguages
     };
 

@@ -12,3 +12,4 @@ export { default as LazyImage } from './LazyImage.jsx';
 export * from './SkeletonLoaders.jsx';
 export { FormContainer, FormSection } from './FormContainer.jsx';
 export { default as LogoutModal } from './LogoutModal.jsx';
+export { default as LanguageModal, LanguageSettingRow } from './LanguageModal.jsx';

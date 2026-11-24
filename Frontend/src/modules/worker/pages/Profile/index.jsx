@@ -13,7 +13,7 @@ import authStorage from '../../../../utils/authStorage';
 import { useSocket } from '../../../../context/SocketContext';
 import { useLanguage } from '../../../../context/LanguageContext';
 import BankDetailsSection from '../../../../components/common/BankDetailsSection';
-import LogoutModal from '../../../../components/common/LogoutModal';
+import { LogoutModal, LanguageModal } from '../../../../components/common';
 import useReferralEnabled from '../../../../hooks/useReferralEnabled';
 import ProfileIncompleteModal from '../../components/common/ProfileIncompleteModal';
 import { checkWorkerProfileCompleteness } from '../../utils/profileCompleteness';
@@ -29,8 +29,6 @@ const Profile = () => {
   const [error, setError] = useState(null);
   const [showBankModal, setShowBankModal] = useState(false);
   const [showLanguageModal, setShowLanguageModal] = useState(false);
-  const [isUpdatingLanguage, setIsUpdatingLanguage] = useState(false);
-  const [langSearch, setLangSearch] = useState('');
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isTogglingStatus, setIsTogglingStatus] = useState(false);
@@ -46,58 +44,22 @@ const Profile = () => {
     flag: currentCode === 'hi' ? '🇮🇳' : '🇬🇧'
   };
 
-  const availableLanguages = (activeLanguagesList && activeLanguagesList.length > 0)
-    ? activeLanguagesList
-    : [
-        { code: 'en', name: 'English', nativeName: 'English', flag: '🇬🇧' },
-        { code: 'hi', name: 'Hindi', nativeName: 'हिन्दी', flag: '🇮🇳' },
-      ];
-
-  const filteredLanguages = availableLanguages.filter((l) => {
-    if (!langSearch.trim()) return true;
-    const q = langSearch.toLowerCase();
-    return (
-      l.name?.toLowerCase().includes(q) ||
-      l.nativeName?.toLowerCase().includes(q) ||
-      l.code?.toLowerCase().includes(q)
-    );
-  });
-
   const handleSelectLanguage = async (langCode) => {
-    if (isUpdatingLanguage) return;
-    if (langCode === currentCode) {
-      setShowLanguageModal(false);
-      return;
-    }
+    // Persist in worker profile settings on backend
+    const storedSettings = authStorage.getUserData('worker')?.settings || {};
+    const updatedSettings = {
+      notifications: storedSettings.notifications ?? true,
+      soundAlerts: storedSettings.soundAlerts ?? true,
+      ...storedSettings,
+      language: langCode
+    };
 
     try {
-      setIsUpdatingLanguage(true);
-      changeLanguage(langCode, { isExplicit: true });
-
-      // Persist in worker profile settings on backend
-      const storedSettings = authStorage.getUserData('worker')?.settings || {};
-      const updatedSettings = {
-        notifications: storedSettings.notifications ?? true,
-        soundAlerts: storedSettings.soundAlerts ?? true,
-        ...storedSettings,
-        language: langCode
-      };
-
-      try {
-        await workerService.updateProfile({ settings: updatedSettings });
-        localStorage.setItem('workerSettings', JSON.stringify(updatedSettings));
-        authStorage.updateUserData('worker', { settings: updatedSettings });
-      } catch (err) {
-        console.warn('Could not persist worker language settings to server:', err);
-      }
-
-      toastManager.success('Language updated successfully');
-      setShowLanguageModal(false);
+      await workerService.updateProfile({ settings: updatedSettings });
+      localStorage.setItem('workerSettings', JSON.stringify(updatedSettings));
+      authStorage.updateUserData('worker', { settings: updatedSettings });
     } catch (err) {
-      console.error('Failed to change language:', err);
-      toastManager.error('Failed to update language');
-    } finally {
-      setIsUpdatingLanguage(false);
+      console.warn('Could not persist worker language settings to server:', err);
     }
   };
 
@@ -806,119 +768,11 @@ const Profile = () => {
       )}
 
       {/* Language Selection Modal */}
-      {showLanguageModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-0 sm:p-4 animate-fadeIn"
-          onClick={() => !isUpdatingLanguage && setShowLanguageModal(false)}
-        >
-          <div
-            className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md p-5 sm:p-6 shadow-2xl relative max-h-[85vh] flex flex-col overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className="flex items-start justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
-                  <FiGlobe className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900 leading-snug">Choose Language</h3>
-                  <p className="text-xs text-slate-500 font-medium">Select your preferred language / अपनी भाषा चुनें</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowLanguageModal(false)}
-                disabled={isUpdatingLanguage}
-                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
-                title="Close"
-              >
-                <FiX className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Search if multiple languages */}
-            {availableLanguages.length > 5 && (
-              <div className="mt-3">
-                <input
-                  type="text"
-                  value={langSearch}
-                  onChange={(e) => setLangSearch(e.target.value)}
-                  placeholder="Search language / भाषा खोजें..."
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-emerald-500 bg-slate-50/50"
-                />
-              </div>
-            )}
-
-            {/* Language Options List */}
-            <div className="mt-3.5 space-y-2 overflow-y-auto max-h-[55vh] pr-0.5" translate="no">
-              {filteredLanguages.map((lang) => {
-                const isSelected = (currentCode?.toLowerCase() === lang.code?.toLowerCase());
-                return (
-                  <button
-                    key={lang.code}
-                    type="button"
-                    onClick={() => handleSelectLanguage(lang.code)}
-                    disabled={isUpdatingLanguage}
-                    className={`w-full p-3 rounded-2xl border text-left transition-all flex items-center justify-between cursor-pointer active:scale-[0.99] ${
-                      isSelected
-                        ? 'bg-emerald-50/80 border-emerald-500 text-emerald-950 shadow-xs ring-1 ring-emerald-500/30'
-                        : 'bg-white border-slate-200/80 text-slate-700 hover:bg-slate-50/80 hover:border-slate-300'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className="text-2xl shrink-0">{lang.flag || '🌐'}</span>
-                      <div className="min-w-0">
-                        <div className="flex items-baseline gap-1.5 flex-wrap">
-                          <span className="text-sm font-bold truncate">
-                            {lang.nativeName || lang.name}
-                          </span>
-                          {lang.nativeName && lang.nativeName !== lang.name && (
-                            <span className={`text-xs ${isSelected ? 'text-emerald-700/80' : 'text-slate-400'}`}>
-                              ({lang.name})
-                            </span>
-                          )}
-                        </div>
-                        <span className={`text-[10.5px] uppercase tracking-wider block ${isSelected ? 'text-emerald-700 font-semibold' : 'text-slate-400'}`}>
-                          Code: {lang.code}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="shrink-0 ml-3">
-                      {isSelected ? (
-                        <div className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-xs">
-                          <FiCheck className="w-3.5 h-3.5 stroke-[3]" />
-                        </div>
-                      ) : (
-                        <div className="w-6 h-6 rounded-full border-2 border-slate-200" />
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-
-              {filteredLanguages.length === 0 && (
-                <div className="py-8 text-center text-slate-400 text-xs">
-                  No languages found matching "{langSearch}"
-                </div>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-              <span>Current: <strong className="text-slate-800" translate="no">{currentLangObj.nativeName || currentLangObj.name}</strong></span>
-              <button
-                type="button"
-                onClick={() => setShowLanguageModal(false)}
-                className="px-4 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <LanguageModal
+        isOpen={showLanguageModal}
+        onClose={() => setShowLanguageModal(false)}
+        onSelectLanguage={handleSelectLanguage}
+      />
 
       {/* Logout Confirmation Modal */}
       <LogoutModal

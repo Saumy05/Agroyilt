@@ -11,11 +11,12 @@ import authStorage from '../../../../utils/authStorage';
 import Header from '../../components/layout/Header';
 import BottomNav from '../../components/layout/BottomNav';
 import BankDetailsSection from '../../../../components/common/BankDetailsSection';
-import LogoutModal from '../../../../components/common/LogoutModal';
+import { LogoutModal, LanguageModal, LanguageSettingRow } from '../../../../components/common';
 
 const Settings = () => {
   const navigate = useNavigate();
   const { currentCode, changeLanguage, activeLanguagesList } = useLanguage();
+  const [showLanguageModal, setShowLanguageModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -77,11 +78,19 @@ const Settings = () => {
   }, []);
 
   useEffect(() => {
-    const loadSettings = () => {
+    const loadSettings = async () => {
       try {
         const savedSettings = JSON.parse(localStorage.getItem('vendorSettings') || '{}');
         if (Object.keys(savedSettings).length > 0) {
           setSettings(prev => ({ ...prev, ...savedSettings }));
+        }
+        const res = await api.get('/vendors/settings');
+        if (res.data?.success && res.data.settings) {
+          setSettings(prev => ({ ...prev, ...res.data.settings }));
+          localStorage.setItem('vendorSettings', JSON.stringify(res.data.settings));
+          if (res.data.settings.language) {
+            changeLanguage(res.data.settings.language);
+          }
         }
       } catch (error) {
         console.error('Error loading settings:', error);
@@ -126,11 +135,12 @@ const Settings = () => {
     localStorage.setItem('vendorSettings', JSON.stringify(updated));
     changeLanguage(lang, { isExplicit: true });
     try {
-      await vendorAuthService.updateProfile({
-        settings: { language: lang }
-      });
+      await api.put('/vendors/settings', { language: lang });
     } catch (e) {
-      // Non-fatal if offline
+      // Fallback to profile update
+      try {
+        await vendorAuthService.updateProfile({ settings: { language: lang } });
+      } catch (err) {}
     }
     toastManager.success('Language updated');
   };
@@ -282,46 +292,11 @@ const Settings = () => {
         </div>
 
         {/* Language Settings */}
-        <div
-          className="bg-white rounded-xl p-4 mb-6 shadow-md"
-          style={{
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-          }}
-        >
-          <div className="flex items-center gap-3 mb-4">
-            <FiGlobe className="w-5 h-5" style={{ color: themeColors.icon }} />
-            <h3 className="font-bold text-gray-800">Language</h3>
-          </div>
-
-          <div className="space-y-2" translate="no">
-            {(activeLanguagesList && activeLanguagesList.length > 0 ? activeLanguagesList : [
-              { code: 'en', name: 'English', nativeName: 'English' },
-              { code: 'hi', name: 'Hindi', nativeName: 'हिंदी' },
-            ]).map((lang) => {
-              const isSelected = (currentCode || settings.language) === lang.code;
-              return (
-                <button
-                  key={lang.code}
-                  type="button"
-                  onClick={() => handleLanguageChange(lang.code)}
-                  className={`w-full py-3 px-4 rounded-lg text-left transition-all flex items-center justify-between cursor-pointer ${
-                    isSelected ? 'text-white font-bold' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
-                  }`}
-                  style={
-                    isSelected
-                      ? {
-                        background: themeColors.button,
-                        boxShadow: `0 2px 8px ${themeColors.button}40`,
-                      }
-                      : {}
-                  }
-                >
-                  <span>{lang.nativeName || lang.name}</span>
-                  {isSelected && <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full font-normal">Active</span>}
-                </button>
-              );
-            })}
-          </div>
+        <div className="mb-6">
+          <LanguageSettingRow
+            onClick={() => setShowLanguageModal(true)}
+            iconColor={themeColors.icon}
+          />
         </div>
 
         {/* About */}
@@ -429,6 +404,13 @@ const Settings = () => {
         onConfirm={handleLogout}
         isLoading={isLoggingOut}
         role="Vendor"
+      />
+
+      {/* Language Selection Modal */}
+      <LanguageModal
+        isOpen={showLanguageModal}
+        onClose={() => setShowLanguageModal(false)}
+        onSelectLanguage={handleLanguageChange}
       />
 
       <BottomNav />

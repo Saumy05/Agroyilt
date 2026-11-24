@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { FiGlobe, FiPlus, FiTrash2, FiCheck, FiStar, FiAlertCircle, FiX } from 'react-icons/fi';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { FiGlobe, FiPlus, FiTrash2, FiCheck, FiStar, FiAlertCircle, FiX, FiChevronDown, FiSearch } from 'react-icons/fi';
 import {
   getAdminLanguages,
   toggleLanguageStatus,
@@ -10,6 +10,37 @@ import {
 import { toastManager } from '../../../../utils/toastManager';
 import { useLanguage } from '../../../../context/LanguageContext';
 import LogoLoader from '../../../../components/common/LogoLoader';
+
+// Curated list of Indian official languages (22 Eighth Schedule) & popular regional dialects
+const INDIAN_LANGUAGES = [
+  { name: 'English', nativeName: 'English', code: 'en', flag: '🇬🇧' },
+  { name: 'Hindi', nativeName: 'हिन्दी', code: 'hi', flag: '🇮🇳' },
+  { name: 'Bengali', nativeName: 'বাংলা', code: 'bn', flag: '🇮🇳' },
+  { name: 'Marathi', nativeName: 'मराठी', code: 'mr', flag: '🇮🇳' },
+  { name: 'Telugu', nativeName: 'తెలుగు', code: 'te', flag: '🇮🇳' },
+  { name: 'Tamil', nativeName: 'தமிழ்', code: 'ta', flag: '🇮🇳' },
+  { name: 'Gujarati', nativeName: 'ગુજરાતી', code: 'gu', flag: '🇮🇳' },
+  { name: 'Urdu', nativeName: 'اردو', code: 'ur', flag: '🇮🇳', isRTL: true },
+  { name: 'Kannada', nativeName: 'ಕನ್ನಡ', code: 'kn', flag: '🇮🇳' },
+  { name: 'Odia', nativeName: 'ଓଡ଼ିଆ', code: 'or', flag: '🇮🇳' },
+  { name: 'Malayalam', nativeName: 'മലയാളം', code: 'ml', flag: '🇮🇳' },
+  { name: 'Punjabi', nativeName: 'ਪੰਜਾਬੀ', code: 'pa', flag: '🇮🇳' },
+  { name: 'Assamese', nativeName: 'অসমীয়া', code: 'as', flag: '🇮🇳' },
+  { name: 'Maithili', nativeName: 'मैथिली', code: 'mai', flag: '🇮🇳' },
+  { name: 'Bhojpuri', nativeName: 'भोजपुरी', code: 'bho', flag: '🇮🇳' },
+  { name: 'Santali', nativeName: 'ᱥᱟᱱᱛᱟᱲᱤ', code: 'sat', flag: '🇮🇳' },
+  { name: 'Kashmiri', nativeName: 'कॉशुर / کٲشُر', code: 'ks', flag: '🇮🇳' },
+  { name: 'Nepali', nativeName: 'नेपाली', code: 'ne', flag: '🇳🇵' },
+  { name: 'Konkani', nativeName: 'कोंकणी', code: 'kok', flag: '🇮🇳' },
+  { name: 'Sindhi', nativeName: 'سنڌي / सिंधी', code: 'sd', flag: '🇮🇳' },
+  { name: 'Dogri', nativeName: 'डोगरी', code: 'doi', flag: '🇮🇳' },
+  { name: 'Manipuri', nativeName: 'ꯃꯤꯇꯩꯂꯣꯟ', code: 'mni', flag: '🇮🇳' },
+  { name: 'Bodo', nativeName: 'बड़ो', code: 'brx', flag: '🇮🇳' },
+  { name: 'Sanskrit', nativeName: 'संस्कृतम्', code: 'sa', flag: '🇮🇳' },
+  { name: 'Haryanvi', nativeName: 'हरियाणवी', code: 'bgc', flag: '🇮🇳' },
+  { name: 'Chhattisgarhi', nativeName: 'छत्तीसगढ़ी', code: 'hne', flag: '🇮🇳' },
+  { name: 'Marwari', nativeName: 'मारवाड़ी', code: 'mwr', flag: '🇮🇳' },
+];
 
 const Switch = ({ checked, onChange, disabled, title }) => (
   <button
@@ -39,14 +70,91 @@ const Languages = () => {
 
   // Modal State
   const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedPreset, setSelectedPreset] = useState('');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [dropdownSearch, setDropdownSearch] = useState('');
+  const dropdownRef = useRef(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [newLang, setNewLang] = useState({
     name: '',
     nativeName: '',
     code: '',
     flag: '🇮🇳',
+    isRTL: false,
     isActive: true
   });
+
+  // Close custom dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    if (isDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isDropdownOpen]);
+
+  // Lock body scroll while modal is open
+  useEffect(() => {
+    if (!showAddModal) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [showAddModal]);
+
+  // Set of existing language codes to avoid duplicates
+  const existingCodes = useMemo(() => {
+    return new Set((languages || []).map((l) => (l.code || '').toLowerCase().trim()));
+  }, [languages]);
+
+  // Selected preset object
+  const selectedPresetObj = useMemo(() => {
+    return INDIAN_LANGUAGES.find((p) => p.code === selectedPreset);
+  }, [selectedPreset]);
+
+  // Filtered Indian languages based on search input
+  const filteredIndianLanguages = useMemo(() => {
+    const q = dropdownSearch.trim().toLowerCase();
+    if (!q) return INDIAN_LANGUAGES;
+    return INDIAN_LANGUAGES.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        p.nativeName.toLowerCase().includes(q) ||
+        p.code.toLowerCase().includes(q)
+    );
+  }, [dropdownSearch]);
+
+  const handleChooseLanguage = (preset) => {
+    if (preset === 'custom') {
+      setSelectedPreset('custom');
+      setIsDropdownOpen(false);
+      setNewLang({
+        name: '',
+        nativeName: '',
+        code: '',
+        flag: '🇮🇳',
+        isRTL: false,
+        isActive: true
+      });
+      return;
+    }
+
+    setSelectedPreset(preset.code);
+    setIsDropdownOpen(false);
+    setNewLang({
+      name: preset.name,
+      nativeName: preset.nativeName,
+      code: preset.code,
+      flag: preset.flag || '🇮🇳',
+      isRTL: Boolean(preset.isRTL),
+      isActive: true
+    });
+  };
 
   const loadLanguages = useCallback(async () => {
     try {
@@ -140,11 +248,13 @@ const Languages = () => {
       if (res.success) {
         toastManager.success('New language added successfully');
         setShowAddModal(false);
+        setSelectedPreset('');
         setNewLang({
           name: '',
           nativeName: '',
           code: '',
           flag: '🇮🇳',
+          isRTL: false,
           isActive: true
         });
         await loadLanguages();
@@ -325,61 +435,200 @@ const Languages = () => {
             </div>
 
             <form onSubmit={handleAddSubmit} className="space-y-4">
-              <div>
+              {/* Custom Searchable Indian Languages Dropdown */}
+              <div className="relative" ref={dropdownRef}>
                 <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
-                  Language Name (in English) *
+                  Choose Language from Indian Presets *
                 </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Odia, Bengali, Urdu"
-                  value={newLang.name}
-                  onChange={(e) => setNewLang({ ...newLang, name: e.target.value })}
-                  required
-                  className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
-                />
+
+                {/* Dropdown Trigger Button */}
+                <button
+                  type="button"
+                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                  className={`w-full px-3.5 py-2.5 bg-emerald-50/50 border rounded-xl text-sm font-semibold text-gray-800 flex items-center justify-between transition-all cursor-pointer shadow-2xs ${
+                    isDropdownOpen
+                      ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-white'
+                      : 'border-emerald-300/80 hover:border-emerald-400'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 truncate">
+                    {selectedPresetObj ? (
+                      <>
+                        <span className="text-base">{selectedPresetObj.flag}</span>
+                        <span className="text-gray-900 font-bold">{selectedPresetObj.name}</span>
+                        <span className="text-emerald-700 text-xs font-medium">({selectedPresetObj.nativeName})</span>
+                        <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold">
+                          {selectedPresetObj.code}
+                        </span>
+                      </>
+                    ) : selectedPreset === 'custom' ? (
+                      <>
+                        <span>✏️</span>
+                        <span className="text-gray-900 font-semibold">Custom / Other Language (Manual)</span>
+                      </>
+                    ) : (
+                      <span className="text-gray-400 font-normal">-- Select an Indian Language / भारतीय भाषा चुनें --</span>
+                    )}
+                  </div>
+                  <FiChevronDown
+                    className={`w-4 h-4 text-emerald-700 transition-transform duration-200 shrink-0 ml-2 ${
+                      isDropdownOpen ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+
+                {/* Dropdown Menu Container */}
+                {isDropdownOpen && (
+                  <div className="absolute top-full left-0 right-0 mt-1.5 z-50 bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden">
+                    {/* Search Input Header */}
+                    <div className="p-2.5 border-b border-gray-100 bg-gray-50/70">
+                      <div className="relative">
+                        <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                        <input
+                          type="text"
+                          value={dropdownSearch}
+                          onChange={(e) => setDropdownSearch(e.target.value)}
+                          placeholder="Search Indian language or script (e.g. Odia, ଓଡ଼ିଆ)..."
+                          className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-gray-800"
+                          autoFocus
+                        />
+                        {dropdownSearch && (
+                          <button
+                            type="button"
+                            onClick={() => setDropdownSearch('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5 cursor-pointer"
+                          >
+                            <FiX className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Scrollable List */}
+                    <div className="max-h-56 overflow-y-auto divide-y divide-gray-50 overscroll-contain">
+                      {filteredIndianLanguages.map((p) => {
+                        const isAdded = existingCodes.has(p.code.toLowerCase());
+                        const isSelected = selectedPreset === p.code;
+
+                        return (
+                          <button
+                            key={p.code}
+                            type="button"
+                            disabled={isAdded}
+                            onClick={() => handleChooseLanguage(p)}
+                            className={`w-full px-3.5 py-2.5 text-left flex items-center justify-between text-xs transition-colors ${
+                              isAdded
+                                ? 'bg-gray-50/70 opacity-40 cursor-not-allowed text-gray-400'
+                                : isSelected
+                                ? 'bg-emerald-50 text-emerald-900 font-bold'
+                                : 'hover:bg-gray-50 text-gray-800 cursor-pointer'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <span className="text-base shrink-0">{p.flag}</span>
+                              <span className="font-bold text-gray-900 truncate">{p.name}</span>
+                              <span className="text-gray-500 truncate">({p.nativeName})</span>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0 ml-2">
+                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 uppercase font-semibold">
+                                {p.code}
+                              </span>
+                              {isAdded && (
+                                <span className="text-[10px] font-semibold text-gray-400 bg-gray-200/60 px-1.5 py-0.5 rounded">
+                                  Already Added
+                                </span>
+                              )}
+                              {isSelected && !isAdded && (
+                                <FiCheck className="w-3.5 h-3.5 text-emerald-600 stroke-[3]" />
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+
+                      {filteredIndianLanguages.length === 0 && (
+                        <div className="p-4 text-center text-xs text-gray-400">
+                          No Indian languages found matching "{dropdownSearch}"
+                        </div>
+                      )}
+
+                      {/* Custom Language Manual Entry Option */}
+                      <button
+                        type="button"
+                        onClick={() => handleChooseLanguage('custom')}
+                        className="w-full px-3.5 py-2.5 text-left flex items-center gap-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 border-t border-gray-100 bg-emerald-50/30 cursor-pointer transition-colors"
+                      >
+                        <span>✏️</span>
+                        <span>Custom / Other Indian Dialect (Manual Entry)</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <p className="text-[11px] text-gray-400 mt-1">
+                  Selecting a preset automatically fills the native script, ISO code, and flag below.
+                </p>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
-                  Native Language Name *
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. ଓଡ଼ିଆ, বাংলা, اردو"
-                  value={newLang.nativeName}
-                  onChange={(e) => setNewLang({ ...newLang, nativeName: e.target.value })}
-                  required
-                  className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
+              {/* Pre-filled / Editable Details */}
+              <div className="p-3.5 bg-gray-50/70 border border-gray-200/80 rounded-xl space-y-3">
                 <div>
                   <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
-                    ISO Code *
+                    Language Name (in English) *
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. or, ur, fr"
-                    value={newLang.code}
-                    onChange={(e) => setNewLang({ ...newLang, code: e.target.value.toLowerCase().trim() })}
+                    placeholder="e.g. Odia, Bengali, Urdu"
+                    value={newLang.name}
+                    onChange={(e) => setNewLang({ ...newLang, name: e.target.value })}
                     required
-                    maxLength={5}
-                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
+                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
                   />
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
-                    Flag Emoji
+                    Native Language Name *
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. 🇮🇳"
-                    value={newLang.flag}
-                    onChange={(e) => setNewLang({ ...newLang, flag: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                    placeholder="e.g. ଓଡ଼ିଆ, বাংলা, اردو"
+                    value={newLang.nativeName}
+                    onChange={(e) => setNewLang({ ...newLang, nativeName: e.target.value })}
+                    required
+                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
                   />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
+                      ISO Code *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. or, ur, fr"
+                      value={newLang.code}
+                      onChange={(e) => setNewLang({ ...newLang, code: e.target.value.toLowerCase().trim() })}
+                      required
+                      maxLength={5}
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
+                      Flag Emoji
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 🇮🇳"
+                      value={newLang.flag}
+                      onChange={(e) => setNewLang({ ...newLang, flag: e.target.value })}
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
                 </div>
               </div>
 
