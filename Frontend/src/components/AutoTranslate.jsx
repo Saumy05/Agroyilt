@@ -9,7 +9,7 @@ import { translateText } from '../services/translationService';
  * Skips regions marked with translate="no" or data-no-translate.
  */
 
-const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEXTAREA', 'INPUT', 'CODE', 'PRE']);
+const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEXTAREA', 'INPUT', 'CODE', 'PRE', 'SVG', 'PATH']);
 const HAS_LETTERS = /[A-Za-z]{2,}/;
 const SCAN_DELAY_MS = 100;
 
@@ -76,8 +76,6 @@ const AutoTranslate = () => {
             } finally {
               isInternalMutating = false;
             }
-          } else {
-            applied.set(current, value); // already same or not translatable
           }
         });
       }
