@@ -104,6 +104,7 @@ const NoInternetScreen = () => {
           checking: chk || OFFLINE_EN.checking,
           retry: retry || OFFLINE_EN.retry
         };
+        if (translated.title === OFFLINE_EN.title) return; // not translated: try again next time
         setStrings(translated);
         try { localStorage.setItem(`agroyilt_offline_i18n_${currentCode}`, JSON.stringify(translated)); } catch {}
       })

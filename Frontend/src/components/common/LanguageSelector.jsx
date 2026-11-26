@@ -24,10 +24,7 @@ const LanguageSelector = ({ variant = 'pill', className = '' }) => {
     };
   }, [isOpen]);
 
-  const languages = activeLanguagesList && activeLanguagesList.length > 0 ? activeLanguagesList : [
-    { code: 'en', name: 'English', nativeName: 'English', flag: '🇬🇧' },
-    { code: 'hi', name: 'Hindi', nativeName: 'हिन्दी', flag: '🇮🇳' },
-  ];
+  const languages = activeLanguagesList;
 
   const currentLangObj = languages.find(l => l.code === currentCode || l.name === language) || languages[0];
 
@@ -41,7 +38,7 @@ const LanguageSelector = ({ variant = 'pill', className = '' }) => {
     : 'border border-emerald-200 bg-emerald-50/70 text-emerald-800 hover:bg-emerald-100/70';
 
   return (
-    <div className={`relative inline-block text-left ${className}`} ref={dropdownRef} translate="no">
+    <div className={`relative inline-block text-left ${className}`} ref={dropdownRef}>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
@@ -49,7 +46,7 @@ const LanguageSelector = ({ variant = 'pill', className = '' }) => {
         title="Change Language"
       >
         <span className="text-sm">{currentLangObj?.flag || '🌐'}</span>
-        <span className="font-bold">{currentLangObj?.nativeName || currentLangObj?.name || 'English'}</span>
+        <span className="font-bold" translate="no">{currentLangObj?.nativeName || currentLangObj?.name || 'English'}</span>
         <FiChevronDown className={`w-3.5 h-3.5 text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
@@ -73,7 +70,7 @@ const LanguageSelector = ({ variant = 'pill', className = '' }) => {
               </button>
             </div>
 
-            <div className="space-y-1">
+            <div className="space-y-1" translate="no">
               {languages.map((lang) => {
                 const isSelected = currentCode === lang.code;
                 return (

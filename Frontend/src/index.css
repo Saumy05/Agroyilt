@@ -262,3 +262,23 @@ html {
 body.hide-bottom-nav nav.fixed.bottom-0 {
   display: none !important;
 }
+
+/* Text waiting for its translation stays invisible, and reappears by itself if none arrives */
+@keyframes tr-pending {
+
+  from,
+  to {
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    text-shadow: none;
+  }
+}
+
+[data-tr-pending] {
+  animation: tr-pending 4s step-end !important;
+}
+
+[data-tr-ph-pending]::placeholder {
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+}

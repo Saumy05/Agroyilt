@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { GoogleMap, useJsApiLoader, Marker } from '@react-google-maps/api';
-import { GOOGLE_MAPS_LOADER_ID, GOOGLE_MAPS_LIBRARIES } from '../../../../../utils/googleMapsLoader';
+import { GOOGLE_MAPS_LOADER_ID, GOOGLE_MAPS_LIBRARIES, getGoogleMapsLoaderLanguage } from '../../../../../utils/googleMapsLoader';
 import { toastManager } from '../../../../../utils/toastManager';
 import flutterBridge from '../../../../../utils/flutterBridge';
 
@@ -22,6 +22,7 @@ const GoogleMapPicker = ({ onLocationSelect, initialPosition = null, fallbackAre
 
   const { isLoaded, loadError } = useJsApiLoader({
     id: GOOGLE_MAPS_LOADER_ID,
+    language: getGoogleMapsLoaderLanguage(),
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
     libraries: GOOGLE_MAPS_LIBRARIES
   });

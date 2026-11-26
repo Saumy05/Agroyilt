@@ -4,7 +4,7 @@ import {
   Marker,
   useJsApiLoader
 } from '@react-google-maps/api';
-import { GOOGLE_MAPS_LOADER_ID, GOOGLE_MAPS_LIBRARIES } from '../../../../../utils/googleMapsLoader';
+import { GOOGLE_MAPS_LOADER_ID, GOOGLE_MAPS_LIBRARIES, getGoogleMapsLoaderLanguage } from '../../../../../utils/googleMapsLoader';
 import { FiCrosshair } from 'react-icons/fi';
 import { toastManager } from '../../../../../utils/toastManager';
 import flutterBridge from '../../../../../utils/flutterBridge';
@@ -31,6 +31,7 @@ const LocationPicker = ({
 }) => {
   const { isLoaded, loadError } = useJsApiLoader({
     id: GOOGLE_MAPS_LOADER_ID,
+    language: getGoogleMapsLoaderLanguage(),
     googleMapsApiKey: MAPS_API_KEY,
     libraries: GOOGLE_MAPS_LIBRARIES,
   });

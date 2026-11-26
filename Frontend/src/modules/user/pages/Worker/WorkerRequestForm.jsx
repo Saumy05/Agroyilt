@@ -984,7 +984,7 @@ const WorkerRequestForm = () => {
                   {formData.bookingType === 'HOURLY' && <FiCheckCircle className="text-emerald-600" size={14} />}
                 </div>
                 <p className="text-[10px] sm:text-[11px] text-slate-500 leading-tight">
-                  For short shifts by the hour. Timer starts with Reach OTP.
+                  For short shifts by the hour. Timer starts with the arrival OTP.
                 </p>
               </button>
 
@@ -1003,7 +1003,7 @@ const WorkerRequestForm = () => {
                   {formData.bookingType === 'DAILY' && <FiCheckCircle className="text-emerald-600" size={14} />}
                 </div>
                 <p className="text-[10px] sm:text-[11px] text-slate-500 leading-tight">
-                  Multi-day farm work. Fresh Reach OTP every working day.
+                  Multi-day farm work. A new arrival OTP every working day.
                 </p>
               </button>
 
@@ -1108,7 +1108,7 @@ const WorkerRequestForm = () => {
                     value={skillInput}
                     onChange={e => setSkillInput(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSkill(skillInput); } }}
-                    placeholder="Type skill & press Enter"
+                    placeholder="Type a skill, then press the enter key"
                     className="flex-1 bg-slate-50/80 border border-slate-200 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
                   />
                   <button
@@ -1218,7 +1218,7 @@ const WorkerRequestForm = () => {
                       >
                         <FiCalendar className="absolute left-3 top-2.5 text-slate-400 group-hover:text-emerald-600 transition-colors" size={14} />
                         <span className={formData.startDate ? 'text-slate-800 font-bold tracking-wide' : 'text-slate-400 font-normal'}>
-                          {formatToDDMMYYYY(formData.startDate) || 'DD/MM/YYYY'}
+                          {formatToDDMMYYYY(formData.startDate) || 'Day/Month/Year'}
                         </span>
                         <span className="text-xs opacity-60 group-hover:opacity-100 transition-opacity">📅</span>
                       </div>
@@ -1321,7 +1321,7 @@ const WorkerRequestForm = () => {
                         >
                           <FiCalendar className="absolute left-3 top-2.5 text-slate-400 group-hover:text-emerald-600 transition-colors" size={14} />
                           <span className={formData.scheduledDate ? 'text-slate-800 font-bold tracking-wide' : 'text-slate-400 font-normal'}>
-                            {formatToDDMMYYYY(formData.scheduledDate) || 'DD/MM/YYYY'}
+                            {formatToDDMMYYYY(formData.scheduledDate) || 'Day/Month/Year'}
                           </span>
                           <span className="text-xs opacity-60 group-hover:opacity-100 transition-opacity">📅</span>
                         </div>
@@ -1388,7 +1388,7 @@ const WorkerRequestForm = () => {
                       >
                         <FiCalendar className="absolute left-3 top-2.5 text-slate-400 group-hover:text-emerald-600 transition-colors" size={14} />
                         <span className={formData.scheduledDate ? 'text-slate-800 font-bold tracking-wide' : 'text-slate-400 font-normal'}>
-                          {formatToDDMMYYYY(formData.scheduledDate) || 'DD/MM/YYYY'}
+                          {formatToDDMMYYYY(formData.scheduledDate) || 'Day/Month/Year'}
                         </span>
                         <span className="text-xs opacity-60 group-hover:opacity-100 transition-opacity">📅</span>
                       </div>

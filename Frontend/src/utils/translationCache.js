@@ -6,7 +6,7 @@
 
 const DB_NAME = 'AgroyiltTranslationCache';
 const STORE_NAME = 'translations';
-const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 Hours
+const CACHE_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days: UI translations rarely change, and re-fetching them delays screens
 const IDB_TIMEOUT_MS = 400;
 
 const memoryCache = new Map();

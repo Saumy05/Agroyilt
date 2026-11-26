@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GoogleMap, useJsApiLoader, DirectionsRenderer, OverlayView, PolylineF } from '@react-google-maps/api';
-import { GOOGLE_MAPS_LOADER_ID, GOOGLE_MAPS_LIBRARIES } from '../../../../utils/googleMapsLoader';
+import { GOOGLE_MAPS_LOADER_ID, GOOGLE_MAPS_LIBRARIES, getGoogleMapsLoaderLanguage } from '../../../../utils/googleMapsLoader';
 import { FiArrowLeft, FiNavigation, FiMapPin, FiCrosshair, FiPhone, FiCheckCircle, FiMaximize, FiMinimize, FiClock, FiWifiOff, FiAlertTriangle, FiRefreshCw } from 'react-icons/fi';
 import { toastManager } from '../../../../utils/toastManager';
 import workerService from '../../../../services/workerService';
@@ -50,6 +50,7 @@ const JobMap = () => {
 
   const { isLoaded } = useJsApiLoader({
     id: GOOGLE_MAPS_LOADER_ID,
+    language: getGoogleMapsLoaderLanguage(),
     googleMapsApiKey: apiKey,
     libraries: GOOGLE_MAPS_LIBRARIES
   });

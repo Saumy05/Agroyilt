@@ -1174,7 +1174,6 @@ const LandLeasePage = () => {
                       <p className="font-bold text-gray-900 flex items-center gap-1.5">
                         <FiMapPin className="w-4 h-4 text-emerald-700" />
                         Where is the land? <span className="text-red-500">*</span>
-                        <span className="text-[11px] font-semibold text-gray-500">(भूमि का स्थान)</span>
                       </p>
                       <p className="text-[11px] text-gray-600 mt-0.5 leading-snug">
                         Put a pin on the map. It goes into the lease agreement together with the khasra number.
@@ -2373,13 +2372,12 @@ const LandLeasePage = () => {
       {acceptDialog && (
         <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/50 p-3" onClick={() => setAcceptDialog(null)}>
           <div className="w-full max-w-sm bg-white rounded-3xl p-5 space-y-3" onClick={(e) => e.stopPropagation()}>
-            <p className="font-black text-gray-900 text-base">Accept this offer? · प्रस्ताव स्वीकार करें?</p>
+            <p className="font-black text-gray-900 text-base">Accept this offer?</p>
             <p className="text-xs text-gray-600 leading-snug">
               A lease agreement will be made for both of you to read and sign. The lease starts only after you both sign.
-              <span className="block mt-1">अनुबंध बनेगा। दोनों के हस्ताक्षर के बाद ही पट्टा शुरू होगा।</span>
             </p>
-            <p className="text-[11px] font-bold uppercase text-gray-500">Agreement language · अनुबंध की भाषा</p>
-            <div className="grid grid-cols-2 gap-2">
+            <p className="text-[11px] font-bold uppercase text-gray-500">Agreement language</p>
+            <div className="grid grid-cols-2 gap-2" translate="no">
               <button onClick={() => confirmAcceptOffer('hi')} className="py-3 rounded-xl bg-emerald-800 text-white font-black text-sm active:scale-95">हिन्दी</button>
               <button onClick={() => confirmAcceptOffer('en')} className="py-3 rounded-xl bg-white border-2 border-emerald-800 text-emerald-900 font-black text-sm active:scale-95">English</button>
             </div>

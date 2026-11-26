@@ -5,9 +5,9 @@ import { toastManager } from '../../utils/toastManager';
 import { paymentDefaultService } from '../../services/paymentDefaultService';
 
 const REASONS = [
-  { id: 'FARMER_REFUSES_TO_PAY', label: 'Farmer refuses to pay', hi: 'किसान पैसे देने से मना कर रहा है' },
-  { id: 'FARMER_DISPUTES_AMOUNT', label: 'Farmer disputes the amount', hi: 'किसान बिल की रकम पर विवाद कर रहा है' },
-  { id: 'FARMER_UNREACHABLE', label: 'Farmer is unreachable', hi: 'किसान से संपर्क नहीं हो रहा' }
+  { id: 'FARMER_REFUSES_TO_PAY', label: 'Farmer refuses to pay' },
+  { id: 'FARMER_DISPUTES_AMOUNT', label: 'Farmer disputes the amount' },
+  { id: 'FARMER_UNREACHABLE', label: 'Farmer is unreachable' }
 ];
 
 /**
@@ -54,7 +54,6 @@ const ReportNonPaymentModal = ({ isOpen, bookingId, amount, onClose, onSubmitted
               <h3 className="text-base font-black text-gray-900">Reported to support</h3>
               <p className="text-xs text-gray-600 leading-relaxed">
                 Support will contact the farmer and decide. If the farmer is found at fault, your earning for this job is paid to your wallet.
-                <br />(सपोर्ट किसान से संपर्क करेगा। किसान की गलती होने पर आपकी कमाई वॉलेट में आ जाएगी।)
               </p>
               <button onClick={onClose} className="w-full py-3 rounded-2xl font-black text-white bg-gradient-to-r from-emerald-600 to-teal-700 text-sm">Done</button>
             </div>
@@ -65,7 +64,7 @@ const ReportNonPaymentModal = ({ isOpen, bookingId, amount, onClose, onSubmitted
                   <div className="w-9 h-9 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0"><FiAlertTriangle className="w-5 h-5" /></div>
                   <div>
                     <h3 className="text-base font-black text-gray-900">Farmer is not paying</h3>
-                    <p className="text-[11px] text-gray-500">Bill due: ₹{Number(amount || 0).toLocaleString()} (किसान भुगतान नहीं कर रहा)</p>
+                    <p className="text-[11px] text-gray-500">Bill due: ₹{Number(amount || 0).toLocaleString()}</p>
                   </div>
                 </div>
                 <button onClick={close} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500"><FiX className="w-4 h-4" /></button>
@@ -76,7 +75,6 @@ const ReportNonPaymentModal = ({ isOpen, bookingId, amount, onClose, onSubmitted
                   <button key={r.id} type="button" onClick={() => setReason(r.id)}
                     className={`w-full text-left px-3.5 py-3 rounded-xl border-2 transition-all ${reason === r.id ? 'border-red-500 bg-red-50' : 'border-gray-100 hover:border-gray-200'}`}>
                     <span className={`block text-xs font-black ${reason === r.id ? 'text-red-700' : 'text-gray-800'}`}>{r.label}</span>
-                    <span className="block text-[10px] text-gray-500">{r.hi}</span>
                   </button>
                 ))}
               </div>

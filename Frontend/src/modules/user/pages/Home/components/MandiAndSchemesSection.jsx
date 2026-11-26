@@ -195,7 +195,7 @@ const MandiAndSchemesSection = () => {
               <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-baseline justify-between">
                 <span className="text-[10px] font-bold text-slate-400">Modal price:</span>
                 <span className="text-[15px] font-black text-emerald-700">
-                  ₹{item.modalPrice.toLocaleString()} <span className="text-[9.5px] font-semibold text-slate-400">/qtl</span>
+                  ₹{item.modalPrice.toLocaleString()} <span className="text-[9.5px] font-semibold text-slate-400">/quintal</span>
                 </span>
               </div>
             </div>

@@ -282,7 +282,7 @@ const LeasePaymentsPage = () => {
                 <FiAlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
                 <div>
                   <p className="font-black text-sm">This lease was ended for unpaid rent</p>
-                  <p className="text-slate-300 mt-0.5">पट्टा किराया न देने के कारण समाप्त हो गया। The rent still owed can be paid to the owner below.</p>
+                  <p className="text-slate-300 mt-0.5">The rent still owed can be paid to the owner below.</p>
                 </div>
               </div>
             )}

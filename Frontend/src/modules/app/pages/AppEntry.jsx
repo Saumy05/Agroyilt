@@ -201,7 +201,7 @@ const AppEntry = () => {
           }}>
             <FiPlay size={10} style={{ marginLeft: '1px' }} />
           </span>
-          <span>Watch App Guide / वीडियो देखें</span>
+          <span>Watch App Guide</span>
         </button>
       </div>
 
@@ -243,7 +243,7 @@ const AppEntry = () => {
           }}>
             <FiPlay size={13} style={{ marginLeft: '2px' }} />
           </span>
-          <span>How It Works / ऐप सीखें (2 Min)</span>
+          <span>How It Works (2 Min)</span>
         </button>
 
         {/* Register Button */}

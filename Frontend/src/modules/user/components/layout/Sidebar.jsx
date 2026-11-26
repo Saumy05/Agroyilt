@@ -372,7 +372,7 @@ const Sidebar = ({ isOpen, onClose }) => {
             {/* Compact Footer / Logout */}
             <div className="p-3 pt-2 bg-white border-t border-slate-100">
               <div className="flex items-center justify-between px-3 py-2 bg-emerald-50/50 rounded-xl mb-2.5 border border-emerald-100/60">
-                <span className="text-xs font-bold text-emerald-900">Language / भाषा</span>
+                <span className="text-xs font-bold text-emerald-900">Language</span>
                 <LanguageSelector />
               </div>
 

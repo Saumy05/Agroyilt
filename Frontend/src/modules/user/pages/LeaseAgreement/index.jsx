@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { getAppLocale } from '../../../../utils/languageUtils';
+import { useLanguage } from '../../../../context/LanguageContext';
+import { translateText } from '../../../../services/translationService';
 import { useNavigate, useParams } from 'react-router-dom';
 import { FiArrowLeft, FiLock, FiCheckCircle, FiClock, FiShield, FiSend, FiAlertTriangle, FiXCircle, FiDownload } from 'react-icons/fi';
 import leaseAgreementService from '../../services/leaseAgreementService';
@@ -8,12 +10,12 @@ import flutterBridge from '../../../../utils/flutterBridge';
 import BoundarySketch from '../../components/common/BoundarySketch';
 
 const STATUS = {
-  DRAFT: { label: 'Waiting for signatures', hi: 'हस्ताक्षर बाकी', cls: 'bg-amber-100 text-amber-800' },
-  PARTIALLY_SIGNED: { label: 'One signature done', hi: 'एक हस्ताक्षर हुआ', cls: 'bg-amber-100 text-amber-800' },
-  FULLY_EXECUTED: { label: 'Signed by both', hi: 'दोनों ने हस्ताक्षर किए', cls: 'bg-emerald-100 text-emerald-800' },
-  CANCELLED: { label: 'Cancelled', hi: 'रद्द', cls: 'bg-red-100 text-red-700' },
-  EXPIRED: { label: 'Expired', hi: 'समय समाप्त', cls: 'bg-slate-200 text-slate-700' },
-  DISPUTED: { label: 'Under review', hi: 'विवाद की जाँच', cls: 'bg-purple-100 text-purple-800' }
+  DRAFT: { label: 'Waiting for signatures', cls: 'bg-amber-100 text-amber-800' },
+  PARTIALLY_SIGNED: { label: 'One signature done', cls: 'bg-amber-100 text-amber-800' },
+  FULLY_EXECUTED: { label: 'Signed by both', cls: 'bg-emerald-100 text-emerald-800' },
+  CANCELLED: { label: 'Cancelled', cls: 'bg-red-100 text-red-700' },
+  EXPIRED: { label: 'Expired', cls: 'bg-slate-200 text-slate-700' },
+  DISPUTED: { label: 'Under review', cls: 'bg-purple-100 text-purple-800' }
 };
 
 const fmtDateTime = (d) => (d ? new Date(d).toLocaleString(getAppLocale(), { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '');
@@ -21,9 +23,9 @@ const fmtDate = (d) => (d ? new Date(d).toLocaleDateString(getAppLocale(), { day
 const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 
 /** Certificate block of one party: signed (with stamp) or still waiting. */
-const SignatureBlock = ({ title, titleHi, person, sig, isMe }) => (
+const SignatureBlock = ({ title, person, sig, isMe }) => (
   <div className={`rounded-2xl border p-4 ${sig.signed ? 'border-emerald-300 bg-emerald-50/60' : 'border-dashed border-slate-300 bg-slate-50'}`}>
-    <p className="text-[11px] font-black uppercase tracking-wide text-slate-500">{title} <span className="normal-case">· {titleHi}</span>{isMe && <span className="ml-1.5 text-emerald-700">(You)</span>}</p>
+    <p className="text-[11px] font-black uppercase tracking-wide text-slate-500">{title}{isMe && <span className="ml-1.5 text-emerald-700">(You)</span>}</p>
     <p className="mt-1 text-base font-extrabold text-slate-900 break-words">{person.name}</p>
     {sig.signed ? (
       <div className="mt-2 space-y-1 text-xs text-emerald-900">
@@ -32,7 +34,7 @@ const SignatureBlock = ({ title, titleHi, person, sig, isMe }) => (
         <p className="text-[11px] text-emerald-800/80">Registered name locked · OTP verified{sig.platform ? ` · ${sig.platform}` : ''}</p>
       </div>
     ) : (
-      <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-slate-500"><FiClock className="shrink-0" /> Signature pending · हस्ताक्षर बाकी</p>
+      <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-slate-500"><FiClock className="shrink-0" /> Signature pending</p>
     )}
   </div>
 );
@@ -40,6 +42,7 @@ const SignatureBlock = ({ title, titleHi, person, sig, isMe }) => (
 const LeaseAgreementPage = () => {
   const { agreementId } = useParams();
   const navigate = useNavigate();
+  const { currentCode } = useLanguage();
   const [ag, setAg] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -161,7 +164,7 @@ const LeaseAgreementPage = () => {
   };
 
   const cancel = async () => {
-    const reason = window.prompt('Why are you cancelling? (optional)\nरद्द करने का कारण (वैकल्पिक)');
+    const reason = window.prompt(await translateText('Why are you cancelling? (optional)', currentCode));
     if (reason === null) return;
     try {
       const res = await leaseAgreementService.cancel(agreementId, reason);
@@ -217,10 +220,10 @@ const LeaseAgreementPage = () => {
             <FiArrowLeft size={18} />
           </button>
           <div className="min-w-0 flex-1">
-            <h1 className="text-sm font-black text-slate-900 truncate">Lease Agreement · पट्टा अनुबंध</h1>
+            <h1 className="text-sm font-black text-slate-900 truncate">Lease Agreement</h1>
             <p className="text-[11px] font-semibold text-slate-500 truncate">{ag.referenceNo}</p>
           </div>
-          <span className={`px-2.5 py-1 rounded-full text-[10px] font-black ${st.cls}`}>{st.label}<span className="block text-[9px] font-semibold">{st.hi}</span></span>
+          <span className={`px-2.5 py-1 rounded-full text-[10px] font-black ${st.cls}`}>{st.label}</span>
         </div>
       </div>
 
@@ -229,19 +232,19 @@ const LeaseAgreementPage = () => {
         <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
           <div className="flex flex-wrap items-center gap-2 mb-3">
             <span className={`px-2.5 py-1 rounded-full text-[11px] font-black ${fixed ? 'bg-blue-100 text-blue-800' : 'bg-orange-100 text-orange-800'}`}>
-              {fixed ? 'Fixed Rent · किराया' : 'Batai · बटाई'}
+              {fixed ? 'Fixed Rent' : 'Batai (crop share)'}
             </span>
             <span className="text-[11px] font-semibold text-slate-500">Khasra {t.khasraNumber} · {t.village}{t.district ? `, ${t.district}` : ''}</span>
           </div>
           <div className="grid grid-cols-2 gap-2.5 text-center">
-            <div className="rounded-xl bg-slate-50 p-2.5"><p className="text-[10px] font-bold uppercase text-slate-400">Land · भूमि</p><p className="font-black text-slate-900">{t.landAreaAcres} acres</p></div>
+            <div className="rounded-xl bg-slate-50 p-2.5"><p className="text-[10px] font-bold uppercase text-slate-400">Land</p><p className="font-black text-slate-900">{t.landAreaAcres} acres</p></div>
             <div className="rounded-xl bg-slate-50 p-2.5">
-              <p className="text-[10px] font-bold uppercase text-slate-400">Duration · अवधि</p>
+              <p className="text-[10px] font-bold uppercase text-slate-400">Duration</p>
               <p className="font-black text-slate-900">{t.durationMonths} months</p>
               <p className="text-[10px] font-semibold text-slate-500">{ag.effective?.startDate ? `${fmtDate(ag.effective.startDate)} – ${fmtDate(ag.effective.endDate)}` : 'starts when both sign'}</p>
             </div>
             <div className="rounded-xl bg-slate-50 p-2.5 col-span-2">
-              <p className="text-[10px] font-bold uppercase text-slate-400">{fixed ? 'Rent · किराया' : "Owner's share · मालिक का हिस्सा"}</p>
+              <p className="text-[10px] font-bold uppercase text-slate-400">{fixed ? 'Rent' : "Owner's share"}</p>
               <p className="font-black text-slate-900">{fixed ? `${inr(t.pricePerAcrePerYear)} /acre/year · Total ${inr(t.totalRent)}` : `${t.sharePercentage}% of the crop`}</p>
             </div>
           </div>
@@ -262,7 +265,7 @@ const LeaseAgreementPage = () => {
         {/* Advance payment: installment 1 is charged from the farmer's wallet the moment both have signed */}
         {ag.advance?.required && live && (
           <div className={`rounded-2xl border p-3.5 text-sm ${ag.advance.short && ag.myRole === 'farmer' ? 'bg-amber-50 border-amber-300 text-amber-900' : 'bg-white border-slate-200 text-slate-800'}`}>
-            <p className="font-black">Payment at the start · शुरुआत में भुगतान</p>
+            <p className="font-black">Payment at the start</p>
             <p className="mt-0.5 text-[13px]">
               {inr(ag.advance.amount)} (the first payment of the rent) is taken from the farmer's wallet as soon as both have signed. If it is not paid within 3 days of the lease starting, the owner can end the lease.
             </p>
@@ -283,9 +286,9 @@ const LeaseAgreementPage = () => {
             <FiShield className="w-6 h-6 shrink-0 mt-0.5" />
             <div>
               <p className="font-black">Agreement signed by both parties</p>
-              <p className="text-sm text-emerald-50">दोनों पक्षों ने हस्ताक्षर कर दिए हैं। {ag.executedAt ? fmtDateTime(ag.executedAt) : ''}</p>
+              <p className="text-sm text-emerald-50">{ag.executedAt ? fmtDateTime(ag.executedAt) : ''}</p>
               {ag.effective?.startDate && ag.effective?.endDate && (
-                <p className="mt-1 text-sm font-bold">Lease period · पट्टा अवधि: {fmtDate(ag.effective.startDate)} – {fmtDate(ag.effective.endDate)}</p>
+                <p className="mt-1 text-sm font-bold">Lease period: {fmtDate(ag.effective.startDate)} – {fmtDate(ag.effective.endDate)}</p>
               )}
               <button onClick={() => navigate('/user/land-lease?tab=my-leases&sub=listings')} className="mt-2 px-3 py-1.5 rounded-lg bg-white/20 text-xs font-bold">Go to my leases</button>
             </div>
@@ -302,7 +305,7 @@ const LeaseAgreementPage = () => {
         )}
         {live && ag.mySigned && (
           <div className="rounded-2xl bg-amber-50 border border-amber-200 p-3.5 text-sm font-semibold text-amber-900">
-            You have signed. Waiting for the other party to sign · दूसरे पक्ष के हस्ताक्षर का इंतज़ार है।
+            You have signed. Waiting for the other party to sign
           </div>
         )}
         {live && ag.expiresAt && (
@@ -310,17 +313,17 @@ const LeaseAgreementPage = () => {
         )}
 
         <button onClick={downloadPdf} className="w-full py-3 rounded-xl bg-white border border-slate-300 text-slate-800 text-sm font-bold flex items-center justify-center gap-2 active:scale-[0.99]">
-          <FiDownload /> {ag.status === 'FULLY_EXECUTED' ? 'Download signed PDF · PDF डाउनलोड करें' : 'Download PDF copy · PDF कॉपी'}
+          <FiDownload /> {ag.status === 'FULLY_EXECUTED' ? 'Download signed PDF' : 'Download PDF copy'}
         </button>
 
         {/* The agreement */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-6">
-          <div className="agr-doc" dangerouslySetInnerHTML={{ __html: ag.html }} />
+          <div className="agr-doc" translate="no" dangerouslySetInnerHTML={{ __html: ag.html }} />
 
           {/* Both signatures on the same document */}
           <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <SignatureBlock title="Landowner" titleHi="भूमि स्वामी" person={ag.landowner} sig={ag.signatures.landowner} isMe={ag.myRole === 'landowner'} />
-            <SignatureBlock title="Farmer / Tenant" titleHi="पट्टाधारक" person={ag.farmer} sig={ag.signatures.farmer} isMe={ag.myRole === 'farmer'} />
+            <SignatureBlock title="Landowner" person={ag.landowner} sig={ag.signatures.landowner} isMe={ag.myRole === 'landowner'} />
+            <SignatureBlock title="Farmer / Tenant" person={ag.farmer} sig={ag.signatures.farmer} isMe={ag.myRole === 'farmer'} />
           </div>
           <div ref={endRef} className="h-2" />
         </div>
@@ -328,7 +331,7 @@ const LeaseAgreementPage = () => {
         {/* Signing */}
         {ag.canSign && (
           <div className="bg-white rounded-2xl border-2 border-emerald-500 p-4 space-y-3.5 shadow-sm">
-            <p className="font-black text-slate-900">Sign this agreement · अनुबंध पर हस्ताक्षर करें</p>
+            <p className="font-black text-slate-900">Sign this agreement</p>
             {ag.myRole === 'farmer' && ag.advance?.short && (
               <p className="text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
                 Signing needs ₹{Math.ceil(ag.advance.amount - ag.advance.balance)} more in your wallet. Add money, then come back and sign.
@@ -336,12 +339,12 @@ const LeaseAgreementPage = () => {
             )}
             {!readToEnd && (
               <p className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
-                Scroll through the whole agreement above to enable signing. · पूरा अनुबंध पढ़ने के बाद ही हस्ताक्षर होंगे।
+                Scroll through the whole agreement above to enable signing.
               </p>
             )}
 
             <div>
-              <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Your registered name · आपका पंजीकृत नाम</label>
+              <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Your registered name</label>
               <div className="relative">
                 <input value={ag.lockedName || ''} disabled readOnly className="w-full px-3.5 py-3 pr-24 rounded-xl bg-slate-100 border border-slate-200 font-extrabold text-slate-900" />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[10px] font-black text-emerald-700"><FiLock size={12} /> Verified</span>
@@ -351,7 +354,7 @@ const LeaseAgreementPage = () => {
 
             <label className={`flex items-start gap-3 p-3 rounded-xl border ${accepted ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200'} ${readToEnd ? 'cursor-pointer' : 'opacity-50'}`}>
               <input type="checkbox" disabled={!readToEnd} checked={accepted} onChange={(e) => setAccepted(e.target.checked)} className="w-5 h-5 mt-0.5 accent-emerald-600 shrink-0" />
-              <span className="text-sm font-semibold text-slate-800 leading-snug">{ag.consentText}</span>
+              <span className="text-sm font-semibold text-slate-800 leading-snug" translate="no">{ag.consentText}</span>
             </label>
 
             {!otpSentTo ? (
@@ -360,7 +363,7 @@ const LeaseAgreementPage = () => {
                 disabled={!readToEnd || !accepted || sending || (ag.myRole === 'farmer' && ag.advance?.short)}
                 className="w-full py-3.5 rounded-xl bg-emerald-700 text-white font-black flex items-center justify-center gap-2 disabled:opacity-40 active:scale-[0.99]"
               >
-                <FiSend /> {sending ? 'Sending…' : 'Send OTP to my mobile · OTP भेजें'}
+                <FiSend /> {sending ? 'Sending…' : 'Send OTP to my mobile'}
               </button>
             ) : (
               <div className="space-y-2.5">
@@ -376,7 +379,7 @@ const LeaseAgreementPage = () => {
                   disabled={!otpReady || !accepted || signing}
                   className="w-full py-3.5 rounded-xl bg-emerald-700 text-white font-black flex items-center justify-center gap-2 disabled:opacity-40 active:scale-[0.99]"
                 >
-                  <FiCheckCircle /> {signing ? 'Signing…' : 'Affix Digital Signature & Confirm · हस्ताक्षर करें'}
+                  <FiCheckCircle /> {signing ? 'Signing…' : 'Affix Digital Signature & Confirm'}
                 </button>
                 <button onClick={sendOtp} disabled={resendIn > 0 || sending} className="w-full text-xs font-bold text-emerald-800 disabled:text-slate-400">
                   {resendIn > 0 ? `Send a new code in ${resendIn}s` : 'Send a new code'}
@@ -387,7 +390,7 @@ const LeaseAgreementPage = () => {
         )}
 
         {live && ag.myRole && (
-          <button onClick={cancel} className="w-full py-2.5 text-xs font-bold text-red-600">Cancel this agreement · अनुबंध रद्द करें</button>
+          <button onClick={cancel} className="w-full py-2.5 text-xs font-bold text-red-600">Cancel this agreement</button>
         )}
       </div>
     </div>

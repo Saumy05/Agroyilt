@@ -188,7 +188,7 @@ const Settings = () => {
 
         {/* Language Selection */}
         <div className="mb-6">
-          <h2 className="text-base font-bold text-black mb-3">Language / भाषा</h2>
+          <h2 className="text-base font-bold text-black mb-3">Language</h2>
           <LanguageSettingRow
             onClick={() => setShowLanguageModal(true)}
             iconColor={themeColors.button}

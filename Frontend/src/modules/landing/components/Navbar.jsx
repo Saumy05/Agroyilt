@@ -18,15 +18,7 @@ const Navbar = () => {
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
   const dropdownRef = React.useRef(null);
 
-  const displayLanguages = useMemo(() => {
-    if (Array.isArray(activeLanguagesList) && activeLanguagesList.length > 0) {
-      return activeLanguagesList;
-    }
-    return [
-      { code: 'en', name: 'English', nativeName: 'English', flag: '🇬🇧' },
-      { code: 'hi', name: 'Hindi', nativeName: 'हिन्दी', flag: '🇮🇳' },
-    ];
-  }, [activeLanguagesList]);
+  const displayLanguages = activeLanguagesList;
 
   // Close dropdown when clicking outside
   useEffect(() => {

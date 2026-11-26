@@ -10,7 +10,7 @@ import {
 } from 'react-icons/fi';
 import { FaRupeeSign } from 'react-icons/fa';
 import { GoogleMap, useJsApiLoader, OverlayView, InfoWindow } from '@react-google-maps/api';
-import { GOOGLE_MAPS_LOADER_ID, GOOGLE_MAPS_LIBRARIES } from '../../../../utils/googleMapsLoader';
+import { GOOGLE_MAPS_LOADER_ID, GOOGLE_MAPS_LIBRARIES, getGoogleMapsLoaderLanguage } from '../../../../utils/googleMapsLoader';
 import api from '../../../../services/api';
 import { toastManager } from '../../../../utils/toastManager';
 import { waitForServerPayment } from '../../../../utils/paymentRecovery';
@@ -127,6 +127,7 @@ const BookingTrack = () => {
 
   const { isLoaded: isMapScriptLoaded } = useJsApiLoader({
     id: GOOGLE_MAPS_LOADER_ID,
+    language: getGoogleMapsLoaderLanguage(),
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '',
     libraries: GOOGLE_MAPS_LIBRARIES
   });

@@ -8,6 +8,8 @@
 import api from './api';
 import { getFromCache, getFromCacheSync, saveToCache } from '../utils/translationCache';
 import { getFromCoreDictionary } from '../utils/coreDictionary';
+import { localizeTerms } from '../utils/nativeTerms';
+import { toTranslationCode } from '../utils/languageUtils';
 
 // Google Translate API Keys for direct client-side fallback
 const FALLBACK_GOOGLE_API_KEY = 'AIzaSyC2UW5-Nt9KidxOfBRrZImeBRh9SOMGluo';
@@ -19,6 +21,32 @@ let requestQueue = [];
 let batchTimeout = null;
 const BATCH_WAIT_MS = 80; // 80ms debounce window to collect requests
 let backendDownUntil = 0; // Circuit breaker timestamp when backend proxy fails/returns untranslated
+const DIRECT_TIMEOUT_MS = 6000;
+
+/**
+ * Number templates: once "Starts in 4 min" is translated, "Starts in 3 min" is filled in
+ * at once, so counters and timers do not wait on the network every time they change.
+ */
+const NUMBER = /\d+(?:[.,:]\d+)*/g;
+const templates = new Map();
+const templateKey = (sourceLang, targetLang, text) => `${sourceLang}|${targetLang}|${text.replace(NUMBER, '#')}`;
+
+const learnTemplate = (sourceLang, targetLang, text, translation) => {
+    const given = text.match(NUMBER);
+    if (!given || new Set(given).size !== given.length || !/\p{L}{2,}/u.test(text)) return;
+    const found = translation.match(NUMBER) || [];
+    const order = found.map((n) => given.indexOf(n));
+    if (found.length !== given.length || order.includes(-1) || new Set(order).size !== order.length) return;
+    templates.set(templateKey(sourceLang, targetLang, text), { parts: translation.split(NUMBER), order });
+};
+
+const fillTemplate = (sourceLang, targetLang, text) => {
+    const given = text.match(NUMBER);
+    if (!given) return null;
+    const template = templates.get(templateKey(sourceLang, targetLang, text));
+    if (!template || template.order.length !== given.length) return null;
+    return template.parts.reduce((out, part, i) => out + part + (i < template.order.length ? given[template.order[i]] : ''), '');
+};
 
 /**
  * Decode HTML character entities returned by Google Translate
@@ -47,16 +75,19 @@ const fetchDirectGoogleTranslate = async (texts, targetLang, sourceLang = 'en') 
         for (const apiKey of GOOGLE_API_KEYS) {
             try {
                 const url = `https://translation.googleapis.com/language/translate/v2?key=${apiKey}`;
+                const abort = new AbortController();
+                const timer = setTimeout(() => abort.abort(), DIRECT_TIMEOUT_MS);
                 const res = await fetch(url, {
+                    signal: abort.signal,
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         q: chunk,
-                        target: targetLang,
+                        target: toTranslationCode(targetLang),
                         source: sourceLang,
                         format: 'text'
                     })
-                });
+                }).finally(() => clearTimeout(timer));
 
                 if (res.ok) {
                     const data = await res.json();
@@ -138,10 +169,14 @@ const processLangGroup = async (groupQueue, targetLang, sourceLang) => {
     // 3. Resolve all promises and persist to cache
     groupQueue.forEach(q => {
         const translation = translationMap[q.text] || q.text;
-        if (translation && translation !== q.text) {
-            saveToCache(sourceLang, targetLang, q.text, translation);
+        if (translation === q.text) {
+            q.resolve(q.text);
+            return;
         }
-        q.resolve(translation);
+        saveToCache(sourceLang, targetLang, q.text, translation);
+        const localized = localizeTerms(translation, targetLang);
+        learnTemplate(sourceLang, targetLang, q.text, localized);
+        q.resolve(localized);
     });
 };
 
@@ -168,28 +203,43 @@ const processQueue = async () => {
 };
 
 /**
+ * Translation available right now, without waiting: dictionary, memory/localStorage cache,
+ * a number template, or a text made only of abbreviations. Returns null when it must be fetched.
+ */
+export const getInstantTranslation = (text, targetLang, sourceLang = 'en') => {
+    if (!text || !targetLang || targetLang === sourceLang) return null;
+
+    const known = (sourceLang === 'en' && getFromCoreDictionary(text, targetLang))
+        || getFromCacheSync(sourceLang, targetLang, text);
+    if (known) {
+        const localized = localizeTerms(known, targetLang);
+        learnTemplate(sourceLang, targetLang, text, localized);
+        return localized;
+    }
+
+    const filled = fillTemplate(sourceLang, targetLang, text);
+    if (filled) return filled;
+
+    const terms = localizeTerms(text, targetLang);
+    return terms !== text && !/[A-Za-z]{2,}/.test(terms) ? terms : null;
+};
+
+/**
  * Core Translation Function
- * Priority: Core Dictionary -> Sync Memory/LocalStorage Cache -> IndexedDB Cache -> Batch API
+ * Priority: Instant lookup -> IndexedDB Cache -> Batch API
  */
 export const translateText = (text, targetLang, sourceLang = 'en') => {
     if (!text || typeof text !== 'string' || text.trim() === '') return Promise.resolve(text);
     if (!targetLang || targetLang === sourceLang) return Promise.resolve(text);
 
-    // 1. Instant Core Dictionary Check (0ms latency)
-    const instant = getFromCoreDictionary(text, targetLang);
+    const instant = getInstantTranslation(text, targetLang, sourceLang);
     if (instant) {
         return Promise.resolve(instant);
     }
 
-    // 2. Synchronous Cache Check (Memory / localStorage)
-    const syncCached = getFromCacheSync(sourceLang, targetLang, text);
-    if (syncCached) {
-        return Promise.resolve(syncCached);
-    }
-
-    // 3. Async IndexedDB Cache Check -> Queue for Batch Translation
+    // Async IndexedDB Cache Check -> Queue for Batch Translation
     return getFromCache(sourceLang, targetLang, text).catch(() => null).then((cached) => {
-        if (cached) return cached;
+        if (cached) return localizeTerms(cached, targetLang);
 
         return new Promise((resolve) => {
             requestQueue.push({ text, targetLang, sourceLang, resolve });

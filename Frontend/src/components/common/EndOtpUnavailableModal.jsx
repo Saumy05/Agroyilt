@@ -6,9 +6,9 @@ import { uploadToCloudinary } from '../../utils/cloudinaryUpload';
 import { serviceTimerService } from '../../services/serviceTimerService';
 
 const REASONS = [
-  { id: 'FARMER_NOT_ANSWERING', label: 'Farmer not answering phone', hi: 'किसान फोन नहीं उठा रहा' },
-  { id: 'FARMER_DISPUTING_WORK', label: 'Farmer disputing the work', hi: 'किसान काम पर विवाद कर रहा है' },
-  { id: 'FARMER_LEFT_FIELD', label: 'Farmer left the field', hi: 'किसान खेत छोड़कर चला गया' }
+  { id: 'FARMER_NOT_ANSWERING', label: 'Farmer not answering phone' },
+  { id: 'FARMER_DISPUTING_WORK', label: 'Farmer disputing the work' },
+  { id: 'FARMER_LEFT_FIELD', label: 'Farmer left the field' }
 ];
 
 /** One photo slot: tap to open the camera, uploads straight away and shows a preview. */
@@ -103,7 +103,6 @@ const EndOtpUnavailableModal = ({ isOpen, bookingId, onClose, onSubmitted }) => 
               <h3 className="text-base font-black text-gray-900">Dispute submitted</h3>
               <p className="text-xs text-gray-600 leading-relaxed">
                 Dispute submitted with your photo evidence. You may safely leave the field; support is contacting the farmer.
-                <br />(आप सुरक्षित रूप से खेत छोड़ सकते हैं, सपोर्ट किसान से संपर्क कर रहा है।)
               </p>
               <p className="text-[11px] text-gray-500">Billing is paused at this moment. You'll be notified when support completes the booking.</p>
               <button onClick={onClose} className="w-full py-3 rounded-2xl font-black text-white bg-gradient-to-r from-emerald-600 to-teal-700 text-sm">Done</button>
@@ -115,7 +114,7 @@ const EndOtpUnavailableModal = ({ isOpen, bookingId, onClose, onSubmitted }) => 
                   <div className="w-9 h-9 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0"><FiAlertTriangle className="w-5 h-5" /></div>
                   <div>
                     <h3 className="text-base font-black text-gray-900">End OTP not available</h3>
-                    <p className="text-[11px] text-gray-500">Why can't you get the farmer's End OTP? (अंतिम ओटीपी क्यों नहीं मिला?)</p>
+                    <p className="text-[11px] text-gray-500">Why can't you get the farmer's End OTP?</p>
                   </div>
                 </div>
                 <button onClick={close} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500"><FiX className="w-4 h-4" /></button>
@@ -126,7 +125,6 @@ const EndOtpUnavailableModal = ({ isOpen, bookingId, onClose, onSubmitted }) => 
                   <button key={r.id} type="button" onClick={() => setReason(r.id)}
                     className={`w-full text-left px-3.5 py-3 rounded-xl border-2 transition-all ${reason === r.id ? 'border-red-500 bg-red-50' : 'border-gray-100 hover:border-gray-200'}`}>
                     <span className={`block text-xs font-black ${reason === r.id ? 'text-red-700' : 'text-gray-800'}`}>{r.label}</span>
-                    <span className="block text-[10px] text-gray-500">{r.hi}</span>
                   </button>
                 ))}
               </div>

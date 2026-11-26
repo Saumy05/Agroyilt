@@ -259,10 +259,13 @@ async function removeInvalidTokens(tokens) {
   }
 }
 
-const LANG_NAME_TO_CODE = {
-  english: 'en', hindi: 'hi', marathi: 'mr', gujarati: 'gu', punjabi: 'pa',
-  tamil: 'ta', telugu: 'te', kannada: 'kn', malayalam: 'ml', bengali: 'bn',
-  odia: 'or', oriya: 'or', assamese: 'as', urdu: 'ur', nepali: 'ne'
+// Wording the app's service worker shows around a notification
+const NOTIFICATION_LABELS = {
+  appNotif: 'App Notification',
+  newUpdate: 'You have a new update.',
+  viewStatus: '👁️ View Status',
+  accept: '📞 ACCEPT & VIEW',
+  decline: '✕ DECLINE'
 };
 
 /**
@@ -276,15 +279,17 @@ async function localizePayloadForRecipient(recipient, payload) {
       const def = await getDefaultLanguage();
       lang = def?.code || 'en';
     }
-    const clean = String(lang).trim().toLowerCase();
-    const targetCode = LANG_NAME_TO_CODE[clean] || clean;
+    const { resolveLanguageCode } = require('./languageService');
+    const targetCode = await resolveLanguageCode(lang);
     if (!targetCode || targetCode === 'en') {
       return { payload, lang: 'en' };
     }
     const { translateBatch } = require('./translationService');
     const title = payload.title || '';
     const body = payload.body || '';
-    const [tTitle, tBody] = await translateBatch([title, body], targetCode, 'en');
+    const labelKeys = Object.keys(NOTIFICATION_LABELS);
+    const [tTitle, tBody, ...tLabels] = await translateBatch([title, body, ...Object.values(NOTIFICATION_LABELS)], targetCode, 'en');
+    const uiLabels = JSON.stringify(Object.fromEntries(labelKeys.map((key, i) => [key, tLabels[i]])));
     return {
       lang: targetCode,
       payload: {
@@ -293,7 +298,8 @@ async function localizePayloadForRecipient(recipient, payload) {
         body: tBody || body,
         data: {
           ...(payload.data || {}),
-          lang: targetCode
+          lang: targetCode,
+          uiLabels
         }
       }
     };

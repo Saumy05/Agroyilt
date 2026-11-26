@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useJsApiLoader } from '@react-google-maps/api';
-import { GOOGLE_MAPS_LOADER_ID, GOOGLE_MAPS_LIBRARIES } from '../../../../utils/googleMapsLoader';
+import { GOOGLE_MAPS_LOADER_ID, GOOGLE_MAPS_LIBRARIES, getGoogleMapsLoaderLanguage } from '../../../../utils/googleMapsLoader';
 import PlaceNameSuggest from './PlaceNameSuggest';
 import { DISTRICTS_BY_STATE } from './districtsByState';
 import CustomSelect from './CustomSelect';
@@ -53,7 +53,7 @@ const searchAll = (service, query) => new Promise((resolve) => {
  * Names already added are left out. "Other…" switches to a type-ahead for anything Google does not list.
  */
 const GooglePlaceList = ({ level, stateName, districtName, existingNames = [], value, onChange, editing = false, required = false, placeholder }) => {
-  const { isLoaded, loadError } = useJsApiLoader({ id: GOOGLE_MAPS_LOADER_ID, googleMapsApiKey: MAPS_API_KEY, libraries: GOOGLE_MAPS_LIBRARIES });
+  const { isLoaded, loadError } = useJsApiLoader({ id: GOOGLE_MAPS_LOADER_ID, language: getGoogleMapsLoaderLanguage(), googleMapsApiKey: MAPS_API_KEY, libraries: GOOGLE_MAPS_LIBRARIES });
   const [result, setResult] = useState({ key: '', items: [], problem: '' });
   const [customKey, setCustomKey] = useState('');
 

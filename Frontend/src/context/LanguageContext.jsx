@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { normalizeLanguageCode, isRTLLanguage } from '../utils/languageUtils';
+import { saveLanguagePreference } from '../services/languagePreferenceService';
 import { getActiveLanguages, FALLBACK_LANGUAGES } from '../services/languageService';
 import authStorage from '../utils/authStorage';
 
@@ -39,9 +40,18 @@ export const LanguageProvider = ({ children }) => {
     const languageRef = useRef(language);
     languageRef.current = language;
 
+    // The code comes from the admin's language list, so any language added there works.
+    // Until the list loads, use the code saved with the last choice.
     const currentCode = useMemo(() => {
-        return normalizeLanguageCode(language);
-    }, [language]);
+        const listed = languages[language]?.code;
+        if (listed) return normalizeLanguageCode(listed);
+        const saved = typeof localStorage !== 'undefined' && localStorage.getItem('userLanguage') === language
+            ? localStorage.getItem('userLanguageCode')
+            : null;
+        return normalizeLanguageCode(saved || language);
+    }, [language, languages]);
+    const currentCodeRef = useRef(currentCode);
+    currentCodeRef.current = currentCode;
 
     /**
      * Internal helper to apply a language
@@ -63,7 +73,7 @@ export const LanguageProvider = ({ children }) => {
 
             // Update document language & direction
             document.documentElement.lang = langCode;
-            document.documentElement.dir = isRTLLanguage(langCode) ? 'rtl' : 'ltr';
+            document.documentElement.dir = matched.isRTL || isRTLLanguage(langCode) ? 'rtl' : 'ltr';
 
             // Notify external listeners (Google Maps, flutterBridge, etc.)
             window.dispatchEvent(new CustomEvent('agroyilt-language-changed', {
@@ -159,7 +169,9 @@ export const LanguageProvider = ({ children }) => {
         }
 
         if (!matched) return;
+        const isNewChoice = isExplicit && normalizeLanguageCode(matched.code || matched.name) !== currentCodeRef.current;
         applyLanguage(matched, isExplicit);
+        if (isNewChoice) saveLanguagePreference(matched.code || normalizeLanguageCode(matched.name));
     }, [languages, activeLanguagesList, applyLanguage]);
 
     /**
@@ -190,14 +202,14 @@ export const LanguageProvider = ({ children }) => {
     useEffect(() => {
         if (typeof document !== 'undefined') {
             document.documentElement.lang = currentCode;
-            document.documentElement.dir = isRTLLanguage(currentCode) ? 'rtl' : 'ltr';
+            document.documentElement.dir = languages[language]?.isRTL || isRTLLanguage(currentCode) ? 'rtl' : 'ltr';
         }
         if (typeof localStorage !== 'undefined' && currentCode) {
             if (!localStorage.getItem('userLanguageCode')) {
                 localStorage.setItem('userLanguageCode', currentCode);
             }
         }
-    }, [currentCode]);
+    }, [currentCode, language, languages]);
 
     const defaultLanguageObj = activeLanguagesList.find(l => l.isDefault) || null;
     const currentLangObj = activeLanguagesList.find(l => l.code === currentCode || l.name === language) || {

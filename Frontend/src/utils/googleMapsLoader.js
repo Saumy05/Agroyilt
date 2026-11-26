@@ -18,6 +18,20 @@ export const getGoogleMapsLanguage = () => {
   return 'en';
 };
 
+let loaderLanguage = null;
+
+/**
+ * Map language for the script loader. Fixed at first use: the loader refuses a different
+ * value later, so a language change reaches the map labels when the app is reopened.
+ */
+export const getGoogleMapsLoaderLanguage = () => {
+  if (!loaderLanguage) {
+    const isAdmin = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin');
+    loaderLanguage = isAdmin ? 'en' : getGoogleMapsLanguage();
+  }
+  return loaderLanguage;
+};
+
 /**
  * Common loader options for Google Maps API
  */
@@ -25,5 +39,5 @@ export const getGoogleMapsLoaderOptions = () => ({
   id: GOOGLE_MAPS_LOADER_ID,
   googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
   libraries: GOOGLE_MAPS_LIBRARIES,
-  language: getGoogleMapsLanguage()
+  language: getGoogleMapsLoaderLanguage()
 });

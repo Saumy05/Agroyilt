@@ -1,4 +1,21 @@
 const Language = require('../models/Language');
+const { isLanguageSupported } = require('./translationService');
+
+/** Refuse languages the app could never be translated into */
+const assertTranslatable = async (code) => {
+  if (!(await isLanguageSupported(code))) {
+    throw new Error(`Google Translate does not support the language code "${code}", so the app cannot be shown in it.`);
+  }
+};
+
+/** Language code for a saved preference, which may hold a code ("mr") or a name ("Marathi") */
+const resolveLanguageCode = async (value) => {
+  const clean = String(value || '').trim().toLowerCase();
+  if (!clean) return '';
+  const pattern = new RegExp(`^${clean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+  const found = await Language.findOne({ $or: [{ code: clean }, { name: pattern }] }).select('code');
+  return found?.code || clean;
+};
 
 /**
  * Built-in default Indian languages for AgroYilt
@@ -75,6 +92,8 @@ const toggleLanguage = async (id, isActive) => {
     throw new Error('Cannot disable the default language. Change default language first.');
   }
 
+  if (isActive) await assertTranslatable(lang.code);
+
   lang.isActive = Boolean(isActive);
   await lang.save();
   return lang;
@@ -88,6 +107,8 @@ const setDefaultLanguage = async (id, { syncToUsers = true } = {}) => {
   if (!target) {
     throw new Error('Language not found');
   }
+
+  await assertTranslatable(target.code);
 
   // Find the previous default language
   const prevDefault = await Language.findOne({ isDefault: true });
@@ -149,6 +170,8 @@ const addLanguage = async ({ code, name, nativeName, flag, isRTL, isActive = tru
     throw new Error(`Language with code "${cleanCode}" already exists`);
   }
 
+  await assertTranslatable(cleanCode);
+
   const highestSort = await Language.findOne().sort({ sortOrder: -1 }).select('sortOrder');
   const nextOrder = (highestSort?.sortOrder || 0) + 1;
 
@@ -190,6 +213,7 @@ const deleteLanguage = async (id) => {
 
 module.exports = {
   DEFAULT_LANGUAGES,
+  resolveLanguageCode,
   ensureDefaultLanguages,
   getActiveLanguages,
   getAllLanguages,

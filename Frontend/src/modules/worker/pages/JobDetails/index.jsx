@@ -899,7 +899,7 @@ const JobDetails = () => {
     // FIX 2: Only show arrival OTP if work has NOT yet started.
     // If workStatus is already IN_PROGRESS, skip this block — status will be 'in_progress' not 'visited'.
     if ((statusLower === 'visited' || statusLower === 'arrived') && job?.workStatus !== 'IN_PROGRESS') {
-      if (startOtpLocked) return lockedAction(isDaily ? "Today's Reach OTP" : 'Start OTP', startOtpOpensAt, isSticky);
+      if (startOtpLocked) return lockedAction(isDaily ? "Today's Arrival OTP" : 'Start OTP', startOtpOpensAt, isSticky);
       return (
         <button
           onClick={() => handleStatusUpdate('visit')}

@@ -22,7 +22,7 @@ const Profile = () => {
   const { enabled: referralOn } = useReferralEnabled('worker');
   const navigate = useNavigate();
   const socket = useSocket();
-  const { language, currentCode, changeLanguage, activeLanguagesList } = useLanguage();
+  const { language, currentLang: currentLangObj } = useLanguage();
   // Initialize with empty/default values - will be loaded from localStorage
   const [profile, setProfile] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -35,14 +35,6 @@ const Profile = () => {
   const [showIncompleteModal, setShowIncompleteModal] = useState(false);
   const statusSeqRef = useRef(0);
 
-  const currentLangObj = (activeLanguagesList || []).find(
-    (l) => l.code?.toLowerCase() === currentCode?.toLowerCase() || l.name?.toLowerCase() === language?.toLowerCase()
-  ) || {
-    code: currentCode || 'en',
-    name: language || 'English',
-    nativeName: currentCode === 'hi' ? 'हिन्दी' : (language || 'English'),
-    flag: currentCode === 'hi' ? '🇮🇳' : '🇬🇧'
-  };
 
   const handleSelectLanguage = async (langCode) => {
     // Persist in worker profile settings on backend
@@ -328,7 +320,7 @@ const Profile = () => {
             type="button"
             onClick={() => setShowLanguageModal(true)}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-emerald-50 hover:bg-emerald-100/90 border border-emerald-200/80 text-emerald-800 text-xs font-bold transition-all active:scale-95 shadow-2xs cursor-pointer"
-            title="Change Language / भाषा बदलें"
+            title="Change Language"
             aria-label="Change Language"
           >
             <FiGlobe className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
@@ -621,7 +613,7 @@ const Profile = () => {
             <FiChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
           </button>
 
-          {/* App Language / भाषा */}
+          {/* App Language */}
           <button
             type="button"
             onClick={() => setShowLanguageModal(true)}
@@ -632,7 +624,7 @@ const Profile = () => {
                 <FiGlobe className="w-4 h-4" />
               </div>
               <div>
-                <span className="font-bold text-slate-800 block text-xs sm:text-sm">App Language / भाषा</span>
+                <span className="font-bold text-slate-800 block text-xs sm:text-sm">App Language</span>
                 <span className="text-[11px] text-slate-400">Change preferred application language</span>
               </div>
             </div>

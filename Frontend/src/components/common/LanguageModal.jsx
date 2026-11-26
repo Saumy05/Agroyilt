@@ -17,24 +17,15 @@ export const LanguageModal = ({
   isOpen,
   onClose,
   onSelectLanguage,
-  title = 'Select Language / भाषा चुनें',
-  subtitle = 'Choose your preferred app language / अपनी पसंदीदा भाषा चुनें',
+  title = 'Select Language',
+  subtitle = 'Choose your preferred app language',
 }) => {
   const { currentCode, language, changeLanguage, activeLanguagesList } = useLanguage();
   const [searchQuery, setSearchQuery] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
   const [selectedCode, setSelectedCode] = useState(currentCode || 'en');
 
-  // Normalize available languages
-  const languages = useMemo(() => {
-    if (Array.isArray(activeLanguagesList) && activeLanguagesList.length > 0) {
-      return activeLanguagesList;
-    }
-    return [
-      { code: 'en', name: 'English', nativeName: 'English', flag: '🇬🇧', isDefault: true },
-      { code: 'hi', name: 'Hindi', nativeName: 'हिन्दी', flag: '🇮🇳' },
-    ];
-  }, [activeLanguagesList]);
+  const languages = activeLanguagesList;
 
   // Robust body scroll lock while modal is open
   useEffect(() => {
@@ -226,7 +217,7 @@ export const LanguageModal = ({
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search language / भाषा खोजें..."
+                    placeholder="Search language..."
                     className="w-full pl-9 pr-9 py-2 text-xs sm:text-sm rounded-xl border border-slate-200 bg-slate-50/70 focus:bg-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all text-slate-800 placeholder-slate-400"
                   />
                   {searchQuery && (
@@ -243,7 +234,7 @@ export const LanguageModal = ({
             )}
 
             {/* Language Options List */}
-            <div className="px-5 sm:px-6 py-3 space-y-2.5 overflow-y-auto overscroll-contain touch-pan-y flex-1" translate="no">
+            <div className="px-5 sm:px-6 py-3 space-y-2.5 overflow-y-auto overscroll-contain touch-pan-y flex-1">
               {filteredLanguages.map((lang) => {
                 const isSelected = (selectedCode || '').toLowerCase() === (lang.code || '').toLowerCase();
 
@@ -266,11 +257,11 @@ export const LanguageModal = ({
                       </span>
                       <div className="min-w-0">
                         <div className="flex items-baseline gap-2 flex-wrap">
-                          <span className="text-sm sm:text-base font-bold tracking-tight text-slate-900">
+                          <span translate="no" className="text-sm sm:text-base font-bold tracking-tight text-slate-900">
                             {lang.nativeName || lang.name}
                           </span>
                           {lang.nativeName && lang.nativeName !== lang.name && (
-                            <span className={`text-xs ${isSelected ? 'text-emerald-700/80 font-medium' : 'text-slate-400'}`}>
+                            <span translate="no" className={`text-xs ${isSelected ? 'text-emerald-700/80 font-medium' : 'text-slate-400'}`}>
                               ({lang.name})
                             </span>
                           )}
@@ -280,7 +271,7 @@ export const LanguageModal = ({
                             </span>
                           )}
                         </div>
-                        <span className={`text-[11px] font-medium block mt-0.5 ${isSelected ? 'text-emerald-700' : 'text-slate-400'}`}>
+                        <span translate="no" className={`text-[11px] font-medium block mt-0.5 ${isSelected ? 'text-emerald-700' : 'text-slate-400'}`}>
                           {lang.code.toUpperCase()} • {lang.name}
                         </span>
                       </div>
@@ -350,7 +341,7 @@ export const LanguageModal = ({
                   ) : (
                     <>
                       <FiCheck className="w-4 h-4 stroke-[2.5]" />
-                      <span>Apply / सहेजें</span>
+                      <span>Apply</span>
                     </>
                   )}
                 </button>
@@ -379,18 +370,12 @@ export const LanguageSettingRow = ({
   const { currentCode, language, activeLanguagesList } = useLanguage();
 
   const currentLangObj = useMemo(() => {
-    const list = Array.isArray(activeLanguagesList) && activeLanguagesList.length > 0
-      ? activeLanguagesList
-      : [
-          { code: 'en', name: 'English', nativeName: 'English', flag: '🇬🇧' },
-          { code: 'hi', name: 'Hindi', nativeName: 'हिन्दी', flag: '🇮🇳' },
-        ];
     return (
-      list.find(
+      activeLanguagesList.find(
         (l) =>
           l.code?.toLowerCase() === currentCode?.toLowerCase() ||
           l.name?.toLowerCase() === language?.toLowerCase()
-      ) || list[0]
+      ) || activeLanguagesList[0] || {}
     );
   }, [activeLanguagesList, currentCode, language]);
 
@@ -413,7 +398,6 @@ export const LanguageSettingRow = ({
         <div className="text-left min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-gray-900 truncate">{title}</span>
-            <span className="text-xs text-gray-400 font-normal">/ भाषा</span>
           </div>
           <span className="text-xs text-gray-500 block truncate">{subtitle}</span>
         </div>

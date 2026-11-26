@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useJsApiLoader } from '@react-google-maps/api';
-import { GOOGLE_MAPS_LOADER_ID, GOOGLE_MAPS_LIBRARIES } from '../../../../utils/googleMapsLoader';
+import { GOOGLE_MAPS_LOADER_ID, GOOGLE_MAPS_LIBRARIES, getGoogleMapsLoaderLanguage } from '../../../../utils/googleMapsLoader';
 
 const MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
 
@@ -15,7 +15,7 @@ const cleanName = (s) => String(s || '').replace(/\s+(district|tahsil|tehsil|tal
  * instead of typing it. Typing still works (Google may not know every name), and with no Maps key it is a plain input.
  */
 const PlaceNameSuggest = ({ value, onChange, placeholder, level = 'district', stateName = '', districtName = '', required = false, className = '' }) => {
-  const { isLoaded, loadError } = useJsApiLoader({ id: GOOGLE_MAPS_LOADER_ID, googleMapsApiKey: MAPS_API_KEY, libraries: GOOGLE_MAPS_LIBRARIES });
+  const { isLoaded, loadError } = useJsApiLoader({ id: GOOGLE_MAPS_LOADER_ID, language: getGoogleMapsLoaderLanguage(), googleMapsApiKey: MAPS_API_KEY, libraries: GOOGLE_MAPS_LIBRARIES });
   const [suggestions, setSuggestions] = useState([]);
   const [open, setOpen] = useState(false);
   const [searching, setSearching] = useState(false);

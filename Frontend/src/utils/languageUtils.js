@@ -32,7 +32,20 @@ export const languageCodeMap = {
   'Bodo': 'brx'
 };
 
-export const rtlLanguages = ["ar", "he", "ur", "fa"];
+const RTL_SCRIPTS = new Set(['Arab', 'Hebr', 'Thaa', 'Nkoo', 'Syrc', 'Adlm', 'Rohg']);
+
+// Google Translate knows these under a different code
+const TRANSLATION_CODES = { mni: 'mni-Mtei' };
+export const toTranslationCode = (code) => TRANSLATION_CODES[code] || code;
+
+/** Script a language is written in (e.g. 'Deva'), worked out from its code so newly added languages are covered */
+export const getScript = (code) => {
+  try {
+    return new Intl.Locale(toTranslationCode(code)).maximize().script;
+  } catch {
+    return undefined;
+  }
+};
 
 /**
  * Normalizes language codes for API and Google Cloud Translate use.
@@ -75,10 +88,7 @@ export const normalizeLanguageCode = (lang) => {
 /**
  * Checks if a language is RTL (Right-to-Left)
  */
-export const isRTLLanguage = (lang) => {
-  const normalized = normalizeLanguageCode(lang);
-  return rtlLanguages.includes(normalized);
-};
+export const isRTLLanguage = (lang) => RTL_SCRIPTS.has(getScript(normalizeLanguageCode(lang)));
 
 /**
  * Returns the Intl locale string matching the active app language (e.g. 'hi-IN', 'mr-IN', 'en-IN').
@@ -86,5 +96,12 @@ export const isRTLLanguage = (lang) => {
 export const getAppLocale = () => {
   if (typeof localStorage === 'undefined') return 'en-IN';
   const code = localStorage.getItem('userLanguageCode') || localStorage.getItem('systemDefaultLanguageCode') || 'en';
-  return code === 'en' ? 'en-IN' : `${code}-IN`;
+  if (code === 'en') return 'en-IN';
+  const locale = `${code}-IN`;
+  // Where the device has no date format for a language, use the Indian English one
+  try {
+    return Intl.DateTimeFormat.supportedLocalesOf([locale]).length ? locale : 'en-IN';
+  } catch {
+    return 'en-IN';
+  }
 };

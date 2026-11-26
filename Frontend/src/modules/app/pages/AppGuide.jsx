@@ -18,7 +18,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 const guideData = {
   farmer: {
     id: 'farmer',
-    label: 'Farmer / किसान',
+    label: 'Farmer',
     icon: '🌾',
     badge: 'Farmer Guide',
     landscapeSrc: '/videos/agroyilt_farmer_guide_actual_screens.mp4',
@@ -27,16 +27,16 @@ const guideData = {
     points: [
       'Quick login with mobile number and 4-digit MPIN',
       'Rent tractors, harvesters, irrigation motors (₹50/hr) & pipes (₹5/day)',
-      '3 Flexible modes: Hourly (timer with Reach OTP), Daily, or Theka (contract)',
+      '3 Flexible modes: Hourly (timer with arrival OTP), Daily, or Theka (contract)',
       'Secure Escrow Wallet: payments released only after job completion',
       'Live booking status tracking and verified local machinery vendors',
     ],
     registerRoute: '/user/signup',
-    registerLabel: 'Register as Farmer / किसान खाता बनाएं',
+    registerLabel: 'Register as Farmer',
   },
   worker: {
     id: 'worker',
-    label: 'Worker / मज़दूर',
+    label: 'Worker',
     icon: '👷',
     badge: 'Worker Guide',
     landscapeSrc: '/videos/agroyilt_worker_training_guide.mp4',
@@ -47,14 +47,14 @@ const guideData = {
       'Live Online/Offline switch to work whenever you are free',
       'Set custom pricing: ₹100/hr, ₹600/day, or ₹1500/acre',
       'Instant push alerts when a local farmer books you',
-      'Reach OTP start and direct earnings withdrawal to your bank account',
+      'Arrival OTP start and direct earnings withdrawal to your bank account',
     ],
     registerRoute: '/worker/signup',
-    registerLabel: 'Join as Worker / श्रमिक खाता बनाएं',
+    registerLabel: 'Join as Worker',
   },
   vendor: {
     id: 'vendor',
-    label: 'Vendor / मालिक',
+    label: 'Vendor',
     icon: '🚜',
     badge: 'Machinery Owner Guide',
     landscapeSrc: '/videos/agroyilt_vendor_training_guide.mp4',
@@ -68,7 +68,7 @@ const guideData = {
       'Guaranteed payouts backed by AgroYilt Escrow protection',
     ],
     registerRoute: '/vendor/signup',
-    registerLabel: 'Register Machinery / मशीनरी जोड़ें',
+    registerLabel: 'Register Machinery',
   },
 };
 
@@ -186,7 +186,7 @@ const AppGuide = () => {
         {/* Title */}
         <div style={{ textAlign: 'center', flex: 1, padding: '0 8px' }}>
           <h1 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#fff', letterSpacing: '-0.2px' }}>
-            AgroYilt Guide / वीडियो सीखें
+            AgroYilt Guide
           </h1>
           <p style={{ margin: 0, fontSize: '0.7rem', color: '#A5D6A7', fontWeight: 600 }}>
             Real Screens • Hindi Audio (~2 min)
@@ -338,7 +338,7 @@ const AppGuide = () => {
                 border: '1px solid rgba(255, 255, 255, 0.2)',
               }}
             >
-              Tap to Play / चलाएं
+              Tap to Play
             </span>
           </div>
         )}
@@ -364,7 +364,7 @@ const AppGuide = () => {
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
               <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#A5D6A7' }}>
-                Key Steps Shown in Video / वीडियो के मुख्य बिंदु:
+                Key Steps Shown in Video:
               </div>
               <a
                 href={videoSrc}
@@ -382,7 +382,7 @@ const AppGuide = () => {
                 }}
               >
                 <FiDownload size={12} />
-                <span>Download MP4</span>
+                <span>Download Video</span>
               </a>
             </div>
             <ul style={{ margin: 0, paddingLeft: '18px', color: 'rgba(255, 255, 255, 0.88)', fontSize: '0.76rem', lineHeight: 1.55 }}>

@@ -551,7 +551,7 @@ const GroupRequestForm = () => {
                   <div className="w-full bg-slate-50/80 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs sm:text-sm flex items-center justify-between transition-all group-hover:border-emerald-300 group-focus-within:ring-2 group-focus-within:ring-emerald-500 group-focus-within:border-emerald-500">
                     <FiCalendar className="absolute left-3 top-2.5 text-slate-400 group-hover:text-emerald-600 transition-colors" size={14} />
                     <span className={formData.scheduledDate ? 'text-slate-800 font-bold tracking-wide' : 'text-slate-400 font-normal'}>
-                      {formatToDDMMYYYY(formData.scheduledDate) || 'DD/MM/YYYY'}
+                      {formatToDDMMYYYY(formData.scheduledDate) || 'Day/Month/Year'}
                     </span>
                     <span className="text-xs opacity-60 group-hover:opacity-100 transition-opacity">📅</span>
                   </div>

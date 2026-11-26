@@ -232,7 +232,7 @@ const DailyTrackingView = ({
                       <div className="flex items-center gap-2">
                         <FiKey className="text-purple-600" size={14} />
                         <span className="text-xs text-purple-900 font-bold">
-                          {w.visitOtpStatus === 'LOCKED' ? 'Reach OTP Locked:' : 'Today’s Reach OTP:'}
+                          {w.visitOtpStatus === 'LOCKED' ? 'Arrival OTP Locked:' : 'Today’s Arrival OTP:'}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">

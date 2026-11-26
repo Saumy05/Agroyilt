@@ -7,6 +7,9 @@ const axiosRaw = require('axios');
 const axios = axiosRaw.default || axiosRaw;
 const { GOOGLE_TRANSLATE_API_KEY, languageCodeMap } = require('../config/googleCloud');
 
+// Google Translate knows these under a different code
+const toGoogleCode = (code) => ({ mni: 'mni-Mtei' }[code] || code);
+
 const getApiKey = () => GOOGLE_TRANSLATE_API_KEY || process.env.GOOGLE_TRANSLATE_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
 
 // Simple 24h TTL Cache
@@ -23,6 +26,37 @@ const decodeHtmlEntities = (str) => {
         .replace(/&lt;/g, '<')
         .replace(/&gt;/g, '>')
         .replace(/&#x2F;/g, '/');
+};
+
+const supportCache = new Map();
+
+/**
+ * Whether Google can translate into a language, asked once a day per language.
+ * Only a clear "unsupported language" answer counts as no; if Google cannot be reached,
+ * the language stays available.
+ */
+const isLanguageSupported = async (code) => {
+    const apiKey = getApiKey();
+    if (!code || code === 'en' || !apiKey) return true;
+
+    const cached = supportCache.get(code);
+    if (cached && Date.now() - cached.timestamp < TTL) return cached.supported;
+
+    let supported = true;
+    try {
+        await axios.post(`https://translation.googleapis.com/language/translate/v2?key=${apiKey}`, {
+            q: 'Hello',
+            target: toGoogleCode(code),
+            source: 'en',
+            format: 'text'
+        }, { timeout: 4000 });
+    } catch (error) {
+        const reason = error.response?.data?.error?.message || '';
+        if (!/bad language pair|invalid value/i.test(reason)) return true;
+        supported = false;
+    }
+    supportCache.set(code, { supported, timestamp: Date.now() });
+    return supported;
 };
 
 /**
@@ -69,7 +103,7 @@ const translateText = async (text, targetLang, sourceLang = 'en') => {
             const url = `https://translation.googleapis.com/language/translate/v2?key=${apiKey}`;
             const response = await axios.post(url, {
                 q: text,
-                target: targetLang,
+                target: toGoogleCode(targetLang),
                 source: sourceLang,
                 format: 'text'
             });
@@ -137,7 +171,7 @@ const translateBatch = async (texts, targetLang, sourceLang = 'en') => {
             const url = `https://translation.googleapis.com/language/translate/v2?key=${apiKey}`;
             const response = await axios.post(url, {
                 q: chunk,
-                target: targetLang,
+                target: toGoogleCode(targetLang),
                 source: sourceLang,
                 format: 'text'
             });
@@ -184,6 +218,7 @@ const translateObject = async (obj, targetLang, sourceLang = 'en', keysToTransla
 };
 
 module.exports = {
+    isLanguageSupported,
     translateText,
     translateBatch,
     translateObject

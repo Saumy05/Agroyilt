@@ -172,11 +172,11 @@ const MaintenanceIndex = () => {
                                     value={formData.reason}
                                     onChange={e => setFormData({ ...formData, reason: e.target.value })}
                                 >
-                                    <option>Routine Checkup</option>
-                                    <option>Repair</option>
-                                    <option>Servicing</option>
-                                    <option>Breakdown</option>
-                                    <option>Other</option>
+                                    <option value="Routine Checkup">Routine Checkup</option>
+                                    <option value="Repair">Repair</option>
+                                    <option value="Servicing">Servicing</option>
+                                    <option value="Breakdown">Breakdown</option>
+                                    <option value="Other">Other</option>
                                 </select>
                             </div>
                             <button

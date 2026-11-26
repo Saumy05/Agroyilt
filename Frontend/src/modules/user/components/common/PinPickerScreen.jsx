@@ -17,7 +17,7 @@ const PinPickerScreen = ({ initialPosition = null, onConfirm, onClose }) => {
           <FiArrowLeft size={18} />
         </button>
         <div className="min-w-0">
-          <h2 className="text-sm font-black text-gray-900">Put the land on the map · भूमि का स्थान</h2>
+          <h2 className="text-sm font-black text-gray-900">Put the land on the map</h2>
           <p className="text-[11px] text-gray-500">Stand on your land and tap the 📍 button, or tap its place on the map.</p>
         </div>
       </div>
@@ -38,7 +38,7 @@ const PinPickerScreen = ({ initialPosition = null, onConfirm, onClose }) => {
           onClick={() => onConfirm(picked)}
           className="w-full py-3.5 rounded-xl bg-emerald-800 text-white font-black flex items-center justify-center gap-2 disabled:opacity-40 active:scale-[0.99]"
         >
-          <FiCheck /> Use this location · यही स्थान रखें
+          <FiCheck /> Use this location
         </button>
       </div>
     </div>

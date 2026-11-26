@@ -29,7 +29,6 @@ const PAUSE_REASONS = [
     id: 'machine_issue',
     icon: FiTool,
     titleEn: 'Machine Issue / Breakdown',
-    titleHi: 'मशीन खराबी / ब्लेड जाम',
     desc: 'Engine stall, hydraulic issue, blade jam or breakdown',
     color: 'from-amber-500 to-red-500'
   },
@@ -37,7 +36,6 @@ const PAUSE_REASONS = [
     id: 'refueling',
     icon: FiActivity,
     titleEn: 'Fuel / Maintenance',
-    titleHi: 'डीजल / टायर / मेंटेनेंस',
     desc: 'Diesel refilling, air pressure, greasing',
     color: 'from-amber-500 to-yellow-500'
   },
@@ -45,7 +43,6 @@ const PAUSE_REASONS = [
     id: 'obstacle',
     icon: FiAlertTriangle,
     titleEn: 'Field Obstacle / Jam',
-    titleHi: 'खेत में रुकावट / पत्थर / पानी',
     desc: 'Stones, mud trap, field boundary wait',
     color: 'from-orange-500 to-amber-600'
   },
@@ -53,7 +50,6 @@ const PAUSE_REASONS = [
     id: 'break',
     icon: FiCoffee,
     titleEn: 'Rest / Meal Break',
-    titleHi: 'आराम / चाय-नाश्ता / लंच',
     desc: 'Operator or farmer rest break',
     color: 'from-emerald-500 to-teal-600'
   },
@@ -61,7 +57,6 @@ const PAUSE_REASONS = [
     id: 'other',
     icon: FiInfo,
     titleEn: 'Other / Weather Issue',
-    titleHi: 'अन्य कारण / मौसम',
     desc: 'Heavy rain, farmer instruction, etc.',
     color: 'from-blue-500 to-indigo-600'
   }
@@ -609,7 +604,6 @@ export const LiveServiceTimer = ({
                   </div>
                   <div>
                     <h5 className="font-black text-xs">{activeReasonObj.titleEn}</h5>
-                    <p className="text-[11px] text-amber-700 font-medium">{activeReasonObj.titleHi}</p>
                   </div>
                 </div>
                 <span className="text-[11px] font-mono font-black bg-amber-200/80 px-2 py-0.5 rounded-lg text-amber-900">
@@ -645,7 +639,6 @@ export const LiveServiceTimer = ({
                       </div>
                       <div>
                         <h5 className="font-black text-xs uppercase tracking-wider">Farmer Work-Resume OTP</h5>
-                        <p className="text-[11px] text-amber-100">काम दोबारा शुरू करने का गुप्त कोड</p>
                       </div>
                     </div>
                     <span className="text-[10px] bg-black/25 px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">
@@ -703,7 +696,7 @@ export const LiveServiceTimer = ({
                 <FiKey className="w-4 h-4 text-white" />
               </div>
               <div>
-                <h5 className="font-black text-xs uppercase tracking-wider">Service Completion OTP (समाप्ति ओटीपी)</h5>
+                <h5 className="font-black text-xs uppercase tracking-wider">Service Completion OTP</h5>
                 <p className="text-[10px] text-teal-100">Share with operator ONLY when work is finished</p>
               </div>
             </div>
@@ -858,7 +851,6 @@ export const LiveServiceTimer = ({
                       <div className="flex-1">
                         <div className="flex items-center justify-between">
                           <p className="text-xs font-black text-gray-900">{r.titleEn}</p>
-                          <span className="text-[10px] font-bold text-gray-500">{r.titleHi}</span>
                         </div>
                         <p className="text-[11px] text-gray-500 mt-0.5">{r.desc}</p>
                       </div>
@@ -870,7 +862,7 @@ export const LiveServiceTimer = ({
               {/* Optional Notes */}
               <div>
                 <label className="text-[11px] font-bold text-gray-600 block mb-1">
-                  Additional Notes (Optional / विवरण)
+                  Additional Notes (Optional)
                 </label>
                 <input
                   type="text"
@@ -888,7 +880,7 @@ export const LiveServiceTimer = ({
                 className="w-full py-4 rounded-2xl font-black text-white bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 shadow-lg shadow-amber-200 active:scale-95 transition-all flex items-center justify-center gap-2 text-sm"
               >
                 <FiPause className="w-4 h-4" />
-                Confirm Pause (रोकें)
+                Confirm Pause
               </button>
             </motion.div>
           </div>
@@ -920,7 +912,7 @@ export const LiveServiceTimer = ({
               <div className="flex items-center justify-between border-b pb-3">
                 <div>
                   <h3 className="text-base font-black text-gray-900">
-                    {isPartialEnd ? '⚠️ End with Partial Bill (खराबी के कारण अंत)' : '🏁 Finish Work & Generate Bill'}
+                    {isPartialEnd ? '⚠️ End with Partial Bill' : '🏁 Finish Work & Generate Bill'}
                   </h3>
                   <p className="text-xs text-gray-500">
                     {isPartialEnd
@@ -965,7 +957,7 @@ export const LiveServiceTimer = ({
                     onChange={(e) => setIsPartialEnd(e.target.checked)}
                     className="w-4 h-4 text-red-600 rounded border-gray-300 focus:ring-red-500 cursor-pointer"
                   />
-                  <span>Machine breakdown / Partial work (खराबी या अधूरा काम)</span>
+                  <span>Machine breakdown / Partial work</span>
                 </label>
                 {isPartialEnd && (
                   <span className="text-[10px] font-black uppercase text-red-600 bg-red-100 px-2 py-0.5 rounded-full">
@@ -977,7 +969,7 @@ export const LiveServiceTimer = ({
               {isPartialEnd && (
                 <div>
                   <label className="text-[11px] font-bold text-gray-700 block mb-1">
-                    Reason for premature end (खराबी या रुकने का कारण):
+                    Reason for premature end:
                   </label>
                   <input
                     type="text"
@@ -993,7 +985,7 @@ export const LiveServiceTimer = ({
               {role === 'vendor' && (
                 <div>
                   <label className="text-[11px] font-bold text-gray-700 block mb-1">
-                    Farmer End OTP (किसान का समाप्ति ओटीपी) <span className="text-red-500">*</span>:
+                    Farmer End OTP <span className="text-red-500">*</span>:
                   </label>
                   <input
                     type="text"
@@ -1011,7 +1003,7 @@ export const LiveServiceTimer = ({
                     onClick={() => { setShowEndModal(false); setShowOtpUnavailable(true); }}
                     className="mt-2 w-full text-center text-[11px] font-black text-red-600 underline underline-offset-2"
                   >
-                    Farmer not giving OTP? / OTP unavailable (ओटीपी उपलब्ध नहीं)
+                    Farmer not giving OTP? / OTP unavailable
                   </button>
                 </div>
               )}
@@ -1026,7 +1018,7 @@ export const LiveServiceTimer = ({
                 }`}
               >
                 <FiCheckCircle className="w-5 h-5" />
-                {isPartialEnd ? 'Confirm Partial Bill End (बिल समाप्त करें)' : 'Confirm & Complete (बिल बनाएं)'}
+                {isPartialEnd ? 'Confirm Partial Bill End' : 'Confirm & Complete'}
               </button>
             </motion.div>
           </div>
@@ -1051,7 +1043,6 @@ export const LiveServiceTimer = ({
                   </div>
                   <div>
                     <h3 className="text-sm font-black text-gray-900 leading-tight">Enter Customer Resume OTP</h3>
-                    <p className="text-[10px] text-gray-500">किसान का रिज़्यूम ओटीपी दर्ज करें</p>
                   </div>
                 </div>
                 <button

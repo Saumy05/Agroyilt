@@ -1,4 +1,5 @@
 const languageService = require('../../services/languageService');
+const { isLanguageSupported } = require('../../services/translationService');
 
 /**
  * Public: Get active languages
@@ -6,7 +7,10 @@ const languageService = require('../../services/languageService');
  */
 exports.getActiveLanguages = async (req, res) => {
   try {
-    const languages = await languageService.getActiveLanguages();
+    const active = await languageService.getActiveLanguages();
+    // Offer only languages the app can actually be translated into
+    const supported = await Promise.all(active.map(l => isLanguageSupported(l.code)));
+    const languages = active.filter((_, i) => supported[i]);
     const defaultLanguage = languages.find(l => l.isDefault) || languages[0] || null;
     return res.status(200).json({
       success: true,
