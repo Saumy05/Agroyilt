@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { confirmAction } from '../../../../utils/confirmAction';
+import { getAppLocale } from '../../../../utils/languageUtils';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import {
@@ -288,8 +289,8 @@ const FarmerRequestDetail = () => {
                 </p>
                 <p className="text-sm font-bold text-slate-700">
                   {request.bookingType === 'DAILY'
-                    ? `${request.numberOfDays || 1} Day(s) (Starts ${request.startDate ? new Date(request.startDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) : 'Soon'})`
-                    : (request.scheduledDate ? new Date(request.scheduledDate).toLocaleDateString('en-IN') : 'Scheduled')}
+                    ? `${request.numberOfDays || 1} Day(s) (Starts ${request.startDate ? new Date(request.startDate).toLocaleDateString(getAppLocale(), { month: 'short', day: 'numeric' }) : 'Soon'})`
+                    : (request.scheduledDate ? new Date(request.scheduledDate).toLocaleDateString(getAppLocale()) : 'Scheduled')}
                 </p>
               </div>
             </div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { getAppLocale } from '../../../../utils/languageUtils';
 import { useNavigate, useParams } from 'react-router-dom';
 import { FiArrowLeft, FiLock, FiCheckCircle, FiClock, FiShield, FiSend, FiAlertTriangle, FiXCircle, FiDownload } from 'react-icons/fi';
 import leaseAgreementService from '../../services/leaseAgreementService';
@@ -15,8 +16,8 @@ const STATUS = {
   DISPUTED: { label: 'Under review', hi: 'विवाद की जाँच', cls: 'bg-purple-100 text-purple-800' }
 };
 
-const fmtDateTime = (d) => (d ? new Date(d).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '');
-const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '');
+const fmtDateTime = (d) => (d ? new Date(d).toLocaleString(getAppLocale(), { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '');
+const fmtDate = (d) => (d ? new Date(d).toLocaleDateString(getAppLocale(), { day: '2-digit', month: 'short', year: 'numeric' }) : '');
 const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 
 /** Certificate block of one party: signed (with stamp) or still waiting. */

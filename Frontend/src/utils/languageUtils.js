@@ -79,3 +79,12 @@ export const isRTLLanguage = (lang) => {
   const normalized = normalizeLanguageCode(lang);
   return rtlLanguages.includes(normalized);
 };
+
+/**
+ * Returns the Intl locale string matching the active app language (e.g. 'hi-IN', 'mr-IN', 'en-IN').
+ */
+export const getAppLocale = () => {
+  if (typeof localStorage === 'undefined') return 'en-IN';
+  const code = localStorage.getItem('userLanguageCode') || localStorage.getItem('systemDefaultLanguageCode') || 'en';
+  return code === 'en' ? 'en-IN' : `${code}-IN`;
+};

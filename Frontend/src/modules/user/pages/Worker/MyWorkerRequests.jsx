@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { confirmAction } from '../../../../utils/confirmAction';
+import { getAppLocale } from '../../../../utils/languageUtils';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import {
@@ -333,7 +334,7 @@ const MyWorkerRequests = () => {
             </div>
             <div>
               <p className="text-[10px] uppercase font-bold text-slate-400">Date</p>
-              <p className="text-[10px] font-black text-slate-700">{new Date(req.scheduledDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</p>
+              <p className="text-[10px] font-black text-slate-700">{new Date(req.scheduledDate).toLocaleDateString(getAppLocale(), { day: 'numeric', month: 'short' })}</p>
             </div>
           </div>
 

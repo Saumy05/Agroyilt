@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getAppLocale } from '../../../../utils/languageUtils';
 import useReferralEnabled from '../../../../hooks/useReferralEnabled';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -399,7 +400,7 @@ const Wallet = () => {
                   const rawDate = item.createdAt || item.date || item.timestamp;
                   const parsedDate = rawDate ? new Date(rawDate) : null;
                   const formattedDate = parsedDate && !isNaN(parsedDate.getTime())
-                    ? parsedDate.toLocaleDateString('en-IN', {
+                    ? parsedDate.toLocaleDateString(getAppLocale(), {
                         day: 'numeric',
                         month: 'short',
                         year: 'numeric'

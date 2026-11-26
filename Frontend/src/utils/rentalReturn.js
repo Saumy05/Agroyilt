@@ -1,3 +1,5 @@
+import { getAppLocale } from './languageUtils';
+
 // Day-based machinery rentals: every day is 24 hours from pickup. These helpers say when the machine is due back.
 // All clock times are shown in Indian time, the same zone the server uses to work the return time out.
 const DAY_MS = 86400000;
@@ -18,12 +20,6 @@ export const appDateParts = (d) => ({
   date: d.toLocaleDateString('en-CA', { timeZone: APP_TIME_ZONE }),
   time: d.toLocaleTimeString('en-GB', { timeZone: APP_TIME_ZONE, hour: '2-digit', minute: '2-digit', hour12: false })
 });
-
-const getAppLocale = () => {
-  if (typeof localStorage === 'undefined') return 'en-IN';
-  const code = localStorage.getItem('userLanguageCode') || localStorage.getItem('systemDefaultLanguageCode') || 'en';
-  return code === 'en' ? 'en-IN' : `${code}-IN`;
-};
 
 /** "Mon, 2 Nov · 9:00 AM" */
 export const formatAppDateTime = (d) => {

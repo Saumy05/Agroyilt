@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { getAppLocale } from '../../utils/languageUtils';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { FiArrowLeft, FiFileText, FiShield } from 'react-icons/fi';
 import API from '../../services/api';
@@ -99,7 +100,7 @@ const LegalPage = ({ doc }) => {
           </div>
           {updatedAt && !loading && (
             <p className="text-[11px] text-slate-400 font-medium mb-4 pl-12">
-              Last updated {new Date(updatedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
+              Last updated {new Date(updatedAt).toLocaleDateString(getAppLocale(), { day: 'numeric', month: 'long', year: 'numeric' })}
             </p>
           )}
           <div className={updatedAt && !loading ? '' : 'mt-4'}>

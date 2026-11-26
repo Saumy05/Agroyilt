@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo } from 'react';
+import { getAppLocale } from '../../../../utils/languageUtils';
 import { useNavigate, useParams } from 'react-router-dom';
 import { FiCheck, FiClock, FiUser, FiUsers, FiMapPin, FiTool, FiDollarSign, FiFileText, FiCheckCircle, FiX, FiNavigation, FiPackage, FiXCircle, FiAlertCircle } from 'react-icons/fi';
 import { vendorTheme as themeColors } from '../../../../theme';
@@ -860,7 +861,7 @@ const BookingTimeline = () => {
                   <span>Service operations and live timer are disabled.</span>
                   {booking.cancelledAt && (
                     <span className="text-red-500 font-medium">
-                      {new Date(booking.cancelledAt).toLocaleString('en-IN', {
+                      {new Date(booking.cancelledAt).toLocaleString(getAppLocale(), {
                         day: 'numeric',
                         month: 'short',
                         hour: '2-digit',

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { getAppLocale } from '../../../../utils/languageUtils';
 import { FiSearch, FiTruck, FiChevronRight, FiArrowLeft, FiMapPin } from 'react-icons/fi';
 import { Helmet } from 'react-helmet-async';
 import { publicEquipmentService } from '../../../../services/publicEquipmentService';
@@ -143,7 +144,7 @@ const RentalCatalog = () => {
                   {item.availability?.busyNow && (
                     <span className="absolute bottom-2 left-2 px-2 py-0.5 bg-amber-500 rounded-full text-[8.5px] font-black uppercase text-white shadow-xs">
                       {item.availability.availableFrom
-                        ? `On rent · back ${new Date(item.availability.availableFrom).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`
+                        ? `On rent · back ${new Date(item.availability.availableFrom).toLocaleDateString(getAppLocale(), { day: 'numeric', month: 'short' })}`
                         : 'On rent'}
                     </span>
                   )}

@@ -1,5 +1,6 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { getAppLocale } from '../../../../utils/languageUtils';
 import { FiCloud, FiCloudRain, FiCloudSnow, FiSun, FiWind, FiDroplet, FiChevronLeft, FiAlertTriangle, FiThermometer, FiSun as FiUv, FiEye, FiZap, FiSunrise, FiSunset } from 'react-icons/fi';
 import { motion } from 'framer-motion';
 import weatherService from '../../services/weatherService';
@@ -155,7 +156,7 @@ export default function WeatherReport() {
                                 className="min-w-[105px] bg-white rounded-2xl p-3 shadow-sm border border-slate-50 flex flex-col items-center text-center"
                             >
                                 <p className="text-[10px] font-black text-slate-500 uppercase mb-1">
-                                    {i === 0 ? 'Tmrw' : new Date(day.date).toLocaleDateString('en-IN', { weekday: 'short' })}
+                                    {i === 0 ? 'Tomorrow' : new Date(day.date).toLocaleDateString(getAppLocale(), { weekday: 'short' })}
                                 </p>
                                 <div className="w-9 h-9 mb-1">
                                     {getWeatherIcon(day.description, "w-full h-full")}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { getAppLocale } from '../../../../utils/languageUtils';
 import WorkerPaymentBill from '../../components/booking/WorkerPaymentBill';
 import WorkerWorkTime from '../../components/booking/WorkerWorkTime';
 import { useNavigate, useParams, useLocation, useSearchParams } from 'react-router-dom';
@@ -1365,7 +1366,7 @@ const BookingDetails = () => {
                           const start = new Date(booking.startedAt).getTime();
                           const durMs = (booking.estimatedDuration || 1) * (booking.rental_type === 'daily' ? 86400000 : 3600000);
                           const deadline = new Date(start + durMs);
-                          return deadline.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+                          return deadline.toLocaleTimeString(getAppLocale(), { hour: '2-digit', minute: '2-digit' });
                         })()
                       : (booking.rental_type === 'daily' && booking.endDate
                         ? formatTimeOfDay(booking.endDate)

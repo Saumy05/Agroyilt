@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { getAppLocale } from '../../../../utils/languageUtils';
 import { 
   FiArrowLeft, FiStar, FiMapPin, FiTruck, 
   FiClock, FiCalendar, FiCheckCircle, FiChevronRight,
@@ -282,7 +283,7 @@ const AvailableVendors = () => {
     try {
       const d = new Date(dateStr);
       if (isNaN(d.getTime())) return String(dateStr);
-      return d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+      return d.toLocaleDateString(getAppLocale(), { weekday: 'short', day: 'numeric', month: 'short' });
     } catch {
       return String(dateStr);
     }

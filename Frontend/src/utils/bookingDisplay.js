@@ -1,3 +1,5 @@
+import { getAppLocale } from './languageUtils';
+
 const ONLINE_METHODS = ['online', 'razorpay', 'qr_online', 'wallet', 'upi'];
 const PAID_STATUSES = ['success', 'paid', 'collected_by_vendor', 'collected_by_worker', 'plan_covered'];
 
@@ -43,12 +45,6 @@ export const to12HourText = (text) => {
     const hour = Number(h);
     return `${hour % 12 || 12}:${m} ${hour >= 12 ? 'PM' : 'AM'}`;
   });
-};
-
-const getAppLocale = () => {
-  if (typeof localStorage === 'undefined') return 'en-IN';
-  const code = localStorage.getItem('userLanguageCode') || localStorage.getItem('systemDefaultLanguageCode') || 'en';
-  return code === 'en' ? 'en-IN' : `${code}-IN`;
 };
 
 export const formatTimeOfDay = (d) => (d && !Number.isNaN(new Date(d).getTime())

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getAppLocale } from '../../utils/languageUtils';
 import {
   FiClock,
   FiCheckCircle,
@@ -85,7 +86,7 @@ export const WithdrawalHistoryList = ({ refreshTrigger = 0 }) => {
 
   const formatDate = (dateStr) => {
     if (!dateStr) return '';
-    return new Date(dateStr).toLocaleDateString('en-IN', {
+    return new Date(dateStr).toLocaleDateString(getAppLocale(), {
       day: 'numeric',
       month: 'short',
       year: 'numeric',

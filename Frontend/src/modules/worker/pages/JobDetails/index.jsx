@@ -1,5 +1,6 @@
 import { syncServerClock, nowMs } from '../../../../utils/serverClock';
 import { confirmAction } from '../../../../utils/confirmAction';
+import { getAppLocale } from '../../../../utils/languageUtils';
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, lazy, Suspense } from 'react';
 import { useNavigate, useParams, useLocation, useSearchParams } from 'react-router-dom';
 import { FiMapPin, FiPhone, FiClock, FiUser, FiCheck, FiX, FiArrowRight, FiNavigation, FiTool, FiCheckCircle, FiDollarSign, FiCamera, FiPlus, FiTrash, FiXCircle, FiAward, FiFileText, FiAlertTriangle, FiCreditCard } from 'react-icons/fi';
@@ -95,7 +96,7 @@ const ActiveWorkStopwatch = ({ job }) => {
 
   const startDisplay = useMemo(() => {
     try {
-      return new Date(startTimestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+      return new Date(startTimestamp).toLocaleTimeString(getAppLocale(), { hour: '2-digit', minute: '2-digit', hour12: true });
     } catch {
       return 'Recently';
     }
@@ -104,7 +105,7 @@ const ActiveWorkStopwatch = ({ job }) => {
   const stopDisplay = useMemo(() => {
     if (!stopTimestamp) return '';
     try {
-      return new Date(stopTimestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+      return new Date(stopTimestamp).toLocaleTimeString(getAppLocale(), { hour: '2-digit', minute: '2-digit', hour12: true });
     } catch {
       return '';
     }
@@ -292,8 +293,8 @@ const LifecycleStepper = ({ status, cash = null }) => {
   );
 };
 
-const fmtTime = (d) => d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-const fmtDay = (d) => d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+const fmtTime = (d) => d.toLocaleTimeString(getAppLocale(), { hour: '2-digit', minute: '2-digit', hour12: true });
+const fmtDay = (d) => d.toLocaleDateString(getAppLocale(), { weekday: 'short', day: 'numeric', month: 'short' });
 
 const fmtBooked = (mins) => {
   const m = Number(mins) || 0;
@@ -331,7 +332,7 @@ const getDurationInfo = (job) => {
       startTime: fmtTime(start),
       startDay: fmtDay(start),
       endTime: fmtTime(end),
-      fullDate: end.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
+      fullDate: end.toLocaleDateString(getAppLocale(), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
       duration: durationStr
     };
   }
@@ -1359,7 +1360,7 @@ const JobDetails = () => {
                   <div>
                     <p className="text-xs font-bold text-gray-400 uppercase mb-1">Scheduled Time</p>
                     <p className="text-sm text-gray-700 font-medium">
-                      {new Date(job.scheduledDate).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
+                      {new Date(job.scheduledDate).toLocaleDateString(getAppLocale(), { weekday: 'long', day: 'numeric', month: 'long' })}
                     </p>
                     <p className="text-sm font-bold text-blue-600 mt-0.5">{to12HourText(job.scheduledTime)}</p>
                   </div>

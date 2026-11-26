@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { getAppLocale } from '../../../../utils/languageUtils';
 import { 
   FiSearch, FiMapPin, FiTruck, FiClock, 
   FiChevronRight, FiArrowLeft, FiCalendar, 
@@ -649,7 +650,7 @@ const MachineryExplorer = () => {
     if (!dateStr) return '';
     try {
       const d = new Date(dateStr);
-      return d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+      return d.toLocaleDateString(getAppLocale(), { weekday: 'short', day: 'numeric', month: 'short' });
     } catch {
       return dateStr;
     }

@@ -78,13 +78,22 @@ const AutoTranslate = () => {
         if (cancelled || inflightMap.get(el) !== value) return;
         inflightMap.delete(el);
         if (el.getAttribute(attr) !== value) return;
-        appliedMap.set(el, out || value);
         if (out) {
+          appliedMap.set(el, out);
           isInternalMutating = true;
           try {
             el.setAttribute(attr, out);
           } finally {
             isInternalMutating = false;
+          }
+        } else {
+          const count = retries.get(el) || 0;
+          if (count < 2 && !retryTimer) {
+            retries.set(el, count + 1);
+            retryTimer = setTimeout(() => {
+              retryTimer = null;
+              if (!cancelled) scan();
+            }, 2500);
           }
         }
       });

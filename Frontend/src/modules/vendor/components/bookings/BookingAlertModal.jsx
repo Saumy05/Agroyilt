@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getAppLocale } from '../../../../utils/languageUtils';
 import { createPortal } from 'react-dom';
 import { FiX, FiMapPin, FiClock, FiDollarSign, FiArrowRight, FiBell, FiAlertCircle, FiMinimize2, FiUsers } from 'react-icons/fi';
 import { FaRupeeSign } from 'react-icons/fa';
@@ -156,8 +157,9 @@ const BookingAlertCard = ({ booking, onAccept, onReject, onAssign, initialTimeLe
       tomorrow.setDate(now.getDate() + 1);
       const isTomorrow = d.toDateString() === tomorrow.toDateString();
 
-      const shortDate = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-      const fullDate = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+      const locale = getAppLocale();
+      const shortDate = d.toLocaleDateString(locale, { day: 'numeric', month: 'short' });
+      const fullDate = d.toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' });
 
       if (isToday) return `Today, ${shortDate}`;
       if (isTomorrow) return `Tomorrow, ${shortDate}`;

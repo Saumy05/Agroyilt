@@ -1,5 +1,6 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { getAppLocale } from '../../../../utils/languageUtils';
 import { FiStar, FiArrowLeft, FiUser, FiCalendar, FiMessageSquare, FiFilter, FiLoader } from 'react-icons/fi';
 import { toastManager } from '../../../../utils/toastManager';
 import { vendorTheme as themeColors } from '../../../../theme';
@@ -38,7 +39,7 @@ const MyRatings = () => {
 
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-IN', {
+    return new Date(dateString).toLocaleDateString(getAppLocale(), {
       day: 'numeric',
       month: 'short',
       year: 'numeric'

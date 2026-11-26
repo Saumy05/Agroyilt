@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
+import { getAppLocale } from '../../../../utils/languageUtils';
 import { useNavigate } from 'react-router-dom';
 import { FiArrowUp, FiArrowDown, FiArrowRight, FiClock, FiCheckCircle, FiAlertCircle, FiSend, FiShield, FiX } from 'react-icons/fi';
 import { IoWallet, IoWalletOutline } from 'react-icons/io5';
@@ -119,7 +120,7 @@ const Wallet = () => {
 
   const formatDate = (dateStr) => {
     const date = new Date(dateStr);
-    return date.toLocaleDateString('en-IN', {
+    return date.toLocaleDateString(getAppLocale(), {
       day: 'numeric',
       month: 'short',
       year: 'numeric'

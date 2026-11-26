@@ -1,7 +1,8 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FiCalendar, FiClock, FiCheck, FiAlertCircle } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import availabilityService from '../../services/availabilityService';
+import { getAppLocale } from '../../../../utils/languageUtils';
 
 const SlotPicker = ({ serviceId, onSlotSelect }) => {
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -14,11 +15,12 @@ const SlotPicker = ({ serviceId, onSlotSelect }) => {
     const days = Array.from({ length: 7 }, (_, i) => {
         const d = new Date();
         d.setDate(d.getDate() + i);
+        const locale = getAppLocale();
         return {
             date: d.toISOString().split('T')[0],
-            dayName: d.toLocaleDateString('en-IN', { weekday: 'short' }),
+            dayName: d.toLocaleDateString(locale, { weekday: 'short' }),
             dayNum: d.getDate(),
-            month: d.toLocaleDateString('en-IN', { month: 'short' })
+            month: d.toLocaleDateString(locale, { month: 'short' })
         };
     });
 
@@ -36,7 +38,7 @@ const SlotPicker = ({ serviceId, onSlotSelect }) => {
                     if (!stillAvailable) setSelectedSlot(null);
                 }
             } catch (err) {
-                setError("Slot load karne mein dikkat hai.");
+                setError("Failed to load slots. Please try again.");
             } finally {
                 setLoading(false);
             }

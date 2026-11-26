@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { getAppLocale } from '../../utils/languageUtils';
 import {
   FiTruck,
   FiCheckCircle,
@@ -139,7 +140,7 @@ const RentalHandoverCard = ({
             </p>
             {handover.farmerConfirmedAt && (
               <p className="text-[9px] text-slate-400 mt-0.5">
-                {new Date(handover.farmerConfirmedAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                {new Date(handover.farmerConfirmedAt).toLocaleDateString(getAppLocale(), { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
               </p>
             )}
           </div>
@@ -165,7 +166,7 @@ const RentalHandoverCard = ({
             </p>
             {handover.vendorConfirmedAt && (
               <p className="text-[9px] text-slate-400 mt-0.5">
-                {new Date(handover.vendorConfirmedAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                {new Date(handover.vendorConfirmedAt).toLocaleDateString(getAppLocale(), { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
               </p>
             )}
           </div>
@@ -271,7 +272,7 @@ const RentalHandoverCard = ({
             )}
 
             <p className="text-[10px] text-red-700 italic border-t border-red-200/80 pt-2">
-              Reported by {damage.reporterRole || 'Party'} on {damage.reportedAt ? new Date(damage.reportedAt).toLocaleDateString('en-IN') : 'recently'}. An AgroYilt claim officer will mediate settlement.
+              Reported by {damage.reporterRole || 'Party'} on {damage.reportedAt ? new Date(damage.reportedAt).toLocaleDateString(getAppLocale()) : 'recently'}. An AgroYilt claim officer will mediate settlement.
             </p>
           </div>
         )}

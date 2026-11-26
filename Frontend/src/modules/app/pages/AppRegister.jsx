@@ -261,7 +261,7 @@ const AppRegister = () => {
             transition: 'all 0.2s ease',
           }}
         >
-          <span>Continue as {selected ? roles.find(r => r.id === selected) ?.label : '...'}</span>
+          <span>{selected ? `Continue as ${roles.find(r => r.id === selected)?.label}` : 'Continue as ...'}</span>
           {selected && <FiChevronRight size={20} />}
         </button>
 

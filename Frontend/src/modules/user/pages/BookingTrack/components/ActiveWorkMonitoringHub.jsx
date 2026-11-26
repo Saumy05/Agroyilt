@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { getAppLocale } from '../../../../../utils/languageUtils';
 import {
   FiClock, FiCheckCircle, FiInfo, FiKey, FiPhone,
   FiCopy, FiAlertTriangle, FiUser, FiTool, FiChevronRight
@@ -133,7 +134,7 @@ const ActiveWorkMonitoringHub = ({
 
   const startDisplay = useMemo(() => {
     try {
-      return new Date(startTimestamp).toLocaleTimeString('en-IN', {
+      return new Date(startTimestamp).toLocaleTimeString(getAppLocale(), {
         hour: '2-digit',
         minute: '2-digit',
         hour12: true
@@ -146,7 +147,7 @@ const ActiveWorkMonitoringHub = ({
   const endEstimatedDisplay = useMemo(() => {
     try {
       const endMs = startTimestamp + (durationMinutes * 60 * 1000);
-      return new Date(endMs).toLocaleTimeString('en-IN', {
+      return new Date(endMs).toLocaleTimeString(getAppLocale(), {
         hour: '2-digit',
         minute: '2-digit',
         hour12: true
@@ -164,7 +165,7 @@ const ActiveWorkMonitoringHub = ({
     : `${workLength({ minutes: bookedMinutes })}${extraMinutes ? ` + ${workLength({ minutes: extraMinutes })} extra` : ''} (ends ~${endEstimatedDisplay})`;
 
   const stopDisplay = stopTimestamp
-    ? new Date(stopTimestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+    ? new Date(stopTimestamp).toLocaleTimeString(getAppLocale(), { hour: '2-digit', minute: '2-digit', hour12: true })
     : '';
 
   // Any worker with End OTP generated (worker tapped Stop Work)

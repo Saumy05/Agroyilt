@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { getAppLocale } from '../../../../utils/languageUtils';
 import { Helmet } from 'react-helmet-async';
 import {
   FiArrowLeft, FiMapPin, FiCalendar, FiClock,
@@ -184,7 +185,7 @@ const formatFriendlyDay = (isoDateStr) => {
   const [y, m, d] = parts.map(Number);
   const dateObj = new Date(y, m - 1, d);
   if (isNaN(dateObj.getTime())) return '';
-  return dateObj.toLocaleDateString('en-IN', {
+  return dateObj.toLocaleDateString(getAppLocale(), {
     weekday: 'short',
     day: '2-digit',
     month: 'short',

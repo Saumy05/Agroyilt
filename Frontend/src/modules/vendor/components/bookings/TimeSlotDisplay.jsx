@@ -1,6 +1,7 @@
-﻿import React from 'react';
+import React from 'react';
 import { FiClock, FiCalendar } from 'react-icons/fi';
 import { vendorTheme as themeColors } from '../../../../theme';
+import { getAppLocale } from '../../../../utils/languageUtils';
 
 const TimeSlotDisplay = ({ timeSlot, showIcon = true, size = 'md' }) => {
   if (!timeSlot) return null;
@@ -21,7 +22,7 @@ const TimeSlotDisplay = ({ timeSlot, showIcon = true, size = 'md' }) => {
   const formatDate = (dateString) => {
     if (!dateString) return '';
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-IN', { 
+    return date.toLocaleDateString(getAppLocale(), { 
       weekday: 'short', 
       day: 'numeric', 
       month: 'short' 

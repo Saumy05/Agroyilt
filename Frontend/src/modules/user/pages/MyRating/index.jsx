@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { getAppLocale } from '../../../../utils/languageUtils';
 import {
   FiArrowLeft, FiStar, FiUser, FiBriefcase,
   FiCalendar, FiMessageSquare, FiLoader, FiCheckCircle, FiTool
@@ -58,7 +59,7 @@ const MyRating = () => {
   const formatDate = (dateString) => {
     if (!dateString) return 'Recent';
     try {
-      return new Date(dateString).toLocaleDateString('en-IN', {
+      return new Date(dateString).toLocaleDateString(getAppLocale(), {
         day: 'numeric',
         month: 'short',
         year: 'numeric'

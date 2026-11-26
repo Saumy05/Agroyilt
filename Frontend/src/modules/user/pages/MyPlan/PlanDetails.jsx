@@ -1,5 +1,6 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { getAppLocale } from '../../../../utils/languageUtils';
 import { FiArrowLeft, FiCheck, FiCalendar, FiClock, FiCreditCard, FiInfo, FiShield, FiStar, FiZap, FiCheckCircle } from 'react-icons/fi';
 import { getPlans } from '../../services/planService';
 import { userAuthService } from '../../../../services/authService';
@@ -55,7 +56,7 @@ const PlanDetails = () => {
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-IN', {
+    return date.toLocaleDateString(getAppLocale(), {
       day: 'numeric',
       month: 'long',
       year: 'numeric'

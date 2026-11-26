@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, memo, useRef } from 'react';
+import { getAppLocale } from '../../../../utils/languageUtils';
 import { useNavigate } from 'react-router-dom';
 import { FiBriefcase, FiUsers, FiBell, FiArrowRight, FiUser, FiClock, FiMapPin, FiCheckCircle, FiTrendingUp, FiChevronRight, FiAlertTriangle, FiCalendar, FiBarChart2, FiActivity, FiTruck } from 'react-icons/fi';
 import { FaWallet } from 'react-icons/fa';
@@ -418,7 +419,7 @@ const Dashboard = memo(() => {
                 if (rawDate) {
                   try {
                     const d = new Date(rawDate);
-                    dateText = !isNaN(d.getTime()) ? d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : String(rawDate);
+                    dateText = !isNaN(d.getTime()) ? d.toLocaleDateString(getAppLocale(), { day: 'numeric', month: 'short' }) : String(rawDate);
                   } catch {
                     dateText = String(rawDate);
                   }

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { getAppLocale } from '../../../../utils/languageUtils';
 import { createPortal } from 'react-dom';
 import {
   FiX,
@@ -743,10 +744,10 @@ const WorkerBookingRequestAlertModal = ({ isOpen, requestData, onClose, onReques
                       <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Schedule</p>
                       <p className="text-xs font-bold text-slate-800">
                         {requestData.bookingType === 'DAILY'
-                          ? `${requestData.numberOfDays || 1} Day(s) • Starts ${requestData.startDate ? new Date(requestData.startDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) : (requestData.scheduledDate ? new Date(requestData.scheduledDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) : 'Soon')}`
+                          ? `${requestData.numberOfDays || 1} Day(s) • Starts ${requestData.startDate ? new Date(requestData.startDate).toLocaleDateString(getAppLocale(), { month: 'short', day: 'numeric' }) : (requestData.scheduledDate ? new Date(requestData.scheduledDate).toLocaleDateString(getAppLocale(), { month: 'short', day: 'numeric' }) : 'Soon')}`
                           : (requestData.bookingType === 'THEKA'
-                            ? `${requestData.scheduledDate ? new Date(requestData.scheduledDate).toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Today'} • Report by ${to12HourText(requestData.startTime) || '08:00 AM'}`
-                            : `${requestData.scheduledDate ? new Date(requestData.scheduledDate).toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Today'} • ${to12HourText(requestData.startTime) || 'Flexible'}${requestData.endTime ? ` - ${to12HourText(requestData.endTime)}` : ''}`)}
+                            ? `${requestData.scheduledDate ? new Date(requestData.scheduledDate).toLocaleDateString(getAppLocale(), { weekday: 'short', month: 'short', day: 'numeric' }) : 'Today'} • Report by ${to12HourText(requestData.startTime) || '08:00 AM'}`
+                            : `${requestData.scheduledDate ? new Date(requestData.scheduledDate).toLocaleDateString(getAppLocale(), { weekday: 'short', month: 'short', day: 'numeric' }) : 'Today'} • ${to12HourText(requestData.startTime) || 'Flexible'}${requestData.endTime ? ` - ${to12HourText(requestData.endTime)}` : ''}`)}
                       </p>
                     </div>
                   </div>
@@ -865,20 +866,20 @@ const WorkerBookingRequestAlertModal = ({ isOpen, requestData, onClose, onReques
                       <p className="text-xs font-bold text-slate-800 leading-snug mt-0.5">
                         {requestData.bookingType === 'DAILY' ? (
                           <>
-                            <span>{requestData.numberOfDays || 1} Day(s) • Starts {requestData.startDate ? new Date(requestData.startDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) : (requestData.scheduledDate ? new Date(requestData.scheduledDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) : 'Soon')}</span>
+                            <span>{requestData.numberOfDays || 1} Day(s) • Starts {requestData.startDate ? new Date(requestData.startDate).toLocaleDateString(getAppLocale(), { month: 'short', day: 'numeric' }) : (requestData.scheduledDate ? new Date(requestData.scheduledDate).toLocaleDateString(getAppLocale(), { month: 'short', day: 'numeric' }) : 'Soon')}</span>
                             <span className="block text-[10px] text-amber-800 font-black mt-0.5">
                               ⏱️ 9-Hr Shift (8 hrs work + 1 hr lunch break) • Report by {requestData.reportingTime || '09:00 AM'}
                             </span>
                           </>
                         ) : requestData.bookingType === 'THEKA' ? (
                           <>
-                            <span>{requestData.scheduledDate ? new Date(requestData.scheduledDate).toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Today'} • Report by {to12HourText(requestData.startTime) || 'Flexible'}</span>
+                            <span>{requestData.scheduledDate ? new Date(requestData.scheduledDate).toLocaleDateString(getAppLocale(), { weekday: 'short', month: 'short', day: 'numeric' }) : 'Today'} • Report by {to12HourText(requestData.startTime) || 'Flexible'}</span>
                             <span className="block text-[10px] text-emerald-800 font-black mt-0.5">
                               🌾 Fixed Task Contract • Paid upon completion verification
                             </span>
                           </>
                         ) : (
-                          `${requestData.scheduledDate ? new Date(requestData.scheduledDate).toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Today'} • ${to12HourText(requestData.startTime) || 'Flexible'}${requestData.endTime ? ` - ${to12HourText(requestData.endTime)}` : ''}`
+                          `${requestData.scheduledDate ? new Date(requestData.scheduledDate).toLocaleDateString(getAppLocale(), { weekday: 'short', month: 'short', day: 'numeric' }) : 'Today'} • ${to12HourText(requestData.startTime) || 'Flexible'}${requestData.endTime ? ` - ${to12HourText(requestData.endTime)}` : ''}`
                         )}
                       </p>
                     </div>

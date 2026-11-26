@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { confirmAction } from '../../../../../utils/confirmAction';
+import { getAppLocale } from '../../../../../utils/languageUtils';
 import { useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import {
@@ -28,8 +29,8 @@ const STEPS = ['On the way', 'Arrived', 'Working', 'Stopped', 'Done'];
 const STEP_INDEX = { NOT_STARTED: -1, JOURNEY_STARTED: 0, ARRIVED: 1, IN_PROGRESS: 2, WORK_SUBMITTED: 3, COMPLETED: 4 };
 const BOOKED_STATUS_LABEL = { confirmed: 'Confirmed', in_progress: 'In progress', partially_completed: 'In progress', completed: 'Completed' };
 
-const time = (d) => (d ? new Date(d).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true }) : '');
-const day = (d) => (d ? new Date(d).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }) : '');
+const time = (d) => (d ? new Date(d).toLocaleTimeString(getAppLocale(), { hour: 'numeric', minute: '2-digit', hour12: true }) : '');
+const day = (d) => (d ? new Date(d).toLocaleDateString(getAppLocale(), { weekday: 'short', day: 'numeric', month: 'short' }) : '');
 /** "17:13" on a date → Date in the phone's time zone */
 const atTime = (date, hhmm) => {
   if (!date || !hhmm) return null;

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
+import { getAppLocale } from '../../../../utils/languageUtils';
 import { useNavigate } from 'react-router-dom';
 import { FiArrowUp, FiArrowDown, FiClock, FiBell, FiX, FiImage, FiFileText, FiCreditCard, FiCalendar, FiInfo, FiCheckCircle, FiShield, FiAlertCircle, FiArrowRight } from 'react-icons/fi';
 import { IoWallet, IoWalletOutline } from 'react-icons/io5';
@@ -188,7 +189,7 @@ const Wallet = () => {
 
   const formatDate = (dateStr) => {
     const date = new Date(dateStr);
-    return date.toLocaleDateString('en-IN', {
+    return date.toLocaleDateString(getAppLocale(), {
       day: 'numeric',
       month: 'short',
       year: 'numeric'
@@ -397,7 +398,7 @@ const Wallet = () => {
                     <p className="font-bold text-gray-900 text-xs mb-0.5">{booking.serviceName}</p>
                     <p className="text-[11px] text-gray-500 font-medium mb-0.5">Booking #{booking.bookingNumber}</p>
                     <p className="text-[10px] text-gray-400">
-                      Completed: {new Date(booking.completedAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}
+                      Completed: {new Date(booking.completedAt).toLocaleDateString(getAppLocale(), { month: 'short', day: 'numeric' })}
                     </p>
                   </div>
                   {wallet.vendorId ? (

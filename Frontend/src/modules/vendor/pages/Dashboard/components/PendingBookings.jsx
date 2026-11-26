@@ -5,6 +5,7 @@ import { vendorTheme as themeColors } from '../../../../../theme';
 import { toastManager } from '../../../../../utils/toastManager';
 import { acceptBooking, rejectBooking } from '../../../services/bookingService';
 import { formatRentalReturn } from '../../../../../utils/rentalReturn';
+import { getAppLocale } from '../../../../../utils/languageUtils';
 
 const PendingBookings = memo(({ bookings, setPendingBookings, setActiveAlertBooking }) => {
   const navigate = useNavigate();
@@ -17,7 +18,7 @@ const PendingBookings = memo(({ bookings, setPendingBookings, setActiveAlertBook
       try {
         const d = new Date(rawDate);
         if (!isNaN(d.getTime())) {
-          dateStr = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+          dateStr = d.toLocaleDateString(getAppLocale(), { day: 'numeric', month: 'short' });
         } else {
           dateStr = String(rawDate);
         }

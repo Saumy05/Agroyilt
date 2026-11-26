@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
+import { getAppLocale } from '../../../../utils/languageUtils';
 import { useNavigate } from 'react-router-dom';
 import { 
   FiClock, 
@@ -231,7 +232,7 @@ const SettlementHistory = () => {
   const formatDate = (dateStr) => {
     if (!dateStr) return '';
     const date = new Date(dateStr);
-    return date.toLocaleDateString('en-IN', {
+    return date.toLocaleDateString(getAppLocale(), {
       day: 'numeric',
       month: 'short',
       year: 'numeric',

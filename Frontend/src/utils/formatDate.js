@@ -1,3 +1,5 @@
+import { getAppLocale } from './languageUtils';
+
 // The app-wide date format: DD/MM/YYYY (same as the booking checkout and the worker forms).
 export const formatDateDDMMYYYY = (value) => {
   if (!value) return '';
@@ -11,12 +13,6 @@ export const formatDateDDMMYYYY = (value) => {
   const dd = String(date.getDate()).padStart(2, '0');
   const mm = String(date.getMonth() + 1).padStart(2, '0');
   return `${dd}/${mm}/${date.getFullYear()}`;
-};
-
-const getAppLocale = () => {
-  if (typeof localStorage === 'undefined') return 'en-IN';
-  const code = localStorage.getItem('userLanguageCode') || localStorage.getItem('systemDefaultLanguageCode') || 'en';
-  return code === 'en' ? 'en-IN' : `${code}-IN`;
 };
 
 /** DD/MM/YYYY, hh:mm AM/PM */

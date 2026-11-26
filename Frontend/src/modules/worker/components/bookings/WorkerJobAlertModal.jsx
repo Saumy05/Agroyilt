@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getAppLocale } from '../../../../utils/languageUtils';
 import {
   FiX,
   FiMapPin,
@@ -259,7 +260,7 @@ const WorkerJobAlertModal = ({ isOpen, jobId, onClose, onJobAccepted }) => {
                     <div className="flex-1 min-w-0">
                       <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Scheduled Date & Time</p>
                       <p className="text-xs font-bold text-slate-800 leading-snug mt-0.5">
-                        {job.scheduledDate ? new Date(job.scheduledDate).toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : 'Today'} • {job.scheduledTime || 'Flexible'}
+                        {job.scheduledDate ? new Date(job.scheduledDate).toLocaleDateString(getAppLocale(), { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : 'Today'} • {job.scheduledTime || 'Flexible'}
                       </p>
                     </div>
                   </div>

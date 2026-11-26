@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { confirmAction } from '../../../../utils/confirmAction';
+import { getAppLocale } from '../../../../utils/languageUtils';
 import { useNavigate, useParams } from 'react-router-dom';
 import { FiArrowLeft, FiCheck, FiClock, FiCreditCard, FiAlertTriangle, FiFileText } from 'react-icons/fi';
 import landLeaseService from '../../services/landLeaseService';
@@ -10,7 +11,7 @@ import authStorage from '../../../../utils/authStorage';
 import { planLabel } from './paymentPlan';
 
 const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
-const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '-');
+const fmtDate = (d) => (d ? new Date(d).toLocaleDateString(getAppLocale(), { day: 'numeric', month: 'short', year: 'numeric' }) : '-');
 
 const STATUS_STYLE = {
   paid: 'bg-emerald-100 text-emerald-800',

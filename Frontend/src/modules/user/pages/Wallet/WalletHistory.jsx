@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getAppLocale } from '../../../../utils/languageUtils';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   FiArrowLeft, 
@@ -211,7 +212,7 @@ const WalletHistory = () => {
     if (!rawDate) return 'Recent';
     const parsed = new Date(rawDate);
     if (isNaN(parsed.getTime())) return 'Recent';
-    return parsed.toLocaleDateString('en-IN', {
+    return parsed.toLocaleDateString(getAppLocale(), {
       day: 'numeric',
       month: 'short',
       year: 'numeric'
@@ -222,7 +223,7 @@ const WalletHistory = () => {
     if (!rawDate) return 'N/A';
     const parsed = new Date(rawDate);
     if (isNaN(parsed.getTime())) return 'N/A';
-    return parsed.toLocaleString('en-IN', {
+    return parsed.toLocaleString(getAppLocale(), {
       day: 'numeric',
       month: 'short',
       year: 'numeric',

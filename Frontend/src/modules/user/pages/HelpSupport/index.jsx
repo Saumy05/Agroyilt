@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { getAppLocale } from '../../../../utils/languageUtils';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import {
   FiArrowLeft, FiSearch, FiMessageCircle, FiMail, FiPhone,
@@ -1051,7 +1052,7 @@ const HelpSupport = () => {
                 <div className="flex items-center gap-1.5 text-[10px] text-gray-400 font-medium mt-0.5">
                   <span>{activeTicket.category}</span>
                   <span>•</span>
-                  <span>{new Date(activeTicket.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
+                  <span>{new Date(activeTicket.createdAt).toLocaleDateString(getAppLocale(), { day: 'numeric', month: 'short' })}</span>
                   {activeTicket.bookingNumber && (
                     <>
                       <span>•</span>

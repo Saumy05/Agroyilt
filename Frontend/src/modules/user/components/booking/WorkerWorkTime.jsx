@@ -1,8 +1,9 @@
 import React from 'react';
 import { FiClock } from 'react-icons/fi';
 import { workLength } from '../../../../utils/workerPayment';
+import { getAppLocale } from '../../../../utils/languageUtils';
 
-const time = (d) => (d ? new Date(d).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : null);
+const time = (d) => (d ? new Date(d).toLocaleTimeString(getAppLocale(), { hour: '2-digit', minute: '2-digit', hour12: true }) : null);
 
 /**
  * How long the worker actually worked (Start OTP → Stop Work), from booking.workTime.

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo } from 'react';
+import { getAppLocale } from '../../../../utils/languageUtils';
 import { useNavigate } from 'react-router-dom';
 import { 
   FiBriefcase, 
@@ -272,11 +273,12 @@ const AssignedJobs = () => {
               );
 
               // Date formatting
-              const dateStr = job.scheduledDate ? new Date(job.scheduledDate).toLocaleDateString('en-IN', {
+              const locale = getAppLocale();
+              const dateStr = job.scheduledDate ? new Date(job.scheduledDate).toLocaleDateString(locale, {
                 month: 'short',
                 day: 'numeric',
                 year: 'numeric'
-              }) : (job.createdAt ? new Date(job.createdAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A');
+              }) : (job.createdAt ? new Date(job.createdAt).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A');
 
               // Time formatting
               let startTimeStr = to12HourText(job.scheduledTime) || '';
@@ -286,7 +288,7 @@ const AssignedJobs = () => {
               else if (job.createdAt) startDate = new Date(job.createdAt);
 
               if (!startTimeStr && startDate) {
-                startTimeStr = startDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+                startTimeStr = startDate.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', hour12: true });
               }
 
               let endDate = null;
@@ -297,7 +299,7 @@ const AssignedJobs = () => {
                 else if (job.updatedAt) endDate = new Date(job.updatedAt);
 
                 if (endDate) {
-                  endTimeStr = endDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+                  endTimeStr = endDate.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', hour12: true });
                 }
               }
 

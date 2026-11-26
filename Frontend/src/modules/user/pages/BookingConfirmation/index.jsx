@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { getAppLocale } from '../../../../utils/languageUtils';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { toastManager } from '../../../../utils/toastManager';
 import { themeColors } from '../../../../theme';
@@ -325,7 +326,7 @@ const BookingConfirmation = () => {
     try {
       const date = new Date(dateString);
       if (isNaN(date.getTime())) return String(dateString);
-      return date.toLocaleDateString('en-IN', {
+      return date.toLocaleDateString(getAppLocale(), {
         weekday: 'long',
         day: 'numeric',
         month: 'short',
