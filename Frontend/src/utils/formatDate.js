@@ -13,10 +13,16 @@ export const formatDateDDMMYYYY = (value) => {
   return `${dd}/${mm}/${date.getFullYear()}`;
 };
 
+const getAppLocale = () => {
+  if (typeof localStorage === 'undefined') return 'en-IN';
+  const code = localStorage.getItem('userLanguageCode') || localStorage.getItem('systemDefaultLanguageCode') || 'en';
+  return code === 'en' ? 'en-IN' : `${code}-IN`;
+};
+
 /** DD/MM/YYYY, hh:mm AM/PM */
 export const formatDateTimeDDMMYYYY = (value) => {
   const date = value instanceof Date ? value : new Date(value);
   if (!value || Number.isNaN(date.getTime())) return '';
-  const time = date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+  const time = date.toLocaleTimeString(getAppLocale(), { hour: '2-digit', minute: '2-digit', hour12: true });
   return `${formatDateDDMMYYYY(date)}, ${time}`;
 };

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { confirmAction } from '../../../../utils/confirmAction';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -377,7 +378,7 @@ const WorkerTeam = () => {
   };
 
   const removeMember = async (memberId) => {
-    if (!window.confirm('Are you sure you want to remove this member?')) return;
+    if (!(await confirmAction('Are you sure you want to remove this member?', { type: 'danger' }))) return;
     try {
       const res = await api.post('/workers/team/remove', { memberId });
       if (res.data.success) {
@@ -390,7 +391,7 @@ const WorkerTeam = () => {
   };
 
   const leaveTeam = async () => {
-    if (!window.confirm('Are you sure you want to leave this team?\n\nYou will become an independent worker (0 teams) and can accept direct jobs or join another team.\n\nNote: You cannot leave while you have an active on-field job in progress.')) return;
+    if (!(await confirmAction('Are you sure you want to leave this team?\n\nYou will become an independent worker (0 teams) and can accept direct jobs or join another team.\n\nNote: You cannot leave while you have an active on-field job in progress.', { type: 'danger' }))) return;
     try {
       const res = await api.post('/workers/team/leave');
       if (res.data.success) {

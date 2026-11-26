@@ -1,4 +1,5 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
+import { confirmAction } from '../../../../utils/confirmAction';
 import { FiCalendar, FiPlus, FiTrash2, FiClock, FiAlertCircle, FiChevronLeft } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import Header from '../../components/layout/Header';
@@ -58,7 +59,7 @@ const MaintenanceIndex = () => {
     };
 
     const handleDelete = async (id) => {
-        if (!window.confirm('Are you sure you want to cancel this maintenance?')) return;
+        if (!(await confirmAction('Are you sure you want to cancel this maintenance?', { type: 'danger' }))) return;
         try {
             await maintenanceService.deleteSchedule(id);
             toastManager.success('Maintenance cancelled');

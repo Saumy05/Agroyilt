@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
+import { confirmAction } from '../../../../utils/confirmAction';
 import { useNavigate, useParams } from 'react-router-dom';
 import { FiCheck, FiClock, FiUser, FiMapPin, FiTool, FiDollarSign, FiCheckCircle, FiX, FiNavigation } from 'react-icons/fi';
 import { workerTheme as themeColors } from '../../../../theme';
@@ -105,7 +106,7 @@ const JobTimeline = () => {
   };
 
   const handleConfirmSettlement = async () => {
-    if (window.confirm("Confirm that you have received all payments and finalize this job?")) {
+    if (await confirmAction("Confirm that you have received all payments and finalize this job?", { type: 'info' })) {
       try {
         setActionLoading(true);
         await workerService.updateJobStatus(id, job.status, { finalSettlementStatus: 'DONE' });

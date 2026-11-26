@@ -1,7 +1,35 @@
 import { toast } from 'react-hot-toast';
+import { translateText } from '../services/translationService';
+import { getFromCoreDictionary } from './coreDictionary';
 
 const DEDUPE_WINDOW_MS = 4000;
 const activeToasts = new Map();
+
+const getTargetLang = () => {
+  if (typeof window === 'undefined') return 'en';
+  if (window.location.pathname.startsWith('/admin')) return 'en';
+  return localStorage.getItem('userLanguageCode') || localStorage.getItem('systemDefaultLanguageCode') || 'en';
+};
+
+const showTranslatedToast = (renderFn, message, key, options) => {
+  const targetLang = getTargetLang();
+  if (!targetLang || targetLang === 'en' || typeof message !== 'string') {
+    return renderFn(message, { id: key, ...options });
+  }
+  const instant = getFromCoreDictionary(message, targetLang);
+  if (instant) {
+    return renderFn(instant, { id: key, ...options });
+  }
+  const toastId = renderFn(message, { id: key, ...options });
+  translateText(message, targetLang)
+    .then((translated) => {
+      if (translated && translated !== message) {
+        renderFn(translated, { id: key || toastId, ...options });
+      }
+    })
+    .catch(() => {});
+  return toastId;
+};
 
 /**
  * Generates a deterministic key for a toast based on message and type if an explicit ID is not provided.
@@ -81,7 +109,7 @@ export const toastManager = {
     const key = generateDeterministicKey('success', message, options.id);
     if (isDuplicate(key)) return;
     toast.dismiss();
-    return toast.success(message, { id: key, duration: 2500, ...options });
+    return showTranslatedToast(toast.success, message, key, { duration: 2500, ...options });
   },
   
   error: (errorOrMessage, options = {}) => {
@@ -89,15 +117,14 @@ export const toastManager = {
     const key = generateDeterministicKey('error', message, options.id);
     if (isDuplicate(key)) return;
     toast.dismiss();
-    return toast.error(message, { id: key, duration: 3000, ...options });
+    return showTranslatedToast(toast.error, message, key, { duration: 3000, ...options });
   },
   
   info: (message, options = {}) => {
     const key = generateDeterministicKey('info', message, options.id);
     if (isDuplicate(key)) return;
     toast.dismiss();
-    return toast(message, { 
-      id: key, 
+    return showTranslatedToast(toast, message, key, { 
       duration: 3000, 
       icon: 'ℹ️',
       ...options 
@@ -108,8 +135,7 @@ export const toastManager = {
     const key = generateDeterministicKey('warning', message, options.id);
     if (isDuplicate(key)) return;
     toast.dismiss();
-    return toast(message, { 
-      id: key, 
+    return showTranslatedToast(toast, message, key, { 
       duration: 3000,
       icon: '⚠️',
       style: {
@@ -123,7 +149,7 @@ export const toastManager = {
   
   loading: (message, options = {}) => {
     toast.dismiss();
-    return toast.loading(message, options);
+    return showTranslatedToast(toast.loading, message, options.id, options);
   },
 
   // Helper to clear all toasts

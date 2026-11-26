@@ -93,9 +93,28 @@ messaging.onBackgroundMessage((payload) => {
     return;
   }
 
+  const SW_LABELS = {
+    hi: { appNotif: 'ऐप सूचना', newUpdate: 'आपके पास एक नया अपडेट है।', viewStatus: '👁️ स्थिति देखें', accept: '📞 स्वीकार करें', decline: '✕ अस्वीकार करें' },
+    mr: { appNotif: 'अॅप सूचना', newUpdate: 'तुमच्याकडे नवीन अपडेट आहे.', viewStatus: '👁️ स्थिती पहा', accept: '📞 स्वीकारा', decline: '✕ नकार द्या' },
+    gu: { appNotif: 'એપ સૂચના', newUpdate: 'તમારી પાસે નવું અપડેટ છે.', viewStatus: '👁️ સ્થિતિ જુઓ', accept: '📞 સ્વીકારો', decline: '✕ નકારો' },
+    pa: { appNotif: 'ਐਪ ਸੂਚਨਾ', newUpdate: 'ਤੁਹਾਡੇ ਕੋਲ ਇੱਕ ਨਵਾਂ ਅਪਡੇਟ ਹੈ।', viewStatus: '👁️ ਸਥਿਤੀ ਵੇਖੋ', accept: '📞 ਸਵੀਕਾਰ ਕਰੋ', decline: '✕ ਅਸਵੀਕਾਰ ਕਰੋ' },
+    bn: { appNotif: 'অ্যাপ বিজ্ঞপ্তি', newUpdate: 'আপনার একটি নতুন আপডেট আছে।', viewStatus: '👁️ অবস্থা দেখুন', accept: '📞 গ্রহণ করুন', decline: '✕ প্রত্যাখ্যান করুন' },
+    ta: { appNotif: 'ஆப் அறிவிப்பு', newUpdate: 'உங்களுக்கு புதிய தகவல் உள்ளது.', viewStatus: '👁️ நிலை காண்க', accept: '📞 ஏற்கவும்', decline: '✕ நிராகரிக்கவும்' },
+    te: { appNotif: 'యాప్ నోటిఫికేషన్', newUpdate: 'మీకు కొత్త అప్‌డేట్ ఉంది.', viewStatus: '👁️ స్థితి చూడండి', accept: '📞 అంగీకరించండి', decline: '✕ తిరస్కరించండి' },
+    kn: { appNotif: 'ಆ್ಯಪ್ ಅಧಿಸೂಚನೆ', newUpdate: 'ನಿಮಗೆ ಹೊಸ ಅಪ್‌ಡೇಟ್ ಇದೆ.', viewStatus: '👁️ ಸ್ಥಿತಿ ನೋಡಿ', accept: '📞 ಸ್ವೀಕರಿಸಿ', decline: '✕ ನಿರಾಕರಿಸಿ' },
+    ml: { appNotif: 'ആപ്പ് അറിയിപ്പ്', newUpdate: 'നിങ്ങൾക്ക് പുതിയ അപ്‌ഡേറ്റ് ഉണ്ട്.', viewStatus: '👁️ നില കാണുക', accept: '📞 സ്വീകരിക്കുക', decline: '✕ നിരസിക്കുക' }
+  };
+  const swL = SW_LABELS[data.lang] || {
+    appNotif: 'App Notification',
+    newUpdate: 'You have a new update.',
+    viewStatus: '👁️ View Status',
+    accept: '📞 ACCEPT & VIEW',
+    decline: '✕ DECLINE'
+  };
+
   // Default fallbacks if one is missing
-  notificationTitle = notificationTitle || 'App Notification';
-  notificationBody = notificationBody || 'You have a new update.';
+  notificationTitle = notificationTitle || swL.appNotif;
+  notificationBody = notificationBody || swL.newUpdate;
 
   let icon = data.icon || notification.icon || '/AgroyiltLogo.png';
   let badge = '/AgroyiltLogo.png';
@@ -123,11 +142,11 @@ messaging.onBackgroundMessage((payload) => {
   // Enhanced styling for different notification types
   switch (notificationType) {
     case 'booking_requested':
-      notificationTitle = notificationTitle || '📅 Booking Created!';
-      notificationBody = notificationBody || 'Your service request has been received.';
+      notificationTitle = notificationTitle || swL.appNotif;
+      notificationBody = notificationBody || swL.newUpdate;
       vibrate = [200, 100];
       actions = [
-        { action: 'view', title: '👁️ View Status' }
+        { action: 'view', title: swL.viewStatus }
       ];
       break;
 
@@ -136,13 +155,13 @@ messaging.onBackgroundMessage((payload) => {
     case 'team_member_invitation':
     case 'group_member_request':
       // High priority worker booking request alert - ring & loud vibration like Ola/Uber/Rapido
-      notificationTitle = data.title || notification.title || '🌾 New Work Request!';
-      notificationBody = data.body || notification.body || (data.workTitle ? `New job request: ${data.workTitle}` : 'Farmer is requesting your service.');
+      notificationTitle = data.title || notification.title || swL.appNotif;
+      notificationBody = data.body || notification.body || swL.newUpdate;
       requireInteraction = true; // Keep visible on screen
       vibrate = [1000, 400, 1000, 400, 1000, 400, 1000, 400, 1000]; // Urgent phone ring vibration pattern
       actions = [
-        { action: 'accept', title: '📞 ACCEPT & VIEW' },
-        { action: 'reject', title: '✕ DECLINE' }
+        { action: 'accept', title: swL.accept },
+        { action: 'reject', title: swL.decline }
       ];
       break;
 

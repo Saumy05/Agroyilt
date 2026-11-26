@@ -8,6 +8,8 @@ import { CartProvider } from './context/CartContext';
 import { GeoProvider } from './context/GeoContext';
 import { BrandProvider } from './context/BrandContext';
 import NoInternetScreen from './components/common/NoInternetScreen';
+import GlobalConfirmHost from './components/common/GlobalConfirmHost';
+import { translateText } from './services/translationService';
 import { initializePushNotifications, setupForegroundNotificationHandler } from './services/pushNotificationService';
 // Global common imports removed here as they are now handled in AppRoutes.jsx for conditional rendering
 
@@ -91,24 +93,35 @@ function App() {
         // Show native browser notification in foreground if permission is granted
         if ('Notification' in window && Notification.permission === 'granted') {
           console.log(' [App.jsx] Displaying native browser notification...');
-          try {
-            new Notification(title, {
-              body: body,
-              icon: payload.notification?.icon || payload.data?.icon || '/AgroyiltLogo.png'
-            });
-          } catch (e) {
-            // Android mobile browsers disallow `new Notification()` in window context and require `navigator.serviceWorker.ready.showNotification`
-            if ('serviceWorker' in navigator) {
-              navigator.serviceWorker.ready.then((reg) => {
-                reg.showNotification(title, {
-                  body: body,
-                  icon: payload.notification?.icon || payload.data?.icon || '/AgroyiltLogo.png',
-                  data: payload.data
-                });
-              }).catch((swErr) => console.error('Error showing SW notification in foreground:', swErr));
-            } else {
-              console.error('Error showing native notification in foreground:', e);
+          const targetLang = localStorage.getItem('userLanguageCode') || localStorage.getItem('systemDefaultLanguageCode') || 'en';
+          const showNative = (tTitle, tBody) => {
+            try {
+              new Notification(tTitle, {
+                body: tBody,
+                icon: payload.notification?.icon || payload.data?.icon || '/AgroyiltLogo.png'
+              });
+            } catch (e) {
+              // Android mobile browsers disallow `new Notification()` in window context and require `navigator.serviceWorker.ready.showNotification`
+              if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.ready.then((reg) => {
+                  reg.showNotification(tTitle, {
+                    body: tBody,
+                    icon: payload.notification?.icon || payload.data?.icon || '/AgroyiltLogo.png',
+                    data: payload.data
+                  });
+                }).catch((swErr) => console.error('Error showing SW notification in foreground:', swErr));
+              } else {
+                console.error('Error showing native notification in foreground:', e);
+              }
             }
+          };
+          if (targetLang && targetLang !== 'en' && !currentPath.startsWith('/admin')) {
+            Promise.all([
+              translateText(title, targetLang),
+              body ? translateText(body, targetLang) : Promise.resolve('')
+            ]).then(([tTitle, tBody]) => showNative(tTitle || title, tBody || body)).catch(() => showNative(title, body));
+          } else {
+            showNative(title, body);
           }
         } else {
           console.log('Native browser notifications skipped. Permission status:', 'Notification' in window ? Notification.permission : 'Not supported');
@@ -137,6 +150,7 @@ function App() {
                 <AutoTranslate />
                 <ToastLimiter />
                 <NoInternetScreen />
+                <GlobalConfirmHost />
                 <AppRoutes />
                 {/* Global components moved to routes/index.jsx */}
                 <Toaster

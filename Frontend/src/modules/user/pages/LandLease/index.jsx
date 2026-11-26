@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { confirmAction } from '../../../../utils/confirmAction';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useLeaseTypes } from '../../../../hooks/useLeaseTypes';
 import {
@@ -313,7 +314,7 @@ const LandLeasePage = () => {
       try {
         res = await send(false);
       } catch (err) {
-        if (err.response?.data?.code === 'PRICE_CONFIRM' && window.confirm(err.response.data.message)) res = await send(true);
+        if (err.response?.data?.code === 'PRICE_CONFIRM' && (await confirmAction(err.response.data.message))) res = await send(true);
         else throw err;
       }
 
@@ -359,7 +360,7 @@ const LandLeasePage = () => {
 
   // Landowner rejects tenant's offer
   const handleRejectOffer = async (landId, offerId) => {
-    if (!window.confirm('Do you want to reject this offer?')) {
+    if (!(await confirmAction('Do you want to reject this offer?', { type: 'danger' }))) {
       return;
     }
     try {
@@ -377,7 +378,7 @@ const LandLeasePage = () => {
 
   // Delete listing
   const handleDeleteLand = async (landId) => {
-    if (!window.confirm('Do you want to remove this land listing?')) {
+    if (!(await confirmAction('Do you want to remove this land listing?', { type: 'danger' }))) {
       return;
     }
     try {
@@ -646,7 +647,7 @@ const LandLeasePage = () => {
       try {
         res = await landLeaseService.listLand(payload);
       } catch (err) {
-        if (err.response?.data?.code === 'PRICE_CONFIRM' && window.confirm(err.response.data.message)) {
+        if (err.response?.data?.code === 'PRICE_CONFIRM' && (await confirmAction(err.response.data.message))) {
           res = await landLeaseService.listLand({ ...payload, confirmHighPrice: true });
         } else {
           throw err;

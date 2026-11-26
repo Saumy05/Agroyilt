@@ -259,6 +259,49 @@ async function removeInvalidTokens(tokens) {
   }
 }
 
+const LANG_NAME_TO_CODE = {
+  english: 'en', hindi: 'hi', marathi: 'mr', gujarati: 'gu', punjabi: 'pa',
+  tamil: 'ta', telugu: 'te', kannada: 'kn', malayalam: 'ml', bengali: 'bn',
+  odia: 'or', oriya: 'or', assamese: 'as', urdu: 'ur', nepali: 'ne'
+};
+
+/**
+ * Resolve recipient's preferred language code ('en', 'hi', etc.) and translate notification title/body.
+ */
+async function localizePayloadForRecipient(recipient, payload) {
+  try {
+    let lang = recipient?.settings?.language || null;
+    if (!lang) {
+      const { getDefaultLanguage } = require('./languageService');
+      const def = await getDefaultLanguage();
+      lang = def?.code || 'en';
+    }
+    const clean = String(lang).trim().toLowerCase();
+    const targetCode = LANG_NAME_TO_CODE[clean] || clean;
+    if (!targetCode || targetCode === 'en') {
+      return { payload, lang: 'en' };
+    }
+    const { translateBatch } = require('./translationService');
+    const title = payload.title || '';
+    const body = payload.body || '';
+    const [tTitle, tBody] = await translateBatch([title, body], targetCode, 'en');
+    return {
+      lang: targetCode,
+      payload: {
+        ...payload,
+        title: tTitle || title,
+        body: tBody || body,
+        data: {
+          ...(payload.data || {}),
+          lang: targetCode
+        }
+      }
+    };
+  } catch (err) {
+    return { payload, lang: 'en' };
+  }
+}
+
 /**
  * Send notification to a specific user
  * @param {string} userId - User's MongoDB _id
@@ -287,12 +330,14 @@ async function sendNotificationToUser(userId, payload, includeMobile = true) {
 
     console.log(`[FCM] 📤 Sending notification to user ${user.name} (${userId}) on ${tokens.length} devices`);
 
+    const { payload: localized } = await localizePayloadForRecipient(user, payload);
+
     // Add priority and sound for user notifications too
     const finalPayload = {
-      ...payload,
-      highPriority: payload.priority === 'high' ||
-        ['booking_requested', 'new_booking', 'booking_accepted', 'worker_started', 'journey_started', 'work_done', 'work_completed', 'booking_completed', 'vendor_reached', 'visit_verified', 'payment_success', 'payment_received', 'work_started', 'in_progress', 'worker_accepted'].includes(payload.data?.type) || true,
-      dataOnly: payload.dataOnly === true ? true : false
+      ...localized,
+      highPriority: localized.priority === 'high' ||
+        ['booking_requested', 'new_booking', 'booking_accepted', 'worker_started', 'journey_started', 'work_done', 'work_completed', 'booking_completed', 'vendor_reached', 'visit_verified', 'payment_success', 'payment_received', 'work_started', 'in_progress', 'worker_accepted'].includes(localized.data?.type) || true,
+      dataOnly: localized.dataOnly === true ? true : false
     };
 
     await sendPushNotification(tokens, finalPayload);
@@ -329,11 +374,13 @@ async function sendNotificationToVendor(vendorId, payload, includeMobile = true)
 
     console.log(`[FCM] 📤 Sending notification to vendor ${vendor.businessName || vendor.name} (${vendorId}) on ${tokens.length} devices`);
 
+    const { payload: localized } = await localizePayloadForRecipient(vendor, payload);
+
     const finalPayload = {
-      ...payload,
-      title: `🏢 [Vendor] ${payload.title}`, // Add identification
+      ...localized,
+      title: `🏢 [Vendor] ${localized.title}`, // Add identification
       highPriority: true,
-      dataOnly: payload.dataOnly === true ? true : false
+      dataOnly: localized.dataOnly === true ? true : false
     };
 
     await sendPushNotification(tokens, finalPayload);
@@ -392,18 +439,20 @@ async function sendNotificationToWorker(workerId, payload, includeMobile = true)
       'group_member_request'
     ].includes(notifType);
 
+    const { payload: localized } = await localizePayloadForRecipient(worker, payload);
+
     const finalPayload = {
-      ...payload,
-      title: `👷 [Pro] ${payload.title || 'New Work Alert'}`,
-      channelId: isUrgent ? 'booking_alerts' : (payload.channelId || 'booking_alerts'),
-      sound: isUrgent ? 'booking_alert' : (payload.sound || 'default'),
+      ...localized,
+      title: `👷 [Pro] ${localized.title || 'New Work Alert'}`,
+      channelId: isUrgent ? 'booking_alerts' : (localized.channelId || 'booking_alerts'),
+      sound: isUrgent ? 'booking_alert' : (localized.sound || 'default'),
       highPriority: true,
-      dataOnly: payload.dataOnly === true ? true : false,
+      dataOnly: localized.dataOnly === true ? true : false,
       data: {
-        ...(payload.data || {}),
+        ...(localized.data || {}),
         notificationType: notifType || 'worker_booking_request',
         isUrgentBooking: isUrgent ? 'true' : 'false',
-        sound: isUrgent ? 'booking_alert' : (payload.sound || 'default'),
+        sound: isUrgent ? 'booking_alert' : (localized.sound || 'default'),
         channelId: isUrgent ? 'booking_alerts' : 'booking_alerts'
       }
     };

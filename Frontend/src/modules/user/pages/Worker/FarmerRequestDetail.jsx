@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { confirmAction } from '../../../../utils/confirmAction';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import {
@@ -132,7 +133,7 @@ const FarmerRequestDetail = () => {
   };
 
   const handleCancel = async () => {
-    if (!window.confirm('Cancel this work request? Workers who were notified will be informed.')) return;
+    if (!(await confirmAction('Cancel this work request? Workers who were notified will be informed.', { type: 'danger' }))) return;
     try {
       setCancelling(true);
       await workerBookingService.cancelFarmerRequest(id);

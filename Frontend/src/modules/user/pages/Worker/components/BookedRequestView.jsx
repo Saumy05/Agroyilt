@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { confirmAction } from '../../../../../utils/confirmAction';
 import { useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import {
@@ -216,7 +217,7 @@ const BookedRequestView = ({ request, onRefresh }) => {
     const msg = request.paymentMethod === 'cash'
       ? 'Cancel this booking? The workers will be told not to come.'
       : 'Cancel this booking? The workers will be told not to come and your payment is refunded to your wallet.';
-    if (!window.confirm(msg)) return;
+    if (!(await confirmAction(msg, { type: 'danger' }))) return;
     try {
       setCancelling(true);
       await workerBookingService.cancelFarmerRequest(id);

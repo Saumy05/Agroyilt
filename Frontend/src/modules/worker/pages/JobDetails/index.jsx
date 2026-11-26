@@ -1,4 +1,5 @@
 import { syncServerClock, nowMs } from '../../../../utils/serverClock';
+import { confirmAction } from '../../../../utils/confirmAction';
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, lazy, Suspense } from 'react';
 import { useNavigate, useParams, useLocation, useSearchParams } from 'react-router-dom';
 import { FiMapPin, FiPhone, FiClock, FiUser, FiCheck, FiX, FiArrowRight, FiNavigation, FiTool, FiCheckCircle, FiDollarSign, FiCamera, FiPlus, FiTrash, FiXCircle, FiAward, FiFileText, FiAlertTriangle, FiCreditCard } from 'react-icons/fi';
@@ -523,7 +524,7 @@ const JobDetails = () => {
 
   const handleStopWork = async () => {
     if (actionLoadingRef.current) return;
-    if (!window.confirm(isDaily ? "Stop today's work? The farmer will then give you the End OTP." : 'Stop work? The farmer will then give you the End OTP.')) return;
+    if (!(await confirmAction(isDaily ? "Stop today's work? The farmer will then give you the End OTP." : 'Stop work? The farmer will then give you the End OTP.', { type: 'warning' }))) return;
     actionLoadingRef.current = true;
     try {
       setActionLoading(true);
@@ -591,7 +592,7 @@ const JobDetails = () => {
   // Leader withdraws an offline member before the work starts; the penalty (if the admin set one) falls on the leader
   const withdrawOfflineMember = async () => {
     const name = job?.offlineMember?.name || 'this member';
-    if (!window.confirm(`Withdraw ${name} from this job? The farmer will be refunded for them, and a cancellation penalty may be charged to you.`)) return;
+    if (!(await confirmAction(`Withdraw ${name} from this job? The farmer will be refunded for them, and a cancellation penalty may be charged to you.`, { type: 'danger' }))) return;
     try {
       setActionLoading(true);
       const res = await workerService.withdrawFromAssignment(job.assignmentId || job._id, 'Withdrawn by the team leader');

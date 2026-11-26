@@ -192,6 +192,11 @@ export const LanguageProvider = ({ children }) => {
             document.documentElement.lang = currentCode;
             document.documentElement.dir = isRTLLanguage(currentCode) ? 'rtl' : 'ltr';
         }
+        if (typeof localStorage !== 'undefined' && currentCode) {
+            if (!localStorage.getItem('userLanguageCode')) {
+                localStorage.setItem('userLanguageCode', currentCode);
+            }
+        }
     }, [currentCode]);
 
     const defaultLanguageObj = activeLanguagesList.find(l => l.isDefault) || null;

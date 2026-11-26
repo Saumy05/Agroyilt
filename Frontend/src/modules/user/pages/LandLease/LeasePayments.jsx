@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { confirmAction } from '../../../../utils/confirmAction';
 import { useNavigate, useParams } from 'react-router-dom';
 import { FiArrowLeft, FiCheck, FiClock, FiCreditCard, FiAlertTriangle, FiFileText } from 'react-icons/fi';
 import landLeaseService from '../../services/landLeaseService';
@@ -205,10 +206,10 @@ const LeasePaymentsPage = () => {
 
     const walletCovers = walletBalance === null || walletBalance >= item.amount;
     if (walletCovers) {
-      if (!window.confirm(`Pay ${inr(item.amount)} from wallet?`)) return;
+      if (!(await confirmAction(`Pay ${inr(item.amount)} from wallet?`, { type: 'info' }))) return;
       return walletPay();
     }
-    if (!window.confirm(`Your wallet has ${inr(walletBalance)}, which is not enough.\n\nPay ${inr(item.amount)} online instead?`)) return;
+    if (!(await confirmAction(`Your wallet has ${inr(walletBalance)}, which is not enough.\n\nPay ${inr(item.amount)} online instead?`, { type: 'info' }))) return;
     return payOnline(kind, item, successMsg);
   };
 
@@ -234,7 +235,7 @@ const LeasePaymentsPage = () => {
     const text = eligibility?.immediate
       ? 'End this lease now? The first installment was not paid in time. The tenant can still pay what is owed, but the lease stops.'
       : `Send a ${data?.noticeDays || 15}-day notice? If the overdue rent (${inr(eligibility?.overdueAmount)}) is still unpaid when it runs out, the lease ends.`;
-    if (!window.confirm(text)) return;
+    if (!(await confirmAction(text, { type: 'danger' }))) return;
     await run('end-lease', () => landLeaseService.endForNonPayment(landId), 'Done');
   };
 

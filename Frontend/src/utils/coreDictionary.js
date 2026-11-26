@@ -224,7 +224,22 @@ export const CORE_DICTIONARY = {
     'New': 'नया',
     'First Booking': 'पहली बुकिंग',
     'Up to ₹500 OFF on First Booking': 'पहली बुकिंग पर ₹500 तक की छूट',
-    'Use Code AGRO500 for tractor & harvester rent': 'ट्रैक्टर और हार्वेस्टर किराए के लिए AGRO500 कोड का उपयोग करें'
+    'Use Code AGRO500 for tractor & harvester rent': 'ट्रैक्टर और हार्वेस्टर किराए के लिए AGRO500 कोड का उपयोग करें',
+
+    // Offline, Dialogs & Common Errors
+    'No internet connection': 'इंटरनेट कनेक्शन नहीं है',
+    'Please check your Wi-Fi or mobile data and try again.': 'कृपया अपना मोबाइल डेटा या वाई-फ़ाई जांचें और पुनः प्रयास करें।',
+    'Checking...': 'जांच हो रही है...',
+    'Try again': 'पुनः प्रयास करें',
+    'Confirm Action': 'कार्रवाई की पुष्टि करें',
+    'Are you sure you want to proceed?': 'क्या आप वाकई आगे बढ़ना चाहते हैं?',
+    'Yes': 'हाँ',
+    'No': 'नहीं',
+    'Booking cancelled': 'बुकिंग रद्द कर दी गई',
+    'An unknown error occurred. Please try again.': 'एक अज्ञात त्रुटि हुई। कृपया पुनः प्रयास करें।',
+    'An internal database error occurred. Please try again later.': 'आंतरिक डेटाबेस त्रुटि हुई। कृपया बाद में पुनः प्रयास करें।',
+    'Unable to connect to the server. Please check your internet connection.': 'सर्वर से कनेक्ट नहीं हो पा रहा है। कृपया अपना इंटरनेट कनेक्शन जांचें।',
+    'Something went wrong. Please try again.': 'कुछ गलत हो गया। कृपया पुनः प्रयास करें।'
   }
 };
 

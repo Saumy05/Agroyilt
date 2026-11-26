@@ -10,6 +10,7 @@ import { translateText } from '../services/translationService';
  */
 
 const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEXTAREA', 'INPUT', 'CODE', 'PRE', 'SVG', 'PATH']);
+const TRANSLATABLE_ATTRS = ['placeholder', 'title', 'aria-label', 'alt'];
 const HAS_LETTERS = /[A-Za-z]{2,}/;
 const SCAN_DELAY_MS = 100;
 
@@ -31,9 +32,19 @@ const AutoTranslate = () => {
     const originals = new WeakMap(); // text node -> original English text
     const applied = new WeakMap(); // text node -> translated text
     const inflight = new WeakMap(); // text node -> English text currently translating
-    const attrOriginals = new WeakMap(); // element -> original English placeholder
-    const attrApplied = new WeakMap(); // element -> translated placeholder
-    const attrInflight = new WeakMap();
+    // Per-attribute maps: attr -> WeakMap<Element, string>
+    const attrOriginals = new Map();
+    const attrApplied = new Map();
+    const attrInflight = new Map();
+    const getAttrMap = (store, attr) => {
+      if (!store.has(attr)) store.set(attr, new WeakMap());
+      return store.get(attr);
+    };
+
+    let originalDocTitle = null;
+    let appliedDocTitle = null;
+    let inflightDocTitle = null;
+
     let cancelled = false;
     let timer = null;
     let isInternalMutating = false;
@@ -50,9 +61,54 @@ const AutoTranslate = () => {
       });
     };
 
+    const translateAttr = (el, attr) => {
+      const value = el.getAttribute(attr) || '';
+      const appliedMap = getAttrMap(attrApplied, attr);
+      const inflightMap = getAttrMap(attrInflight, attr);
+      const origMap = getAttrMap(attrOriginals, attr);
+
+      if (appliedMap.get(el) === value || inflightMap.get(el) === value) return;
+      if (!HAS_LETTERS.test(value) || el.closest('[translate="no"],[data-no-translate]')) return;
+
+      origMap.set(el, value);
+      inflightMap.set(el, value);
+      translateInto(value, (out) => {
+        if (cancelled || inflightMap.get(el) !== value) return;
+        inflightMap.delete(el);
+        if (el.getAttribute(attr) !== value) return;
+        appliedMap.set(el, out || value);
+        if (out) {
+          isInternalMutating = true;
+          try {
+            el.setAttribute(attr, out);
+          } finally {
+            isInternalMutating = false;
+          }
+        }
+      });
+    };
+
+    const scanTitle = () => {
+      const title = document.title || '';
+      if (!title || appliedDocTitle === title || inflightDocTitle === title || !HAS_LETTERS.test(title)) return;
+      originalDocTitle = title;
+      inflightDocTitle = title;
+      translateInto(title, (out) => {
+        if (cancelled || inflightDocTitle !== title) return;
+        inflightDocTitle = null;
+        if (document.title !== title) return;
+        if (out) {
+          appliedDocTitle = out;
+          document.title = out;
+        }
+      });
+    };
+
     const scan = () => {
       timer = null;
       if (cancelled) return;
+
+      scanTitle();
 
       const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
       let node;
@@ -80,20 +136,12 @@ const AutoTranslate = () => {
         });
       }
 
-      document.querySelectorAll('[placeholder]').forEach((el) => {
-        const value = el.getAttribute('placeholder') || '';
-        if (attrApplied.get(el) === value || attrInflight.get(el) === value) return;
-        if (!HAS_LETTERS.test(value) || el.closest('[translate="no"],[data-no-translate]')) return;
+      for (const attr of TRANSLATABLE_ATTRS) {
+        document.querySelectorAll(`[${attr}]`).forEach((el) => translateAttr(el, attr));
+      }
 
-        attrOriginals.set(el, value);
-        attrInflight.set(el, value);
-        translateInto(value, (out) => {
-          if (cancelled || attrInflight.get(el) !== value) return;
-          attrInflight.delete(el);
-          if (el.getAttribute('placeholder') !== value) return;
-          attrApplied.set(el, out || value);
-          if (out) el.setAttribute('placeholder', out);
-        });
+      document.querySelectorAll('input[type="button"], input[type="submit"], input[type="reset"]').forEach((el) => {
+        translateAttr(el, 'value');
       });
     };
 
@@ -108,14 +156,27 @@ const AutoTranslate = () => {
       subtree: true,
       characterData: true,
       attributes: true,
-      attributeFilter: ['placeholder']
+      attributeFilter: TRANSLATABLE_ATTRS
     });
+
+    const titleEl = document.querySelector('title');
+    let titleObserver = null;
+    if (titleEl) {
+      titleObserver = new MutationObserver(scanTitle);
+      titleObserver.observe(titleEl, { childList: true, characterData: true, subtree: true });
+    }
+
     scan();
 
     return () => {
       cancelled = true;
       observer.disconnect();
+      if (titleObserver) titleObserver.disconnect();
       if (timer) clearTimeout(timer);
+
+      if (originalDocTitle && appliedDocTitle === document.title) {
+        document.title = originalDocTitle;
+      }
 
       // Restore original English when unmounting or switching to English
       const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
@@ -125,11 +186,15 @@ const AutoTranslate = () => {
           node.nodeValue = originals.get(node);
         }
       }
-      document.querySelectorAll('[placeholder]').forEach((el) => {
-        if (attrOriginals.has(el) && attrApplied.get(el) === el.getAttribute('placeholder')) {
-          el.setAttribute('placeholder', attrOriginals.get(el));
-        }
-      });
+      for (const attr of [...TRANSLATABLE_ATTRS, 'value']) {
+        const origMap = getAttrMap(attrOriginals, attr);
+        const appliedMap = getAttrMap(attrApplied, attr);
+        document.querySelectorAll(`[${attr}]`).forEach((el) => {
+          if (origMap.has(el) && appliedMap.get(el) === el.getAttribute(attr)) {
+            el.setAttribute(attr, origMap.get(el));
+          }
+        });
+      }
     };
   }, [currentCode]);
 

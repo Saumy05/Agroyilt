@@ -19,10 +19,17 @@ export const appDateParts = (d) => ({
   time: d.toLocaleTimeString('en-GB', { timeZone: APP_TIME_ZONE, hour: '2-digit', minute: '2-digit', hour12: false })
 });
 
+const getAppLocale = () => {
+  if (typeof localStorage === 'undefined') return 'en-IN';
+  const code = localStorage.getItem('userLanguageCode') || localStorage.getItem('systemDefaultLanguageCode') || 'en';
+  return code === 'en' ? 'en-IN' : `${code}-IN`;
+};
+
 /** "Mon, 2 Nov · 9:00 AM" */
 export const formatAppDateTime = (d) => {
-  const date = d.toLocaleDateString('en-IN', { timeZone: APP_TIME_ZONE, weekday: 'short', day: 'numeric', month: 'short' });
-  const time = d.toLocaleTimeString('en-IN', { timeZone: APP_TIME_ZONE, hour: 'numeric', minute: '2-digit', hour12: true }).toUpperCase();
+  const locale = getAppLocale();
+  const date = d.toLocaleDateString(locale, { timeZone: APP_TIME_ZONE, weekday: 'short', day: 'numeric', month: 'short' });
+  const time = d.toLocaleTimeString(locale, { timeZone: APP_TIME_ZONE, hour: 'numeric', minute: '2-digit', hour12: true }).toUpperCase();
   return `${date} · ${time}`;
 };
 

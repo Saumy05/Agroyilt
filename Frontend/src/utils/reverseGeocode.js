@@ -27,7 +27,7 @@ const toPlace = (results) => {
 export const reverseGeocode = async (lat, lng, preferredLang) => {
   if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) return null;
   const latlng = { lat: Number(lat), lng: Number(lng) };
-  const lang = preferredLang || (typeof localStorage !== 'undefined' ? localStorage.getItem('userLanguageCode') : 'en') || 'en';
+  const lang = preferredLang || (typeof localStorage !== 'undefined' ? (localStorage.getItem('userLanguageCode') || localStorage.getItem('systemDefaultLanguageCode')) : 'en') || 'en';
 
   try {
     if (window.google?.maps?.Geocoder) {

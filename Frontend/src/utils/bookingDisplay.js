@@ -45,8 +45,14 @@ export const to12HourText = (text) => {
   });
 };
 
+const getAppLocale = () => {
+  if (typeof localStorage === 'undefined') return 'en-IN';
+  const code = localStorage.getItem('userLanguageCode') || localStorage.getItem('systemDefaultLanguageCode') || 'en';
+  return code === 'en' ? 'en-IN' : `${code}-IN`;
+};
+
 export const formatTimeOfDay = (d) => (d && !Number.isNaN(new Date(d).getTime())
-  ? new Date(d).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }).replace(/am|pm/i, (m) => m.toUpperCase())
+  ? new Date(d).toLocaleTimeString(getAppLocale(), { hour: '2-digit', minute: '2-digit', hour12: true }).replace(/am|pm/i, (m) => m.toUpperCase())
   : '');
 const timeOf = formatTimeOfDay;
 const dayOf = (d) => {

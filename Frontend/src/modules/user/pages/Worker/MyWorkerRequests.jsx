@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { confirmAction } from '../../../../utils/confirmAction';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import {
@@ -124,7 +125,7 @@ const MyWorkerRequests = () => {
   };
 
   const handleLegacyCancel = async (id) => {
-    if (!window.confirm('Cancel this request?')) return;
+    if (!(await confirmAction('Cancel this request?', { type: 'danger' }))) return;
     try {
       if (tab === 'single') await workerBookingService.cancelRequest(id);
       else await workerBookingService.cancelGroupRequest(id);
@@ -147,7 +148,7 @@ const MyWorkerRequests = () => {
   };
 
   const handleConfirmGroupCash = async (id) => {
-    if (!window.confirm('Confirm booking with Cash on Completion?\n\nYou will pay cash directly to the Team Leader once work is finished.')) return;
+    if (!(await confirmAction('Confirm booking with Cash on Completion?\n\nYou will pay cash directly to the Team Leader once work is finished.', { type: 'info' }))) return;
     try {
       setProcessingPaymentId(id);
       toast.loading('Confirming group booking with Cash...', { id: 'cash-toast' });

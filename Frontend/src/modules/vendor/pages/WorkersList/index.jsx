@@ -1,4 +1,5 @@
-﻿import React, { useState, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect } from 'react';
+import { confirmAction } from '../../../../utils/confirmAction';
 import { useNavigate } from 'react-router-dom';
 import { FiUsers, FiPlus, FiEdit2, FiTrash2, FiSearch, FiUser, FiBriefcase, FiPhone } from 'react-icons/fi';
 import { motion } from 'framer-motion';
@@ -59,7 +60,7 @@ const WorkersList = () => {
   }, []);
 
   const handleDelete = async (workerId) => {
-    if (window.confirm('Are you sure you want to delete this worker?')) {
+    if (await confirmAction('Are you sure you want to delete this worker?', { type: 'danger' })) {
       try {
         await deleteWorker(workerId);
         setWorkers(workers.filter(w => w.id !== workerId));

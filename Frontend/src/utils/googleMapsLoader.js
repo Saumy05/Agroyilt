@@ -9,7 +9,11 @@ export const GOOGLE_MAPS_LIBRARIES = ['places', 'geometry', 'drawing'];
  */
 export const getGoogleMapsLanguage = () => {
   if (typeof localStorage !== 'undefined') {
-    return localStorage.getItem('userLanguageCode') || 'en';
+    const hasExplicit = localStorage.getItem('userLanguageExplicit') === 'true';
+    if (hasExplicit) {
+      return localStorage.getItem('userLanguageCode') || 'en';
+    }
+    return localStorage.getItem('userLanguageCode') || localStorage.getItem('systemDefaultLanguageCode') || 'en';
   }
   return 'en';
 };

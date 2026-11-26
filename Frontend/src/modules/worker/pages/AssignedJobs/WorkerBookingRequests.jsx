@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { confirmAction } from '../../../../utils/confirmAction';
 import { useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { FiArrowLeft, FiClock, FiMapPin, FiCalendar, FiDollarSign, FiX } from 'react-icons/fi';
@@ -134,7 +135,7 @@ const WorkerBookingRequests = () => {
       }
     } else {
       // Reject
-      if (!window.confirm('Are you sure you want to reject this request?')) return;
+      if (!(await confirmAction('Are you sure you want to reject this request?', { type: 'danger' }))) return;
       try {
         setSubmitting(true);
         await workerBookingService.workerRespondToFarmerRequest(id, 'reject');

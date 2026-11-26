@@ -29,12 +29,34 @@
         <line x1="12" y1="20" x2="12.01" y2="20"></line>
       </svg>
     </div>
-    <h1>No internet connection</h1>
-    <p>Check your Wi-Fi or mobile data, then try again.</p>
-    <p class="hi">इंटरनेट कनेक्शन नहीं है। कृपया इंटरनेट जाँचें और फिर से कोशिश करें।</p>
+    <h1 id="title">No internet connection</h1>
+    <p id="desc">Check your Wi-Fi or mobile data, then try again.</p>
+    <p class="hi" id="desc-hi">इंटरनेट कनेक्शन नहीं है। कृपया इंटरनेट जाँचें और फिर से कोशिश करें।</p>
     <button id="retry" type="button">Try again</button>
   </main>
   <script>
+    (function () {
+      try {
+        var lang = localStorage.getItem('userLanguageCode') || localStorage.getItem('systemDefaultLanguageCode') || 'en';
+        if (lang && lang !== 'en') {
+          var cached = localStorage.getItem('agroyilt_offline_i18n_' + lang);
+          var t = cached ? JSON.parse(cached) : (lang === 'hi' ? {
+            title: 'इंटरनेट कनेक्शन नहीं है',
+            desc: 'कृपया अपना वाई-फ़ाई या मोबाइल डेटा जाँचें और फिर से कोशिश करें।',
+            retry: 'पुनः प्रयास करें'
+          } : null);
+          if (t) {
+            document.documentElement.lang = lang;
+            document.title = t.title;
+            document.getElementById('title').textContent = t.title;
+            document.getElementById('desc').textContent = t.desc;
+            var hiEl = document.getElementById('desc-hi');
+            if (hiEl) hiEl.style.display = 'none';
+            document.getElementById('retry').textContent = t.retry;
+          }
+        }
+      } catch (e) {}
+    })();
     document.getElementById('retry').addEventListener('click', function () { location.reload(); });
     // as soon as the connection is back, load the real page
     window.addEventListener('online', function () { location.reload(); });

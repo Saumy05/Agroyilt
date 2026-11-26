@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { confirmAction } from '../../../../utils/confirmAction';
 import {
     FiChevronLeft,
     FiMapPin,
@@ -164,7 +165,7 @@ const SoilTesting = () => {
     };
 
     const handleDeleteRequest = async (id) => {
-        if (!window.confirm("Are you sure you want to delete this request?")) return;
+        if (!(await confirmAction("Are you sure you want to delete this request?", { type: 'danger' }))) return;
         try {
             const res = await soilTestService.delete(id);
             if (res.success) {
