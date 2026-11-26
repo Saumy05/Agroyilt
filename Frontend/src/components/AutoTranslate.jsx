@@ -32,6 +32,7 @@ const AutoTranslate = () => {
     const originals = new WeakMap(); // text node -> original English text
     const applied = new WeakMap(); // text node -> translated text
     const inflight = new WeakMap(); // text node -> English text currently translating
+    const retries = new WeakMap(); // text node -> retry count on failed translation
     // Per-attribute maps: attr -> WeakMap<Element, string>
     const attrOriginals = new Map();
     const attrApplied = new Map();
@@ -47,6 +48,7 @@ const AutoTranslate = () => {
 
     let cancelled = false;
     let timer = null;
+    let retryTimer = null;
     let isInternalMutating = false;
 
     // Keep the spaces around a text, translate only the words
@@ -132,6 +134,15 @@ const AutoTranslate = () => {
             } finally {
               isInternalMutating = false;
             }
+          } else {
+            const count = retries.get(current) || 0;
+            if (count < 2 && !retryTimer) {
+              retries.set(current, count + 1);
+              retryTimer = setTimeout(() => {
+                retryTimer = null;
+                if (!cancelled) scan();
+              }, 2500);
+            }
           }
         });
       }
@@ -173,6 +184,7 @@ const AutoTranslate = () => {
       observer.disconnect();
       if (titleObserver) titleObserver.disconnect();
       if (timer) clearTimeout(timer);
+      if (retryTimer) clearTimeout(retryTimer);
 
       if (originalDocTitle && appliedDocTitle === document.title) {
         document.title = originalDocTitle;

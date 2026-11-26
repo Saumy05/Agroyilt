@@ -89,7 +89,7 @@ const processQueue = async (targetLang, sourceLang = 'en') => {
             texts: uniqueTexts,
             targetLang,
             sourceLang
-        }, { timeout: 3500 });
+        }, { timeout: 10000 });
 
         if (res.data?.success && Array.isArray(res.data?.data?.translations)) {
             uniqueTexts.forEach((text, index) => {

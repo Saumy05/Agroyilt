@@ -239,7 +239,25 @@ export const CORE_DICTIONARY = {
     'An unknown error occurred. Please try again.': 'एक अज्ञात त्रुटि हुई। कृपया पुनः प्रयास करें।',
     'An internal database error occurred. Please try again later.': 'आंतरिक डेटाबेस त्रुटि हुई। कृपया बाद में पुनः प्रयास करें।',
     'Unable to connect to the server. Please check your internet connection.': 'सर्वर से कनेक्ट नहीं हो पा रहा है। कृपया अपना इंटरनेट कनेक्शन जांचें।',
-    'Something went wrong. Please try again.': 'कुछ गलत हो गया। कृपया पुनः प्रयास करें।'
+    'Something went wrong. Please try again.': 'कुछ गलत हो गया। कृपया पुनः प्रयास करें।',
+
+    // Vendor & Equipment Management
+    'Add Equipment': 'उपकरण जोड़ें',
+    'Edit Equipment': 'उपकरण संपादित करें',
+    'List your machine on Agroyilt': 'Agroyilt पर अपनी मशीन सूचीबद्ध करें',
+    'Update specifications & pricing': 'विवरण और मूल्य अपडेट करें',
+    'Publish': 'प्रकाशित करें',
+    'Machine Setup': 'मशीन सेटअप',
+    'Price with each attachment': 'प्रत्येक अटैचमेंट के साथ मूल्य',
+    'PRICE WITH EACH ATTACHMENT': 'प्रत्येक अटैचमेंट के साथ मूल्य',
+    'Accessories (extra charge)': 'एक्सेसरीज़ (अतिरिक्त शुल्क)',
+    'Blank = same as the machine\'s own rate': 'खाली = मशीन की अपनी दर के समान',
+    '₹0 = included in the rental': '₹0 = किराए में शामिल',
+    'Per hour (field work)': 'प्रति घंटा (खेत का काम)',
+    'Hourly Add-on': 'प्रति घंटा ऐड-ऑन',
+    'The farmer pays exactly these amounts for the job. A blank box uses the machine\'s own rate.': 'किसान काम के लिए ठीक यही राशि चुकाता है। खाली बॉक्स मशीन की अपनी दर का उपयोग करता है।',
+    'Farmer pays:': 'किसान भुगतान करता है:',
+    'Attachment': 'अटैचमेंट'
   }
 };
 
