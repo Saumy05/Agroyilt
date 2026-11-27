@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import ctaBg from '../landing_images/fertilizer_seeds4.jpg';
+import ctaBg from '../landing_images/fertilizer_seeds4.webp';
 import TranslatedText from '../../../components/TranslatedText';
 import PlayStoreButton from './PlayStoreButton';
 import { useLandingContent } from '../../../context/LandingContentContext';
@@ -13,7 +13,7 @@ const CTA = () => {
     return (
         <section className="py-10 sm:py-16 relative overflow-hidden bg-gray-900">
             <div className="absolute inset-0 z-0">
-                <img
+                <img loading="lazy" decoding="async"
                     src={ctaBg}
                     className="w-full h-full object-cover opacity-30"
                     alt="AgroYilt Background"

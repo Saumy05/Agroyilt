@@ -3,7 +3,7 @@ import { motion, useInView } from 'framer-motion';
 import { HiOutlineMap, HiOutlineCalendar, HiOutlineBadgeCheck, HiOutlineCloud, HiOutlineChartBar, HiOutlineLockClosed } from 'react-icons/hi';
 import { usePageTranslation } from '../../../hooks/usePageTranslation';
 import { useLandingContent } from '../../../context/LandingContentContext';
-import featureImg from '../landing_images/dron_spraying1.jpg';
+import featureImg from '../landing_images/dron_spraying1.webp';
 
 const FeatureCard = ({ feature, idx, isCompactMobile = false }) => {
   const [hovered, setHovered] = useState(false);
@@ -145,7 +145,7 @@ const FeatureSection = () => {
               transition={{ duration: 0.7, ease: 'easeOut' }}
               className="relative rounded-2xl sm:rounded-[2.5rem] overflow-hidden shadow-xl sm:shadow-2xl"
             >
-              <img
+              <img loading="lazy" decoding="async"
                 src={featureImg}
                 alt={badgeText}
                 className="w-full h-44 sm:h-64 md:h-[430px] object-cover"

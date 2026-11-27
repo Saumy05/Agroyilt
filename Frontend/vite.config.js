@@ -33,6 +33,12 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
+          // Shared code must have its own chunk. Left unassigned, it is bundled into whichever library chunk uses
+          // it first, and every visitor then downloads that library (the admin-only charts were loading this way).
+          if (id.includes('vite/preload-helper') ||
+              /node_modules\/(react|react-dom|react-router|react-router-dom|scheduler|react-is|use-sync-external-store|clsx)\//.test(id)) {
+            return 'react-vendor';
+          }
           if (id.includes('node_modules')) {
             if (id.includes('recharts')) {
               return 'recharts-vendor';

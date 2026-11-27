@@ -89,7 +89,7 @@ const TestimonialSection = () => {
                             <div className="flex items-center gap-2.5 sm:gap-3 mt-auto pt-3 sm:pt-4 border-t border-gray-50">
                                 <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 rounded-full overflow-hidden border-2 border-green-500/20 shadow-inner bg-green-50 shrink-0">
                                     {review.userImage ? (
-                                        <img src={review.userImage} alt={review.userName} className="w-full h-full object-cover" />
+                                        <img loading="lazy" decoding="async" src={review.userImage} alt={review.userName} className="w-full h-full object-cover" />
                                     ) : (
                                         <div className="w-full h-full flex items-center justify-center text-green-600 font-bold text-sm sm:text-base md:text-lg">
                                             {review.userName?.charAt(0)}

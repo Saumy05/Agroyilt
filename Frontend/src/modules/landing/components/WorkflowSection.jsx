@@ -4,9 +4,9 @@ import { HiOutlineUser, HiOutlineTruck, HiOutlineShieldCheck } from 'react-icons
 import { usePageTranslation } from '../../../hooks/usePageTranslation';
 import { useLandingContent } from '../../../context/LandingContentContext';
 
-import farmerImg from '../landing_images/tracter.jpg';
-import ownerImg from '../landing_images/harvester.jpg';
-import adminImg from '../landing_images/admin_dashboard.png';
+import farmerImg from '../landing_images/tracter.webp';
+import ownerImg from '../landing_images/harvester.webp';
+import adminImg from '../landing_images/admin_dashboard.webp';
 
 // Step connector with animated line
 const StepConnector = ({ isActive }) => (
@@ -142,7 +142,7 @@ const WorkflowSection = () => {
             >
               {/* LEFT: Image */}
               <div className="lg:w-5/12 h-44 sm:h-60 lg:h-auto relative overflow-hidden">
-                <img
+                <img loading="lazy" decoding="async"
                   src={currentRole.image}
                   alt={currentRole.label}
                   className="w-full h-full object-cover opacity-70"

@@ -84,7 +84,7 @@ const LiveContentSection = () => {
                                     >
                                         <div className="flex items-center gap-3">
                                             <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl overflow-hidden shrink-0 border border-gray-100 bg-gray-200">
-                                                <img 
+                                                <img loading="lazy" decoding="async" 
                                                     src={blog.image || "https://placehold.jp/300x200.png"} 
                                                     alt={blog.title} 
                                                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
@@ -126,7 +126,7 @@ const LiveContentSection = () => {
                                     >
                                         <div className="flex items-center gap-3">
                                             <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl overflow-hidden shrink-0 border border-gray-100 bg-gray-200">
-                                                <img 
+                                                <img loading="lazy" decoding="async" 
                                                     src={article.image || "https://placehold.jp/300x200.png"} 
                                                     alt={article.title} 
                                                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"

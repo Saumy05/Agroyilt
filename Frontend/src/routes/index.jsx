@@ -3,13 +3,6 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 
 // Import module routes
 import LandingPage from '../modules/landing/LandingPage';
-import UserRoutes from '../modules/user/routes';
-import VendorRoutes from '../modules/vendor/routes';
-import WorkerRoutes from '../modules/worker/routes';
-import AdminRoutes from '../modules/admin/routes';
-import MobileAppRoutes from '../modules/app/routes'; // Mobile-only app module
-import ReferralInvite from '../modules/app/pages/ReferralInvite';
-import AppGuide from '../modules/app/pages/AppGuide';
 import BlogListing from '../modules/landing/pages/BlogListing';
 import ArticleListing from '../modules/landing/pages/ArticleListing';
 import BlogDetail from '../modules/landing/pages/BlogDetail';
@@ -22,6 +15,28 @@ import { TermsPage, PrivacyPage } from '../modules/legal/LegalPage';
 import { LocationPermissionChecker } from '../components/common';
 import { isFlutterWebView } from '../utils/platformUtils';
 import authStorage from '../utils/authStorage';
+import LogoLoader from '../components/common/LogoLoader';
+import { importOrReload } from '../utils/importOrReload';
+
+// Each module is downloaded only when one of its pages is opened, so website visitors don't wait for app code
+const lazyModule = (importFunc) => React.lazy(() => importOrReload(importFunc).catch(() => ({
+  default: () => (
+    <div className="flex flex-col items-center justify-center min-h-screen gap-4 p-6 text-center">
+      <p className="text-gray-700 font-semibold">Failed to load page. Please check your internet connection.</p>
+      <button onClick={() => window.location.reload()} className="px-6 py-3 rounded-xl bg-green-700 text-white font-semibold">
+        Refresh Page
+      </button>
+    </div>
+  ),
+})));
+
+const UserRoutes = lazyModule(() => import('../modules/user/routes'));
+const VendorRoutes = lazyModule(() => import('../modules/vendor/routes'));
+const WorkerRoutes = lazyModule(() => import('../modules/worker/routes'));
+const AdminRoutes = lazyModule(() => import('../modules/admin/routes'));
+const MobileAppRoutes = lazyModule(() => import('../modules/app/routes')); // Mobile-only app module
+const ReferralInvite = lazyModule(() => import('../modules/app/pages/ReferralInvite'));
+const AppGuide = lazyModule(() => import('../modules/app/pages/AppGuide'));
 
 const AppRoutes = () => {
   const location = useLocation();
@@ -65,6 +80,7 @@ const AppRoutes = () => {
 
   return (
     <>
+      <React.Suspense fallback={<LogoLoader />}>
       <Routes>
         {/* Module Routes - High Priority */}
         <Route path="/user/*" element={<UserRoutes />} />
@@ -118,6 +134,7 @@ const AppRoutes = () => {
         {/* Fallback for any unknown user routes to go to home */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </React.Suspense>
 
       {!hideGlobalElements && (
         <>

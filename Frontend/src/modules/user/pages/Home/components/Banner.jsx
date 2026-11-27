@@ -1,5 +1,5 @@
 ﻿import React from 'react';
-import homepageBanner from '../../../../../assets/images/pages/Home/Banner/homepage-banner.png';
+import homepageBanner from '../../../../../assets/images/pages/Home/Banner/homepage-banner.webp';
 import { optimizeCloudinaryUrl } from '../../../../../utils/cloudinaryOptimize';
 
 const Banner = React.memo(({ imageUrl, onClick }) => {

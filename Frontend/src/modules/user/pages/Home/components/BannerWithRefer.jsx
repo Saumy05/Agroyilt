@@ -1,5 +1,5 @@
 ﻿import React from 'react';
-import winterBanner from '../../../../../assets/images/pages/Home/Banner/Winter-banner.png';
+import winterBanner from '../../../../../assets/images/pages/Home/Banner/Winter-banner.webp';
 
 const BannerWithRefer = ({ imageUrl, onBannerClick, onReferClick }) => {
   return (

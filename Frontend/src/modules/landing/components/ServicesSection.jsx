@@ -8,12 +8,12 @@ import { usePageTranslation } from '../../../hooks/usePageTranslation';
 import { useLandingContent } from '../../../context/LandingContentContext';
 
 // Import Images
-import tractorImg from '../landing_images/tracter1.jpg';
-import harvesterImg from '../landing_images/harvester2.jpg';
-import droneImg from '../landing_images/dron_spraying.jpg';
-import labourImg from '../landing_images/labour1.jpg';
-import seedsImg from '../landing_images/fertilizer_seeds3.jpg';
-import advisoryImg from '../landing_images/crop_advasory.jpg';
+import tractorImg from '../landing_images/tracter1.webp';
+import harvesterImg from '../landing_images/harvester2.webp';
+import droneImg from '../landing_images/dron_spraying.webp';
+import labourImg from '../landing_images/labour1.webp';
+import seedsImg from '../landing_images/fertilizer_seeds3.webp';
+import advisoryImg from '../landing_images/crop_advasory.webp';
 
 const SLIDE_DURATION = 5000;
 

@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import api from '../../../services/api';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import harvesterHero from '../landing_images/hero_premium.png';
+import harvesterHero from '../landing_images/hero_premium.webp';
 import TranslatedText from '../../../components/TranslatedText';
 import PlayStoreButton from './PlayStoreButton';
 import { FiPlay } from 'react-icons/fi';
@@ -105,6 +105,7 @@ const Hero = () => {
         <img
           src={harvesterHero}
           alt="AgroYilt Hero"
+          fetchPriority="high"
           className="w-full h-full object-cover scale-110"
         />
         {/* Multi-layer gradient overlay */}

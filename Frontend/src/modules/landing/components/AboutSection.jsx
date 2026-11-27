@@ -126,7 +126,7 @@ const AboutSection = () => {
                             {aboutContent && aboutContent.images && aboutContent.images.length > 0 ? (
                                 aboutContent.images.length === 1 ? (
                                     <div className="relative w-full h-full rounded-2xl overflow-hidden shadow-xl group">
-                                        <img 
+                                        <img loading="lazy" decoding="async" 
                                             src={aboutContent.images[0].url} 
                                             alt={aboutContent.images[0].name || "About AgroYilt"} 
                                             className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" 
@@ -146,7 +146,7 @@ const AboutSection = () => {
                                                     aboutContent.images.length <= 4 && (idx === 1 ? 'translate-y-4 sm:translate-y-8' : idx === 2 ? '-translate-y-4 sm:-translate-y-8' : '')
                                                 }`}
                                             >
-                                                <img 
+                                                <img loading="lazy" decoding="async" 
                                                     src={img.url} 
                                                     alt={img.name || `About ${idx}`} 
                                                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" 
@@ -225,6 +225,7 @@ const AboutSection = () => {
                                             ) : (
                                                 <video 
                                                     width="100%" 
+                                                    preload="metadata" 
                                                     height="315" 
                                                     controls 
                                                     className="w-full aspect-video object-cover"
@@ -265,6 +266,7 @@ const AboutSection = () => {
                                         ) : (
                                             <video 
                                                 width="100%" 
+                                                preload="metadata" 
                                                 height="315" 
                                                 controls 
                                                 className="w-full aspect-video object-cover"
