@@ -1,6 +1,43 @@
+const mongoose = require('mongoose');
 const VendorEquipment = require('../../models/VendorEquipment');
 const Category = require('../../models/Category');
 const { validationResult } = require('express-validator');
+const { sanitizeSlug } = require('../../utils/requestedImplements');
+
+const canCreateGlobalCategory = (user) =>
+  !user || user.role === 'super_admin' || ['GLOBAL', 'GLOBAL_INDIA'].includes(user.scopeType);
+
+const populateEquipmentQuery = (query) =>
+  query
+    .populate({
+      path: 'vendorId',
+      select: 'name email phone avatar businessName cityId address stateId districtId subDistrictId',
+      populate: { path: 'cityId', select: 'name' }
+    })
+    .populate('cityIds', 'name')
+    .populate('stateId', 'name code')
+    .populate('districtId', 'name')
+    .populate('subDistrictId', 'name')
+    .populate('categoryId', 'title slug rentByUnit unitLabel')
+    .populate('subCategoryIds', 'title')
+    .populate('implements.subCategoryId', 'title');
+
+const linkParentCategory = async (category, parentCategoryId) => {
+  const pidStr = String(parentCategoryId);
+  const existingParents = Array.isArray(category.parentCategories)
+    ? category.parentCategories.map((p) => String(p))
+    : [];
+  let changed = false;
+  if (!category.parentCategory) {
+    category.parentCategory = parentCategoryId;
+    changed = true;
+  }
+  if (!existingParents.includes(pidStr)) {
+    category.parentCategories = [...(category.parentCategories || []), parentCategoryId];
+    changed = true;
+  }
+  if (changed) await category.save();
+};
 
 /**
  * Get all equipment for management
@@ -14,27 +51,18 @@ exports.getAllEquipment = async (req, res) => {
       query.isDeleted = true;
     } else {
       query.isDeleted = { $ne: true };
-      if (status) query.status = status;
+      if (status === 'pending') {
+        query.$or = [{ status: 'pending' }, { 'requestedImplements.status': 'pending' }];
+      } else if (status) {
+        query.status = status;
+      }
     }
     if (vendorId) query.vendorId = vendorId;
     if (stateId) query.stateId = stateId;
     if (districtId) query.districtId = districtId;
     if (subDistrictId) query.subDistrictId = subDistrictId;
 
-    const equipment = await VendorEquipment.find(query)
-      .populate({ 
-        path: 'vendorId', 
-        select: 'name email phone avatar businessName cityId address stateId districtId subDistrictId', 
-        populate: { path: 'cityId', select: 'name' } 
-      })
-      .populate('cityIds', 'name')
-      .populate('stateId', 'name code')
-      .populate('districtId', 'name')
-      .populate('subDistrictId', 'name')
-      .populate('categoryId', 'title slug rentByUnit unitLabel')
-      .populate('subCategoryIds', 'title')
-      .populate('implements.subCategoryId', 'title')
-      .sort({ createdAt: -1 });
+    const equipment = await populateEquipmentQuery(VendorEquipment.find(query)).sort({ createdAt: -1 });
 
     res.status(200).json({
       success: true,
@@ -78,8 +106,7 @@ exports.updateEquipmentStatus = async (req, res) => {
         });
         if (!category) {
           // Same rule as the category form: only an all-India admin may create an all-India category
-          const a = req.user;
-          if (a && a.role !== 'super_admin' && !['GLOBAL', 'GLOBAL_INDIA'].includes(a.scopeType)) {
+          if (!canCreateGlobalCategory(req.user)) {
             return res.status(403).json({
               success: false,
               message: `The category "${title}" does not exist yet. Ask a super admin to approve this one so the category can be created.`
@@ -222,6 +249,150 @@ exports.updateEquipment = async (req, res) => {
     }
     res.status(200).json({ success: true, message: 'Updated successfully', data: equipment });
   } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+/**
+ * Approve, map to an existing attachment, or reject a vendor-requested custom attachment.
+ * PATCH /api/admin/equipment/:id/requested-implements/:reqId
+ */
+exports.reviewRequestedImplement = async (req, res) => {
+  try {
+    const { id, reqId } = req.params;
+    const { action, targetCategoryId, title: customTitle, remarks } = req.body || {};
+
+    if (!['approve', 'map', 'reject'].includes(action)) {
+      return res.status(400).json({ success: false, message: 'Invalid action (must be approve, map, or reject)' });
+    }
+    if (!mongoose.Types.ObjectId.isValid(id) || !mongoose.Types.ObjectId.isValid(reqId)) {
+      return res.status(400).json({ success: false, message: 'Invalid equipment or attachment request ID' });
+    }
+
+    const equipment = await VendorEquipment.findById(id);
+    if (!equipment) {
+      return res.status(404).json({ success: false, message: 'Equipment not found' });
+    }
+
+    const reqImpl = equipment.requestedImplements.id(reqId);
+    if (!reqImpl) {
+      return res.status(404).json({ success: false, message: 'Requested attachment not found' });
+    }
+
+    let notice = null;
+    let resolvedTitle = reqImpl.name;
+
+    if (action === 'reject') {
+      const reason = String(remarks || '').trim() || 'Rejected by admin';
+      reqImpl.status = 'rejected';
+      reqImpl.adminRemarks = reason;
+      notice = {
+        type: 'equipment_rejected',
+        title: 'Custom attachment rejected',
+        message: `Requested attachment "${reqImpl.name}" for "${equipment.name}" was rejected. Reason: ${reason}`
+      };
+    } else {
+      if (!equipment.categoryId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Approve the requested main category first before approving custom attachments.'
+        });
+      }
+
+      let category = null;
+      if (action === 'map') {
+        if (!targetCategoryId || !mongoose.Types.ObjectId.isValid(targetCategoryId)) {
+          return res.status(400).json({ success: false, message: 'Please select an existing attachment category to link' });
+        }
+        category = await Category.findById(targetCategoryId);
+        if (!category) {
+          return res.status(404).json({ success: false, message: 'Target category not found' });
+        }
+        await linkParentCategory(category, equipment.categoryId);
+      } else {
+        const title = String(customTitle || reqImpl.name || '').trim();
+        if (title.length < 2 || title.length > 80) {
+          return res.status(400).json({ success: false, message: 'Attachment title must be between 2 and 80 characters' });
+        }
+        const slug = sanitizeSlug(title);
+        const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        category = await Category.findOne({
+          type: 'service',
+          $or: [{ title: new RegExp(`^${escaped}$`, 'i') }, ...(slug ? [{ slug }] : [])]
+        });
+
+        if (category) {
+          await linkParentCategory(category, equipment.categoryId);
+        } else {
+          if (!canCreateGlobalCategory(req.user)) {
+            return res.status(403).json({
+              success: false,
+              message: `The attachment "${title}" does not exist yet. Ask a super admin to approve this one so it can be created.`
+            });
+          }
+          category = await Category.create({
+            title,
+            slug: slug || `impl-${Date.now().toString(36)}`,
+            type: 'service',
+            status: 'active',
+            scope: 'GLOBAL_INDIA',
+            showOnHome: true,
+            fulfillmentMode: equipment.listingType === 'rental' ? 'rental' : 'service',
+            trackingType: 'none',
+            parentCategory: equipment.categoryId,
+            parentCategories: [equipment.categoryId],
+            createdBy: req.user?._id || null
+          });
+        }
+      }
+
+      resolvedTitle = category.title || resolvedTitle;
+      const catIdStr = String(category._id);
+      const existingImpl = (equipment.implements || []).find(
+        (impl) => String(impl.subCategoryId) === catIdStr
+      );
+      if (existingImpl) {
+        existingImpl.pricing = reqImpl.pricing;
+      } else {
+        equipment.implements.push({ subCategoryId: category._id, pricing: reqImpl.pricing });
+      }
+      if (!(equipment.subCategoryIds || []).some((sid) => String(sid) === catIdStr)) {
+        equipment.subCategoryIds.push(category._id);
+      }
+      equipment.requestedImplements.pull(reqImpl._id);
+
+      notice = {
+        type: 'equipment_approved',
+        title: 'Custom attachment approved',
+        message: `Your requested attachment "${resolvedTitle}" for "${equipment.name}" is approved and live with your configured rates.`
+      };
+    }
+
+    await equipment.save();
+
+    if (notice) {
+      try {
+        await require('../notificationControllers/notificationController').createNotification({
+          vendorId: equipment.vendorId,
+          ...notice,
+          relatedId: equipment._id,
+          relatedType: 'equipment'
+        });
+      } catch (e) {
+        console.error('Requested attachment notification failed:', e.message);
+      }
+    }
+
+    const updated = await populateEquipmentQuery(VendorEquipment.findById(equipment._id));
+    res.status(200).json({
+      success: true,
+      message: action === 'reject'
+        ? `Attachment "${resolvedTitle}" rejected`
+        : `Attachment "${resolvedTitle}" ${action === 'map' ? 'linked' : 'approved'} successfully`,
+      data: updated
+    });
+  } catch (error) {
+    console.error('Review Requested Implement Error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };

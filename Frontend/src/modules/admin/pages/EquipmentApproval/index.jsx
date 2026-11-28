@@ -7,6 +7,7 @@ import {
 import { toastManager } from '../../../../utils/toastManager';
 import { motion, AnimatePresence } from 'framer-motion';
 import adminEquipmentService from '../../../../services/adminEquipmentService';
+import { categoryService } from '../../../../services/catalogService';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import { refreshAdminCounts } from '../../utils/adminCounts';
 
@@ -29,11 +30,35 @@ const EquipmentApproval = () => {
   // New rental category requested by the vendor: the admin decides whether it is rented by the piece
   const [byUnit, setByUnit] = useState(false);
   const [unitLabel, setUnitLabel] = useState('');
+  const [allCategories, setAllCategories] = useState([]);
+  const [reqTitles, setReqTitles] = useState({});
+  const [reqMapTargets, setReqMapTargets] = useState({});
+  const [reviewingReqId, setReviewingReqId] = useState(null);
 
   useEffect(() => { 
     setByUnit(false); 
     setUnitLabel(''); 
+    setReqMapTargets({});
+    setReqTitles({});
   }, [selectedItem?._id]);
+
+  useEffect(() => {
+    categoryService.getAll({ status: 'active', limit: 500 })
+      .then((res) => {
+        if (res.success && Array.isArray(res.categories)) {
+          const hasParent = (c) => Boolean(c.parentCategory || (Array.isArray(c.parentCategories) && c.parentCategories.length > 0));
+          const list = res.categories
+            .filter((c) => !c.type || c.type === 'service')
+            .sort((a, b) => {
+              const parentDiff = Number(hasParent(b)) - Number(hasParent(a));
+              if (parentDiff !== 0) return parentDiff;
+              return String(a.title || '').localeCompare(String(b.title || ''));
+            });
+          setAllCategories(list);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const needsCategoryChoice = (item) => Boolean(item && !item.categoryId && item.requestedCategoryName && item.listingType === 'rental');
 
@@ -106,6 +131,57 @@ const EquipmentApproval = () => {
       }
     } catch (err) {
       toastManager.error(err.response?.data?.message || 'Restore failed');
+    }
+  };
+
+  const handleReviewRequestedImplement = async (reqImpl, action) => {
+    if (!selectedItem?._id || !reqImpl?._id) return;
+    let payload = { action };
+
+    if (action === 'reject') {
+      const reason = window.prompt(`Reason for rejecting "${reqImpl.name}" (the vendor will see it):`);
+      if (reason === null) return;
+      if (!reason.trim()) {
+        toastManager.error('Please give a reason so the vendor knows what to fix');
+        return;
+      }
+      payload.remarks = reason.trim();
+    } else if (action === 'map') {
+      const targetId = reqMapTargets[reqImpl._id];
+      if (!targetId) {
+        toastManager.error('Select an existing attachment category to link');
+        return;
+      }
+      payload.targetCategoryId = targetId;
+    } else {
+      const title = (reqTitles[reqImpl._id] ?? reqImpl.name ?? '').trim();
+      if (title.length < 2) {
+        toastManager.error('Attachment name must be at least 2 characters');
+        return;
+      }
+      payload.title = title;
+    }
+
+    try {
+      setReviewingReqId(reqImpl._id);
+      const res = await adminEquipmentService.reviewRequestedImplement(selectedItem._id, reqImpl._id, payload);
+      if (res.success && res.data) {
+        setSelectedItem(res.data);
+        const stillPendingInQueue =
+          res.data.status === 'pending' ||
+          (res.data.requestedImplements || []).some((r) => r.status === 'pending');
+        setEquipment((prev) =>
+          filterStatus === 'pending' && !stillPendingInQueue
+            ? prev.filter((e) => e._id !== res.data._id)
+            : prev.map((e) => (e._id === res.data._id ? res.data : e))
+        );
+        refreshAdminCounts();
+        toastManager.success(res.message || 'Updated');
+      }
+    } catch (err) {
+      toastManager.error(err.response?.data?.message || 'Failed to review attachment');
+    } finally {
+      setReviewingReqId(null);
     }
   };
 
@@ -229,15 +305,22 @@ const EquipmentApproval = () => {
 
                       {/* Category */}
                       <td className="px-6 py-4">
-                        {item.categoryId ? (
-                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100/80">
-                            {item.categoryId.title}
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-700 border border-purple-100/80">
-                            Req: {item.requestedCategoryName || 'Uncategorized'}
-                          </span>
-                        )}
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {item.categoryId ? (
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100/80">
+                              {item.categoryId.title}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-700 border border-purple-100/80">
+                              Req: {item.requestedCategoryName || 'Uncategorized'}
+                            </span>
+                          )}
+                          {(item.requestedImplements || []).filter((r) => r.status === 'pending').length > 0 && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200/80">
+                              +{(item.requestedImplements || []).filter((r) => r.status === 'pending').length} custom
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Vendor */}
@@ -477,6 +560,129 @@ const EquipmentApproval = () => {
                             + {impl.subCategoryId?.title || 'Unknown'}
                           </span>
                         ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Vendor-Requested Custom Attachments */}
+                  {Array.isArray(selectedItem.requestedImplements) && selectedItem.requestedImplements.length > 0 && (
+                    <div className="p-4 rounded-xl bg-amber-50/70 border border-amber-200/80 space-y-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-bold text-amber-900 uppercase tracking-wider">
+                          Requested Custom Attachments ({selectedItem.requestedImplements.length})
+                        </p>
+                        {!selectedItem.categoryId && (
+                          <span className="text-[11px] font-medium text-amber-700">
+                            Approve main listing first to create/link
+                          </span>
+                        )}
+                      </div>
+                      <div className="space-y-2.5">
+                        {(() => {
+                          const mainCatId = String(selectedItem.categoryId?._id || selectedItem.categoryId || '');
+                          const itemMode = selectedItem.listingType === 'rental' ? 'rental' : 'service';
+                          const linkableCategories = allCategories.filter(
+                            (c) => String(c.id || c._id) !== mainCatId && (c.fulfillmentMode || 'service') === itemMode
+                          );
+
+                          return selectedItem.requestedImplements.map((reqImpl) => {
+                          const isBusy = reviewingReqId === reqImpl._id;
+                          const rates = Object.entries(reqImpl.pricing || {})
+                            .filter(([key, val]) => val?.isEnabled && RATE_UNIT_LABELS[key] && (Number(val.price) > 0 || Number(val.perKmRate) > 0))
+                            .map(([key, val]) => `₹${Number(key === 'distance_based' ? (val.perKmRate || val.price) : val.price).toLocaleString('en-IN')}/${RATE_UNIT_LABELS[key]}`);
+
+                          return (
+                            <div key={reqImpl._id} className="p-3 rounded-lg bg-white border border-amber-200/70 space-y-2">
+                              <div className="flex items-center justify-between gap-2">
+                                {reqImpl.status === 'pending' ? (
+                                  <input
+                                    type="text"
+                                    value={reqTitles[reqImpl._id] ?? reqImpl.name}
+                                    onChange={(e) => setReqTitles((prev) => ({ ...prev, [reqImpl._id]: e.target.value }))}
+                                    className="flex-1 px-2.5 py-1.5 text-xs font-semibold text-gray-900 bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:border-blue-500 outline-none"
+                                    placeholder="Attachment category name"
+                                  />
+                                ) : (
+                                  <span className="text-xs font-bold text-gray-900">{reqImpl.name}</span>
+                                )}
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                                  reqImpl.status === 'rejected'
+                                    ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                    : 'bg-amber-50 text-amber-700 border border-amber-200'
+                                }`}>
+                                  {reqImpl.status}
+                                </span>
+                              </div>
+
+                              {rates.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {rates.map((r, i) => (
+                                    <span key={i} className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200/60 text-[11px] font-semibold">
+                                      {r}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+
+                              {reqImpl.status === 'rejected' && reqImpl.adminRemarks && (
+                                <p className="text-[11px] text-rose-600 font-medium">Reason: {reqImpl.adminRemarks}</p>
+                              )}
+
+                              {reqImpl.status === 'pending' && (
+                                <div className="space-y-2 pt-1">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <button
+                                      type="button"
+                                      disabled={!selectedItem.categoryId || isBusy}
+                                      onClick={() => handleReviewRequestedImplement(reqImpl, 'approve')}
+                                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold transition-colors"
+                                    >
+                                      {isBusy ? 'Saving...' : 'Create & Approve'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={isBusy}
+                                      onClick={() => handleReviewRequestedImplement(reqImpl, 'reject')}
+                                      className="px-3 py-1.5 bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 rounded-lg text-xs font-semibold transition-colors"
+                                    >
+                                      Reject
+                                    </button>
+                                  </div>
+
+                                  {linkableCategories.length > 0 && (
+                                    <div className="flex items-center gap-2">
+                                      <select
+                                        value={reqMapTargets[reqImpl._id] || ''}
+                                        onChange={(e) => setReqMapTargets((prev) => ({ ...prev, [reqImpl._id]: e.target.value }))}
+                                        className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-800 outline-none focus:border-blue-500"
+                                      >
+                                        <option value="">Or link to existing attachment...</option>
+                                        {linkableCategories.map((c) => {
+                                          const cid = c.id || c._id;
+                                          const hasParent = Boolean(c.parentCategory || (Array.isArray(c.parentCategories) && c.parentCategories.length > 0));
+                                          return (
+                                            <option key={cid} value={cid}>
+                                              {c.title}{hasParent ? ' (Implement)' : ''}
+                                            </option>
+                                          );
+                                        })}
+                                      </select>
+                                      <button
+                                        type="button"
+                                        disabled={!selectedItem.categoryId || !reqMapTargets[reqImpl._id] || isBusy}
+                                        onClick={() => handleReviewRequestedImplement(reqImpl, 'map')}
+                                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold transition-colors shrink-0"
+                                      >
+                                        Link
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        });
+                        })()}
                       </div>
                     </div>
                   )}

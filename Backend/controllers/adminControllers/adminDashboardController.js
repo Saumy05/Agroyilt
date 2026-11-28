@@ -460,7 +460,10 @@ const getSidebarCounts = async (req, res) => {
           ]
         }
       })),
-      VendorEquipment.countDocuments({ status: 'pending' }),
+      VendorEquipment.countDocuments({
+        isDeleted: { $ne: true },
+        $or: [{ status: 'pending' }, { 'requestedImplements.status': 'pending' }]
+      }),
       // New disputes nobody has picked up yet ('pending' is the legacy alias of OPEN)
       Dispute.countDocuments({ status: { $in: ['OPEN', 'pending'] } }),
       // Support tickets waiting in the unclaimed queue

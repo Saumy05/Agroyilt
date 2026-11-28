@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { 
   FiChevronLeft, FiPlus, FiTrash2, FiUpload, 
@@ -41,6 +41,52 @@ const foldAddOnsIntoTotals = (implementsList = [], pricing = {}) => (implementsL
   return { ...i, pricing: next };
 });
 
+const DEFAULT_CATEGORY_META = {
+  trackingType: 'none',
+  requiresDriver: false,
+  fulfillmentMode: 'service',
+  rentByUnit: false,
+  unitLabel: '',
+  chargedPerKm: false
+};
+
+const getCategoryMode = (cat) => {
+  if (!cat) return 'service';
+  return cat.fulfillmentMode || (cat.trackingType === 'odometer' ? 'service' : 'rental');
+};
+
+const isTrolleyName = (name = '') => (/trailer|trolley|ट्राली|ट्रॉली/i).test(name);
+
+const buildDefaultImplementPricing = (parentPricing = {}, name = '', listingType = 'service') => ({
+  hourly: { price: 0, isEnabled: parentPricing?.hourly?.isEnabled ?? true },
+  land_based: { price: 0, isEnabled: parentPricing?.land_based?.isEnabled ?? false },
+  daily: { price: 0, isEnabled: parentPricing?.daily?.isEnabled ?? false },
+  distance_based: {
+    price: 0,
+    perKmRate: 0,
+    isEnabled: (isTrolleyName(name) && listingType !== 'rental') || !!parentPricing?.distance_based?.isEnabled
+  }
+});
+
+const serializeImplementPricing = (pricing = {}, parentPricing = {}) => {
+  const hPrice = parseFloat(pricing?.hourly?.price) || 0;
+  const lPrice = parseFloat(pricing?.land_based?.price) || 0;
+  const dPrice = parseFloat(pricing?.daily?.price) || 0;
+  const kmPrice = parseFloat(pricing?.distance_based?.price) || 0;
+  return {
+    hourly: { price: hPrice, isEnabled: hPrice > 0 || !!parentPricing?.hourly?.isEnabled },
+    land_based: { price: lPrice, isEnabled: lPrice > 0 || !!parentPricing?.land_based?.isEnabled },
+    daily: { price: dPrice, isEnabled: dPrice > 0 || !!parentPricing?.daily?.isEnabled },
+    distance_based: {
+      price: kmPrice,
+      perKmRate: kmPrice,
+      isEnabled: kmPrice > 0 || !!parentPricing?.distance_based?.isEnabled,
+      baseCharge: parseFloat(pricing?.distance_based?.baseCharge) || 0,
+      baseKm: parseFloat(pricing?.distance_based?.baseKm) || 0
+    }
+  };
+};
+
 const AddEquipment = () => {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -53,6 +99,8 @@ const AddEquipment = () => {
   const [uploading, setUploading] = useState(false);
   const [isRequestingCategory, setIsRequestingCategory] = useState(false);
   const [isRequestingCity, setIsRequestingCity] = useState(false);
+  const [isRequestingImplement, setIsRequestingImplement] = useState(false);
+  const [customImplementName, setCustomImplementName] = useState('');
   const [implementSearch, setImplementSearch] = useState('');
 
   const [form, setForm] = useState({
@@ -62,6 +110,7 @@ const AddEquipment = () => {
     requestedCityName: '',
     listingType: 'service',
     implements: [],          // NEW: [{subCategoryId, pricing:{hourly,land_based,daily}}]
+    requestedImplements: [], // Vendor-requested custom attachments awaiting admin approval
     subCategoryIds: [],      // legacy fallback
     name: '',
     modelNumber: '',
@@ -78,7 +127,17 @@ const AddEquipment = () => {
   });
 
   // Tracks the selected category's metadata (trackingType, requiresDriver, fulfillmentMode)
-  const [categoryMeta, setCategoryMeta] = useState({ trackingType: 'none', requiresDriver: false, fulfillmentMode: 'service', rentByUnit: false, unitLabel: '', chargedPerKm: false });
+  const [categoryMeta, setCategoryMeta] = useState(DEFAULT_CATEGORY_META);
+
+  const serviceTypes = useMemo(
+    () => machineTypes.filter(t => getCategoryMode(t) !== 'rental'),
+    [machineTypes]
+  );
+  const rentalTypes = useMemo(
+    () => machineTypes.filter(t => getCategoryMode(t) === 'rental'),
+    [machineTypes]
+  );
+  const filteredMachineTypes = form.listingType === 'rental' ? rentalTypes : serviceTypes;
 
   useEffect(() => {
     fetchInitialData();
@@ -109,6 +168,8 @@ const AddEquipment = () => {
       }
 
       let activeCategoryId = '';
+      let resolvedListingType = 'service';
+      let resolvedIsRequesting = false;
       if (isEdit) {
         let item = null;
 
@@ -152,17 +213,32 @@ const AddEquipment = () => {
               distance_based: i.pricing?.distance_based || { price: 0, perKmRate: 0, isEnabled: false }
             }
           })) || [];
+          const loadedRequestedImplements = Array.isArray(item.requestedImplements)
+            ? item.requestedImplements.map((r, idx) => ({
+                ...r,
+                localKey: r._id || `req-${idx}-${r.name}`,
+                pricing: {
+                  hourly: r.pricing?.hourly || { price: 0, isEnabled: false },
+                  land_based: r.pricing?.land_based || { price: 0, isEnabled: false },
+                  daily: r.pricing?.daily || { price: 0, isEnabled: false },
+                  distance_based: r.pricing?.distance_based || { price: 0, perKmRate: 0, isEnabled: false }
+                }
+              }))
+            : [];
           const isLegacyService = (item.listingType || 'service') !== 'rental' && item.attachmentRates !== 'total';
+          resolvedListingType = item.listingType || 'service';
+          resolvedIsRequesting = !!item.requestedCategoryName;
           setForm({
             ...item,
             attachmentRates: 'total',
-            listingType: item.listingType || 'service',
+            listingType: resolvedListingType,
             categoryId: catId,
             requestedCategoryName: item.requestedCategoryName || '',
             requestedCityName: item.requestedCityName || '',
             cityIds: item.cityIds || [],
             subCategoryIds: item.subCategoryIds?.map(s => s._id || s) || [],
             implements: isLegacyService ? foldAddOnsIntoTotals(loadedImplements, loadedPricing) : loadedImplements,
+            requestedImplements: loadedRequestedImplements,
             pricing: loadedPricing
           });
           if (item.requestedCategoryName) {
@@ -183,9 +259,11 @@ const AddEquipment = () => {
             if (v === 2 && draftForm) {
               setForm(prev => ({ ...prev, ...draftForm }));
               activeCategoryId = draftForm.categoryId || '';
+              resolvedListingType = draftForm.listingType || 'service';
             }
             if (typeof draftIsRequesting === 'boolean') {
               setIsRequestingCategory(draftIsRequesting);
+              resolvedIsRequesting = draftIsRequesting;
             }
             if (typeof draftIsRequestingCity === 'boolean') {
               setIsRequestingCity(draftIsRequestingCity);
@@ -209,9 +287,9 @@ const AddEquipment = () => {
         // Fetch category metadata to drive adaptive UI
         const selected = allTypes.find(t => (t.id?.toString() || t._id?.toString()) === activeCategoryId.toString());
         if (selected) {
-          const mode = selected.fulfillmentMode || (selected.trackingType === 'odometer' ? 'service' : 'rental');
-          setCategoryMeta({ 
-            trackingType: selected.trackingType || 'none', 
+          const mode = getCategoryMode(selected);
+          setCategoryMeta({
+            trackingType: selected.trackingType || 'none',
             requiresDriver: selected.requiresDriver || false,
             fulfillmentMode: mode,
             rentByUnit: !!selected.rentByUnit,
@@ -222,7 +300,30 @@ const AddEquipment = () => {
             ...prev,
             listingType: mode
           }));
+        } else {
+          if (!isEdit && allTypes.length > 0) {
+            const hasService = allTypes.some(t => getCategoryMode(t) !== 'rental');
+            const hasRental = allTypes.some(t => getCategoryMode(t) === 'rental');
+            const nextMode = resolvedListingType === 'rental'
+              ? (!hasRental && hasService ? 'service' : 'rental')
+              : (!hasService && hasRental ? 'rental' : 'service');
+            resolvedListingType = nextMode;
+            setForm(prev => ({ ...prev, categoryId: '', listingType: nextMode }));
+          }
+          setCategoryMeta(prev => ({ ...prev, fulfillmentMode: resolvedListingType }));
         }
+      } else {
+        let nextMode = resolvedListingType;
+        if (!isEdit && !resolvedIsRequesting && allTypes.length > 0) {
+          const hasService = allTypes.some(t => getCategoryMode(t) !== 'rental');
+          const hasRental = allTypes.some(t => getCategoryMode(t) === 'rental');
+          if (nextMode === 'service' && !hasService && hasRental) nextMode = 'rental';
+          else if (nextMode === 'rental' && !hasRental && hasService) nextMode = 'service';
+        }
+        if (nextMode !== resolvedListingType) {
+          setForm(prev => ({ ...prev, listingType: nextMode }));
+        }
+        setCategoryMeta(prev => ({ ...prev, fulfillmentMode: nextMode }));
       }
     } catch (err) {
       console.error('fetchInitialData fatal error:', err);
@@ -244,10 +345,70 @@ const AddEquipment = () => {
     }
   }, [form, isRequestingCategory, isRequestingCity, isEdit, loading]);
 
-  const handleCategoryChange = async (categoryId) => {
-    setForm(prev => ({ ...prev, categoryId, implements: [], subCategoryIds: [] }));
+  const handleListingTypeChange = (nextType) => {
+    if (nextType === form.listingType) return;
+
+    if (isRequestingCategory) {
+      setForm(prev => ({ ...prev, listingType: nextType }));
+      setCategoryMeta(prev => ({ ...prev, fulfillmentMode: nextType }));
+      return;
+    }
+
     setMachineImplements([]);
-    if (!categoryId) return;
+    setIsRequestingImplement(false);
+    setCustomImplementName('');
+    setCategoryMeta({ ...DEFAULT_CATEGORY_META, fulfillmentMode: nextType });
+    setForm(prev => {
+      const currentPricing = prev.pricing || {};
+      const nextPricing = nextType === 'rental'
+        ? {
+            ...currentPricing,
+            hourly: {
+              ...(currentPricing.hourly || { price: 0 }),
+              isEnabled: currentPricing.hourly?.isEnabled || !currentPricing.daily?.isEnabled
+            },
+            daily: {
+              ...(currentPricing.daily || { price: 0 }),
+              isEnabled: !!currentPricing.daily?.isEnabled
+            },
+            land_based: { ...(currentPricing.land_based || { price: 0 }), isEnabled: false },
+            distance_based: { ...(currentPricing.distance_based || { price: 0, perKmRate: 0 }), isEnabled: false }
+          }
+        : {
+            ...currentPricing,
+            hourly: {
+              ...(currentPricing.hourly || { price: 0 }),
+              isEnabled: currentPricing.hourly?.isEnabled || !currentPricing.land_based?.isEnabled
+            },
+            land_based: {
+              ...(currentPricing.land_based || { price: 0 }),
+              isEnabled: !!currentPricing.land_based?.isEnabled
+            },
+            daily: { ...(currentPricing.daily || { price: 0 }), isEnabled: false },
+            distance_based: { ...(currentPricing.distance_based || { price: 0, perKmRate: 0 }), isEnabled: false }
+          };
+
+      return {
+        ...prev,
+        listingType: nextType,
+        categoryId: '',
+        implements: [],
+        requestedImplements: [],
+        subCategoryIds: [],
+        pricing: nextPricing
+      };
+    });
+  };
+
+  const handleCategoryChange = async (categoryId) => {
+    setForm(prev => ({ ...prev, categoryId, implements: [], requestedImplements: [], subCategoryIds: [] }));
+    setMachineImplements([]);
+    setIsRequestingImplement(false);
+    setCustomImplementName('');
+    if (!categoryId) {
+      setCategoryMeta(prev => ({ ...DEFAULT_CATEGORY_META, fulfillmentMode: form.listingType || prev.fulfillmentMode }));
+      return;
+    }
 
     try {
       const res = await vendorEquipmentService.getImplements(categoryId);
@@ -257,7 +418,7 @@ const AddEquipment = () => {
       const allTypes = machineTypes;
       const selected = allTypes.find(t => (t.id?.toString() || t._id?.toString()) === categoryId.toString());
       if (selected) {
-        const mode = selected.fulfillmentMode || (selected.trackingType === 'odometer' ? 'service' : 'rental');
+        const mode = getCategoryMode(selected);
         setCategoryMeta({
           trackingType: selected.trackingType || 'none',
           requiresDriver: selected.requiresDriver || false,
@@ -282,6 +443,34 @@ const AddEquipment = () => {
     } catch (err) {
       toastManager.error('Failed to load implements');
     }
+  };
+
+  const handleAddCustomImplement = () => {
+    const trimmed = customImplementName.trim();
+    if (trimmed.length < 2) return toastManager.error('Please enter a valid attachment name');
+    const lower = trimmed.toLowerCase();
+    const matchesPreset = machineImplements.some(
+      m => (m.title || '').split('(')[0].trim().toLowerCase() === lower
+    );
+    if (matchesPreset) return toastManager.error('This attachment is already available above');
+    const alreadyRequested = (form.requestedImplements || []).some(
+      r => (r.name || '').trim().toLowerCase() === lower
+    );
+    if (alreadyRequested) return toastManager.error('This attachment is already in your request list');
+    setForm(p => ({
+      ...p,
+      requestedImplements: [
+        ...(p.requestedImplements || []),
+        {
+          localKey: `req-${Date.now()}`,
+          name: trimmed,
+          status: 'pending',
+          adminRemarks: null,
+          pricing: buildDefaultImplementPricing(p.pricing, trimmed, p.listingType)
+        }
+      ]
+    }));
+    setCustomImplementName('');
   };
 
   const handleImageUpload = async (e, variant = 'general') => {
@@ -342,27 +531,20 @@ const AddEquipment = () => {
     delete submissionData.driver;
     delete submissionData.includesDriver;
     delete submissionData.workerId;
-    submissionData.implements = (form.implements || []).map(i => {
-      const hPrice = parseFloat(i.pricing?.hourly?.price) || 0;
-      const lPrice = parseFloat(i.pricing?.land_based?.price) || 0;
-      const dPrice = parseFloat(i.pricing?.daily?.price) || 0;
-      const kmPrice = parseFloat(i.pricing?.distance_based?.price) || 0;
-      return {
-        subCategoryId: i.subCategoryId?._id || i.subCategoryId,
-        pricing: {
-          hourly: { price: hPrice, isEnabled: hPrice > 0 || !!form.pricing?.hourly?.isEnabled },
-          land_based: { price: lPrice, isEnabled: lPrice > 0 || !!form.pricing?.land_based?.isEnabled },
-          daily: { price: dPrice, isEnabled: dPrice > 0 || !!form.pricing?.daily?.isEnabled },
-          distance_based: {
-            price: kmPrice,
-            perKmRate: kmPrice,
-            isEnabled: kmPrice > 0 || !!form.pricing?.distance_based?.isEnabled,
-            baseCharge: parseFloat(i.pricing?.distance_based?.baseCharge) || 0,
-            baseKm: parseFloat(i.pricing?.distance_based?.baseKm) || 0
-          }
-        }
-      };
-    });
+    submissionData.implements = (form.implements || []).map(i => ({
+      subCategoryId: i.subCategoryId?._id || i.subCategoryId,
+      pricing: serializeImplementPricing(i.pricing, form.pricing)
+    }));
+    submissionData.requestedImplements = isRequestingCategory
+      ? []
+      : (form.requestedImplements || [])
+          .filter(r => r?.name && r.name.trim().length >= 2)
+          .map(r => ({
+            ...(r._id ? { _id: r._id } : {}),
+            name: r.name.trim(),
+            ...(r.status === 'rejected' ? { status: 'rejected' } : {}),
+            pricing: serializeImplementPricing(r.pricing, form.pricing)
+          }));
     submissionData.subCategoryIds = submissionData.implements.map(i => i.subCategoryId);
 
     // No stock count is kept: farmers choose how many, and every request reaches the vendor
@@ -383,7 +565,9 @@ const AddEquipment = () => {
     if (!submissionData.name || submissionData.name.length < 3) return toastManager.error('Please enter a valid machine name');
     
     // 2. Pricing Validation
-    const hasImplementDistancePrice = (form.implements || []).some(i => (i.pricing?.distance_based?.price || 0) > 0);
+    const hasImplementDistancePrice =
+      (form.implements || []).some(i => (i.pricing?.distance_based?.price || 0) > 0) ||
+      (form.requestedImplements || []).some(r => (r.pricing?.distance_based?.price || 0) > 0);
     const enabledModes = Object.keys(form.pricing).filter(k => form.pricing[k]?.isEnabled);
     if (enabledModes.length === 0 && !hasImplementDistancePrice) {
       return toastManager.error('Please enable at least one pricing mode (Hourly, Acre, Daily or Per KM)');
@@ -469,19 +653,127 @@ const AddEquipment = () => {
             {/* Machine Setup */}
             <FormSection title="Machine Setup">
               <div className="space-y-4">
-                {/* Category Dropdown */}
+                {/* Service Model Toggle (Drives Category Filter) */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 block">Service Model</label>
+                    {!isRequestingCategory && form.categoryId && (
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                        form.listingType === 'rental'
+                          ? 'text-amber-700 bg-amber-50 border-amber-200'
+                          : 'text-blue-700 bg-blue-50 border-blue-200'
+                      }`}>
+                        Set by Platform
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 p-1 bg-slate-100 rounded-xl border border-slate-200/60">
+                    <button
+                      type="button"
+                      onClick={() => handleListingTypeChange('service')}
+                      className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg font-semibold text-xs transition-all ${
+                        form.listingType === 'service'
+                          ? 'bg-white text-slate-900 shadow-xs'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <FiTruck className={`w-4 h-4 flex-shrink-0 ${form.listingType === 'service' ? 'text-blue-600' : 'text-slate-400'}`} />
+                      <span>Machine Service</span>
+                      {!isRequestingCategory && machineTypes.length > 0 && (
+                        <span
+                          translate="no"
+                          className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+                            form.listingType === 'service'
+                              ? 'bg-blue-50 text-blue-700'
+                              : 'bg-slate-200/70 text-slate-500'
+                          }`}
+                        >
+                          {serviceTypes.length}
+                        </span>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleListingTypeChange('rental')}
+                      className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg font-semibold text-xs transition-all ${
+                        form.listingType === 'rental'
+                          ? 'bg-white text-slate-900 shadow-xs'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <FiTool className={`w-4 h-4 flex-shrink-0 ${form.listingType === 'rental' ? 'text-amber-600' : 'text-slate-400'}`} />
+                      <span>Tool Rental</span>
+                      {!isRequestingCategory && machineTypes.length > 0 && (
+                        <span
+                          translate="no"
+                          className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+                            form.listingType === 'rental'
+                              ? 'bg-amber-50 text-amber-700'
+                              : 'bg-slate-200/70 text-slate-500'
+                          }`}
+                        >
+                          {rentalTypes.length}
+                        </span>
+                      )}
+                    </button>
+                  </div>
+
+                  {isRequestingCategory ? (
+                    <p key={`req-hint-${form.listingType}`} className="text-[11px] text-slate-400 pl-0.5 flex flex-wrap items-center gap-x-1">
+                      <span>
+                        {form.listingType === 'service'
+                          ? "You do the job at the farmer's field, with live GPS tracking"
+                          : 'Equipment only (operated by farmer)'}
+                      </span>
+                      <span translate="no">·</span>
+                      <span>Admin confirms this when approving your new category.</span>
+                    </p>
+                  ) : form.listingType === 'rental' ? (
+                    <div key="mode-card-rental" className="flex items-center gap-3 p-2.5 bg-amber-50/70 rounded-xl border border-amber-200/80">
+                      <div className="w-7 h-7 rounded-lg bg-amber-100 flex items-center justify-center text-amber-700 flex-shrink-0">
+                        <FiTool className="w-3.5 h-3.5" />
+                      </div>
+                      <p className="text-[11px] text-amber-800/90 leading-snug">
+                        Direct equipment rental. Farmers rent this machine from the Rental Catalog and operate it themselves.
+                      </p>
+                    </div>
+                  ) : (
+                    <div key="mode-card-service" className="flex items-center gap-3 p-2.5 bg-blue-50/70 rounded-xl border border-blue-200/80">
+                      <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center text-blue-700 flex-shrink-0">
+                        <FiTruck className="w-3.5 h-3.5" />
+                      </div>
+                      <p className="text-[11px] text-blue-800/90 leading-snug">
+                        The farmer books a job and your machine does it at their field, with live GPS tracking and start/end OTPs.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Category Dropdown (Filtered by Selected Service Model) */}
                 <div>
                   <label className="text-xs font-bold text-slate-700 mb-1.5 block">Category</label>
                   {!isRequestingCategory ? (
                     <div className="space-y-1.5">
                       <div className="relative">
-                        <select 
+                        <select
+                          key={form.listingType}
                           className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3.5 pr-10 text-xs sm:text-sm font-semibold text-slate-800 outline-none appearance-none focus:bg-white focus:border-blue-500 transition-all"
                           value={form.categoryId}
                           onChange={(e) => handleCategoryChange(e.target.value)}
                         >
-                          <option value="">Select Category (e.g. Tractor)</option>
-                          {machineTypes.map(t => {
+                          <option
+                            key={`${form.listingType}-${filteredMachineTypes.length > 0 ? 'has-opts' : 'empty'}`}
+                            value=""
+                          >
+                            {filteredMachineTypes.length === 0
+                              ? 'No categories available in this mode'
+                              : form.listingType === 'rental'
+                                ? 'Select Rental Category (e.g. Sprayer)'
+                                : 'Select Service Category (e.g. Tractor)'}
+                          </option>
+                          {filteredMachineTypes.map(t => {
                             const cleanName = t.title ? t.title.split('(')[0].trim() : '';
                             return (
                               <option key={t.id} value={t.id}>{cleanName}</option>
@@ -490,11 +782,17 @@ const AddEquipment = () => {
                         </select>
                         <FiChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none w-4 h-4" />
                       </div>
+                      <p className="text-[11px] text-slate-400 ml-0.5">
+                        Not finding your machine? Try switching Service / Rental above.
+                      </p>
                       <button
                         type="button"
                         onClick={() => {
                           setIsRequestingCategory(true);
-                          setForm(p => ({ ...p, categoryId: '', implements: [], subCategoryIds: [] }));
+                          setMachineImplements([]);
+                          setIsRequestingImplement(false);
+                          setCustomImplementName('');
+                          setForm(p => ({ ...p, categoryId: '', implements: [], requestedImplements: [], subCategoryIds: [] }));
                         }}
                         className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold transition-colors ml-0.5"
                       >
@@ -524,156 +822,119 @@ const AddEquipment = () => {
                   )}
                 </div>
 
-                {/* Service Model Indicator (Auto-Locked by Category) */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-slate-700 block">Service Model</label>
-                    {!isRequestingCategory && form.categoryId && (
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                        form.listingType === 'rental'
-                          ? 'text-amber-700 bg-amber-50 border-amber-200'
-                          : 'text-blue-700 bg-blue-50 border-blue-200'
-                      }`}>
-                        Set by Platform
-                      </span>
-                    )}
-                  </div>
-
-                  {isRequestingCategory ? (
-                    <div className="space-y-1.5">
-                      <div className="grid grid-cols-2 p-1 bg-slate-100 rounded-xl border border-slate-200/60">
-                        <button
-                          type="button"
-                          onClick={() => setForm(p => ({ ...p, listingType: 'service' }))}
-                          className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg font-semibold text-xs transition-all ${
-                            form.listingType === 'service'
-                              ? 'bg-white text-slate-900 shadow-xs'
-                              : 'text-slate-500 hover:text-slate-800'
-                          }`}
-                        >
-                          <FiTruck className={`w-4 h-4 ${form.listingType === 'service' ? 'text-blue-600' : 'text-slate-400'}`} />
-                          <span>Machine Service</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setForm(p => ({ ...p, listingType: 'rental' }))}
-                          className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg font-semibold text-xs transition-all ${
-                            form.listingType === 'rental'
-                              ? 'bg-white text-slate-900 shadow-xs'
-                              : 'text-slate-500 hover:text-slate-800'
-                          }`}
-                        >
-                          <FiTool className={`w-4 h-4 ${form.listingType === 'rental' ? 'text-amber-600' : 'text-slate-400'}`} />
-                          <span>Tool Rental</span>
-                        </button>
-                      </div>
-                      <p className="text-[11px] text-slate-400 pl-0.5">
-                        {form.listingType === 'service' ? "You do the job at the farmer's field, with live GPS tracking" : 'Equipment only (operated by farmer)'}
-                        {' · '}Admin confirms this when approving your new category.
-                      </p>
-                    </div>
-                  ) : form.categoryId ? (
-                    form.listingType === 'rental' ? (
-                      <div className="flex items-center gap-3 p-3 bg-amber-50/70 rounded-xl border border-amber-200/80">
-                        <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center text-amber-700 flex-shrink-0">
-                          <FiTool className="w-4 h-4" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-xs font-bold text-amber-900">Tool Rental (Self-Operated)</div>
-                          <p className="text-[11px] text-amber-700/90 leading-tight mt-0.5">
-                            Direct equipment rental. Farmers rent this machine from the Rental Catalog and operate it themselves.
-                          </p>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-3 p-3 bg-blue-50/70 rounded-xl border border-blue-200/80">
-                        <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-700 flex-shrink-0">
-                          <FiTruck className="w-4 h-4" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-xs font-bold text-blue-900">Machine Service</div>
-                          <p className="text-[11px] text-blue-700/90 leading-tight mt-0.5">
-                            The farmer books a job and your machine does it at their field, with live GPS tracking and start/end OTPs.
-                          </p>
-                        </div>
-                      </div>
-                    )
-                  ) : (
-                    <div className="p-3 bg-slate-50 rounded-xl border border-dashed border-slate-200 text-[11px] text-slate-400 font-medium">
-                      Select a category above to automatically configure the service model (Service or Rental).
-                    </div>
-                  )}
-                </div>
-
-                {/* Available Attachments & Direct Pricing */}
+                {/* Available Attachments & Direct Pricing (Preset + Custom Requested) */}
                 <AnimatePresence>
-                  {machineImplements.length > 0 && (
+                  {!isRequestingCategory && form.categoryId && (
                     <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="space-y-3 pt-1">
                       <div className="flex items-center justify-between">
                         <label className="text-xs font-bold text-slate-700 block">Available Attachments</label>
-                        {form.implements.length > 0 && (
-                          <span className="text-[11px] font-semibold text-blue-600">
-                            {form.implements.length} selected
+                        {(form.implements.length + (form.requestedImplements?.length || 0)) > 0 && (
+                          <span className="text-[11px] font-semibold text-blue-600 flex items-center gap-1">
+                            <span translate="no">{form.implements.length + (form.requestedImplements?.length || 0)}</span>
+                            <span>selected</span>
                           </span>
                         )}
                       </div>
 
                       {/* Implement Selection Chips */}
-                      <div className="flex flex-wrap gap-2">
-                        {machineImplements.map(impl => {
-                          const implId = impl.id || impl._id;
-                          const isSelected = form.implements.some(i => (i.subCategoryId?._id || i.subCategoryId) === implId);
-                          const cleanName = impl.title ? impl.title.split('(')[0].trim() : '';
+                      {machineImplements.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {machineImplements.map(impl => {
+                            const implId = impl.id || impl._id;
+                            const isSelected = form.implements.some(i => (i.subCategoryId?._id || i.subCategoryId) === implId);
+                            const cleanName = impl.title ? impl.title.split('(')[0].trim() : '';
 
-                          return (
-                            <button
-                              key={implId}
-                              type="button"
-                              onClick={() => {
-                                setForm(p => {
-                                  const exists = p.implements.some(i => (i.subCategoryId?._id || i.subCategoryId) === implId);
-                                  if (exists) {
-                                    return {
-                                      ...p,
-                                      implements: p.implements.filter(i => (i.subCategoryId?._id || i.subCategoryId) !== implId),
-                                      subCategoryIds: p.subCategoryIds.filter(id => id !== implId)
-                                    };
-                                  } else {
-                                    const isTrolleyChip = (/trailer|trolley|ट्राली|ट्रॉली/i).test(cleanName);
-                                    // The trolley's per-km rate lives on the attachment itself (one rate); the machine's own per-km row is left alone
-
+                            return (
+                              <button
+                                key={implId}
+                                type="button"
+                                onClick={() => {
+                                  setForm(p => {
+                                    const exists = p.implements.some(i => (i.subCategoryId?._id || i.subCategoryId) === implId);
+                                    if (exists) {
+                                      return {
+                                        ...p,
+                                        implements: p.implements.filter(i => (i.subCategoryId?._id || i.subCategoryId) !== implId),
+                                        subCategoryIds: p.subCategoryIds.filter(id => id !== implId)
+                                      };
+                                    }
                                     return {
                                       ...p,
                                       implements: [...p.implements, {
                                         subCategoryId: implId,
-                                        pricing: {
-                                          hourly: { price: 0, isEnabled: p.pricing?.hourly?.isEnabled ?? true },
-                                          land_based: { price: 0, isEnabled: p.pricing?.land_based?.isEnabled ?? false },
-                                          daily: { price: 0, isEnabled: p.pricing?.daily?.isEnabled ?? false },
-                                          distance_based: { price: 0, perKmRate: 0, isEnabled: (isTrolleyChip && p.listingType !== 'rental') || !!p.pricing?.distance_based?.isEnabled }
-                                        }
+                                        pricing: buildDefaultImplementPricing(p.pricing, cleanName, p.listingType)
                                       }],
                                       subCategoryIds: [...p.subCategoryIds, implId]
                                     };
-                                  }
-                                });
-                              }}
-                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                                isSelected 
-                                  ? 'bg-blue-600 text-white shadow-xs' 
-                                  : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200/80'
-                              }`}
-                            >
-                              {isSelected ? <FiCheck className="w-3.5 h-3.5 stroke-[3]" /> : <FiPlus className="w-3.5 h-3.5 text-slate-400" />}
-                              <span>{cleanName}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
+                                  });
+                                }}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                                  isSelected
+                                    ? 'bg-blue-600 text-white shadow-xs'
+                                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200/80'
+                                }`}
+                              >
+                                {isSelected ? <FiCheck className="w-3.5 h-3.5 stroke-[3]" /> : <FiPlus className="w-3.5 h-3.5 text-slate-400" />}
+                                <span>{cleanName}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
 
-                      {/* Attachment Rates Configuration Cards */}
-                      {form.implements.length > 0 && (
+                      {/* Request Missing Attachment Input */}
+                      {!isRequestingImplement ? (
+                        <button
+                          type="button"
+                          onClick={() => setIsRequestingImplement(true)}
+                          className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold transition-colors ml-0.5"
+                        >
+                          + Request missing attachment
+                        </button>
+                      ) : (
+                        <div className="p-3 bg-blue-50/50 border border-blue-200/70 rounded-xl space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-slate-700">Request Custom Attachment</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsRequestingImplement(false);
+                                setCustomImplementName('');
+                              }}
+                              className="text-[11px] text-slate-500 hover:text-slate-700 font-semibold"
+                            >
+                              Close
+                            </button>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              placeholder="Attachment name (e.g. Bund Maker)"
+                              className="flex-1 bg-white border border-slate-200 rounded-lg py-2 px-3 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500 transition-all"
+                              value={customImplementName}
+                              onChange={e => setCustomImplementName(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key !== 'Enter') return;
+                                e.preventDefault();
+                                handleAddCustomImplement();
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={handleAddCustomImplement}
+                              className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shrink-0 transition-colors"
+                            >
+                              Add
+                            </button>
+                          </div>
+                          <p className="text-[10px] text-slate-500 leading-snug">
+                            Sent to admin for approval. Your machine stays bookable and this attachment goes live with your rates once approved.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Attachment Rates Configuration Cards (Preset + Custom Requested) */}
+                      {(form.implements.length > 0 || (form.requestedImplements?.length || 0) > 0) && (
                         <div className="space-y-2 pt-2 border-t border-slate-100">
                           <div className="flex items-center justify-between">
                             <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">
@@ -685,32 +946,101 @@ const AddEquipment = () => {
                           </div>
 
                           <div className="space-y-2">
-                            {form.implements.map(implItem => {
-                              const currentImplId = implItem.subCategoryId?._id || implItem.subCategoryId;
-                              const implMeta = machineImplements.find(m => (m.id || m._id) === currentImplId);
-                              const name = implMeta ? implMeta.title.split('(')[0].trim() : 'Attachment';
+                            {[
+                              ...form.implements.map(implItem => {
+                                const currentImplId = implItem.subCategoryId?._id || implItem.subCategoryId;
+                                const implMeta = machineImplements.find(m => (m.id || m._id) === currentImplId);
+                                return {
+                                  listKey: 'implements',
+                                  itemId: currentImplId,
+                                  cardKey: `impl-${currentImplId}`,
+                                  name: implMeta ? implMeta.title.split('(')[0].trim() : 'Attachment',
+                                  pricing: implItem.pricing,
+                                  status: null,
+                                  adminRemarks: null
+                                };
+                              }),
+                              ...(form.requestedImplements || []).map((reqItem, idx) => {
+                                const reqKey = reqItem._id || reqItem.localKey || `req-${idx}`;
+                                return {
+                                  listKey: 'requestedImplements',
+                                  itemId: reqKey,
+                                  cardKey: `req-${reqKey}`,
+                                  name: reqItem.name,
+                                  pricing: reqItem.pricing,
+                                  status: reqItem.status || 'pending',
+                                  adminRemarks: reqItem.adminRemarks || null
+                                };
+                              })
+                            ].map(({ listKey, itemId, cardKey, name, pricing, status, adminRemarks }) => {
+                              const isTrolleyImpl = isTrolleyName(name);
+                              const matchesEntry = (entry, idx) => {
+                                if (listKey === 'implements') {
+                                  return (entry.subCategoryId?._id || entry.subCategoryId) === itemId;
+                                }
+                                return (entry._id || entry.localKey || `req-${idx}`) === itemId;
+                              };
+                              const updateEntryPricing = (mode, patch) => {
+                                setForm(p => ({
+                                  ...p,
+                                  [listKey]: (p[listKey] || []).map((entry, idx) =>
+                                    matchesEntry(entry, idx)
+                                      ? {
+                                          ...entry,
+                                          ...(listKey === 'requestedImplements' && entry.status === 'rejected'
+                                            ? { status: 'pending', adminRemarks: null }
+                                            : {}),
+                                          pricing: { ...entry.pricing, [mode]: patch }
+                                        }
+                                      : entry
+                                  )
+                                }));
+                              };
+                              const removeEntry = () => {
+                                setForm(p => ({
+                                  ...p,
+                                  [listKey]: (p[listKey] || []).filter((entry, idx) => !matchesEntry(entry, idx)),
+                                  ...(listKey === 'implements'
+                                    ? { subCategoryIds: p.subCategoryIds.filter(id => id !== itemId) }
+                                    : {})
+                                }));
+                              };
 
                               return (
-                                <div key={currentImplId} className="p-3 bg-slate-50/80 border border-slate-200/80 rounded-xl space-y-2">
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                                      <FiTool className="w-3.5 h-3.5 text-blue-600" />
-                                      <span>{name}</span>
-                                    </span>
+                                <div key={cardKey} className={`p-3 border rounded-xl space-y-2 ${
+                                  status === 'rejected'
+                                    ? 'bg-rose-50/50 border-rose-200/80'
+                                    : status === 'pending'
+                                      ? 'bg-amber-50/40 border-amber-200/80'
+                                      : 'bg-slate-50/80 border-slate-200/80'
+                                }`}>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                                      <FiTool className={`w-3.5 h-3.5 flex-shrink-0 ${status === 'pending' ? 'text-amber-600' : status === 'rejected' ? 'text-rose-600' : 'text-blue-600'}`} />
+                                      <span className="text-xs font-bold text-slate-800 truncate">{name}</span>
+                                      {status === 'pending' && (
+                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                                          Pending Approval
+                                        </span>
+                                      )}
+                                      {status === 'rejected' && (
+                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 border border-rose-200">
+                                          Rejected
+                                        </span>
+                                      )}
+                                    </div>
                                     <button
                                       type="button"
-                                      onClick={() => {
-                                        setForm(p => ({
-                                          ...p,
-                                          implements: p.implements.filter(i => (i.subCategoryId?._id || i.subCategoryId) !== currentImplId),
-                                          subCategoryIds: p.subCategoryIds.filter(id => id !== currentImplId)
-                                        }));
-                                      }}
-                                      className="text-[11px] font-semibold text-rose-500 hover:text-rose-700 transition-colors"
+                                      onClick={removeEntry}
+                                      className="text-[11px] font-semibold text-rose-500 hover:text-rose-700 transition-colors shrink-0"
                                     >
                                       Remove
                                     </button>
                                   </div>
+
+                                  {status === 'rejected' && adminRemarks && (
+                                    <p className="text-[11px] text-rose-600 font-medium">{adminRemarks}</p>
+                                  )}
 
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                     {form.pricing.hourly.isEnabled && (
@@ -723,18 +1053,8 @@ const AddEquipment = () => {
                                             placeholder={form.listingType === 'rental' ? '0' : String(form.pricing.hourly.price || 0)}
                                             className="w-full text-right text-xs font-bold text-slate-800 outline-none bg-transparent"
                                             onFocus={(e) => e.target.select()}
-                                            value={implItem.pricing?.hourly?.price === 0 ? '' : implItem.pricing?.hourly?.price}
-                                            onChange={e => {
-                                              const val = parseFloat(e.target.value) || 0;
-                                              setForm(p => ({
-                                                ...p,
-                                                implements: p.implements.map(i => 
-                                                  (i.subCategoryId?._id || i.subCategoryId) === currentImplId
-                                                    ? { ...i, pricing: { ...i.pricing, hourly: { price: val, isEnabled: true } } }
-                                                    : i
-                                                )
-                                              }));
-                                            }}
+                                            value={pricing?.hourly?.price === 0 ? '' : (pricing?.hourly?.price ?? '')}
+                                            onChange={e => updateEntryPricing('hourly', { price: parseFloat(e.target.value) || 0, isEnabled: true })}
                                           />
                                           <span className="text-[10px] text-slate-400">/hr</span>
                                         </div>
@@ -751,18 +1071,8 @@ const AddEquipment = () => {
                                             placeholder={form.listingType === 'rental' ? '0' : String(form.pricing.land_based.price || 0)}
                                             className="w-full text-right text-xs font-bold text-slate-800 outline-none bg-transparent"
                                             onFocus={(e) => e.target.select()}
-                                            value={implItem.pricing?.land_based?.price === 0 ? '' : implItem.pricing?.land_based?.price}
-                                            onChange={e => {
-                                              const val = parseFloat(e.target.value) || 0;
-                                              setForm(p => ({
-                                                ...p,
-                                                implements: p.implements.map(i => 
-                                                  (i.subCategoryId?._id || i.subCategoryId) === currentImplId
-                                                    ? { ...i, pricing: { ...i.pricing, land_based: { price: val, isEnabled: true } } }
-                                                    : i
-                                                )
-                                              }));
-                                            }}
+                                            value={pricing?.land_based?.price === 0 ? '' : (pricing?.land_based?.price ?? '')}
+                                            onChange={e => updateEntryPricing('land_based', { price: parseFloat(e.target.value) || 0, isEnabled: true })}
                                           />
                                           <span className="text-[10px] text-slate-400">/ac</span>
                                         </div>
@@ -770,7 +1080,6 @@ const AddEquipment = () => {
                                     )}
 
                                     {(() => {
-                                      const isTrolleyImpl = (/trailer|trolley|ट्राली|ट्रॉली/i).test(name);
                                       if (form.listingType === 'rental') return null; // per-km needs an operator and GPS: service only
                                       if (!isTrolleyImpl && (categoryMeta.chargedPerKm || !form.pricing.distance_based?.isEnabled)) return null;
                                       return (
@@ -788,29 +1097,16 @@ const AddEquipment = () => {
                                               placeholder="0"
                                               className="w-full text-right text-xs font-bold text-slate-800 outline-none bg-transparent"
                                               onFocus={(e) => e.target.select()}
-                                              value={implItem.pricing?.distance_based?.price === 0 ? '' : (implItem.pricing?.distance_based?.price ?? '')}
+                                              value={pricing?.distance_based?.price === 0 ? '' : (pricing?.distance_based?.price ?? '')}
                                               onChange={e => {
                                                 const val = parseFloat(e.target.value) || 0;
-                                                setForm(p => ({
-                                                  ...p,
-                                                  implements: p.implements.map(i => 
-                                                    (i.subCategoryId?._id || i.subCategoryId) === currentImplId
-                                                      ? { 
-                                                          ...i, 
-                                                          pricing: { 
-                                                            ...i.pricing, 
-                                                            distance_based: { 
-                                                              price: val, 
-                                                              perKmRate: val, 
-                                                              isEnabled: true,
-                                                              baseCharge: i.pricing?.distance_based?.baseCharge || 0,
-                                                              baseKm: i.pricing?.distance_based?.baseKm || 0 
-                                                            } 
-                                                          } 
-                                                        }
-                                                      : i
-                                                  )
-                                                }));
+                                                updateEntryPricing('distance_based', {
+                                                  price: val,
+                                                  perKmRate: val,
+                                                  isEnabled: true,
+                                                  baseCharge: pricing?.distance_based?.baseCharge || 0,
+                                                  baseKm: pricing?.distance_based?.baseKm || 0
+                                                });
                                               }}
                                             />
                                             <span className="text-[10px] text-slate-400">/km</span>
@@ -830,22 +1126,21 @@ const AddEquipment = () => {
                                     {form.pricing.hourly.isEnabled && (
                                       <span className="font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.5 rounded text-[10px]">
                                         ₹{form.listingType === 'rental'
-                                          ? (Number(form.pricing.hourly.price) || 0) + (Number(implItem.pricing?.hourly?.price) || 0)
-                                          : (Number(implItem.pricing?.hourly?.price) || Number(form.pricing.hourly.price) || 0)}/hr
+                                          ? (Number(form.pricing.hourly.price) || 0) + (Number(pricing?.hourly?.price) || 0)
+                                          : (Number(pricing?.hourly?.price) || Number(form.pricing.hourly.price) || 0)}/hr
                                       </span>
                                     )}
                                     {form.pricing.land_based.isEnabled && (
                                       <span className="font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.5 rounded text-[10px]">
                                         ₹{form.listingType === 'rental'
-                                          ? (Number(form.pricing.land_based.price) || 0) + (Number(implItem.pricing?.land_based?.price) || 0)
-                                          : (Number(implItem.pricing?.land_based?.price) || Number(form.pricing.land_based.price) || 0)}/acre
+                                          ? (Number(form.pricing.land_based.price) || 0) + (Number(pricing?.land_based?.price) || 0)
+                                          : (Number(pricing?.land_based?.price) || Number(form.pricing.land_based.price) || 0)}/acre
                                       </span>
                                     )}
                                     {(() => {
-                                      const isTrolleyImpl = (/trailer|trolley|ट्राली|ट्रॉली/i).test(name);
                                       if (form.listingType === 'rental') return null;
                                       if (!isTrolleyImpl && (categoryMeta.chargedPerKm || !form.pricing.distance_based?.isEnabled)) return null;
-                                      const totalKmRate = Number(implItem.pricing?.distance_based?.price) || Number(form.pricing.distance_based?.price) || 0;
+                                      const totalKmRate = Number(pricing?.distance_based?.price) || Number(form.pricing.distance_based?.price) || 0;
                                       return (
                                         <span className="font-bold text-teal-800 bg-teal-50 border border-teal-200/60 px-1.5 py-0.5 rounded text-[10px]">
                                           ₹{totalKmRate}/km

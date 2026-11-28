@@ -1,5 +1,19 @@
 const mongoose = require('mongoose');
 
+const attachmentPricingFields = {
+  hourly:         { price: { type: Number, default: 0 }, isEnabled: { type: Boolean, default: false } },
+  per_minute:     { price: { type: Number, default: 0 }, isEnabled: { type: Boolean, default: false } },
+  land_based:     { price: { type: Number, default: 0 }, isEnabled: { type: Boolean, default: false } },
+  daily:          { price: { type: Number, default: 0 }, isEnabled: { type: Boolean, default: false } },
+  distance_based: {
+    price:      { type: Number, default: 0 },
+    perKmRate:  { type: Number, default: 0 },
+    baseCharge: { type: Number, default: 0 },
+    baseKm:     { type: Number, default: 0 },
+    isEnabled:  { type: Boolean, default: false }
+  }
+};
+
 /**
  * VendorEquipment Model
  * Represents machinery listed by vendors for rent.
@@ -53,19 +67,25 @@ const vendorEquipmentSchema = new mongoose.Schema({
       ref: 'Category',
       required: true
     },
-    pricing: {
-      hourly:         { price: { type: Number, default: 0 }, isEnabled: { type: Boolean, default: false } },
-      per_minute:     { price: { type: Number, default: 0 }, isEnabled: { type: Boolean, default: false } },
-      land_based:     { price: { type: Number, default: 0 }, isEnabled: { type: Boolean, default: false } },
-      daily:          { price: { type: Number, default: 0 }, isEnabled: { type: Boolean, default: false } },
-      distance_based: { 
-        price:      { type: Number, default: 0 },
-        perKmRate:  { type: Number, default: 0 },
-        baseCharge: { type: Number, default: 0 },
-        baseKm:     { type: Number, default: 0 },
-        isEnabled:  { type: Boolean, default: false } 
-      }
-    }
+    pricing: attachmentPricingFields
+  }],
+  // Vendor-requested custom attachments awaiting admin approval/mapping
+  requestedImplements: [{
+    name: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    status: {
+      type: String,
+      enum: ['pending', 'rejected'],
+      default: 'pending'
+    },
+    adminRemarks: {
+      type: String,
+      default: null
+    },
+    pricing: attachmentPricingFields
   }],
   // Legacy: kept for backward compat with older listings
   subCategoryIds: [{

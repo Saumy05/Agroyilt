@@ -6,6 +6,7 @@ const Service = require('../../models/Service');
 const RentalTransaction = require('../../models/RentalTransaction');
 const Booking = require('../../models/Booking');
 const { validationResult } = require('express-validator');
+const { normalizeRequestedImplements } = require('../../utils/requestedImplements');
 
 // Helper for pricing validation
 const validatePricing = (pricing) => {
@@ -102,6 +103,7 @@ exports.addEquipment = async (req, res) => {
       requestedCategoryName,
       subCategoryIds,
       implements: implementsList,
+      requestedImplements: rawRequestedImplements,
       listingType,
       name, 
       modelNumber, 
@@ -117,6 +119,9 @@ exports.addEquipment = async (req, res) => {
     const priceError = validatePricing(pricing);
     if (priceError) return res.status(400).json({ success: false, message: priceError });
 
+    const { requestedImplements, error: reqImplError } = normalizeRequestedImplements(rawRequestedImplements);
+    if (reqImplError) return res.status(400).json({ success: false, message: reqImplError });
+
     // 1. Verify Category exists and is a "Main Category" (if categoryId is provided)
     let mainCategory = null;
     if (categoryId) {
@@ -128,10 +133,13 @@ exports.addEquipment = async (req, res) => {
         });
       }
 
-      // 2. Verify sub-categories belong to this main category
+      // 2. Verify sub-categories belong to this main category (via parentCategory or parentCategories)
       let allCategories = [mainCategory];
       if (subCategoryIds && subCategoryIds.length > 0) {
-        const children = await Category.find({ _id: { $in: subCategoryIds }, parentCategory: categoryId });
+        const children = await Category.find({
+          _id: { $in: subCategoryIds },
+          $or: [{ parentCategory: categoryId }, { parentCategories: categoryId }]
+        });
         if (children.length !== subCategoryIds.length) {
           return res.status(400).json({
             success: false,
@@ -195,6 +203,7 @@ exports.addEquipment = async (req, res) => {
       requestedCategoryName: requestedCategoryName || null,
       listingType: finalListingType,
       implements: implementsList || [],
+      requestedImplements,
       subCategoryIds: subCategoryIds || [],
       name,
       modelNumber,
@@ -292,6 +301,15 @@ exports.updateEquipment = async (req, res) => {
 
     // No stock count is kept
     delete updateData.totalUnits;
+
+    if (updateData.requestedImplements !== undefined) {
+      const { requestedImplements, error: reqImplError } = normalizeRequestedImplements(
+        updateData.requestedImplements,
+        { existingRequested: equipment.requestedImplements }
+      );
+      if (reqImplError) return res.status(400).json({ success: false, message: reqImplError });
+      updateData.requestedImplements = requestedImplements;
+    }
 
     // 'total' only means something on a service listing; anything else is dropped
     if (updateData.attachmentRates !== 'total' || (updateData.listingType || equipment.listingType) === 'rental') delete updateData.attachmentRates;

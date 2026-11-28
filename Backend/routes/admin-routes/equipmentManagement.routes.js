@@ -10,6 +10,7 @@ router.use(isAdmin);
 
 router.get('/', equipmentController.getAllEquipment);
 router.patch('/:id/status', equipmentController.updateEquipmentStatus);
+router.patch('/:id/requested-implements/:reqId', equipmentController.reviewRequestedImplement);
 router.put('/:id', equipmentController.updateEquipment);
 router.delete('/:id', equipmentController.deleteEquipment);
 router.patch('/:id/restore', equipmentController.restoreEquipment);

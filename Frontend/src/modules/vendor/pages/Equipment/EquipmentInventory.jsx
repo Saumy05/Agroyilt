@@ -495,10 +495,11 @@ const EquipmentInventory = () => {
                           )}
                         </div>
 
-                        {/* Row 3: Configured Attachments (if any) */}
-                        {Array.isArray(item.implements) && item.implements.length > 0 && (
+                        {/* Row 3: Configured Attachments + Requested Custom Attachments (if any) */}
+                        {((Array.isArray(item.implements) && item.implements.length > 0) ||
+                          (Array.isArray(item.requestedImplements) && item.requestedImplements.length > 0)) && (
                           <div className="flex flex-wrap items-center gap-1 mt-1">
-                            {item.implements.map((impl, idx) => {
+                            {(item.implements || []).map((impl, idx) => {
                               const rawTitle = impl.subCategoryId?.title || impl.subCategoryId?.name || 'Attachment';
                               const title = rawTitle.split('(')[0].trim();
                               const hourlyAdd = Number(impl.pricing?.hourly?.price) || 0;
@@ -515,7 +516,7 @@ const EquipmentInventory = () => {
 
                               return (
                                 <span 
-                                  key={idx} 
+                                  key={`impl-${idx}`} 
                                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-50 border border-slate-200/60 text-[10px] font-medium text-slate-700"
                                 >
                                   <FiTool className="w-2.5 h-2.5 text-slate-400 shrink-0" />
@@ -528,6 +529,22 @@ const EquipmentInventory = () => {
                                 </span>
                               );
                             })}
+                            {(item.requestedImplements || []).map((reqImpl, idx) => (
+                              <span
+                                key={`req-${reqImpl._id || idx}`}
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[10px] font-medium ${
+                                  reqImpl.status === 'rejected'
+                                    ? 'bg-rose-50 border-rose-200/70 text-rose-700'
+                                    : 'bg-amber-50 border-amber-200/70 text-amber-800'
+                                }`}
+                              >
+                                <FiTool className="w-2.5 h-2.5 shrink-0" />
+                                <span>{reqImpl.name}</span>
+                                <span className="font-bold uppercase text-[9px]">
+                                  ({reqImpl.status === 'rejected' ? 'Rejected' : 'Pending'})
+                                </span>
+                              </span>
+                            ))}
                           </div>
                         )}
                       </div>

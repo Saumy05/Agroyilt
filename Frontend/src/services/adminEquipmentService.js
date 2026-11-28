@@ -16,6 +16,11 @@ const adminEquipmentService = {
     return response.data;
   },
 
+  reviewRequestedImplement: async (id, reqId, payload) => {
+    const response = await api.patch(`/admin/equipment/${id}/requested-implements/${reqId}`, payload);
+    return response.data;
+  },
+
   update: async (id, data) => {
     const response = await api.put(`/admin/equipment/${id}`, data);
     return response.data;
